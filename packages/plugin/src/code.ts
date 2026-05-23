@@ -3,6 +3,8 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
 import { createCreateFrameHandler } from './handlers/create-frame.js';
+import { createCreateRectangleHandler } from './handlers/create-rectangle.js';
+import { createCreateTextHandler } from './handlers/create-text.js';
 import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
@@ -24,9 +26,13 @@ import { createPingHandler } from './handlers/ping.js';
 import { createScanNodesByTypesHandler } from './handlers/scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './handlers/scan-text-nodes.js';
 import { createSearchNodesHandler } from './handlers/search-nodes.js';
+import { createMoveNodesHandler } from './handlers/move-nodes.js';
 import { createRenameNodeHandler } from './handlers/rename-node.js';
+import { createResizeNodesHandler } from './handlers/resize-nodes.js';
+import { createSetCornerRadiusHandler } from './handlers/set-corner-radius.js';
 import { createSetFillsHandler } from './handlers/set-fills.js';
 import { createSetOpacityHandler } from './handlers/set-opacity.js';
+import { createSetStrokesHandler } from './handlers/set-strokes.js';
 import { createSetTextHandler } from './handlers/set-text.js';
 import { createSetVisibleHandler } from './handlers/set-visible.js';
 
@@ -89,6 +95,12 @@ const handlers: SandboxHandlers = {
   set_visible: idempotent(idempotencyCache, createSetVisibleHandler(figma)),
   rename_node: idempotent(idempotencyCache, createRenameNodeHandler(figma)),
   delete_nodes: idempotent(idempotencyCache, createDeleteNodesHandler(figma)),
+  create_text: idempotent(idempotencyCache, createCreateTextHandler(figma)),
+  create_rectangle: idempotent(idempotencyCache, createCreateRectangleHandler(figma)),
+  set_corner_radius: idempotent(idempotencyCache, createSetCornerRadiusHandler(figma)),
+  set_strokes: idempotent(idempotencyCache, createSetStrokesHandler(figma)),
+  move_nodes: idempotent(idempotencyCache, createMoveNodesHandler(figma)),
+  resize_nodes: idempotent(idempotencyCache, createResizeNodesHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {

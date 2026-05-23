@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figma-mcp-relay/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { placeNode } from './place.js';
 
 export const createCreateFrameHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -22,16 +23,7 @@ export const createCreateFrameHandler =
     if (typeof p.x === 'number') frame.x = p.x;
     if (typeof p.y === 'number') frame.y = p.y;
 
-    if (typeof p.parentId === 'string') {
-      const parent = await figmaCtx.getNodeByIdAsync(p.parentId);
-      if (parent === null || !('appendChild' in parent)) {
-        frame.remove();
-        throw new Error(`create_frame: parent ${p.parentId} not found or cannot contain children`);
-      }
-      (parent as ChildrenMixin).appendChild(frame);
-    } else {
-      figmaCtx.currentPage.appendChild(frame);
-    }
+    await placeNode(figmaCtx, frame, p.parentId, 'create_frame');
 
     const result: CreateResult = { ok: true, nodeId: frame.id, name: frame.name, type: frame.type };
     return result;

@@ -43,10 +43,16 @@ import { scanNodesByTypesToolDefinition } from './tools/scan-nodes-by-types.js';
 import { scanTextNodesToolDefinition } from './tools/scan-text-nodes.js';
 import { searchNodesToolDefinition } from './tools/search-nodes.js';
 import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from './tools/create-frame.js';
+import { CREATE_RECTANGLE_TOOL_NAME, createRectangleToolDefinition } from './tools/create-rectangle.js';
+import { CREATE_TEXT_TOOL_NAME, createTextToolDefinition } from './tools/create-text.js';
 import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from './tools/delete-nodes.js';
+import { MOVE_NODES_TOOL_NAME, moveNodesToolDefinition } from './tools/move-nodes.js';
 import { RENAME_NODE_TOOL_NAME, renameNodeToolDefinition } from './tools/rename-node.js';
+import { RESIZE_NODES_TOOL_NAME, resizeNodesToolDefinition } from './tools/resize-nodes.js';
+import { SET_CORNER_RADIUS_TOOL_NAME, setCornerRadiusToolDefinition } from './tools/set-corner-radius.js';
 import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from './tools/set-fills.js';
 import { SET_OPACITY_TOOL_NAME, setOpacityToolDefinition } from './tools/set-opacity.js';
+import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from './tools/set-strokes.js';
 import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './tools/set-text.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './tools/set-visible.js';
 
@@ -116,6 +122,12 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     setVisibleToolDefinition,
     renameNodeToolDefinition,
     deleteNodesToolDefinition,
+    createTextToolDefinition,
+    createRectangleToolDefinition,
+    setCornerRadiusToolDefinition,
+    setStrokesToolDefinition,
+    moveNodesToolDefinition,
+    resizeNodesToolDefinition,
   ],
 }));
 
@@ -129,6 +141,12 @@ const WRITE_TOOLS = new Set<string>([
   SET_VISIBLE_TOOL_NAME,
   RENAME_NODE_TOOL_NAME,
   DELETE_NODES_TOOL_NAME,
+  CREATE_TEXT_TOOL_NAME,
+  CREATE_RECTANGLE_TOOL_NAME,
+  SET_CORNER_RADIUS_TOOL_NAME,
+  SET_STROKES_TOOL_NAME,
+  MOVE_NODES_TOOL_NAME,
+  RESIZE_NODES_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

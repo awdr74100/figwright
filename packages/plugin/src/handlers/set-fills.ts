@@ -3,7 +3,7 @@ import type { MutateResult, SerializedPaint } from '@figma-mcp-relay/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 
 /** Convert a serialized paint back to a Figma Paint. Only SOLID is supported for writes so far. */
-const toFigmaPaint = (paint: SerializedPaint): Paint => {
+export const toFigmaPaint = (paint: SerializedPaint): Paint => {
   if (paint.type !== 'SOLID') {
     throw new TypeError(`set_fills: only SOLID paints are supported (got ${paint.type})`);
   }
