@@ -3,6 +3,7 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
 import { createCreateFrameHandler } from './handlers/create-frame.js';
+import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
 import { createGetDocumentHandler } from './handlers/get-document.js';
@@ -23,8 +24,11 @@ import { createPingHandler } from './handlers/ping.js';
 import { createScanNodesByTypesHandler } from './handlers/scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './handlers/scan-text-nodes.js';
 import { createSearchNodesHandler } from './handlers/search-nodes.js';
+import { createRenameNodeHandler } from './handlers/rename-node.js';
 import { createSetFillsHandler } from './handlers/set-fills.js';
+import { createSetOpacityHandler } from './handlers/set-opacity.js';
 import { createSetTextHandler } from './handlers/set-text.js';
+import { createSetVisibleHandler } from './handlers/set-visible.js';
 
 figma.showUI(__html__, { width: 320, height: 400, themeColors: true });
 
@@ -81,6 +85,10 @@ const handlers: SandboxHandlers = {
   set_fills: idempotent(idempotencyCache, createSetFillsHandler(figma)),
   set_text: idempotent(idempotencyCache, createSetTextHandler(figma)),
   create_frame: idempotent(idempotencyCache, createCreateFrameHandler(figma)),
+  set_opacity: idempotent(idempotencyCache, createSetOpacityHandler(figma)),
+  set_visible: idempotent(idempotencyCache, createSetVisibleHandler(figma)),
+  rename_node: idempotent(idempotencyCache, createRenameNodeHandler(figma)),
+  delete_nodes: idempotent(idempotencyCache, createDeleteNodesHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {

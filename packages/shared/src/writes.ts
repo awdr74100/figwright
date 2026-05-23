@@ -18,3 +18,10 @@ export const CreateResultSchema = v.object({
   type: v.string(),
 });
 export type CreateResult = v.InferOutput<typeof CreateResultSchema>;
+
+/** Result of a multi-node op (delete_nodes / …): which target ids were actually affected. */
+export const BatchNodeResultSchema = v.object({
+  ok: v.literal(true),
+  affected: v.array(v.string()),
+});
+export type BatchNodeResult = v.InferOutput<typeof BatchNodeResultSchema>;

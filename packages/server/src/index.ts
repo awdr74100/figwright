@@ -43,8 +43,12 @@ import { scanNodesByTypesToolDefinition } from './tools/scan-nodes-by-types.js';
 import { scanTextNodesToolDefinition } from './tools/scan-text-nodes.js';
 import { searchNodesToolDefinition } from './tools/search-nodes.js';
 import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from './tools/create-frame.js';
+import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from './tools/delete-nodes.js';
+import { RENAME_NODE_TOOL_NAME, renameNodeToolDefinition } from './tools/rename-node.js';
 import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from './tools/set-fills.js';
+import { SET_OPACITY_TOOL_NAME, setOpacityToolDefinition } from './tools/set-opacity.js';
 import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './tools/set-text.js';
+import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './tools/set-visible.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -108,6 +112,10 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     setFillsToolDefinition,
     setTextToolDefinition,
     createFrameToolDefinition,
+    setOpacityToolDefinition,
+    setVisibleToolDefinition,
+    renameNodeToolDefinition,
+    deleteNodesToolDefinition,
   ],
 }));
 
@@ -117,6 +125,10 @@ const WRITE_TOOLS = new Set<string>([
   SET_FILLS_TOOL_NAME,
   SET_TEXT_TOOL_NAME,
   CREATE_FRAME_TOOL_NAME,
+  SET_OPACITY_TOOL_NAME,
+  SET_VISIBLE_TOOL_NAME,
+  RENAME_NODE_TOOL_NAME,
+  DELETE_NODES_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
