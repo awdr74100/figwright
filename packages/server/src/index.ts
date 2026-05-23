@@ -42,19 +42,26 @@ import {
 import { scanNodesByTypesToolDefinition } from './tools/scan-nodes-by-types.js';
 import { scanTextNodesToolDefinition } from './tools/scan-text-nodes.js';
 import { searchNodesToolDefinition } from './tools/search-nodes.js';
+import { CLONE_NODE_TOOL_NAME, cloneNodeToolDefinition } from './tools/clone-node.js';
 import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from './tools/create-frame.js';
 import { CREATE_RECTANGLE_TOOL_NAME, createRectangleToolDefinition } from './tools/create-rectangle.js';
 import { CREATE_TEXT_TOOL_NAME, createTextToolDefinition } from './tools/create-text.js';
 import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from './tools/delete-nodes.js';
+import { LOCK_NODES_TOOL_NAME, lockNodesToolDefinition } from './tools/lock-nodes.js';
 import { MOVE_NODES_TOOL_NAME, moveNodesToolDefinition } from './tools/move-nodes.js';
 import { RENAME_NODE_TOOL_NAME, renameNodeToolDefinition } from './tools/rename-node.js';
 import { RESIZE_NODES_TOOL_NAME, resizeNodesToolDefinition } from './tools/resize-nodes.js';
+import { ROTATE_NODES_TOOL_NAME, rotateNodesToolDefinition } from './tools/rotate-nodes.js';
+import { SET_AUTO_LAYOUT_TOOL_NAME, setAutoLayoutToolDefinition } from './tools/set-auto-layout.js';
+import { SET_BLEND_MODE_TOOL_NAME, setBlendModeToolDefinition } from './tools/set-blend-mode.js';
+import { SET_CONSTRAINTS_TOOL_NAME, setConstraintsToolDefinition } from './tools/set-constraints.js';
 import { SET_CORNER_RADIUS_TOOL_NAME, setCornerRadiusToolDefinition } from './tools/set-corner-radius.js';
 import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from './tools/set-fills.js';
 import { SET_OPACITY_TOOL_NAME, setOpacityToolDefinition } from './tools/set-opacity.js';
 import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from './tools/set-strokes.js';
 import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './tools/set-text.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './tools/set-visible.js';
+import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from './tools/unlock-nodes.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -128,6 +135,13 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     setStrokesToolDefinition,
     moveNodesToolDefinition,
     resizeNodesToolDefinition,
+    setAutoLayoutToolDefinition,
+    setBlendModeToolDefinition,
+    setConstraintsToolDefinition,
+    rotateNodesToolDefinition,
+    lockNodesToolDefinition,
+    unlockNodesToolDefinition,
+    cloneNodeToolDefinition,
   ],
 }));
 
@@ -147,6 +161,13 @@ const WRITE_TOOLS = new Set<string>([
   SET_STROKES_TOOL_NAME,
   MOVE_NODES_TOOL_NAME,
   RESIZE_NODES_TOOL_NAME,
+  SET_AUTO_LAYOUT_TOOL_NAME,
+  SET_BLEND_MODE_TOOL_NAME,
+  SET_CONSTRAINTS_TOOL_NAME,
+  ROTATE_NODES_TOOL_NAME,
+  LOCK_NODES_TOOL_NAME,
+  UNLOCK_NODES_TOOL_NAME,
+  CLONE_NODE_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

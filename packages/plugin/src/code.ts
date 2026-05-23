@@ -2,6 +2,7 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
+import { createCloneNodeHandler } from './handlers/clone-node.js';
 import { createCreateFrameHandler } from './handlers/create-frame.js';
 import { createCreateRectangleHandler } from './handlers/create-rectangle.js';
 import { createCreateTextHandler } from './handlers/create-text.js';
@@ -26,9 +27,14 @@ import { createPingHandler } from './handlers/ping.js';
 import { createScanNodesByTypesHandler } from './handlers/scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './handlers/scan-text-nodes.js';
 import { createSearchNodesHandler } from './handlers/search-nodes.js';
+import { createSetLockedHandler } from './handlers/lock-nodes.js';
 import { createMoveNodesHandler } from './handlers/move-nodes.js';
 import { createRenameNodeHandler } from './handlers/rename-node.js';
 import { createResizeNodesHandler } from './handlers/resize-nodes.js';
+import { createRotateNodesHandler } from './handlers/rotate-nodes.js';
+import { createSetAutoLayoutHandler } from './handlers/set-auto-layout.js';
+import { createSetBlendModeHandler } from './handlers/set-blend-mode.js';
+import { createSetConstraintsHandler } from './handlers/set-constraints.js';
 import { createSetCornerRadiusHandler } from './handlers/set-corner-radius.js';
 import { createSetFillsHandler } from './handlers/set-fills.js';
 import { createSetOpacityHandler } from './handlers/set-opacity.js';
@@ -101,6 +107,13 @@ const handlers: SandboxHandlers = {
   set_strokes: idempotent(idempotencyCache, createSetStrokesHandler(figma)),
   move_nodes: idempotent(idempotencyCache, createMoveNodesHandler(figma)),
   resize_nodes: idempotent(idempotencyCache, createResizeNodesHandler(figma)),
+  set_auto_layout: idempotent(idempotencyCache, createSetAutoLayoutHandler(figma)),
+  set_blend_mode: idempotent(idempotencyCache, createSetBlendModeHandler(figma)),
+  set_constraints: idempotent(idempotencyCache, createSetConstraintsHandler(figma)),
+  rotate_nodes: idempotent(idempotencyCache, createRotateNodesHandler(figma)),
+  lock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, true)),
+  unlock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, false)),
+  clone_node: idempotent(idempotencyCache, createCloneNodeHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {

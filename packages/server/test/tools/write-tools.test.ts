@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { CLONE_NODE_TOOL_NAME, cloneNodeToolDefinition } from '../../src/tools/clone-node.js';
 import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from '../../src/tools/create-frame.js';
+import { LOCK_NODES_TOOL_NAME, lockNodesToolDefinition } from '../../src/tools/lock-nodes.js';
+import { ROTATE_NODES_TOOL_NAME, rotateNodesToolDefinition } from '../../src/tools/rotate-nodes.js';
+import { SET_AUTO_LAYOUT_TOOL_NAME, setAutoLayoutToolDefinition } from '../../src/tools/set-auto-layout.js';
+import { SET_BLEND_MODE_TOOL_NAME, setBlendModeToolDefinition } from '../../src/tools/set-blend-mode.js';
+import { SET_CONSTRAINTS_TOOL_NAME, setConstraintsToolDefinition } from '../../src/tools/set-constraints.js';
+import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from '../../src/tools/unlock-nodes.js';
 import { CREATE_RECTANGLE_TOOL_NAME, createRectangleToolDefinition } from '../../src/tools/create-rectangle.js';
 import { CREATE_TEXT_TOOL_NAME, createTextToolDefinition } from '../../src/tools/create-text.js';
 import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from '../../src/tools/delete-nodes.js';
@@ -93,6 +100,29 @@ describe('M2 write tool definitions', () => {
     expect(resizeNodesToolDefinition.inputSchema).toMatchObject({ required: ['nodeIds', 'width', 'height'] });
   });
 
+  it('set_auto_layout / set_blend_mode / set_constraints / rotate_nodes / clone_node / lock+unlock declare inputs', () => {
+    expect(setAutoLayoutToolDefinition.name).toBe(SET_AUTO_LAYOUT_TOOL_NAME);
+    expect(setAutoLayoutToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId', 'layoutMode'],
+      properties: { layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL'] } },
+    });
+    expect(setBlendModeToolDefinition.name).toBe(SET_BLEND_MODE_TOOL_NAME);
+    expect(setBlendModeToolDefinition.inputSchema).toMatchObject({ required: ['nodeId', 'blendMode'] });
+    expect(setConstraintsToolDefinition.name).toBe(SET_CONSTRAINTS_TOOL_NAME);
+    expect(setConstraintsToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId', 'horizontal', 'vertical'],
+    });
+    expect(rotateNodesToolDefinition.name).toBe(ROTATE_NODES_TOOL_NAME);
+    expect(rotateNodesToolDefinition.inputSchema).toMatchObject({ required: ['nodeIds', 'rotation'] });
+    expect(cloneNodeToolDefinition.name).toBe(CLONE_NODE_TOOL_NAME);
+    expect(cloneNodeToolDefinition.inputSchema).toMatchObject({ required: ['nodeId'] });
+    expect(lockNodesToolDefinition.name).toBe(LOCK_NODES_TOOL_NAME);
+    expect(unlockNodesToolDefinition.name).toBe(UNLOCK_NODES_TOOL_NAME);
+    for (const def of [lockNodesToolDefinition, unlockNodesToolDefinition]) {
+      expect(def.inputSchema).toMatchObject({ required: ['nodeIds'] });
+    }
+  });
+
   it('write tools do not expose requestId in their MCP schema (server injects it)', () => {
     for (const def of [
       setFillsToolDefinition,
@@ -108,6 +138,13 @@ describe('M2 write tool definitions', () => {
       setStrokesToolDefinition,
       moveNodesToolDefinition,
       resizeNodesToolDefinition,
+      setAutoLayoutToolDefinition,
+      setBlendModeToolDefinition,
+      setConstraintsToolDefinition,
+      rotateNodesToolDefinition,
+      lockNodesToolDefinition,
+      unlockNodesToolDefinition,
+      cloneNodeToolDefinition,
     ]) {
       const props = def.inputSchema.properties as Record<string, unknown>;
       expect(props.requestId).toBeUndefined();
