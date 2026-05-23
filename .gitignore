@@ -17,3 +17,4 @@ coverage/
 # Local reference dumps (competitor sources used while building; not part of the repo)
 figma-mcp-bridge.txt
 figma-mcp-go.txt
+figma-context-mcp.txt

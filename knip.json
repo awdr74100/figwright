@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
     ".": {
       "entry": ["vitest.config.ts"],
