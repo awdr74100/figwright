@@ -1,4 +1,9 @@
-import { DEFAULT_PORT, type GetScreenshotResult, PROTOCOL_VERSION } from '@figma-mcp-relay/shared';
+import {
+  DEFAULT_PORT,
+  type GetScreenshotResult,
+  newId,
+  PROTOCOL_VERSION,
+} from '@figma-mcp-relay/shared';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -37,6 +42,9 @@ import {
 import { scanNodesByTypesToolDefinition } from './tools/scan-nodes-by-types.js';
 import { scanTextNodesToolDefinition } from './tools/scan-text-nodes.js';
 import { searchNodesToolDefinition } from './tools/search-nodes.js';
+import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from './tools/create-frame.js';
+import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from './tools/set-fills.js';
+import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './tools/set-text.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -97,8 +105,19 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     getDesignContextToolDefinition,
     getScreenshotToolDefinition,
     saveScreenshotsToolDefinition,
+    setFillsToolDefinition,
+    setTextToolDefinition,
+    createFrameToolDefinition,
   ],
 }));
+
+/** Write tools get a server-generated requestId (stable across dispatch retries) so the plugin can
+ * dedupe side-effects. Reads don't need it. */
+const WRITE_TOOLS = new Set<string>([
+  SET_FILLS_TOOL_NAME,
+  SET_TEXT_TOOL_NAME,
+  CREATE_FRAME_TOOL_NAME,
+]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args } = request.params;
@@ -117,7 +136,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async request => {
     const result = (await dispatchTool({ node, follower, log }, name, args)) as GetScreenshotResult;
     return { content: screenshotContent(result) };
   }
-  const result = await dispatchTool({ node, follower, log }, name, args);
+  // Inject a stable idempotency key for write tools before the (possibly retrying) dispatch.
+  const dispatchArgs = WRITE_TOOLS.has(name)
+    ? { ...(args as Record<string, unknown> | undefined), requestId: newId() }
+    : args;
+  const result = await dispatchTool({ node, follower, log }, name, dispatchArgs);
   return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
 });
 

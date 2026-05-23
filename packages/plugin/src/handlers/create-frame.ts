@@ -1,0 +1,38 @@
+import type { CreateResult } from '@figma-mcp-relay/shared';
+
+import type { SandboxToolHandler } from '../dispatcher.js';
+
+export const createCreateFrameHandler =
+  (figmaCtx: typeof figma): SandboxToolHandler =>
+  async params => {
+    const p = (params ?? {}) as {
+      parentId?: unknown;
+      name?: unknown;
+      x?: unknown;
+      y?: unknown;
+      width?: unknown;
+      height?: unknown;
+    };
+
+    const frame = figmaCtx.createFrame();
+    if (typeof p.name === 'string') frame.name = p.name;
+    if (typeof p.width === 'number' && typeof p.height === 'number') {
+      frame.resize(p.width, p.height);
+    }
+    if (typeof p.x === 'number') frame.x = p.x;
+    if (typeof p.y === 'number') frame.y = p.y;
+
+    if (typeof p.parentId === 'string') {
+      const parent = await figmaCtx.getNodeByIdAsync(p.parentId);
+      if (parent === null || !('appendChild' in parent)) {
+        frame.remove();
+        throw new Error(`create_frame: parent ${p.parentId} not found or cannot contain children`);
+      }
+      (parent as ChildrenMixin).appendChild(frame);
+    } else {
+      figmaCtx.currentPage.appendChild(frame);
+    }
+
+    const result: CreateResult = { ok: true, nodeId: frame.id, name: frame.name, type: frame.type };
+    return result;
+  };
