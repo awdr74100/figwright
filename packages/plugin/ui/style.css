@@ -1,0 +1,21 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-relay-bg: #2c2c2c;
+  --color-relay-fg: #ffffff;
+  --color-relay-muted: #a0a0a0;
+  --color-relay-accent: #18a0fb;
+  --color-relay-danger: #f24822;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}

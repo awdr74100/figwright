@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "preserve",
+    "allowImportingTsExtensions": false,
+    "noEmit": true,
+    "types": ["@figma/plugin-typings", "vite/client"],
+    "composite": false
+  },
+  "include": ["src/**/*.ts", "ui/**/*.ts", "ui/**/*.vue", "test/**/*.ts", "*.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@figma-mcp-relay/plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Figma plugin for figma-mcp-relay — UI + sandbox code.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run build:main && pnpm run build:ui",
+    "build:main": "vite build --config vite.config.main.ts",
+    "build:ui": "vite build --config vite.config.ts",
+    "dev": "vite build --config vite.config.ts --watch",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "vue": "latest"
+  },
+  "devDependencies": {
+    "@figma-mcp-relay/shared": "workspace:*",
+    "@figma/plugin-typings": "latest",
+    "@tailwindcss/vite": "latest",
+    "@vitejs/plugin-vue": "latest",
+    "@vue/test-utils": "latest",
+    "tailwindcss": "latest",
+    "vite": "latest",
+    "vite-plugin-singlefile": "latest",
+    "vue-tsc": "latest"
+  }
+}

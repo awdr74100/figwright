@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "figma-mcp-relay": {
+      "command": "node",
+      "args": ["/Users/roya/Desktop/figma-mcp-relay/packages/server/dist/index.mjs"]
+    }
+  }
+}

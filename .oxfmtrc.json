@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.tsbuildinfo",
+    "pnpm-lock.yaml"
+  ],
+  "arrowParens": "avoid",
+  "singleQuote": true,
+  "printWidth": 100,
+  "sortImports": {},
+  "sortPackageJson": {
+    "sortScripts": true
+  },
+  "jsdoc": {}
+}

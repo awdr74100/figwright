@@ -1,0 +1,283 @@
+import type { Server as HttpServer } from 'node:http';
+
+import {
+  createError,
+  createRequest,
+  createResponse,
+  decodeEnvelope,
+  encodeEnvelope,
+  type Envelope,
+  ErrorCode,
+  HEARTBEAT_INTERVAL_MS,
+  HEARTBEAT_MAX_MISSES,
+  HeartbeatMonitor,
+  HelloParamsSchema,
+  type HelloResult,
+  newId,
+  PROTOCOL_VERSION,
+  SystemMethod,
+} from '@figma-mcp-relay/shared';
+import * as v from 'valibot';
+import { WebSocketServer, type WebSocket } from 'ws';
+
+import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
+
+export interface RelayOptions {
+  serverVersion: string;
+  server: HttpServer;
+  log?: (msg: string) => void;
+  heartbeatIntervalMs?: number;
+  heartbeatMaxMisses?: number;
+  disconnectGraceMs?: number;
+}
+
+interface Pending {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  method: string;
+  params: unknown;
+  dispatched: boolean;
+}
+
+export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
+
+export class Relay {
+  readonly sessions = new SessionManager();
+  private readonly wss: WebSocketServer;
+  private readonly opts: Required<Omit<RelayOptions, 'server'>>;
+  private readonly pending = new Map<string, Pending>();
+
+  constructor(opts: RelayOptions) {
+    this.opts = {
+      serverVersion: opts.serverVersion,
+      log: opts.log ?? (() => {}),
+      heartbeatIntervalMs: opts.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS,
+      heartbeatMaxMisses: opts.heartbeatMaxMisses ?? HEARTBEAT_MAX_MISSES,
+      disconnectGraceMs: opts.disconnectGraceMs ?? DEFAULT_DISCONNECT_GRACE_MS,
+    };
+    this.wss = new WebSocketServer({ server: opts.server });
+    this.wss.on('connection', socket => this.handleConnection(socket));
+  }
+
+  async stop(): Promise<void> {
+    for (const [, p] of this.pending) {
+      clearTimeout(p.timer);
+      p.reject(new Error(`relay stopping (pending ${p.method})`));
+    }
+    this.pending.clear();
+    this.sessions.clear();
+    for (const client of this.wss.clients) {
+      client.terminate();
+    }
+    await new Promise<void>(resolve => this.wss.close(() => resolve()));
+  }
+
+  sendRequest(
+    method: string,
+    params?: unknown,
+    timeoutMs: number = DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS,
+  ): Promise<unknown> {
+    const id = newId();
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`plugin request timeout (method=${method})`));
+      }, timeoutMs);
+      const entry: Pending = { resolve, reject, timer, method, params, dispatched: false };
+      this.pending.set(id, entry);
+      const session = this.sessions.connected()[0];
+      if (session !== undefined && session.socket !== null) {
+        this.dispatchPending(id, entry, session);
+      } else {
+        this.opts.log(`[relay] queued ${method} (no plugin connected)`);
+      }
+    });
+  }
+
+  pendingCount(): number {
+    return this.pending.size;
+  }
+
+  queuedCount(): number {
+    let n = 0;
+    for (const [, p] of this.pending) if (!p.dispatched) n += 1;
+    return n;
+  }
+
+  private dispatchPending(id: string, entry: Pending, session: Session): void {
+    if (session.socket === null) return;
+    entry.dispatched = true;
+    session.socket.send(
+      encodeEnvelope(
+        createRequest({ id, sessionId: session.id, method: entry.method, params: entry.params }),
+      ),
+    );
+  }
+
+  private flushQueue(session: Session): void {
+    if (session.socket === null) return;
+    let flushed = 0;
+    for (const [id, entry] of this.pending) {
+      if (entry.dispatched) continue;
+      this.dispatchPending(id, entry, session);
+      flushed += 1;
+    }
+    if (flushed > 0) this.opts.log(`[relay] flushed ${flushed} queued request(s) to session ${session.id}`);
+  }
+
+  private handleConnection(socket: WebSocket): void {
+    socket.binaryType = 'nodebuffer';
+
+    let session: Session | undefined;
+
+    const helloTimeout = setTimeout(() => {
+      if (session === undefined) {
+        this.opts.log('[relay] hello timeout, closing socket');
+        socket.close(1008, 'hello timeout');
+      }
+    }, 5_000);
+
+    socket.on('message', raw => {
+      let envelope: Envelope;
+      try {
+        envelope = decodeEnvelope(raw as Uint8Array);
+      } catch (err) {
+        this.opts.log(`[relay] decode error: ${(err as Error).message}`);
+        socket.close(1003, 'invalid envelope');
+        return;
+      }
+
+      if (session === undefined) {
+        clearTimeout(helloTimeout);
+        session = this.handleHello(socket, envelope) ?? undefined;
+        if (session === undefined) socket.close(1008, 'hello failed');
+        return;
+      }
+
+      this.handleEnvelope(session, envelope);
+    });
+
+    socket.on('close', () => {
+      clearTimeout(helloTimeout);
+      if (session !== undefined) {
+        this.opts.log(
+          `[relay] session ${session.id} disconnected (grace ${this.opts.disconnectGraceMs}ms)`,
+        );
+        this.sessions.markDisconnected(session, this.opts.disconnectGraceMs);
+      }
+    });
+
+    socket.on('error', err => {
+      this.opts.log(`[relay] socket error: ${err.message}`);
+    });
+  }
+
+  private handleHello(socket: WebSocket, env: Envelope): Session | null {
+    if (env.kind !== 'req' || env.method !== SystemMethod.Hello) {
+      this.sendError(socket, env, ErrorCode.InvalidRequest, 'first message must be $hello');
+      return null;
+    }
+
+    const parsed = v.safeParse(HelloParamsSchema, env.params);
+    if (!parsed.success) {
+      this.sendError(socket, env, ErrorCode.InvalidParams, 'invalid $hello params');
+      return null;
+    }
+
+    const { session, resumed } = this.sessions.register({
+      id: env.sessionId,
+      socket,
+      clientVersion: parsed.output.clientVersion,
+    });
+
+    session.heartbeat = new HeartbeatMonitor({
+      intervalMs: this.opts.heartbeatIntervalMs,
+      maxMisses: this.opts.heartbeatMaxMisses,
+      sendPing: () => this.sendPing(session),
+      onTimeout: () => {
+        this.opts.log(`[relay] session ${session.id} heartbeat timeout`);
+        socket.close(1001, 'heartbeat timeout');
+      },
+    });
+    session.heartbeat.start();
+
+    const result: HelloResult = {
+      serverVersion: this.opts.serverVersion,
+      protocolVersion: PROTOCOL_VERSION,
+      sessionResumed: resumed,
+    };
+    this.sendResponse(socket, env, result);
+    this.opts.log(`[relay] session ${session.id} hello (resumed=${resumed})`);
+    this.flushQueue(session);
+    return session;
+  }
+
+  private handleEnvelope(session: Session, env: Envelope): void {
+    session.heartbeat?.notifyReceived();
+    if (env.kind === 'req' && env.method === SystemMethod.Ping) {
+      if (session.socket !== null) this.sendResponse(session.socket, env, { ok: true });
+      return;
+    }
+    if (env.kind === 'res') {
+      const p = this.pending.get(env.id);
+      if (p !== undefined) {
+        clearTimeout(p.timer);
+        this.pending.delete(env.id);
+        p.resolve(env.result);
+      }
+      return;
+    }
+    if (env.kind === 'err') {
+      const p = this.pending.get(env.id);
+      if (p !== undefined) {
+        clearTimeout(p.timer);
+        this.pending.delete(env.id);
+        p.reject(new Error(`${env.error.code}: ${env.error.message}`));
+      }
+      return;
+    }
+    this.opts.log(
+      `[relay] session ${session.id} <- ${env.kind} ${'method' in env ? env.method : ''}`,
+    );
+  }
+
+  private sendPing(session: Session): void {
+    if (session.socket === null) return;
+    session.socket.send(
+      encodeEnvelope(
+        createRequest({
+          id: newId(),
+          sessionId: session.id,
+          method: SystemMethod.Ping,
+        }),
+      ),
+    );
+  }
+
+  private sendResponse(socket: WebSocket, req: Envelope, result: unknown): void {
+    socket.send(
+      encodeEnvelope(
+        createResponse({ id: req.id, sessionId: req.sessionId, result }),
+      ),
+    );
+  }
+
+  private sendError(
+    socket: WebSocket,
+    req: Envelope,
+    code: string,
+    message: string,
+  ): void {
+    socket.send(
+      encodeEnvelope(
+        createError({
+          id: req.id || newId(),
+          sessionId: req.sessionId || newId(),
+          code,
+          message,
+        }),
+      ),
+    );
+  }
+}

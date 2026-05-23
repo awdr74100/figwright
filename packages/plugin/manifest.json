@@ -1,0 +1,13 @@
+{
+  "name": "figma-mcp-relay",
+  "id": "figma-mcp-relay-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/index.html",
+  "editorType": ["figma", "figjam", "dev"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Connects only to a local figma-mcp-relay WebSocket on 127.0.0.1; the listen port falls back across a range, so all origins are allowed for simplicity (the plugin never reaches the public network)."
+  }
+}

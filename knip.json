@@ -1,0 +1,22 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["vitest.config.ts"],
+      "project": ["*.{ts,js}"]
+    },
+    "packages/shared": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/server": {
+      "entry": ["src/index.ts", "tsdown.config.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/plugin": {
+      "entry": ["src/code.ts", "ui/main.ts", "vite.config.ts", "vite.config.main.ts"],
+      "project": ["src/**/*.ts", "ui/**/*.{ts,vue}"]
+    }
+  },
+  "ignoreDependencies": ["@types/node"]
+}

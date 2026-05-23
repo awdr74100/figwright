@@ -1,0 +1,47 @@
+{
+  "name": "figma-mcp-relay",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MCP clients) with a Figma plugin over a local WebSocket relay.",
+  "homepage": "https://github.com/TBD/figma-mcp-relay",
+  "bugs": {
+    "url": "https://github.com/TBD/figma-mcp-relay/issues"
+  },
+  "license": "MIT",
+  "author": "TBD",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TBD/figma-mcp-relay.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "clean": "pnpm -r exec rm -rf dist .turbo *.tsbuildinfo",
+    "dev": "pnpm -r --parallel run dev",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "knip": "knip",
+    "knip:fix": "knip --fix",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@vitest/coverage-v8": "latest",
+    "knip": "^6.14.1",
+    "lefthook": "latest",
+    "oxfmt": "latest",
+    "oxlint": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.33.2"
+}
