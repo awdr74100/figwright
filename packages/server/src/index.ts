@@ -125,6 +125,16 @@ import {
   NAVIGATE_TO_PAGE_TOOL_NAME,
   navigateToPageToolDefinition,
 } from './tools/navigate-to-page.js';
+import { SET_REACTIONS_TOOL_NAME, setReactionsToolDefinition } from './tools/set-reactions.js';
+import {
+  REMOVE_REACTIONS_TOOL_NAME,
+  removeReactionsToolDefinition,
+} from './tools/remove-reactions.js';
+import { SWAP_COMPONENT_TOOL_NAME, swapComponentToolDefinition } from './tools/swap-component.js';
+import {
+  DETACH_INSTANCE_TOOL_NAME,
+  detachInstanceToolDefinition,
+} from './tools/detach-instance.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -229,6 +239,10 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     deletePageToolDefinition,
     renamePageToolDefinition,
     navigateToPageToolDefinition,
+    setReactionsToolDefinition,
+    removeReactionsToolDefinition,
+    swapComponentToolDefinition,
+    detachInstanceToolDefinition,
   ],
 }));
 
@@ -279,6 +293,10 @@ const WRITE_TOOLS = new Set<string>([
   DELETE_PAGE_TOOL_NAME,
   RENAME_PAGE_TOOL_NAME,
   NAVIGATE_TO_PAGE_TOOL_NAME,
+  SET_REACTIONS_TOOL_NAME,
+  REMOVE_REACTIONS_TOOL_NAME,
+  SWAP_COMPONENT_TOOL_NAME,
+  DETACH_INSTANCE_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

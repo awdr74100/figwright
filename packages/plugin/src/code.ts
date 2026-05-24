@@ -21,6 +21,7 @@ import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
 import { createDeletePageHandler } from './handlers/delete-page.js';
 import { createDeleteStyleHandler } from './handlers/delete-style.js';
 import { createDeleteVariableHandler } from './handlers/delete-variable.js';
+import { createDetachInstanceHandler } from './handlers/detach-instance.js';
 import { createFindReplaceTextHandler } from './handlers/find-replace-text.js';
 import { createGroupNodesHandler } from './handlers/group-nodes.js';
 import { createNavigateToPageHandler } from './handlers/navigate-to-page.js';
@@ -46,6 +47,7 @@ import { createScanTextNodesHandler } from './handlers/scan-text-nodes.js';
 import { createSearchNodesHandler } from './handlers/search-nodes.js';
 import { createSetLockedHandler } from './handlers/lock-nodes.js';
 import { createMoveNodesHandler } from './handlers/move-nodes.js';
+import { createRemoveReactionsHandler } from './handlers/remove-reactions.js';
 import { createRenameNodeHandler } from './handlers/rename-node.js';
 import { createRenamePageHandler } from './handlers/rename-page.js';
 import { createReorderNodesHandler } from './handlers/reorder-nodes.js';
@@ -57,12 +59,14 @@ import { createSetBlendModeHandler } from './handlers/set-blend-mode.js';
 import { createSetConstraintsHandler } from './handlers/set-constraints.js';
 import { createSetCornerRadiusHandler } from './handlers/set-corner-radius.js';
 import { createSetEffectsHandler } from './handlers/set-effects.js';
+import { createSetReactionsHandler } from './handlers/set-reactions.js';
 import { createSetFillsHandler } from './handlers/set-fills.js';
 import { createSetOpacityHandler } from './handlers/set-opacity.js';
 import { createSetStrokesHandler } from './handlers/set-strokes.js';
 import { createSetTextHandler } from './handlers/set-text.js';
 import { createSetVariableValueHandler } from './handlers/set-variable-value.js';
 import { createSetVisibleHandler } from './handlers/set-visible.js';
+import { createSwapComponentHandler } from './handlers/swap-component.js';
 import { createUngroupNodesHandler } from './handlers/ungroup-nodes.js';
 import { createUpdatePaintStyleHandler } from './handlers/update-paint-style.js';
 
@@ -166,6 +170,11 @@ const handlers: SandboxHandlers = {
   delete_page: idempotent(idempotencyCache, createDeletePageHandler(figma)),
   rename_page: idempotent(idempotencyCache, createRenamePageHandler(figma)),
   navigate_to_page: idempotent(idempotencyCache, createNavigateToPageHandler(figma)),
+  // Prototype + components
+  set_reactions: idempotent(idempotencyCache, createSetReactionsHandler(figma)),
+  remove_reactions: idempotent(idempotencyCache, createRemoveReactionsHandler(figma)),
+  swap_component: idempotent(idempotencyCache, createSwapComponentHandler(figma)),
+  detach_instance: idempotent(idempotencyCache, createDetachInstanceHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {
