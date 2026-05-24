@@ -13,6 +13,14 @@ import {
   serializeNode as serializeBase,
 } from '@figma-mcp-relay/shared';
 
+const isGradient = (
+  paint: Paint,
+): paint is GradientPaint =>
+  paint.type === 'GRADIENT_LINEAR' ||
+  paint.type === 'GRADIENT_RADIAL' ||
+  paint.type === 'GRADIENT_ANGULAR' ||
+  paint.type === 'GRADIENT_DIAMOND';
+
 export const serializePaint = (paint: Paint): SerializedPaint => {
   const visible = paint.visible ?? true;
   const opacity = paint.opacity ?? 1;
@@ -22,6 +30,25 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       visible,
       opacity,
       color: { r: paint.color.r, g: paint.color.g, b: paint.color.b },
+    };
+  }
+  if (isGradient(paint)) {
+    // Real Figma gradients always carry these; default defensively so we never throw or emit a
+    // gradient that violates the (stops + transform) schema.
+    const stops = paint.gradientStops ?? [];
+    const transform = paint.gradientTransform ?? [
+      [1, 0, 0],
+      [0, 1, 0],
+    ];
+    return {
+      type: paint.type,
+      visible,
+      opacity,
+      gradientStops: stops.map(s => ({
+        position: s.position,
+        color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
+      })),
+      gradientTransform: transform.map(row => row.slice()),
     };
   }
   return { type: paint.type, visible, opacity };
@@ -225,6 +252,12 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     out.letterSpacing = serializeLetterSpacing(text.letterSpacing);
     out.textCase = typeof text.textCase === 'string' ? text.textCase : MIXED;
     out.textDecoration = typeof text.textDecoration === 'string' ? text.textDecoration : MIXED;
+    // Node-level layout/overflow props (not per-run) — needed for codegen (ellipsis / line-clamp).
+    out.textAutoResize = text.textAutoResize;
+    out.textTruncation = text.textTruncation;
+    out.maxLines = text.maxLines;
+    if (typeof text.paragraphSpacing === 'number') out.paragraphSpacing = text.paragraphSpacing;
+    if (typeof text.paragraphIndent === 'number') out.paragraphIndent = text.paragraphIndent;
     // Only expand per-run styling when the node is actually mixed (uniform text needs no segments).
     const isMixed =
       out.fontSize === MIXED ||

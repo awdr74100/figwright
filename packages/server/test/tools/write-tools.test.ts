@@ -22,6 +22,10 @@ import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from '../../src/tools/set-t
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from '../../src/tools/set-visible.js';
 import { BATCH_TOOL_NAME, batchToolDefinition } from '../../src/tools/batch.js';
 import { CREATE_INSTANCE_TOOL_NAME, createInstanceToolDefinition } from '../../src/tools/create-instance.js';
+import {
+  SET_TEXT_PROPERTIES_TOOL_NAME,
+  setTextPropertiesToolDefinition,
+} from '../../src/tools/set-text-properties.js';
 
 describe('M2 write tool definitions', () => {
   it('set_fills requires nodeId + fills', () => {
@@ -136,6 +140,18 @@ describe('M2 write tool definitions', () => {
       },
     });
     expect(createInstanceToolDefinition.inputSchema.required).toEqual([]);
+  });
+
+  it('set_text_properties requires nodeId; truncation/maxLines/autoResize optional', () => {
+    expect(setTextPropertiesToolDefinition.name).toBe(SET_TEXT_PROPERTIES_TOOL_NAME);
+    expect(setTextPropertiesToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId'],
+      properties: {
+        textTruncation: { enum: ['DISABLED', 'ENDING'] },
+        maxLines: { type: ['number', 'null'] },
+        textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
+      },
+    });
   });
 
   it('batch requires a non-empty ops array of { tool, params } and hides requestId', () => {

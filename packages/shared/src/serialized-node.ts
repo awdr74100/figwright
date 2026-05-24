@@ -26,21 +26,38 @@ const SolidPaintSchema = v.object({
   color: SerializedColorSchema,
 });
 
-const NonSolidPaintSchema = v.object({
-  type: v.picklist([
-    'GRADIENT_LINEAR',
-    'GRADIENT_RADIAL',
-    'GRADIENT_ANGULAR',
-    'GRADIENT_DIAMOND',
-    'IMAGE',
-    'VIDEO',
-    'PATTERN',
-  ]),
+/** A gradient color stop: position 0–1 along the gradient + its RGBA color. */
+export const SerializedColorStopSchema = v.object({
+  position: v.number(),
+  color: SerializedRGBASchema,
+});
+export type SerializedColorStop = v.InferOutput<typeof SerializedColorStopSchema>;
+
+/**
+ * Gradient paint. `gradientTransform` is the Figma Plugin API's 2×3 affine matrix (rows of 3) that
+ * positions the gradient — it round-trips directly into write tools (unlike the REST API's
+ * gradientHandlePositions, which we don't use plugin-side).
+ */
+const GradientPaintSchema = v.object({
+  type: v.picklist(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
+  visible: v.boolean(),
+  opacity: v.number(),
+  gradientStops: v.array(SerializedColorStopSchema),
+  gradientTransform: v.array(v.array(v.number())),
+});
+
+/** IMAGE / VIDEO / PATTERN: type-only for now (raster/pattern detail is out of scope). */
+const OtherPaintSchema = v.object({
+  type: v.picklist(['IMAGE', 'VIDEO', 'PATTERN']),
   visible: v.boolean(),
   opacity: v.number(),
 });
 
-export const SerializedPaintSchema = v.variant('type', [SolidPaintSchema, NonSolidPaintSchema]);
+export const SerializedPaintSchema = v.variant('type', [
+  SolidPaintSchema,
+  GradientPaintSchema,
+  OtherPaintSchema,
+]);
 export type SerializedPaint = v.InferOutput<typeof SerializedPaintSchema>;
 
 export const SerializedFontNameSchema = v.object({
@@ -191,6 +208,11 @@ export interface SerializedNode {
   letterSpacing?: SerializedLetterSpacing | Mixed;
   textCase?: string | Mixed;
   textDecoration?: string | Mixed;
+  textAutoResize?: string;
+  textTruncation?: string;
+  maxLines?: number | null;
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
   /** Present only for mixed-style TEXT: per-run styling so rich text isn't flattened. */
   segments?: readonly SerializedTextSegment[];
   children?: readonly SerializedNode[];
@@ -237,6 +259,11 @@ export const SerializedNodeSchema: v.GenericSchema<SerializedNode> = v.lazy(() =
     letterSpacing: v.exactOptional(v.union([SerializedLetterSpacingSchema, v.literal(MIXED)])),
     textCase: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
     textDecoration: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
+    textAutoResize: v.exactOptional(v.string()),
+    textTruncation: v.exactOptional(v.string()),
+    maxLines: v.exactOptional(v.nullable(v.number())),
+    paragraphSpacing: v.exactOptional(v.number()),
+    paragraphIndent: v.exactOptional(v.number()),
     segments: v.exactOptional(v.array(SerializedTextSegmentSchema)),
     children: v.exactOptional(v.array(SerializedNodeSchema)),
   }),

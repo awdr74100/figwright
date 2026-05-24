@@ -98,9 +98,29 @@ describe('SerializedPaint variant', () => {
     expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
   });
 
-  it('accepts a non-SOLID paint (type only, no color)', () => {
-    const paint = { type: 'GRADIENT_LINEAR' as const, visible: false, opacity: 1 };
+  it('accepts a gradient paint with stops + transform', () => {
+    const paint = {
+      type: 'GRADIENT_LINEAR' as const,
+      visible: false,
+      opacity: 1,
+      gradientStops: [{ position: 0.5, color: { r: 1, g: 0, b: 0, a: 1 } }],
+      gradientTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+    };
     expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
+  });
+
+  it('accepts an IMAGE/VIDEO/PATTERN paint (type only, no gradient detail)', () => {
+    const paint = { type: 'IMAGE' as const, visible: false, opacity: 1 };
+    expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
+  });
+
+  it('rejects a gradient paint missing stops', () => {
+    expect(() =>
+      parse(SerializedPaintSchema, { type: 'GRADIENT_LINEAR', visible: true, opacity: 1 }),
+    ).toThrow(/gradientStops/);
   });
 
   it('rejects SOLID paint missing color', () => {
