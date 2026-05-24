@@ -62,6 +62,50 @@ import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from './tools/set-str
 import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './tools/set-text.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './tools/set-visible.js';
 import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from './tools/unlock-nodes.js';
+import { SET_EFFECTS_TOOL_NAME, setEffectsToolDefinition } from './tools/set-effects.js';
+import {
+  CREATE_PAINT_STYLE_TOOL_NAME,
+  createPaintStyleToolDefinition,
+} from './tools/create-paint-style.js';
+import {
+  CREATE_TEXT_STYLE_TOOL_NAME,
+  createTextStyleToolDefinition,
+} from './tools/create-text-style.js';
+import {
+  CREATE_EFFECT_STYLE_TOOL_NAME,
+  createEffectStyleToolDefinition,
+} from './tools/create-effect-style.js';
+import {
+  CREATE_GRID_STYLE_TOOL_NAME,
+  createGridStyleToolDefinition,
+} from './tools/create-grid-style.js';
+import {
+  UPDATE_PAINT_STYLE_TOOL_NAME,
+  updatePaintStyleToolDefinition,
+} from './tools/update-paint-style.js';
+import {
+  APPLY_STYLE_TO_NODE_TOOL_NAME,
+  applyStyleToNodeToolDefinition,
+} from './tools/apply-style-to-node.js';
+import { DELETE_STYLE_TOOL_NAME, deleteStyleToolDefinition } from './tools/delete-style.js';
+import {
+  CREATE_VARIABLE_COLLECTION_TOOL_NAME,
+  createVariableCollectionToolDefinition,
+} from './tools/create-variable-collection.js';
+import {
+  ADD_VARIABLE_MODE_TOOL_NAME,
+  addVariableModeToolDefinition,
+} from './tools/add-variable-mode.js';
+import { CREATE_VARIABLE_TOOL_NAME, createVariableToolDefinition } from './tools/create-variable.js';
+import {
+  SET_VARIABLE_VALUE_TOOL_NAME,
+  setVariableValueToolDefinition,
+} from './tools/set-variable-value.js';
+import {
+  BIND_VARIABLE_TO_NODE_TOOL_NAME,
+  bindVariableToNodeToolDefinition,
+} from './tools/bind-variable-to-node.js';
+import { DELETE_VARIABLE_TOOL_NAME, deleteVariableToolDefinition } from './tools/delete-variable.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -142,6 +186,20 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     lockNodesToolDefinition,
     unlockNodesToolDefinition,
     cloneNodeToolDefinition,
+    setEffectsToolDefinition,
+    createPaintStyleToolDefinition,
+    createTextStyleToolDefinition,
+    createEffectStyleToolDefinition,
+    createGridStyleToolDefinition,
+    updatePaintStyleToolDefinition,
+    applyStyleToNodeToolDefinition,
+    deleteStyleToolDefinition,
+    createVariableCollectionToolDefinition,
+    addVariableModeToolDefinition,
+    createVariableToolDefinition,
+    setVariableValueToolDefinition,
+    bindVariableToNodeToolDefinition,
+    deleteVariableToolDefinition,
   ],
 }));
 
@@ -168,6 +226,20 @@ const WRITE_TOOLS = new Set<string>([
   LOCK_NODES_TOOL_NAME,
   UNLOCK_NODES_TOOL_NAME,
   CLONE_NODE_TOOL_NAME,
+  SET_EFFECTS_TOOL_NAME,
+  CREATE_PAINT_STYLE_TOOL_NAME,
+  CREATE_TEXT_STYLE_TOOL_NAME,
+  CREATE_EFFECT_STYLE_TOOL_NAME,
+  CREATE_GRID_STYLE_TOOL_NAME,
+  UPDATE_PAINT_STYLE_TOOL_NAME,
+  APPLY_STYLE_TO_NODE_TOOL_NAME,
+  DELETE_STYLE_TOOL_NAME,
+  CREATE_VARIABLE_COLLECTION_TOOL_NAME,
+  ADD_VARIABLE_MODE_TOOL_NAME,
+  CREATE_VARIABLE_TOOL_NAME,
+  SET_VARIABLE_VALUE_TOOL_NAME,
+  BIND_VARIABLE_TO_NODE_TOOL_NAME,
+  DELETE_VARIABLE_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

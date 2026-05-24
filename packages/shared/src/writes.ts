@@ -25,3 +25,36 @@ export const BatchNodeResultSchema = v.object({
   affected: v.array(v.string()),
 });
 export type BatchNodeResult = v.InferOutput<typeof BatchNodeResultSchema>;
+
+/** Result of a style write (create_paint_style / update_paint_style / delete_style / …). */
+export const StyleResultSchema = v.object({
+  ok: v.literal(true),
+  styleId: v.string(),
+  name: v.string(),
+});
+export type StyleResult = v.InferOutput<typeof StyleResultSchema>;
+
+/** Result of create_variable_collection: the new collection + its auto-created default mode. */
+export const CollectionResultSchema = v.object({
+  ok: v.literal(true),
+  collectionId: v.string(),
+  defaultModeId: v.string(),
+  name: v.string(),
+});
+export type CollectionResult = v.InferOutput<typeof CollectionResultSchema>;
+
+/** Result of add_variable_mode: the new mode's id + name. */
+export const ModeResultSchema = v.object({
+  ok: v.literal(true),
+  modeId: v.string(),
+  name: v.string(),
+});
+export type ModeResult = v.InferOutput<typeof ModeResultSchema>;
+
+/** Result of a variable write (create_variable / set_variable_value / delete_variable / …). */
+export const VariableResultSchema = v.object({
+  ok: v.literal(true),
+  variableId: v.string(),
+  name: v.string(),
+});
+export type VariableResult = v.InferOutput<typeof VariableResultSchema>;

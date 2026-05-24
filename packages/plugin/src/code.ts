@@ -2,11 +2,22 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
+import { createAddVariableModeHandler } from './handlers/add-variable-mode.js';
+import { createApplyStyleToNodeHandler } from './handlers/apply-style-to-node.js';
+import { createBindVariableToNodeHandler } from './handlers/bind-variable-to-node.js';
 import { createCloneNodeHandler } from './handlers/clone-node.js';
+import { createCreateEffectStyleHandler } from './handlers/create-effect-style.js';
 import { createCreateFrameHandler } from './handlers/create-frame.js';
+import { createCreateGridStyleHandler } from './handlers/create-grid-style.js';
+import { createCreatePaintStyleHandler } from './handlers/create-paint-style.js';
 import { createCreateRectangleHandler } from './handlers/create-rectangle.js';
 import { createCreateTextHandler } from './handlers/create-text.js';
+import { createCreateTextStyleHandler } from './handlers/create-text-style.js';
+import { createCreateVariableHandler } from './handlers/create-variable.js';
+import { createCreateVariableCollectionHandler } from './handlers/create-variable-collection.js';
 import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
+import { createDeleteStyleHandler } from './handlers/delete-style.js';
+import { createDeleteVariableHandler } from './handlers/delete-variable.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
 import { createGetDocumentHandler } from './handlers/get-document.js';
@@ -36,11 +47,14 @@ import { createSetAutoLayoutHandler } from './handlers/set-auto-layout.js';
 import { createSetBlendModeHandler } from './handlers/set-blend-mode.js';
 import { createSetConstraintsHandler } from './handlers/set-constraints.js';
 import { createSetCornerRadiusHandler } from './handlers/set-corner-radius.js';
+import { createSetEffectsHandler } from './handlers/set-effects.js';
 import { createSetFillsHandler } from './handlers/set-fills.js';
 import { createSetOpacityHandler } from './handlers/set-opacity.js';
 import { createSetStrokesHandler } from './handlers/set-strokes.js';
 import { createSetTextHandler } from './handlers/set-text.js';
+import { createSetVariableValueHandler } from './handlers/set-variable-value.js';
 import { createSetVisibleHandler } from './handlers/set-visible.js';
+import { createUpdatePaintStyleHandler } from './handlers/update-paint-style.js';
 
 figma.showUI(__html__, { width: 320, height: 400, themeColors: true });
 
@@ -114,6 +128,22 @@ const handlers: SandboxHandlers = {
   lock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, true)),
   unlock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, false)),
   clone_node: idempotent(idempotencyCache, createCloneNodeHandler(figma)),
+  // Styles
+  set_effects: idempotent(idempotencyCache, createSetEffectsHandler(figma)),
+  create_paint_style: idempotent(idempotencyCache, createCreatePaintStyleHandler(figma)),
+  create_text_style: idempotent(idempotencyCache, createCreateTextStyleHandler(figma)),
+  create_effect_style: idempotent(idempotencyCache, createCreateEffectStyleHandler(figma)),
+  create_grid_style: idempotent(idempotencyCache, createCreateGridStyleHandler(figma)),
+  update_paint_style: idempotent(idempotencyCache, createUpdatePaintStyleHandler(figma)),
+  apply_style_to_node: idempotent(idempotencyCache, createApplyStyleToNodeHandler(figma)),
+  delete_style: idempotent(idempotencyCache, createDeleteStyleHandler(figma)),
+  // Variables
+  create_variable_collection: idempotent(idempotencyCache, createCreateVariableCollectionHandler(figma)),
+  add_variable_mode: idempotent(idempotencyCache, createAddVariableModeHandler(figma)),
+  create_variable: idempotent(idempotencyCache, createCreateVariableHandler(figma)),
+  set_variable_value: idempotent(idempotencyCache, createSetVariableValueHandler(figma)),
+  bind_variable_to_node: idempotent(idempotencyCache, createBindVariableToNodeHandler(figma)),
+  delete_variable: idempotent(idempotencyCache, createDeleteVariableHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {
