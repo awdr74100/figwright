@@ -24,6 +24,7 @@ import { createDeleteVariableHandler } from './handlers/delete-variable.js';
 import { createDetachInstanceHandler } from './handlers/detach-instance.js';
 import { createFindReplaceTextHandler } from './handlers/find-replace-text.js';
 import { createGroupNodesHandler } from './handlers/group-nodes.js';
+import { createImportImageHandler } from './handlers/import-image.js';
 import { createNavigateToPageHandler } from './handlers/navigate-to-page.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
@@ -175,6 +176,7 @@ const handlers: SandboxHandlers = {
   remove_reactions: idempotent(idempotencyCache, createRemoveReactionsHandler(figma)),
   swap_component: idempotent(idempotencyCache, createSwapComponentHandler(figma)),
   detach_instance: idempotent(idempotencyCache, createDetachInstanceHandler(figma)),
+  import_image: idempotent(idempotencyCache, createImportImageHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {

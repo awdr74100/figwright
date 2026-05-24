@@ -135,6 +135,7 @@ import {
   DETACH_INSTANCE_TOOL_NAME,
   detachInstanceToolDefinition,
 } from './tools/detach-instance.js';
+import { IMPORT_IMAGE_TOOL_NAME, importImageToolDefinition } from './tools/import-image.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -243,6 +244,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     removeReactionsToolDefinition,
     swapComponentToolDefinition,
     detachInstanceToolDefinition,
+    importImageToolDefinition,
   ],
 }));
 
@@ -297,6 +299,7 @@ const WRITE_TOOLS = new Set<string>([
   REMOVE_REACTIONS_TOOL_NAME,
   SWAP_COMPONENT_TOOL_NAME,
   DETACH_INSTANCE_TOOL_NAME,
+  IMPORT_IMAGE_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
