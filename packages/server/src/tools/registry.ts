@@ -60,6 +60,7 @@ import {
 import { ADD_VARIABLE_MODE_TOOL_NAME, addVariableModeToolDefinition } from './add-variable-mode.js';
 import { CREATE_VARIABLE_TOOL_NAME, createVariableToolDefinition } from './create-variable.js';
 import { SET_VARIABLE_VALUE_TOOL_NAME, setVariableValueToolDefinition } from './set-variable-value.js';
+import { SET_TEXT_PROPERTIES_TOOL_NAME, setTextPropertiesToolDefinition } from './set-text-properties.js';
 import { BIND_VARIABLE_TO_NODE_TOOL_NAME, bindVariableToNodeToolDefinition } from './bind-variable-to-node.js';
 import { DELETE_VARIABLE_TOOL_NAME, deleteVariableToolDefinition } from './delete-variable.js';
 import { GROUP_NODES_TOOL_NAME, groupNodesToolDefinition } from './group-nodes.js';
@@ -110,6 +111,7 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   // Writes
   setFillsToolDefinition,
   setTextToolDefinition,
+  setTextPropertiesToolDefinition,
   createFrameToolDefinition,
   setOpacityToolDefinition,
   setVisibleToolDefinition,
@@ -171,6 +173,7 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   SET_FILLS_TOOL_NAME,
   SET_TEXT_TOOL_NAME,
+  SET_TEXT_PROPERTIES_TOOL_NAME,
   CREATE_FRAME_TOOL_NAME,
   SET_OPACITY_TOOL_NAME,
   SET_VISIBLE_TOOL_NAME,

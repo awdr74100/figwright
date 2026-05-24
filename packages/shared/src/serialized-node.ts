@@ -208,6 +208,11 @@ export interface SerializedNode {
   letterSpacing?: SerializedLetterSpacing | Mixed;
   textCase?: string | Mixed;
   textDecoration?: string | Mixed;
+  textAutoResize?: string;
+  textTruncation?: string;
+  maxLines?: number | null;
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
   /** Present only for mixed-style TEXT: per-run styling so rich text isn't flattened. */
   segments?: readonly SerializedTextSegment[];
   children?: readonly SerializedNode[];
@@ -254,6 +259,11 @@ export const SerializedNodeSchema: v.GenericSchema<SerializedNode> = v.lazy(() =
     letterSpacing: v.exactOptional(v.union([SerializedLetterSpacingSchema, v.literal(MIXED)])),
     textCase: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
     textDecoration: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
+    textAutoResize: v.exactOptional(v.string()),
+    textTruncation: v.exactOptional(v.string()),
+    maxLines: v.exactOptional(v.nullable(v.number())),
+    paragraphSpacing: v.exactOptional(v.number()),
+    paragraphIndent: v.exactOptional(v.number()),
     segments: v.exactOptional(v.array(SerializedTextSegmentSchema)),
     children: v.exactOptional(v.array(SerializedNodeSchema)),
   }),

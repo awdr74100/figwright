@@ -50,6 +50,17 @@ describe('set_variable_value handler', () => {
     }
   });
 
+  // Regression for the go-style bug where a FLOAT "parser" strips alias objects: our coerce only
+  // touches strings, so an alias to a FLOAT variable must pass through untouched (not NaN'd/stripped).
+  it('passes a VARIABLE_ALIAS through for a FLOAT variable (not coerced to a number)', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'radius/md', resolvedType: 'FLOAT', setValueForMode }),
+    );
+    await handler({ variableId: 'V:0', modeId: 'M:0', value: { type: 'VARIABLE_ALIAS', id: 'V:9' } });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
+  });
+
   it('rejects a stringified FLOAT that is not a number', async () => {
     const variable = { id: 'V:0', name: 'x', resolvedType: 'FLOAT', setValueForMode: vi.fn<() => void>() };
     await expect(

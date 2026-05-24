@@ -68,6 +68,7 @@ import { createSetFillsHandler } from './set-fills.js';
 import { createSetOpacityHandler } from './set-opacity.js';
 import { createSetStrokesHandler } from './set-strokes.js';
 import { createSetTextHandler } from './set-text.js';
+import { createSetTextPropertiesHandler } from './set-text-properties.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
@@ -88,6 +89,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
   const rawWrites: SandboxHandlers = {
     set_fills: createSetFillsHandler(figmaCtx),
     set_text: createSetTextHandler(figmaCtx),
+    set_text_properties: createSetTextPropertiesHandler(figmaCtx),
     create_frame: createCreateFrameHandler(figmaCtx),
     set_opacity: createSetOpacityHandler(figmaCtx),
     set_visible: createSetVisibleHandler(figmaCtx),

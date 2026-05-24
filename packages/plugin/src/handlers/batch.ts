@@ -140,6 +140,11 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_constraints: nodeProps('set_constraints', ['constraints']),
   rename_node: nodeProps('rename_node', ['name']),
   set_text: setTextInverse,
+  set_text_properties: nodeProps('set_text_properties', [
+    'textAutoResize',
+    'textTruncation',
+    'maxLines',
+  ]),
   // Multi-node mutations.
   move_nodes: nodesSnapshot(
     'move_nodes',

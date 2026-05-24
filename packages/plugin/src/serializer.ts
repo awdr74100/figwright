@@ -252,6 +252,12 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     out.letterSpacing = serializeLetterSpacing(text.letterSpacing);
     out.textCase = typeof text.textCase === 'string' ? text.textCase : MIXED;
     out.textDecoration = typeof text.textDecoration === 'string' ? text.textDecoration : MIXED;
+    // Node-level layout/overflow props (not per-run) — needed for codegen (ellipsis / line-clamp).
+    out.textAutoResize = text.textAutoResize;
+    out.textTruncation = text.textTruncation;
+    out.maxLines = text.maxLines;
+    if (typeof text.paragraphSpacing === 'number') out.paragraphSpacing = text.paragraphSpacing;
+    if (typeof text.paragraphIndent === 'number') out.paragraphIndent = text.paragraphIndent;
     // Only expand per-run styling when the node is actually mixed (uniform text needs no segments).
     const isMixed =
       out.fontSize === MIXED ||
