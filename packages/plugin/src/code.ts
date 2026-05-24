@@ -2,6 +2,7 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
+import { createBatchHandler } from './handlers/batch.js';
 import { createAddPageHandler } from './handlers/add-page.js';
 import { createAddVariableModeHandler } from './handlers/add-variable-mode.js';
 import { createApplyStyleToNodeHandler } from './handlers/apply-style-to-node.js';
@@ -104,6 +105,68 @@ const emitContext = (): void => {
 
 const idempotencyCache = createIdempotencyCache();
 
+// Raw (un-wrapped) write handlers. `batch` calls these directly: a batch carries one requestId and
+// is itself idempotent, so its ops must not be deduped a second time per-op.
+const rawWrites: SandboxHandlers = {
+  set_fills: createSetFillsHandler(figma),
+  set_text: createSetTextHandler(figma),
+  create_frame: createCreateFrameHandler(figma),
+  set_opacity: createSetOpacityHandler(figma),
+  set_visible: createSetVisibleHandler(figma),
+  rename_node: createRenameNodeHandler(figma),
+  delete_nodes: createDeleteNodesHandler(figma),
+  create_text: createCreateTextHandler(figma),
+  create_rectangle: createCreateRectangleHandler(figma),
+  set_corner_radius: createSetCornerRadiusHandler(figma),
+  set_strokes: createSetStrokesHandler(figma),
+  move_nodes: createMoveNodesHandler(figma),
+  resize_nodes: createResizeNodesHandler(figma),
+  set_auto_layout: createSetAutoLayoutHandler(figma),
+  set_blend_mode: createSetBlendModeHandler(figma),
+  set_constraints: createSetConstraintsHandler(figma),
+  rotate_nodes: createRotateNodesHandler(figma),
+  lock_nodes: createSetLockedHandler(figma, true),
+  unlock_nodes: createSetLockedHandler(figma, false),
+  clone_node: createCloneNodeHandler(figma),
+  // Styles
+  set_effects: createSetEffectsHandler(figma),
+  create_paint_style: createCreatePaintStyleHandler(figma),
+  create_text_style: createCreateTextStyleHandler(figma),
+  create_effect_style: createCreateEffectStyleHandler(figma),
+  create_grid_style: createCreateGridStyleHandler(figma),
+  update_paint_style: createUpdatePaintStyleHandler(figma),
+  apply_style_to_node: createApplyStyleToNodeHandler(figma),
+  delete_style: createDeleteStyleHandler(figma),
+  // Variables
+  create_variable_collection: createCreateVariableCollectionHandler(figma),
+  add_variable_mode: createAddVariableModeHandler(figma),
+  create_variable: createCreateVariableHandler(figma),
+  set_variable_value: createSetVariableValueHandler(figma),
+  bind_variable_to_node: createBindVariableToNodeHandler(figma),
+  delete_variable: createDeleteVariableHandler(figma),
+  // Structure + bulk text
+  group_nodes: createGroupNodesHandler(figma),
+  ungroup_nodes: createUngroupNodesHandler(figma),
+  reparent_nodes: createReparentNodesHandler(figma),
+  reorder_nodes: createReorderNodesHandler(figma),
+  find_replace_text: createFindReplaceTextHandler(figma),
+  batch_rename_nodes: createBatchRenameNodesHandler(figma),
+  // Pages
+  add_page: createAddPageHandler(figma),
+  delete_page: createDeletePageHandler(figma),
+  rename_page: createRenamePageHandler(figma),
+  navigate_to_page: createNavigateToPageHandler(figma),
+  // Prototype + components
+  set_reactions: createSetReactionsHandler(figma),
+  remove_reactions: createRemoveReactionsHandler(figma),
+  swap_component: createSwapComponentHandler(figma),
+  detach_instance: createDetachInstanceHandler(figma),
+  import_image: createImportImageHandler(figma),
+  create_ellipse: createCreateEllipseHandler(figma),
+  create_component: createCreateComponentHandler(figma),
+  create_section: createCreateSectionHandler(figma),
+};
+
 const handlers: SandboxHandlers = {
   ping: createPingHandler(figma),
   get_selection: createGetSelectionHandler(figma),
@@ -125,65 +188,14 @@ const handlers: SandboxHandlers = {
   list_files: createListFilesHandler(figma),
   get_design_context: createGetDesignContextHandler(figma),
   get_screenshot: createGetScreenshotHandler(figma),
-  // Write tools: wrapped with idempotency so retries (same requestId) apply the effect once.
-  set_fills: idempotent(idempotencyCache, createSetFillsHandler(figma)),
-  set_text: idempotent(idempotencyCache, createSetTextHandler(figma)),
-  create_frame: idempotent(idempotencyCache, createCreateFrameHandler(figma)),
-  set_opacity: idempotent(idempotencyCache, createSetOpacityHandler(figma)),
-  set_visible: idempotent(idempotencyCache, createSetVisibleHandler(figma)),
-  rename_node: idempotent(idempotencyCache, createRenameNodeHandler(figma)),
-  delete_nodes: idempotent(idempotencyCache, createDeleteNodesHandler(figma)),
-  create_text: idempotent(idempotencyCache, createCreateTextHandler(figma)),
-  create_rectangle: idempotent(idempotencyCache, createCreateRectangleHandler(figma)),
-  set_corner_radius: idempotent(idempotencyCache, createSetCornerRadiusHandler(figma)),
-  set_strokes: idempotent(idempotencyCache, createSetStrokesHandler(figma)),
-  move_nodes: idempotent(idempotencyCache, createMoveNodesHandler(figma)),
-  resize_nodes: idempotent(idempotencyCache, createResizeNodesHandler(figma)),
-  set_auto_layout: idempotent(idempotencyCache, createSetAutoLayoutHandler(figma)),
-  set_blend_mode: idempotent(idempotencyCache, createSetBlendModeHandler(figma)),
-  set_constraints: idempotent(idempotencyCache, createSetConstraintsHandler(figma)),
-  rotate_nodes: idempotent(idempotencyCache, createRotateNodesHandler(figma)),
-  lock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, true)),
-  unlock_nodes: idempotent(idempotencyCache, createSetLockedHandler(figma, false)),
-  clone_node: idempotent(idempotencyCache, createCloneNodeHandler(figma)),
-  // Styles
-  set_effects: idempotent(idempotencyCache, createSetEffectsHandler(figma)),
-  create_paint_style: idempotent(idempotencyCache, createCreatePaintStyleHandler(figma)),
-  create_text_style: idempotent(idempotencyCache, createCreateTextStyleHandler(figma)),
-  create_effect_style: idempotent(idempotencyCache, createCreateEffectStyleHandler(figma)),
-  create_grid_style: idempotent(idempotencyCache, createCreateGridStyleHandler(figma)),
-  update_paint_style: idempotent(idempotencyCache, createUpdatePaintStyleHandler(figma)),
-  apply_style_to_node: idempotent(idempotencyCache, createApplyStyleToNodeHandler(figma)),
-  delete_style: idempotent(idempotencyCache, createDeleteStyleHandler(figma)),
-  // Variables
-  create_variable_collection: idempotent(idempotencyCache, createCreateVariableCollectionHandler(figma)),
-  add_variable_mode: idempotent(idempotencyCache, createAddVariableModeHandler(figma)),
-  create_variable: idempotent(idempotencyCache, createCreateVariableHandler(figma)),
-  set_variable_value: idempotent(idempotencyCache, createSetVariableValueHandler(figma)),
-  bind_variable_to_node: idempotent(idempotencyCache, createBindVariableToNodeHandler(figma)),
-  delete_variable: idempotent(idempotencyCache, createDeleteVariableHandler(figma)),
-  // Structure + bulk text
-  group_nodes: idempotent(idempotencyCache, createGroupNodesHandler(figma)),
-  ungroup_nodes: idempotent(idempotencyCache, createUngroupNodesHandler(figma)),
-  reparent_nodes: idempotent(idempotencyCache, createReparentNodesHandler(figma)),
-  reorder_nodes: idempotent(idempotencyCache, createReorderNodesHandler(figma)),
-  find_replace_text: idempotent(idempotencyCache, createFindReplaceTextHandler(figma)),
-  batch_rename_nodes: idempotent(idempotencyCache, createBatchRenameNodesHandler(figma)),
-  // Pages
-  add_page: idempotent(idempotencyCache, createAddPageHandler(figma)),
-  delete_page: idempotent(idempotencyCache, createDeletePageHandler(figma)),
-  rename_page: idempotent(idempotencyCache, createRenamePageHandler(figma)),
-  navigate_to_page: idempotent(idempotencyCache, createNavigateToPageHandler(figma)),
-  // Prototype + components
-  set_reactions: idempotent(idempotencyCache, createSetReactionsHandler(figma)),
-  remove_reactions: idempotent(idempotencyCache, createRemoveReactionsHandler(figma)),
-  swap_component: idempotent(idempotencyCache, createSwapComponentHandler(figma)),
-  detach_instance: idempotent(idempotencyCache, createDetachInstanceHandler(figma)),
-  import_image: idempotent(idempotencyCache, createImportImageHandler(figma)),
-  create_ellipse: idempotent(idempotencyCache, createCreateEllipseHandler(figma)),
-  create_component: idempotent(idempotencyCache, createCreateComponentHandler(figma)),
-  create_section: idempotent(idempotencyCache, createCreateSectionHandler(figma)),
 };
+
+// Write tools: wrapped with idempotency so retries (same requestId) apply the effect once.
+for (const name of Object.keys(rawWrites)) {
+  handlers[name] = idempotent(idempotencyCache, rawWrites[name]!);
+}
+// batch applies many invertible ops atomically (all-or-nothing). One requestId → idempotent as a unit.
+handlers.batch = idempotent(idempotencyCache, createBatchHandler(figma, rawWrites));
 
 figma.ui.onmessage = (raw: unknown) => {
   void (async (): Promise<void> => {

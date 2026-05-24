@@ -142,6 +142,7 @@ import {
   createComponentToolDefinition,
 } from './tools/create-component.js';
 import { CREATE_SECTION_TOOL_NAME, createSectionToolDefinition } from './tools/create-section.js';
+import { BATCH_TOOL_NAME, batchToolDefinition } from './tools/batch.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -254,6 +255,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     createEllipseToolDefinition,
     createComponentToolDefinition,
     createSectionToolDefinition,
+    batchToolDefinition,
   ],
 }));
 
@@ -312,6 +314,7 @@ const WRITE_TOOLS = new Set<string>([
   CREATE_ELLIPSE_TOOL_NAME,
   CREATE_COMPONENT_TOOL_NAME,
   CREATE_SECTION_TOOL_NAME,
+  BATCH_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

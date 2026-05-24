@@ -58,3 +58,20 @@ export const VariableResultSchema = v.object({
   name: v.string(),
 });
 export type VariableResult = v.InferOutput<typeof VariableResultSchema>;
+
+/** One step in an atomic batch: a write tool name + the params it would normally receive. */
+export const BatchOpSchema = v.object({
+  tool: v.string(),
+  params: v.optional(v.unknown()),
+});
+export type BatchOp = v.InferOutput<typeof BatchOpSchema>;
+
+/**
+ * Result of `batch`: the per-op results in op order. The batch is all-or-nothing — on any failure
+ * the plugin rolls back the already-applied ops and the call rejects instead of returning this.
+ */
+export const BatchResultSchema = v.object({
+  ok: v.literal(true),
+  results: v.array(v.unknown()),
+});
+export type BatchResult = v.InferOutput<typeof BatchResultSchema>;
