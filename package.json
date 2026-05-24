@@ -30,14 +30,14 @@
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "@vitest/coverage-v8": "latest",
+    "@types/node": "^25.9.0",
+    "@vitest/coverage-v8": "^4.1.6",
     "knip": "^6.14.1",
-    "lefthook": "latest",
-    "oxfmt": "latest",
-    "oxlint": "latest",
-    "typescript": "latest",
-    "vitest": "latest"
+    "lefthook": "^2.1.8",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   },
   "engines": {
     "node": ">=24.0.0",
