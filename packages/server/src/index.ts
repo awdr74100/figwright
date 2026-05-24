@@ -136,6 +136,12 @@ import {
   detachInstanceToolDefinition,
 } from './tools/detach-instance.js';
 import { IMPORT_IMAGE_TOOL_NAME, importImageToolDefinition } from './tools/import-image.js';
+import { CREATE_ELLIPSE_TOOL_NAME, createEllipseToolDefinition } from './tools/create-ellipse.js';
+import {
+  CREATE_COMPONENT_TOOL_NAME,
+  createComponentToolDefinition,
+} from './tools/create-component.js';
+import { CREATE_SECTION_TOOL_NAME, createSectionToolDefinition } from './tools/create-section.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -245,6 +251,9 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     swapComponentToolDefinition,
     detachInstanceToolDefinition,
     importImageToolDefinition,
+    createEllipseToolDefinition,
+    createComponentToolDefinition,
+    createSectionToolDefinition,
   ],
 }));
 
@@ -300,6 +309,9 @@ const WRITE_TOOLS = new Set<string>([
   SWAP_COMPONENT_TOOL_NAME,
   DETACH_INSTANCE_TOOL_NAME,
   IMPORT_IMAGE_TOOL_NAME,
+  CREATE_ELLIPSE_TOOL_NAME,
+  CREATE_COMPONENT_TOOL_NAME,
+  CREATE_SECTION_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

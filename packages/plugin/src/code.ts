@@ -8,11 +8,14 @@ import { createApplyStyleToNodeHandler } from './handlers/apply-style-to-node.js
 import { createBatchRenameNodesHandler } from './handlers/batch-rename-nodes.js';
 import { createBindVariableToNodeHandler } from './handlers/bind-variable-to-node.js';
 import { createCloneNodeHandler } from './handlers/clone-node.js';
+import { createCreateComponentHandler } from './handlers/create-component.js';
 import { createCreateEffectStyleHandler } from './handlers/create-effect-style.js';
+import { createCreateEllipseHandler } from './handlers/create-ellipse.js';
 import { createCreateFrameHandler } from './handlers/create-frame.js';
 import { createCreateGridStyleHandler } from './handlers/create-grid-style.js';
 import { createCreatePaintStyleHandler } from './handlers/create-paint-style.js';
 import { createCreateRectangleHandler } from './handlers/create-rectangle.js';
+import { createCreateSectionHandler } from './handlers/create-section.js';
 import { createCreateTextHandler } from './handlers/create-text.js';
 import { createCreateTextStyleHandler } from './handlers/create-text-style.js';
 import { createCreateVariableHandler } from './handlers/create-variable.js';
@@ -177,6 +180,9 @@ const handlers: SandboxHandlers = {
   swap_component: idempotent(idempotencyCache, createSwapComponentHandler(figma)),
   detach_instance: idempotent(idempotencyCache, createDetachInstanceHandler(figma)),
   import_image: idempotent(idempotencyCache, createImportImageHandler(figma)),
+  create_ellipse: idempotent(idempotencyCache, createCreateEllipseHandler(figma)),
+  create_component: idempotent(idempotencyCache, createCreateComponentHandler(figma)),
+  create_section: idempotent(idempotencyCache, createCreateSectionHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {
