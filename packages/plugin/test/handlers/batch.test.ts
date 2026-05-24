@@ -161,6 +161,38 @@ describe('batch handler', () => {
     expect(store.get('1:1')!.fills).toEqual([SOLID(0.2)]); // original fill restored
   });
 
+  it('reports undo failures instead of claiming a clean rollback', async () => {
+    // op 0 creates a frame whose remove() throws → its rollback fails; op 1 throws to trigger rollback.
+    const store = new Map<string, Record<string, unknown>>([['1:2', { id: '1:2', fills: [] }]]);
+    const figmaCtx = {
+      currentPage: { appendChild: vi.fn<(n: unknown) => void>() },
+      getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
+      createFrame: () => {
+        const node = {
+          id: '9:1',
+          name: 'F',
+          type: 'FRAME',
+          resize: vi.fn<(w: number, h: number) => void>(),
+          remove: () => {
+            throw new Error('cannot remove');
+          },
+        };
+        store.set('9:1', node);
+        return node;
+      },
+    } as unknown as typeof figma;
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: {} },
+          { tool: 'set_fills', params: { nodeId: '1:2', fills: [{ type: 'GRADIENT_LINEAR' }] } },
+        ],
+      }),
+    ).rejects.toThrow(/undo\(s\) FAILED.*cannot remove.*partially changed/);
+  });
+
   it('replays as a unit under idempotency: same requestId applies its ops once', async () => {
     const { figmaCtx, store } = makeFigma({ '1:2': { id: '1:2', x: 0, y: 0 } });
     const batch = idempotent(createIdempotencyCache(), createBatchHandler(figmaCtx, realWrites(figmaCtx)));

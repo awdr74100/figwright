@@ -228,17 +228,23 @@ export const createBatchHandler =
       try {
         results.push(await apply[op.tool]!(op.params));
       } catch (err) {
+        // Unwind applied ops in reverse. Keep going even if one undo throws, but record which ones
+        // failed so the error never claims a clean rollback that didn't happen.
+        const undoFailures: string[] = [];
         for (let j = i - 1; j >= 0; j -= 1) {
           try {
             await INVERSES[ops[j]!.tool]!.undo(figmaCtx, ops[j]!.params, captured[j], results[j]);
-          } catch {
-            // Best-effort: keep unwinding the remaining ops even if one undo fails.
+          } catch (undoErr) {
+            const m = undoErr instanceof Error ? undoErr.message : String(undoErr);
+            undoFailures.push(`op ${j} (${ops[j]!.tool}): ${m}`);
           }
         }
         const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`batch: op ${i} (${op.tool}) failed, rolled back ${i} applied op(s): ${message}`, {
-          cause: err,
-        });
+        const rollback =
+          undoFailures.length === 0
+            ? `rolled back ${i} applied op(s)`
+            : `rolled back ${i - undoFailures.length}/${i} op(s); ${undoFailures.length} undo(s) FAILED [${undoFailures.join('; ')}] — document may be partially changed`;
+        throw new Error(`batch: op ${i} (${op.tool}) failed, ${rollback}: ${message}`, { cause: err });
       }
     }
     /* eslint-enable no-await-in-loop */
