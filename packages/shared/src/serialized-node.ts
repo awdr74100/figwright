@@ -26,21 +26,38 @@ const SolidPaintSchema = v.object({
   color: SerializedColorSchema,
 });
 
-const NonSolidPaintSchema = v.object({
-  type: v.picklist([
-    'GRADIENT_LINEAR',
-    'GRADIENT_RADIAL',
-    'GRADIENT_ANGULAR',
-    'GRADIENT_DIAMOND',
-    'IMAGE',
-    'VIDEO',
-    'PATTERN',
-  ]),
+/** A gradient color stop: position 0–1 along the gradient + its RGBA color. */
+export const SerializedColorStopSchema = v.object({
+  position: v.number(),
+  color: SerializedRGBASchema,
+});
+export type SerializedColorStop = v.InferOutput<typeof SerializedColorStopSchema>;
+
+/**
+ * Gradient paint. `gradientTransform` is the Figma Plugin API's 2×3 affine matrix (rows of 3) that
+ * positions the gradient — it round-trips directly into write tools (unlike the REST API's
+ * gradientHandlePositions, which we don't use plugin-side).
+ */
+const GradientPaintSchema = v.object({
+  type: v.picklist(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
+  visible: v.boolean(),
+  opacity: v.number(),
+  gradientStops: v.array(SerializedColorStopSchema),
+  gradientTransform: v.array(v.array(v.number())),
+});
+
+/** IMAGE / VIDEO / PATTERN: type-only for now (raster/pattern detail is out of scope). */
+const OtherPaintSchema = v.object({
+  type: v.picklist(['IMAGE', 'VIDEO', 'PATTERN']),
   visible: v.boolean(),
   opacity: v.number(),
 });
 
-export const SerializedPaintSchema = v.variant('type', [SolidPaintSchema, NonSolidPaintSchema]);
+export const SerializedPaintSchema = v.variant('type', [
+  SolidPaintSchema,
+  GradientPaintSchema,
+  OtherPaintSchema,
+]);
 export type SerializedPaint = v.InferOutput<typeof SerializedPaintSchema>;
 
 export const SerializedFontNameSchema = v.object({

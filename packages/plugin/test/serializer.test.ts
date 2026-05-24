@@ -69,13 +69,46 @@ describe('serializeFlat', () => {
     expect(out.fills).toBe(MIXED);
   });
 
-  it('serializes non-SOLID paint without color', () => {
+  it('serializes a gradient paint with its stops and transform', () => {
     const out = serializeFlatSync(
       fake({
-        fills: [{ type: 'GRADIENT_LINEAR', visible: false, opacity: 0.8 }],
+        fills: [
+          {
+            type: 'GRADIENT_LINEAR',
+            visible: true,
+            opacity: 0.8,
+            gradientStops: [
+              { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+              { position: 1, color: { r: 0, g: 0, b: 1, a: 0.5 } },
+            ],
+            gradientTransform: [
+              [1, 0, 0],
+              [0, 1, 0],
+            ],
+          },
+        ],
       }),
     );
-    expect(out.fills).toEqual([{ type: 'GRADIENT_LINEAR', visible: false, opacity: 0.8 }]);
+    expect(out.fills).toEqual([
+      {
+        type: 'GRADIENT_LINEAR',
+        visible: true,
+        opacity: 0.8,
+        gradientStops: [
+          { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+          { position: 1, color: { r: 0, g: 0, b: 1, a: 0.5 } },
+        ],
+        gradientTransform: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+      },
+    ]);
+  });
+
+  it('serializes IMAGE/VIDEO/PATTERN paints as type-only (no gradient detail)', () => {
+    const out = serializeFlatSync(fake({ fills: [{ type: 'IMAGE', visible: false, opacity: 0.8 }] }));
+    expect(out.fills).toEqual([{ type: 'IMAGE', visible: false, opacity: 0.8 }]);
   });
 
   it('falls back paint.visible/opacity to defaults when undefined', () => {
