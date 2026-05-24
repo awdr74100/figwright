@@ -17,6 +17,7 @@ import { createCreateGridStyleHandler } from './handlers/create-grid-style.js';
 import { createCreatePaintStyleHandler } from './handlers/create-paint-style.js';
 import { createCreateRectangleHandler } from './handlers/create-rectangle.js';
 import { createCreateSectionHandler } from './handlers/create-section.js';
+import { createCreateInstanceHandler } from './handlers/create-instance.js';
 import { createCreateTextHandler } from './handlers/create-text.js';
 import { createCreateTextStyleHandler } from './handlers/create-text-style.js';
 import { createCreateVariableHandler } from './handlers/create-variable.js';
@@ -165,6 +166,7 @@ const rawWrites: SandboxHandlers = {
   create_ellipse: createCreateEllipseHandler(figma),
   create_component: createCreateComponentHandler(figma),
   create_section: createCreateSectionHandler(figma),
+  create_instance: createCreateInstanceHandler(figma),
 };
 
 const handlers: SandboxHandlers = {

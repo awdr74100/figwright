@@ -21,6 +21,7 @@ import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from '../../src/tools
 import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from '../../src/tools/set-text.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from '../../src/tools/set-visible.js';
 import { BATCH_TOOL_NAME, batchToolDefinition } from '../../src/tools/batch.js';
+import { CREATE_INSTANCE_TOOL_NAME, createInstanceToolDefinition } from '../../src/tools/create-instance.js';
 
 describe('M2 write tool definitions', () => {
   it('set_fills requires nodeId + fills', () => {
@@ -122,6 +123,19 @@ describe('M2 write tool definitions', () => {
     for (const def of [lockNodesToolDefinition, unlockNodesToolDefinition]) {
       expect(def.inputSchema).toMatchObject({ required: ['nodeIds'] });
     }
+  });
+
+  it('create_instance takes componentId/componentKey + placement, none required', () => {
+    expect(createInstanceToolDefinition.name).toBe(CREATE_INSTANCE_TOOL_NAME);
+    expect(createInstanceToolDefinition.inputSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        componentId: { type: 'string' },
+        componentKey: { type: 'string' },
+        parentId: { type: 'string' },
+      },
+    });
+    expect(createInstanceToolDefinition.inputSchema.required).toEqual([]);
   });
 
   it('batch requires a non-empty ops array of { tool, params } and hides requestId', () => {

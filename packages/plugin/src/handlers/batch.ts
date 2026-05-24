@@ -180,6 +180,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   create_component: createInverse('create_component'),
   create_section: createInverse('create_section'),
   import_image: createInverse('import_image'),
+  create_instance: createInverse('create_instance'),
   clone_node: createInverse('clone_node', false),
 };
 
