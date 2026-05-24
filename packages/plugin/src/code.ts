@@ -2,6 +2,7 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-rel
 
 import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
+import { createAddPageHandler } from './handlers/add-page.js';
 import { createAddVariableModeHandler } from './handlers/add-variable-mode.js';
 import { createApplyStyleToNodeHandler } from './handlers/apply-style-to-node.js';
 import { createBatchRenameNodesHandler } from './handlers/batch-rename-nodes.js';
@@ -17,10 +18,12 @@ import { createCreateTextStyleHandler } from './handlers/create-text-style.js';
 import { createCreateVariableHandler } from './handlers/create-variable.js';
 import { createCreateVariableCollectionHandler } from './handlers/create-variable-collection.js';
 import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
+import { createDeletePageHandler } from './handlers/delete-page.js';
 import { createDeleteStyleHandler } from './handlers/delete-style.js';
 import { createDeleteVariableHandler } from './handlers/delete-variable.js';
 import { createFindReplaceTextHandler } from './handlers/find-replace-text.js';
 import { createGroupNodesHandler } from './handlers/group-nodes.js';
+import { createNavigateToPageHandler } from './handlers/navigate-to-page.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
 import { createGetDocumentHandler } from './handlers/get-document.js';
@@ -44,6 +47,7 @@ import { createSearchNodesHandler } from './handlers/search-nodes.js';
 import { createSetLockedHandler } from './handlers/lock-nodes.js';
 import { createMoveNodesHandler } from './handlers/move-nodes.js';
 import { createRenameNodeHandler } from './handlers/rename-node.js';
+import { createRenamePageHandler } from './handlers/rename-page.js';
 import { createReorderNodesHandler } from './handlers/reorder-nodes.js';
 import { createReparentNodesHandler } from './handlers/reparent-nodes.js';
 import { createResizeNodesHandler } from './handlers/resize-nodes.js';
@@ -157,6 +161,11 @@ const handlers: SandboxHandlers = {
   reorder_nodes: idempotent(idempotencyCache, createReorderNodesHandler(figma)),
   find_replace_text: idempotent(idempotencyCache, createFindReplaceTextHandler(figma)),
   batch_rename_nodes: idempotent(idempotencyCache, createBatchRenameNodesHandler(figma)),
+  // Pages
+  add_page: idempotent(idempotencyCache, createAddPageHandler(figma)),
+  delete_page: idempotent(idempotencyCache, createDeletePageHandler(figma)),
+  rename_page: idempotent(idempotencyCache, createRenamePageHandler(figma)),
+  navigate_to_page: idempotent(idempotencyCache, createNavigateToPageHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {

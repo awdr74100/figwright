@@ -118,6 +118,13 @@ import {
   BATCH_RENAME_NODES_TOOL_NAME,
   batchRenameNodesToolDefinition,
 } from './tools/batch-rename-nodes.js';
+import { ADD_PAGE_TOOL_NAME, addPageToolDefinition } from './tools/add-page.js';
+import { DELETE_PAGE_TOOL_NAME, deletePageToolDefinition } from './tools/delete-page.js';
+import { RENAME_PAGE_TOOL_NAME, renamePageToolDefinition } from './tools/rename-page.js';
+import {
+  NAVIGATE_TO_PAGE_TOOL_NAME,
+  navigateToPageToolDefinition,
+} from './tools/navigate-to-page.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -218,6 +225,10 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     reorderNodesToolDefinition,
     findReplaceTextToolDefinition,
     batchRenameNodesToolDefinition,
+    addPageToolDefinition,
+    deletePageToolDefinition,
+    renamePageToolDefinition,
+    navigateToPageToolDefinition,
   ],
 }));
 
@@ -264,6 +275,10 @@ const WRITE_TOOLS = new Set<string>([
   REORDER_NODES_TOOL_NAME,
   FIND_REPLACE_TEXT_TOOL_NAME,
   BATCH_RENAME_NODES_TOOL_NAME,
+  ADD_PAGE_TOOL_NAME,
+  DELETE_PAGE_TOOL_NAME,
+  RENAME_PAGE_TOOL_NAME,
+  NAVIGATE_TO_PAGE_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
