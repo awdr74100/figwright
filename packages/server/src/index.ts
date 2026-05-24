@@ -106,6 +106,18 @@ import {
   bindVariableToNodeToolDefinition,
 } from './tools/bind-variable-to-node.js';
 import { DELETE_VARIABLE_TOOL_NAME, deleteVariableToolDefinition } from './tools/delete-variable.js';
+import { GROUP_NODES_TOOL_NAME, groupNodesToolDefinition } from './tools/group-nodes.js';
+import { UNGROUP_NODES_TOOL_NAME, ungroupNodesToolDefinition } from './tools/ungroup-nodes.js';
+import { REPARENT_NODES_TOOL_NAME, reparentNodesToolDefinition } from './tools/reparent-nodes.js';
+import { REORDER_NODES_TOOL_NAME, reorderNodesToolDefinition } from './tools/reorder-nodes.js';
+import {
+  FIND_REPLACE_TEXT_TOOL_NAME,
+  findReplaceTextToolDefinition,
+} from './tools/find-replace-text.js';
+import {
+  BATCH_RENAME_NODES_TOOL_NAME,
+  batchRenameNodesToolDefinition,
+} from './tools/batch-rename-nodes.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -200,6 +212,12 @@ mcp.setRequestHandler(ListToolsRequestSchema, () => ({
     setVariableValueToolDefinition,
     bindVariableToNodeToolDefinition,
     deleteVariableToolDefinition,
+    groupNodesToolDefinition,
+    ungroupNodesToolDefinition,
+    reparentNodesToolDefinition,
+    reorderNodesToolDefinition,
+    findReplaceTextToolDefinition,
+    batchRenameNodesToolDefinition,
   ],
 }));
 
@@ -240,6 +258,12 @@ const WRITE_TOOLS = new Set<string>([
   SET_VARIABLE_VALUE_TOOL_NAME,
   BIND_VARIABLE_TO_NODE_TOOL_NAME,
   DELETE_VARIABLE_TOOL_NAME,
+  GROUP_NODES_TOOL_NAME,
+  UNGROUP_NODES_TOOL_NAME,
+  REPARENT_NODES_TOOL_NAME,
+  REORDER_NODES_TOOL_NAME,
+  FIND_REPLACE_TEXT_TOOL_NAME,
+  BATCH_RENAME_NODES_TOOL_NAME,
 ]);
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {

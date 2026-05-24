@@ -4,6 +4,7 @@ import { dispatchSandboxMessage, type SandboxHandlers } from './dispatcher.js';
 import { createIdempotencyCache, idempotent } from './idempotency.js';
 import { createAddVariableModeHandler } from './handlers/add-variable-mode.js';
 import { createApplyStyleToNodeHandler } from './handlers/apply-style-to-node.js';
+import { createBatchRenameNodesHandler } from './handlers/batch-rename-nodes.js';
 import { createBindVariableToNodeHandler } from './handlers/bind-variable-to-node.js';
 import { createCloneNodeHandler } from './handlers/clone-node.js';
 import { createCreateEffectStyleHandler } from './handlers/create-effect-style.js';
@@ -18,6 +19,8 @@ import { createCreateVariableCollectionHandler } from './handlers/create-variabl
 import { createDeleteNodesHandler } from './handlers/delete-nodes.js';
 import { createDeleteStyleHandler } from './handlers/delete-style.js';
 import { createDeleteVariableHandler } from './handlers/delete-variable.js';
+import { createFindReplaceTextHandler } from './handlers/find-replace-text.js';
+import { createGroupNodesHandler } from './handlers/group-nodes.js';
 import { createGetAnnotationsHandler } from './handlers/get-annotations.js';
 import { createGetDesignContextHandler } from './handlers/get-design-context.js';
 import { createGetDocumentHandler } from './handlers/get-document.js';
@@ -41,6 +44,8 @@ import { createSearchNodesHandler } from './handlers/search-nodes.js';
 import { createSetLockedHandler } from './handlers/lock-nodes.js';
 import { createMoveNodesHandler } from './handlers/move-nodes.js';
 import { createRenameNodeHandler } from './handlers/rename-node.js';
+import { createReorderNodesHandler } from './handlers/reorder-nodes.js';
+import { createReparentNodesHandler } from './handlers/reparent-nodes.js';
 import { createResizeNodesHandler } from './handlers/resize-nodes.js';
 import { createRotateNodesHandler } from './handlers/rotate-nodes.js';
 import { createSetAutoLayoutHandler } from './handlers/set-auto-layout.js';
@@ -54,6 +59,7 @@ import { createSetStrokesHandler } from './handlers/set-strokes.js';
 import { createSetTextHandler } from './handlers/set-text.js';
 import { createSetVariableValueHandler } from './handlers/set-variable-value.js';
 import { createSetVisibleHandler } from './handlers/set-visible.js';
+import { createUngroupNodesHandler } from './handlers/ungroup-nodes.js';
 import { createUpdatePaintStyleHandler } from './handlers/update-paint-style.js';
 
 figma.showUI(__html__, { width: 320, height: 400, themeColors: true });
@@ -144,6 +150,13 @@ const handlers: SandboxHandlers = {
   set_variable_value: idempotent(idempotencyCache, createSetVariableValueHandler(figma)),
   bind_variable_to_node: idempotent(idempotencyCache, createBindVariableToNodeHandler(figma)),
   delete_variable: idempotent(idempotencyCache, createDeleteVariableHandler(figma)),
+  // Structure + bulk text
+  group_nodes: idempotent(idempotencyCache, createGroupNodesHandler(figma)),
+  ungroup_nodes: idempotent(idempotencyCache, createUngroupNodesHandler(figma)),
+  reparent_nodes: idempotent(idempotencyCache, createReparentNodesHandler(figma)),
+  reorder_nodes: idempotent(idempotencyCache, createReorderNodesHandler(figma)),
+  find_replace_text: idempotent(idempotencyCache, createFindReplaceTextHandler(figma)),
+  batch_rename_nodes: idempotent(idempotencyCache, createBatchRenameNodesHandler(figma)),
 };
 
 figma.ui.onmessage = (raw: unknown) => {
