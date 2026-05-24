@@ -1,4 +1,9 @@
-import { DEFAULT_PORT, type GetScreenshotResult, PROTOCOL_VERSION } from '@figma-mcp-relay/shared';
+import {
+  DEFAULT_PORT,
+  type GetScreenshotResult,
+  newId,
+  PROTOCOL_VERSION,
+} from '@figma-mcp-relay/shared';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -8,35 +13,10 @@ import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
-import { getAnnotationsToolDefinition } from './tools/get-annotations.js';
-import { getDesignContextToolDefinition } from './tools/get-design-context.js';
-import { getDocumentToolDefinition } from './tools/get-document.js';
-import { getFontsToolDefinition } from './tools/get-fonts.js';
-import { getLocalComponentsToolDefinition } from './tools/get-local-components.js';
-import { getMetadataToolDefinition } from './tools/get-metadata.js';
-import { getNodeToolDefinition } from './tools/get-node.js';
-import { getNodesInfoToolDefinition } from './tools/get-nodes-info.js';
-import { getPagesToolDefinition } from './tools/get-pages.js';
-import { getReactionsToolDefinition } from './tools/get-reactions.js';
-import {
-  GET_SCREENSHOT_TOOL_NAME,
-  getScreenshotToolDefinition,
-  screenshotContent,
-} from './tools/get-screenshot.js';
-import { getSelectionToolDefinition } from './tools/get-selection.js';
-import { getStylesToolDefinition } from './tools/get-styles.js';
-import { getVariableDefsToolDefinition } from './tools/get-variable-defs.js';
-import { getViewportToolDefinition } from './tools/get-viewport.js';
-import { listFilesToolDefinition } from './tools/list-files.js';
-import { formatPingResult, handlePing, pingToolDefinition } from './tools/ping.js';
-import {
-  handleSaveScreenshots,
-  SAVE_SCREENSHOTS_TOOL_NAME,
-  saveScreenshotsToolDefinition,
-} from './tools/save-screenshots.js';
-import { scanNodesByTypesToolDefinition } from './tools/scan-nodes-by-types.js';
-import { scanTextNodesToolDefinition } from './tools/scan-text-nodes.js';
-import { searchNodesToolDefinition } from './tools/search-nodes.js';
+import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from './tools/registry.js';
+import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
+import { formatPingResult, handlePing } from './tools/ping.js';
+import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -74,31 +54,7 @@ const mcp = new Server(
   { capabilities: { tools: {} } },
 );
 
-mcp.setRequestHandler(ListToolsRequestSchema, () => ({
-  tools: [
-    pingToolDefinition,
-    getSelectionToolDefinition,
-    getDocumentToolDefinition,
-    getNodeToolDefinition,
-    getNodesInfoToolDefinition,
-    getMetadataToolDefinition,
-    getPagesToolDefinition,
-    searchNodesToolDefinition,
-    scanTextNodesToolDefinition,
-    scanNodesByTypesToolDefinition,
-    getStylesToolDefinition,
-    getVariableDefsToolDefinition,
-    getLocalComponentsToolDefinition,
-    getViewportToolDefinition,
-    getFontsToolDefinition,
-    getAnnotationsToolDefinition,
-    getReactionsToolDefinition,
-    listFilesToolDefinition,
-    getDesignContextToolDefinition,
-    getScreenshotToolDefinition,
-    saveScreenshotsToolDefinition,
-  ],
-}));
+mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...TOOL_DEFINITIONS] }));
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args } = request.params;
@@ -117,7 +73,11 @@ mcp.setRequestHandler(CallToolRequestSchema, async request => {
     const result = (await dispatchTool({ node, follower, log }, name, args)) as GetScreenshotResult;
     return { content: screenshotContent(result) };
   }
-  const result = await dispatchTool({ node, follower, log }, name, args);
+  // Inject a stable idempotency key for write tools before the (possibly retrying) dispatch.
+  const dispatchArgs = WRITE_TOOL_NAMES.has(name)
+    ? { ...(args as Record<string, unknown> | undefined), requestId: newId() }
+    : args;
+  const result = await dispatchTool({ node, follower, log }, name, dispatchArgs);
   return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
 });
 
