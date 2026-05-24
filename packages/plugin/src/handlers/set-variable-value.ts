@@ -3,6 +3,30 @@ import type { SerializedVariableValue, VariableResult } from '@figma-mcp-relay/s
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaVariableValue } from './convert.js';
 
+/**
+ * Some MCP clients serialize a schema-untyped property to a string in transit, so `value` can arrive
+ * as e.g. "42" / "true" / '{"r":..}' even though the caller passed a number / boolean / object. We
+ * know the variable's resolvedType, so realign the value to it — otherwise Figma's setValueForMode
+ * rejects every non-STRING variable with a "Mismatched variable resolved type" error.
+ */
+const coerceToResolvedType = (raw: unknown, resolvedType: VariableResolvedDataType): unknown => {
+  if (typeof raw !== 'string') return raw; // native type survived transit — nothing to fix
+  if (resolvedType === 'FLOAT') {
+    const n = Number(raw);
+    if (Number.isNaN(n)) throw new TypeError(`set_variable_value: "${raw}" is not a number`);
+    return n;
+  }
+  if (resolvedType === 'BOOLEAN') return raw === 'true';
+  if (resolvedType === 'COLOR') {
+    try {
+      return JSON.parse(raw) as unknown; // an alias / RGBA object that was stringified
+    } catch {
+      throw new TypeError(`set_variable_value: COLOR value "${raw}" is not valid JSON`);
+    }
+  }
+  return raw; // STRING
+};
+
 export const createSetVariableValueHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
@@ -17,7 +41,8 @@ export const createSetVariableValueHandler =
     if (variable === null) {
       throw new Error(`set_variable_value: variable ${p.variableId} not found`);
     }
-    variable.setValueForMode(p.modeId, toFigmaVariableValue(p.value as SerializedVariableValue));
+    const value = coerceToResolvedType(p.value, variable.resolvedType);
+    variable.setValueForMode(p.modeId, toFigmaVariableValue(value as SerializedVariableValue));
 
     const result: VariableResult = { ok: true, variableId: variable.id, name: variable.name };
     return result;

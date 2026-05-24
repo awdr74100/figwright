@@ -29,6 +29,34 @@ describe('set_variable_value handler', () => {
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
   });
 
+  // Some MCP clients stringify the schema-untyped `value` in transit; the handler realigns it to the
+  // variable's resolvedType so Figma's setValueForMode does not reject every non-STRING variable.
+  it('coerces a stringified value back to the variable resolvedType', async () => {
+    const cases: { resolvedType: string; raw: unknown; expected: unknown }[] = [
+      { resolvedType: 'FLOAT', raw: '42', expected: 42 },
+      { resolvedType: 'BOOLEAN', raw: 'true', expected: true },
+      { resolvedType: 'BOOLEAN', raw: 'false', expected: false },
+      { resolvedType: 'COLOR', raw: '{"r":0.2,"g":0.5,"b":1,"a":1}', expected: { r: 0.2, g: 0.5, b: 1, a: 1 } },
+      { resolvedType: 'STRING', raw: 'hello', expected: 'hello' },
+    ];
+    for (const { resolvedType, raw, expected } of cases) {
+      const setValueForMode = vi.fn<() => void>();
+      const handler = createSetVariableValueHandler(
+        fakeFigma({ id: 'V:0', name: 'x', resolvedType, setValueForMode }),
+      );
+      // eslint-disable-next-line no-await-in-loop -- small fixed table, sequential is fine
+      await handler({ variableId: 'V:0', modeId: 'M:0', value: raw });
+      expect(setValueForMode).toHaveBeenCalledWith('M:0', expected);
+    }
+  });
+
+  it('rejects a stringified FLOAT that is not a number', async () => {
+    const variable = { id: 'V:0', name: 'x', resolvedType: 'FLOAT', setValueForMode: vi.fn<() => void>() };
+    await expect(
+      createSetVariableValueHandler(fakeFigma(variable))({ variableId: 'V:0', modeId: 'M:0', value: 'abc' }),
+    ).rejects.toThrow(/not a number/);
+  });
+
   it('throws when variable missing or input bad', async () => {
     await expect(
       createSetVariableValueHandler(fakeFigma(null))({ variableId: 'V:9', modeId: 'M:0', value: 1 }),
