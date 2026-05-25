@@ -73,11 +73,16 @@ describe('get_design_context handler', () => {
     const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [text] }))({
       detail: 'full',
     })) as GetDesignContextResult;
-    expect(full.nodes[0]).toMatchObject({
-      characters: 'Hi',
+    // P3: fontSize + fontName are deduped into a globalVars textStyle ref; characters/opacity stay inline
+    expect(full.nodes[0]).toMatchObject({ characters: 'Hi', opacity: 0.5 });
+    expect(full.nodes[0]?.fontSize).toBeUndefined();
+    expect(full.nodes[0]?.fontName).toBeUndefined();
+    const textRef = full.nodes[0]?.textStyle;
+    expect(textRef).toMatch(/^text_/);
+    expect(full.globalVars?.styles[textRef!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Bold',
       fontSize: 16,
-      fontName: { family: 'Inter', style: 'Bold' },
-      opacity: 0.5,
     });
   });
 

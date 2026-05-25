@@ -52,6 +52,13 @@ export interface DesignContextNode {
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
   mainComponentId?: string;
+  /**
+   * globalVars refs (P3): when style dedup runs (full detail), the inline `fills` / `fontSize` +
+   * `fontName` are replaced by these refs into `globalVars.styles` — a style shared by N nodes
+   * costs one entry + N refs. `fill` points at a paint array, `textStyle` at a typography bundle.
+   */
+  fill?: string;
+  textStyle?: string;
   deduped?: boolean;
   truncated?: boolean;
   children?: readonly DesignContextNode[];
@@ -79,6 +86,8 @@ export const DesignContextNodeSchema: v.GenericSchema<DesignContextNode> = v.laz
     componentProperties: v.exactOptional(v.record(v.string(), SerializedComponentPropertySchema)),
     mainComponent: v.exactOptional(SerializedMainComponentSchema),
     mainComponentId: v.exactOptional(v.string()),
+    fill: v.exactOptional(v.string()),
+    textStyle: v.exactOptional(v.string()),
     deduped: v.exactOptional(v.boolean()),
     truncated: v.exactOptional(v.boolean()),
     children: v.exactOptional(v.array(DesignContextNodeSchema)),
@@ -98,11 +107,37 @@ export const ResolvedTokenSchema = v.object({
 });
 export type ResolvedToken = v.InferOutput<typeof ResolvedTokenSchema>;
 
+/**
+ * Deduplicated style table (P3). Keys are content-hash ids (`fill_AB12CD`, `text_9F3K2L`) so the
+ * same style always maps to the same id — output is stable across runs and diffable (unlike
+ * Framelink's random ids). Values are opaque style bundles (paint arrays / typography); the
+ * consumer renders them per profile (Tailwind class / CSS var / …) via an adapter.
+ */
+export const GlobalVarsSchema = v.object({
+  styles: v.record(v.string(), v.unknown()),
+});
+export type GlobalVars = v.InferOutput<typeof GlobalVarsSchema>;
+
+/** Quantifies the simplification — chiefly the dedup win (inline vs deduped byte size). */
+export const DesignContextMetricsSchema = v.object({
+  nodeCount: v.number(),
+  maxDepth: v.number(),
+  styleCount: v.number(),
+  tokenCount: v.number(),
+  inlineSizeKb: v.number(),
+  dedupedSizeKb: v.number(),
+});
+export type DesignContextMetrics = v.InferOutput<typeof DesignContextMetricsSchema>;
+
 export const GetDesignContextResultSchema = v.object({
   nodes: v.array(DesignContextNodeSchema),
+  /** Deduplicated style table; nodes carry `fill` / `textStyle` refs into it. Full detail only. */
+  globalVars: v.exactOptional(GlobalVarsSchema),
   /** id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */
   variables: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
   /** id → token, for shared-style ids referenced by any node's `styleIds`. Omitted when empty. */
   styles: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
+  /** Simplification metrics; full detail only. */
+  metrics: v.exactOptional(DesignContextMetricsSchema),
 });
 export type GetDesignContextResult = v.InferOutput<typeof GetDesignContextResultSchema>;

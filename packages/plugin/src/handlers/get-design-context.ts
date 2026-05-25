@@ -1,4 +1,6 @@
 import {
+  computeMetrics,
+  dedupeStyles,
   type DesignContextNode,
   DETAIL_LEVELS,
   type DetailLevel,
@@ -213,7 +215,15 @@ export const createGetDesignContextHandler =
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
     const result: GetDesignContextResult = { nodes };
-    // Token resolution only at full detail — styleIds/boundVariables aren't surfaced below it.
-    if (ctx.detail === 'full') Object.assign(result, await resolveTokens(figmaCtx, nodes));
+
+    // Full detail only: resolve token ids → names (P2), then dedupe styles into globalVars and
+    // measure the simplification (P3). Below full, styleIds/boundVariables/fills aren't surfaced.
+    if (ctx.detail === 'full') {
+      Object.assign(result, await resolveTokens(figmaCtx, nodes));
+      const { nodes: deduped, globalVars } = dedupeStyles(nodes);
+      result.nodes = deduped;
+      if (Object.keys(globalVars.styles).length > 0) result.globalVars = globalVars;
+      result.metrics = computeMetrics(nodes, result);
+    }
     return result;
   };
