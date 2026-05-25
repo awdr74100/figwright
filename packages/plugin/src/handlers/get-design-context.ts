@@ -3,6 +3,7 @@ import {
   DETAIL_LEVELS,
   type DetailLevel,
   type GetDesignContextResult,
+  type ResolvedToken,
 } from '@figma-mcp-relay/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
@@ -35,10 +36,86 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
-  // get_design_context used to drop. id→token-name resolution + globalVars dedup land in P2/P3.
-  if (flat.styleIds !== undefined) out.styleIds = flat.styleIds;
+  // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
+  // globalVars dedup in P3.
+  if (flat.styleIds !== undefined) {
+    // Figma's *StyleId values carry a trailing comma artifact (e.g. "S:abc,"); strip it so the id
+    // matches the `styles` resolution map key and joins cleanly downstream.
+    const ids = flat.styleIds as Record<string, string>;
+    const cleaned: Record<string, string> = {};
+    for (const [k, raw] of Object.entries(ids)) cleaned[k] = raw.replace(/,+$/, '');
+    out.styleIds = cleaned;
+  }
   if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
   if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
+  return out;
+};
+
+/** Gather every variable id (boundVariables) and shared-style id (styleIds) referenced in a tree. */
+const collectRefs = (
+  nodes: readonly DesignContextNode[],
+): { varIds: Set<string>; styleIds: Set<string> } => {
+  const varIds = new Set<string>();
+  const styleIds = new Set<string>();
+  const visit = (n: DesignContextNode): void => {
+    if (n.boundVariables) {
+      for (const ids of Object.values(n.boundVariables)) for (const id of ids) varIds.add(id);
+    }
+    if (n.styleIds) {
+      for (const id of Object.values(n.styleIds as Record<string, string>)) {
+        if (id !== '') styleIds.add(id);
+      }
+    }
+    if (n.children) for (const c of n.children) visit(c);
+  };
+  for (const n of nodes) visit(n);
+  return { varIds, styleIds };
+};
+
+/**
+ * Resolve referenced variable + style ids to names (deduped, top-level). Handles both local and
+ * library/published refs via the per-id async lookups. Unresolvable refs (e.g. a library variable
+ * not subscribed in this file) are silently skipped — the node's inline value stays the fallback.
+ */
+const resolveTokens = async (
+  figmaCtx: typeof figma,
+  nodes: readonly DesignContextNode[],
+): Promise<Pick<GetDesignContextResult, 'variables' | 'styles'>> => {
+  const { varIds, styleIds } = collectRefs(nodes);
+  const out: Pick<GetDesignContextResult, 'variables' | 'styles'> = {};
+
+  const getVar = figmaCtx.variables?.getVariableByIdAsync;
+  if (varIds.size > 0 && typeof getVar === 'function') {
+    const variables: Record<string, ResolvedToken> = {};
+    await Promise.all(
+      [...varIds].map(async id => {
+        try {
+          const v = await getVar.call(figmaCtx.variables, id);
+          if (v !== null) variables[id] = { name: v.name, type: v.resolvedType };
+        } catch {
+          /* unresolved ref — skip, inline value remains the fallback */
+        }
+      }),
+    );
+    if (Object.keys(variables).length > 0) out.variables = variables;
+  }
+
+  const getStyle = figmaCtx.getStyleByIdAsync;
+  if (styleIds.size > 0 && typeof getStyle === 'function') {
+    const styles: Record<string, ResolvedToken> = {};
+    await Promise.all(
+      [...styleIds].map(async id => {
+        try {
+          const s = await getStyle.call(figmaCtx, id);
+          if (s !== null) styles[id] = { name: s.name, type: s.type };
+        } catch {
+          /* unresolved ref — skip */
+        }
+      }),
+    );
+    if (Object.keys(styles).length > 0) out.styles = styles;
+  }
+
   return out;
 };
 
@@ -136,5 +213,7 @@ export const createGetDesignContextHandler =
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
     const result: GetDesignContextResult = { nodes };
+    // Token resolution only at full detail — styleIds/boundVariables aren't surfaced below it.
+    if (ctx.detail === 'full') Object.assign(result, await resolveTokens(figmaCtx, nodes));
     return result;
   };

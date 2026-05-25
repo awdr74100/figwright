@@ -22,10 +22,16 @@ const fakeFigma = (opts: {
   selection?: SceneNode[];
   pageChildren?: SceneNode[];
   lookup?: Record<string, BaseNode | null>;
+  variables?: Record<string, { name: string; resolvedType: string }>;
+  styles?: Record<string, { name: string; type: string }>;
 }): typeof figma =>
   ({
     currentPage: { selection: opts.selection ?? [], children: opts.pageChildren ?? [] },
     getNodeByIdAsync: async (id: string) => opts.lookup?.[id] ?? null,
+    getStyleByIdAsync: async (id: string) => opts.styles?.[id] ?? null,
+    variables: {
+      getVariableByIdAsync: async (id: string) => opts.variables?.[id] ?? null,
+    },
   }) as unknown as typeof figma;
 
 describe('get_design_context handler', () => {
@@ -163,6 +169,48 @@ describe('get_design_context handler', () => {
     expect(result.nodes[1]?.children).toBeUndefined();
     expect(result.nodes[1]?.componentProperties).toEqual({ Variant: { type: 'VARIANT', value: 'outline' } });
     expect(result.nodes[1]?.mainComponent).toEqual({ id: 'M:1', name: 'Button', key: 'abc123' });
+  });
+
+  it('resolves variable + style ids to a deduped top-level token map (full detail), stripping the styleId comma', async () => {
+    const a = node({
+      id: 'a',
+      type: 'TEXT',
+      fillStyleId: 'S:text1,', // Figma trailing-comma artifact
+      boundVariables: { fills: [{ id: 'VariableID:181:4147' }] },
+    });
+    // second node references the SAME variable — must dedupe to one map entry
+    const b = node({ id: 'b', type: 'TEXT', boundVariables: { fills: [{ id: 'VariableID:181:4147' }] } });
+
+    const handler = createGetDesignContextHandler(
+      fakeFigma({
+        pageChildren: [a, b],
+        variables: { 'VariableID:181:4147': { name: 'Primary/500', resolvedType: 'COLOR' } },
+        styles: { 'S:text1': { name: 'Body/Bold', type: 'TEXT' } },
+      }),
+    );
+    const full = (await handler({ detail: 'full' })) as GetDesignContextResult;
+
+    // styleId comma stripped on the node so it joins the map key
+    expect(full.nodes[0]?.styleIds).toEqual({ fill: 'S:text1' });
+    expect(full.variables).toEqual({ 'VariableID:181:4147': { name: 'Primary/500', type: 'COLOR' } });
+    expect(full.styles).toEqual({ 'S:text1': { name: 'Body/Bold', type: 'TEXT' } });
+  });
+
+  it('omits token maps below full detail and when refs are unresolvable', async () => {
+    const ref = node({ id: 'r', type: 'TEXT', boundVariables: { fills: [{ id: 'VariableID:9:9' }] } });
+
+    // compact: grounding fields not surfaced → no resolution
+    const compact = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [ref], variables: { 'VariableID:9:9': { name: 'X', resolvedType: 'COLOR' } } }),
+    )({ detail: 'compact' })) as GetDesignContextResult;
+    expect(compact.variables).toBeUndefined();
+
+    // full but the lookup returns null (e.g. unsubscribed library var) → map omitted, no throw
+    const full = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [ref], variables: {} }),
+    )({ detail: 'full' })) as GetDesignContextResult;
+    expect(full.variables).toBeUndefined();
+    expect(full.nodes[0]?.boundVariables).toEqual({ fills: ['VariableID:9:9'] }); // raw id stays as fallback
   });
 
   it('resolves a nodeId root, returning empty for misses', async () => {

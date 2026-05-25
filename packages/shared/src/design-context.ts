@@ -85,7 +85,24 @@ export const DesignContextNodeSchema: v.GenericSchema<DesignContextNode> = v.laz
   }),
 );
 
+/**
+ * A resolved design-system token: the human name a node's `styleIds` / `boundVariables` id points
+ * to (e.g. `Primary/500`, `size/sm`, `Body/Bold`) plus its kind. Resolution is deduped into the
+ * top-level `variables` / `styles` maps so a token referenced by 100 nodes costs one entry —
+ * nodes keep the id, the consumer joins id → name. The node's own inline value (fill color,
+ * fontSize, …) remains the fallback when a ref is unresolved (e.g. a library var not subscribed).
+ */
+export const ResolvedTokenSchema = v.object({
+  name: v.string(),
+  type: v.string(),
+});
+export type ResolvedToken = v.InferOutput<typeof ResolvedTokenSchema>;
+
 export const GetDesignContextResultSchema = v.object({
   nodes: v.array(DesignContextNodeSchema),
+  /** id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */
+  variables: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
+  /** id → token, for shared-style ids referenced by any node's `styleIds`. Omitted when empty. */
+  styles: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
 });
 export type GetDesignContextResult = v.InferOutput<typeof GetDesignContextResultSchema>;
