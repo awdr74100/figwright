@@ -1,8 +1,11 @@
 import {
+  computeMetrics,
+  dedupeStyles,
   type DesignContextNode,
   DETAIL_LEVELS,
   type DetailLevel,
   type GetDesignContextResult,
+  type ResolvedToken,
 } from '@figma-mcp-relay/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
@@ -31,9 +34,94 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.opacity !== undefined) out.opacity = flat.opacity;
   if (flat.cornerRadius !== undefined) out.cornerRadius = flat.cornerRadius;
   if (flat.fills !== undefined) out.fills = flat.fills;
+  if (flat.strokes !== undefined) out.strokes = flat.strokes;
+  if (flat.strokeWeight !== undefined) out.strokeWeight = flat.strokeWeight;
+  if (flat.strokeAlign !== undefined) out.strokeAlign = flat.strokeAlign;
+  if (flat.effects !== undefined) out.effects = flat.effects;
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
+  // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
+  // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
+  // globalVars dedup in P3.
+  if (flat.styleIds !== undefined) {
+    // Figma's *StyleId values carry a trailing comma artifact (e.g. "S:abc,"); strip it so the id
+    // matches the `styles` resolution map key and joins cleanly downstream.
+    const ids = flat.styleIds as Record<string, string>;
+    const cleaned: Record<string, string> = {};
+    for (const [k, raw] of Object.entries(ids)) cleaned[k] = raw.replace(/,+$/, '');
+    out.styleIds = cleaned;
+  }
+  if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
+  if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
+  return out;
+};
+
+/** Gather every variable id (boundVariables) and shared-style id (styleIds) referenced in a tree. */
+const collectRefs = (
+  nodes: readonly DesignContextNode[],
+): { varIds: Set<string>; styleIds: Set<string> } => {
+  const varIds = new Set<string>();
+  const styleIds = new Set<string>();
+  const visit = (n: DesignContextNode): void => {
+    if (n.boundVariables) {
+      for (const ids of Object.values(n.boundVariables)) for (const id of ids) varIds.add(id);
+    }
+    if (n.styleIds) {
+      for (const id of Object.values(n.styleIds as Record<string, string>)) {
+        if (id !== '') styleIds.add(id);
+      }
+    }
+    if (n.children) for (const c of n.children) visit(c);
+  };
+  for (const n of nodes) visit(n);
+  return { varIds, styleIds };
+};
+
+/**
+ * Resolve referenced variable + style ids to names (deduped, top-level). Handles both local and
+ * library/published refs via the per-id async lookups. Unresolvable refs (e.g. a library variable
+ * not subscribed in this file) are silently skipped — the node's inline value stays the fallback.
+ */
+const resolveTokens = async (
+  figmaCtx: typeof figma,
+  nodes: readonly DesignContextNode[],
+): Promise<Pick<GetDesignContextResult, 'variables' | 'styles'>> => {
+  const { varIds, styleIds } = collectRefs(nodes);
+  const out: Pick<GetDesignContextResult, 'variables' | 'styles'> = {};
+
+  const getVar = figmaCtx.variables?.getVariableByIdAsync;
+  if (varIds.size > 0 && typeof getVar === 'function') {
+    const variables: Record<string, ResolvedToken> = {};
+    await Promise.all(
+      [...varIds].map(async id => {
+        try {
+          const v = await getVar.call(figmaCtx.variables, id);
+          if (v !== null) variables[id] = { name: v.name, type: v.resolvedType };
+        } catch {
+          /* unresolved ref — skip, inline value remains the fallback */
+        }
+      }),
+    );
+    if (Object.keys(variables).length > 0) out.variables = variables;
+  }
+
+  const getStyle = figmaCtx.getStyleByIdAsync;
+  if (styleIds.size > 0 && typeof getStyle === 'function') {
+    const styles: Record<string, ResolvedToken> = {};
+    await Promise.all(
+      [...styleIds].map(async id => {
+        try {
+          const s = await getStyle.call(figmaCtx, id);
+          if (s !== null) styles[id] = { name: s.name, type: s.type };
+        } catch {
+          /* unresolved ref — skip */
+        }
+      }),
+    );
+    if (Object.keys(styles).length > 0) out.styles = styles;
+  }
+
   return out;
 };
 
@@ -52,15 +140,23 @@ const buildNode = async (
   const out = project(node, ctx.detail);
 
   let expandChildren = true;
-  if (ctx.dedupe && node.type === 'INSTANCE') {
+  // Resolve the main component when deduping (needs the id) or at full detail (needs name/key for
+  // component_map). componentProperties on the instance itself are surfaced in project() and survive
+  // dedup — only the expanded child subtree below is collapsed.
+  if (node.type === 'INSTANCE' && (ctx.dedupe || ctx.detail === 'full')) {
     const main = await (node as InstanceNode).getMainComponentAsync();
     if (main !== null) {
       out.mainComponentId = main.id;
-      if (ctx.seen.has(main.id)) {
-        out.deduped = true;
-        expandChildren = false;
-      } else {
-        ctx.seen.add(main.id);
+      if (ctx.detail === 'full') {
+        out.mainComponent = { id: main.id, name: main.name, key: main.key };
+      }
+      if (ctx.dedupe) {
+        if (ctx.seen.has(main.id)) {
+          out.deduped = true;
+          expandChildren = false;
+        } else {
+          ctx.seen.add(main.id);
+        }
       }
     }
   }
@@ -123,5 +219,15 @@ export const createGetDesignContextHandler =
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
     const result: GetDesignContextResult = { nodes };
+
+    // Full detail only: resolve token ids → names (P2), then dedupe styles into globalVars and
+    // measure the simplification (P3). Below full, styleIds/boundVariables/fills aren't surfaced.
+    if (ctx.detail === 'full') {
+      Object.assign(result, await resolveTokens(figmaCtx, nodes));
+      const { nodes: deduped, globalVars } = dedupeStyles(nodes);
+      result.nodes = deduped;
+      if (Object.keys(globalVars.styles).length > 0) result.globalVars = globalVars;
+      result.metrics = computeMetrics(nodes, result);
+    }
     return result;
   };

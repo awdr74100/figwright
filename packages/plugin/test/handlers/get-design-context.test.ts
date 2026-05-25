@@ -22,10 +22,16 @@ const fakeFigma = (opts: {
   selection?: SceneNode[];
   pageChildren?: SceneNode[];
   lookup?: Record<string, BaseNode | null>;
+  variables?: Record<string, { name: string; resolvedType: string }>;
+  styles?: Record<string, { name: string; type: string }>;
 }): typeof figma =>
   ({
     currentPage: { selection: opts.selection ?? [], children: opts.pageChildren ?? [] },
     getNodeByIdAsync: async (id: string) => opts.lookup?.[id] ?? null,
+    getStyleByIdAsync: async (id: string) => opts.styles?.[id] ?? null,
+    variables: {
+      getVariableByIdAsync: async (id: string) => opts.variables?.[id] ?? null,
+    },
   }) as unknown as typeof figma;
 
 describe('get_design_context handler', () => {
@@ -67,11 +73,16 @@ describe('get_design_context handler', () => {
     const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [text] }))({
       detail: 'full',
     })) as GetDesignContextResult;
-    expect(full.nodes[0]).toMatchObject({
-      characters: 'Hi',
+    // P3: fontSize + fontName are deduped into a globalVars textStyle ref; characters/opacity stay inline
+    expect(full.nodes[0]).toMatchObject({ characters: 'Hi', opacity: 0.5 });
+    expect(full.nodes[0]?.fontSize).toBeUndefined();
+    expect(full.nodes[0]?.fontName).toBeUndefined();
+    const textRef = full.nodes[0]?.textStyle;
+    expect(textRef).toMatch(/^text_/);
+    expect(full.globalVars?.styles[textRef!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Bold',
       fontSize: 16,
-      fontName: { family: 'Inter', style: 'Bold' },
-      opacity: 0.5,
     });
   });
 
@@ -109,6 +120,102 @@ describe('get_design_context handler', () => {
     // second instance of the same main component is collapsed
     expect(result.nodes[1]?.deduped).toBe(true);
     expect(result.nodes[1]?.children).toBeUndefined();
+  });
+
+  it('surfaces grounding fields (styleIds / boundVariables / componentProperties) at full detail only', async () => {
+    const grounded = node({
+      id: 'g',
+      type: 'TEXT',
+      characters: 'Hi',
+      fillStyleId: 'S:fill1',
+      textStyleId: 'S:text1',
+      boundVariables: { fills: [{ id: 'VariableID:1' }], fontSize: { id: 'VariableID:2' } },
+      componentProperties: { Size: { type: 'VARIANT', value: 'sm' }, Disabled: { type: 'BOOLEAN', value: false } },
+    });
+
+    const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(full.nodes[0]).toMatchObject({
+      styleIds: { fill: 'S:fill1', text: 'S:text1' },
+      boundVariables: { fills: ['VariableID:1'], fontSize: ['VariableID:2'] },
+      componentProperties: { Size: { type: 'VARIANT', value: 'sm' }, Disabled: { type: 'BOOLEAN', value: false } },
+    });
+
+    // compact must not leak the full-tier grounding fields
+    const compact = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+      detail: 'compact',
+    })) as GetDesignContextResult;
+    expect(compact.nodes[0]?.styleIds).toBeUndefined();
+    expect(compact.nodes[0]?.boundVariables).toBeUndefined();
+    expect(compact.nodes[0]?.componentProperties).toBeUndefined();
+  });
+
+  it('surfaces mainComponent name/key at full detail and preserves instance componentProperties through dedup', async () => {
+    const main = { id: 'M:1', name: 'Button', key: 'abc123' };
+    const mkInstance = (id: string, variant: string): SceneNode =>
+      node({
+        id,
+        type: 'INSTANCE',
+        componentProperties: { Variant: { type: 'VARIANT', value: variant } },
+        children: [node({ id: `${id}-child`, type: 'TEXT' })],
+        getMainComponentAsync: async () => main,
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [mkInstance('i1', 'primary'), mkInstance('i2', 'outline')] }),
+    )({ dedupeComponents: true, detail: 'full' })) as GetDesignContextResult;
+
+    // first instance: full main component + its own variant
+    expect(result.nodes[0]?.mainComponent).toEqual({ id: 'M:1', name: 'Button', key: 'abc123' });
+    expect(result.nodes[0]?.componentProperties).toEqual({ Variant: { type: 'VARIANT', value: 'primary' } });
+    // second instance is deduped (children collapsed) yet KEEPS its distinct variant — the
+    // constraint that lets component_map tell variants apart
+    expect(result.nodes[1]?.deduped).toBe(true);
+    expect(result.nodes[1]?.children).toBeUndefined();
+    expect(result.nodes[1]?.componentProperties).toEqual({ Variant: { type: 'VARIANT', value: 'outline' } });
+    expect(result.nodes[1]?.mainComponent).toEqual({ id: 'M:1', name: 'Button', key: 'abc123' });
+  });
+
+  it('resolves variable + style ids to a deduped top-level token map (full detail), stripping the styleId comma', async () => {
+    const a = node({
+      id: 'a',
+      type: 'TEXT',
+      fillStyleId: 'S:text1,', // Figma trailing-comma artifact
+      boundVariables: { fills: [{ id: 'VariableID:181:4147' }] },
+    });
+    // second node references the SAME variable — must dedupe to one map entry
+    const b = node({ id: 'b', type: 'TEXT', boundVariables: { fills: [{ id: 'VariableID:181:4147' }] } });
+
+    const handler = createGetDesignContextHandler(
+      fakeFigma({
+        pageChildren: [a, b],
+        variables: { 'VariableID:181:4147': { name: 'Primary/500', resolvedType: 'COLOR' } },
+        styles: { 'S:text1': { name: 'Body/Bold', type: 'TEXT' } },
+      }),
+    );
+    const full = (await handler({ detail: 'full' })) as GetDesignContextResult;
+
+    // styleId comma stripped on the node so it joins the map key
+    expect(full.nodes[0]?.styleIds).toEqual({ fill: 'S:text1' });
+    expect(full.variables).toEqual({ 'VariableID:181:4147': { name: 'Primary/500', type: 'COLOR' } });
+    expect(full.styles).toEqual({ 'S:text1': { name: 'Body/Bold', type: 'TEXT' } });
+  });
+
+  it('omits token maps below full detail and when refs are unresolvable', async () => {
+    const ref = node({ id: 'r', type: 'TEXT', boundVariables: { fills: [{ id: 'VariableID:9:9' }] } });
+
+    // compact: grounding fields not surfaced → no resolution
+    const compact = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [ref], variables: { 'VariableID:9:9': { name: 'X', resolvedType: 'COLOR' } } }),
+    )({ detail: 'compact' })) as GetDesignContextResult;
+    expect(compact.variables).toBeUndefined();
+
+    // full but the lookup returns null (e.g. unsubscribed library var) → map omitted, no throw
+    const full = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [ref], variables: {} }),
+    )({ detail: 'full' })) as GetDesignContextResult;
+    expect(full.variables).toBeUndefined();
+    expect(full.nodes[0]?.boundVariables).toEqual({ fills: ['VariableID:9:9'] }); // raw id stays as fallback
   });
 
   it('resolves a nodeId root, returning empty for misses', async () => {
