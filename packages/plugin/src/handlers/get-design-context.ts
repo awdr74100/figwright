@@ -34,6 +34,11 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
+  // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
+  // get_design_context used to drop. id→token-name resolution + globalVars dedup land in P2/P3.
+  if (flat.styleIds !== undefined) out.styleIds = flat.styleIds;
+  if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
+  if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
   return out;
 };
 
@@ -52,15 +57,23 @@ const buildNode = async (
   const out = project(node, ctx.detail);
 
   let expandChildren = true;
-  if (ctx.dedupe && node.type === 'INSTANCE') {
+  // Resolve the main component when deduping (needs the id) or at full detail (needs name/key for
+  // component_map). componentProperties on the instance itself are surfaced in project() and survive
+  // dedup — only the expanded child subtree below is collapsed.
+  if (node.type === 'INSTANCE' && (ctx.dedupe || ctx.detail === 'full')) {
     const main = await (node as InstanceNode).getMainComponentAsync();
     if (main !== null) {
       out.mainComponentId = main.id;
-      if (ctx.seen.has(main.id)) {
-        out.deduped = true;
-        expandChildren = false;
-      } else {
-        ctx.seen.add(main.id);
+      if (ctx.detail === 'full') {
+        out.mainComponent = { id: main.id, name: main.name, key: main.key };
+      }
+      if (ctx.dedupe) {
+        if (ctx.seen.has(main.id)) {
+          out.deduped = true;
+          expandChildren = false;
+        } else {
+          ctx.seen.add(main.id);
+        }
       }
     }
   }

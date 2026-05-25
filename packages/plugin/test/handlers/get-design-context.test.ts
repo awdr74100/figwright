@@ -111,6 +111,60 @@ describe('get_design_context handler', () => {
     expect(result.nodes[1]?.children).toBeUndefined();
   });
 
+  it('surfaces grounding fields (styleIds / boundVariables / componentProperties) at full detail only', async () => {
+    const grounded = node({
+      id: 'g',
+      type: 'TEXT',
+      characters: 'Hi',
+      fillStyleId: 'S:fill1',
+      textStyleId: 'S:text1',
+      boundVariables: { fills: [{ id: 'VariableID:1' }], fontSize: { id: 'VariableID:2' } },
+      componentProperties: { Size: { type: 'VARIANT', value: 'sm' }, Disabled: { type: 'BOOLEAN', value: false } },
+    });
+
+    const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(full.nodes[0]).toMatchObject({
+      styleIds: { fill: 'S:fill1', text: 'S:text1' },
+      boundVariables: { fills: ['VariableID:1'], fontSize: ['VariableID:2'] },
+      componentProperties: { Size: { type: 'VARIANT', value: 'sm' }, Disabled: { type: 'BOOLEAN', value: false } },
+    });
+
+    // compact must not leak the full-tier grounding fields
+    const compact = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+      detail: 'compact',
+    })) as GetDesignContextResult;
+    expect(compact.nodes[0]?.styleIds).toBeUndefined();
+    expect(compact.nodes[0]?.boundVariables).toBeUndefined();
+    expect(compact.nodes[0]?.componentProperties).toBeUndefined();
+  });
+
+  it('surfaces mainComponent name/key at full detail and preserves instance componentProperties through dedup', async () => {
+    const main = { id: 'M:1', name: 'Button', key: 'abc123' };
+    const mkInstance = (id: string, variant: string): SceneNode =>
+      node({
+        id,
+        type: 'INSTANCE',
+        componentProperties: { Variant: { type: 'VARIANT', value: variant } },
+        children: [node({ id: `${id}-child`, type: 'TEXT' })],
+        getMainComponentAsync: async () => main,
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ pageChildren: [mkInstance('i1', 'primary'), mkInstance('i2', 'outline')] }),
+    )({ dedupeComponents: true, detail: 'full' })) as GetDesignContextResult;
+
+    // first instance: full main component + its own variant
+    expect(result.nodes[0]?.mainComponent).toEqual({ id: 'M:1', name: 'Button', key: 'abc123' });
+    expect(result.nodes[0]?.componentProperties).toEqual({ Variant: { type: 'VARIANT', value: 'primary' } });
+    // second instance is deduped (children collapsed) yet KEEPS its distinct variant — the
+    // constraint that lets component_map tell variants apart
+    expect(result.nodes[1]?.deduped).toBe(true);
+    expect(result.nodes[1]?.children).toBeUndefined();
+    expect(result.nodes[1]?.componentProperties).toEqual({ Variant: { type: 'VARIANT', value: 'outline' } });
+    expect(result.nodes[1]?.mainComponent).toEqual({ id: 'M:1', name: 'Button', key: 'abc123' });
+  });
+
   it('resolves a nodeId root, returning empty for misses', async () => {
     const target = node({ id: '1:2' });
     const handler = createGetDesignContextHandler(
