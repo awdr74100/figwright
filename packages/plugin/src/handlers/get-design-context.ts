@@ -34,6 +34,10 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.opacity !== undefined) out.opacity = flat.opacity;
   if (flat.cornerRadius !== undefined) out.cornerRadius = flat.cornerRadius;
   if (flat.fills !== undefined) out.fills = flat.fills;
+  if (flat.strokes !== undefined) out.strokes = flat.strokes;
+  if (flat.strokeWeight !== undefined) out.strokeWeight = flat.strokeWeight;
+  if (flat.strokeAlign !== undefined) out.strokeAlign = flat.strokeAlign;
+  if (flat.effects !== undefined) out.effects = flat.effects;
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;

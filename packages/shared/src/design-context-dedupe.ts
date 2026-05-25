@@ -4,7 +4,12 @@ import type {
   GetDesignContextResult,
   GlobalVars,
 } from './design-context.js';
-import type { SerializedColor, SerializedColorStop, SerializedPaint } from './serialized-node.js';
+import type {
+  SerializedColor,
+  SerializedColorStop,
+  SerializedEffect,
+  SerializedPaint,
+} from './serialized-node.js';
 
 /** JSON with sorted object keys, so equal-but-differently-ordered values hash identically. */
 const stableStringify = (value: unknown): string =>
@@ -64,6 +69,26 @@ const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
   return out;
 };
 
+interface SimplifiedEffect {
+  type: string;
+  color?: string;
+  offset?: { x: number; y: number };
+  radius?: number;
+  spread?: number;
+  visible?: false;
+}
+
+/** Structured shadow/blur: color → hex, drops the always-true `visible`. */
+const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
+  const out: SimplifiedEffect = { type: e.type };
+  if (e.color !== undefined) out.color = toHex(e.color, e.color.a);
+  if (e.offset !== undefined) out.offset = e.offset;
+  if (e.radius !== undefined) out.radius = e.radius;
+  if (e.spread !== undefined) out.spread = e.spread;
+  if (e.visible === false) out.visible = false;
+  return out;
+};
+
 interface TextStyleBundle {
   fontFamily: string;
   fontStyle: string;
@@ -101,6 +126,16 @@ export const dedupeStyles = (
     if (Array.isArray(n.fills) && n.fills.length > 0) {
       out.fill = register(n.fills.map(simplifyPaint), 'fill');
       delete out.fills;
+    }
+
+    if (Array.isArray(n.strokes) && n.strokes.length > 0) {
+      out.stroke = register(n.strokes.map(simplifyPaint), 'stroke');
+      delete out.strokes;
+    }
+
+    if (Array.isArray(n.effects) && n.effects.length > 0) {
+      out.effect = register(n.effects.map(simplifyEffect), 'effect');
+      delete out.effects;
     }
 
     if (

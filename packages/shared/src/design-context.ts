@@ -3,6 +3,7 @@ import * as v from 'valibot';
 import {
   MIXED,
   SerializedComponentPropertySchema,
+  SerializedEffectSchema,
   SerializedFontNameSchema,
   SerializedMainComponentSchema,
   SerializedPaintSchema,
@@ -10,7 +11,9 @@ import {
 } from './serialized-node.js';
 import type {
   SerializedComponentProperty,
+  SerializedEffect,
   SerializedMainComponent,
+  SerializedPaint,
   SerializedStyleIds,
 } from './serialized-node.js';
 
@@ -44,6 +47,10 @@ export interface DesignContextNode {
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
   fills?: readonly v.InferOutput<typeof SerializedPaintSchema>[] | typeof MIXED;
+  strokes?: readonly SerializedPaint[];
+  strokeWeight?: number | typeof MIXED;
+  strokeAlign?: string;
+  effects?: readonly SerializedEffect[];
   characters?: string;
   fontSize?: number | typeof MIXED;
   fontName?: v.InferOutput<typeof SerializedFontNameSchema> | typeof MIXED;
@@ -53,11 +60,14 @@ export interface DesignContextNode {
   mainComponent?: SerializedMainComponent;
   mainComponentId?: string;
   /**
-   * globalVars refs (P3): when style dedup runs (full detail), the inline `fills` / `fontSize` +
-   * `fontName` are replaced by these refs into `globalVars.styles` — a style shared by N nodes
-   * costs one entry + N refs. `fill` points at a paint array, `textStyle` at a typography bundle.
+   * globalVars refs (P3): when style dedup runs (full detail), inline `fills` / `strokes` /
+   * `effects` / (`fontSize` + `fontName`) are replaced by these refs into `globalVars.styles` —
+   * a style shared by N nodes costs one entry + N refs. `fill` / `stroke` point at paint arrays,
+   * `effect` at a shadow/blur array, `textStyle` at a typography bundle.
    */
   fill?: string;
+  stroke?: string;
+  effect?: string;
   textStyle?: string;
   deduped?: boolean;
   truncated?: boolean;
@@ -78,6 +88,10 @@ export const DesignContextNodeSchema: v.GenericSchema<DesignContextNode> = v.laz
     opacity: v.exactOptional(v.number()),
     cornerRadius: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
     fills: v.exactOptional(v.union([v.array(SerializedPaintSchema), v.literal(MIXED)])),
+    strokes: v.exactOptional(v.array(SerializedPaintSchema)),
+    strokeWeight: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
+    strokeAlign: v.exactOptional(v.string()),
+    effects: v.exactOptional(v.array(SerializedEffectSchema)),
     characters: v.exactOptional(v.string()),
     fontSize: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
     fontName: v.exactOptional(v.union([SerializedFontNameSchema, v.literal(MIXED)])),
@@ -87,6 +101,8 @@ export const DesignContextNodeSchema: v.GenericSchema<DesignContextNode> = v.laz
     mainComponent: v.exactOptional(SerializedMainComponentSchema),
     mainComponentId: v.exactOptional(v.string()),
     fill: v.exactOptional(v.string()),
+    stroke: v.exactOptional(v.string()),
+    effect: v.exactOptional(v.string()),
     textStyle: v.exactOptional(v.string()),
     deduped: v.exactOptional(v.boolean()),
     truncated: v.exactOptional(v.boolean()),
