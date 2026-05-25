@@ -121,7 +121,11 @@ export const dedupeStyles = (
   };
 
   const transform = (n: DesignContextNode): DesignContextNode => {
-    const out: DesignContextNode = { ...n };
+    // Keep `children` out until the end so a node's own style refs (fill / stroke / effect /
+    // textStyle) are emitted *before* its children — otherwise a trailing `effect` sits right after
+    // the last child and the model misattributes it (e.g. shadow lands on the button, not the card).
+    const { children, ...rest } = n;
+    const out: DesignContextNode = { ...rest };
 
     if (Array.isArray(n.fills) && n.fills.length > 0) {
       out.fill = register(n.fills.map(simplifyPaint), 'fill');
@@ -154,7 +158,7 @@ export const dedupeStyles = (
       delete out.fontName;
     }
 
-    if (n.children) out.children = n.children.map(transform);
+    if (children) out.children = children.map(transform);
     return out;
   };
 

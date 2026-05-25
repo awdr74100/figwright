@@ -87,6 +87,23 @@ describe('dedupeStyles', () => {
     });
   });
 
+  it("emits a node's own style refs before its children (no shadow-on-child misattribution)", () => {
+    const card: DesignContextNode = {
+      id: 'card',
+      name: 'card',
+      type: 'FRAME',
+      fills: [solid(1, 1, 1)],
+      effects: [{ type: 'DROP_SHADOW', visible: true, radius: 4, color: { r: 0, g: 0, b: 0, a: 0.25 } }],
+      children: [{ id: 'btn', name: 'btn', type: 'INSTANCE', fills: [solid(0.38, 0.4, 0.94)] }],
+    };
+    const { nodes } = dedupeStyles([card]);
+    const keys = Object.keys(nodes[0]!);
+    // the card's own fill + effect must come before the children array
+    expect(keys.indexOf('children')).toBeGreaterThan(keys.indexOf('fill'));
+    expect(keys.indexOf('children')).toBeGreaterThan(keys.indexOf('effect'));
+    expect(keys[keys.length - 1]).toBe('children');
+  });
+
   it('produces deterministic, content-derived ids (stable across runs, diffable)', () => {
     const make = (): DesignContextNode[] => [textNode('x', 'Inter', 'Bold', 14)];
     const a = dedupeStyles(make());
