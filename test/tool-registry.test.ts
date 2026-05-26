@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
+import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests
@@ -9,8 +9,10 @@ import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.
 // input schema property declares a type (the gap that let set_variable_value ship broken).
 
 // Tools the server handles on its own and never dispatches to the plugin, so they have no sandbox
-// handler. save_screenshots is composed server-side from get_screenshot + filesystem writes.
-const SERVER_ONLY_TOOLS = new Set(['save_screenshots']);
+// handler. save_screenshots is composed server-side from get_screenshot + filesystem writes;
+// scan_components / component_map read the local project filesystem (component_map also reuses
+// get_design_context internally) and never touch the sandbox.
+const SERVER_ONLY_TOOLS = new Set(['save_screenshots', 'scan_components', 'component_map']);
 
 const serverNames = TOOL_DEFINITIONS.map(d => d.name);
 const dispatchedNames = serverNames.filter(n => !SERVER_ONLY_TOOLS.has(n));
