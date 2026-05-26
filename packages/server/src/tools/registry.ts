@@ -5,6 +5,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import { ADD_PAGE_TOOL_NAME, addPageToolDefinition } from './add-page.js';
 import { ADD_VARIABLE_MODE_TOOL_NAME, addVariableModeToolDefinition } from './add-variable-mode.js';
+import { analyzeProjectToolDefinition } from './analyze-project.js';
 import {
   APPLY_STYLE_TO_NODE_TOOL_NAME,
   applyStyleToNodeToolDefinition,
@@ -133,8 +134,9 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   getDesignContextToolDefinition,
   getScreenshotToolDefinition,
   saveScreenshotsToolDefinition,
-  // Server-local (filesystem; no plugin handler — like save_screenshots). Profile detection is an
-  // internal helper (analyzeProject), surfaced via these tools' output rather than its own tool.
+  // Server-local (filesystem; no plugin handler — like save_screenshots). analyze_project is an
+  // optional standalone probe; scan_components / component_map also run detection internally.
+  analyzeProjectToolDefinition,
   scanComponentsToolDefinition,
   componentMapToolDefinition,
   // Writes
