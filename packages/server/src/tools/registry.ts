@@ -4,6 +4,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 // consumes these; a registry test asserts they stay in sync with the plugin's handler map (so a new
 // tool can't be half-wired) and that every input schema property declares a type.
 
+import { analyzeProjectToolDefinition } from './analyze-project.js';
 import { getAnnotationsToolDefinition } from './get-annotations.js';
 import { getDesignContextToolDefinition } from './get-design-context.js';
 import { getDocumentToolDefinition } from './get-document.js';
@@ -108,6 +109,8 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   getDesignContextToolDefinition,
   getScreenshotToolDefinition,
   saveScreenshotsToolDefinition,
+  // Server-local (filesystem; no plugin handler — like save_screenshots)
+  analyzeProjectToolDefinition,
   // Writes
   setFillsToolDefinition,
   setTextToolDefinition,

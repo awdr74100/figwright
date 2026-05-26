@@ -14,6 +14,7 @@ import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
 import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from './tools/registry.js';
+import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { formatPingResult, handlePing } from './tools/ping.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
@@ -72,6 +73,10 @@ mcp.setRequestHandler(CallToolRequestSchema, async request => {
   if (name === GET_SCREENSHOT_TOOL_NAME) {
     const result = (await dispatchTool({ node, follower, log }, name, args)) as GetScreenshotResult;
     return { content: screenshotContent(result) };
+  }
+  if (name === ANALYZE_PROJECT_TOOL_NAME) {
+    const result = await handleAnalyzeProject(args);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
   }
   // Inject a stable idempotency key for write tools before the (possibly retrying) dispatch.
   const dispatchArgs = WRITE_TOOL_NAMES.has(name)
