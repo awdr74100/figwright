@@ -20,6 +20,7 @@ import { formatPingResult, handlePing } from './tools/ping.js';
 import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from './tools/registry.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
+import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = '@figma-mcp-relay/server';
 const SERVER_VERSION = '0.0.0';
@@ -86,6 +87,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async request => {
   }
   if (name === COMPONENT_MAP_TOOL_NAME) {
     const result = await handleComponentMap(
+      (tool, a) => dispatchTool({ node, follower, log }, tool, a),
+      args,
+    );
+    return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+  }
+  if (name === TOKEN_MAP_TOOL_NAME) {
+    const result = await handleTokenMap(
       (tool, a) => dispatchTool({ node, follower, log }, tool, a),
       args,
     );

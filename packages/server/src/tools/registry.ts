@@ -103,6 +103,7 @@ import {
 } from './set-variable-value.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './set-visible.js';
 import { SWAP_COMPONENT_TOOL_NAME, swapComponentToolDefinition } from './swap-component.js';
+import { tokenMapToolDefinition } from './token-map.js';
 import { UNGROUP_NODES_TOOL_NAME, ungroupNodesToolDefinition } from './ungroup-nodes.js';
 import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from './unlock-nodes.js';
 import {
@@ -139,6 +140,7 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   analyzeProjectToolDefinition,
   scanComponentsToolDefinition,
   componentMapToolDefinition,
+  tokenMapToolDefinition,
   // Writes
   setFillsToolDefinition,
   setTextToolDefinition,
