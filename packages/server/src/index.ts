@@ -15,6 +15,7 @@ import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
 import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from './tools/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
+import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { formatPingResult, handlePing } from './tools/ping.js';
@@ -81,6 +82,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async request => {
   }
   if (name === SCAN_COMPONENTS_TOOL_NAME) {
     const result = await handleScanComponents(args);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+  }
+  if (name === COMPONENT_MAP_TOOL_NAME) {
+    const result = await handleComponentMap(
+      (tool, a) => dispatchTool({ node, follower, log }, tool, a),
+      args,
+    );
     return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
   }
   // Inject a stable idempotency key for write tools before the (possibly retrying) dispatch.

@@ -6,6 +6,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 import { analyzeProjectToolDefinition } from './analyze-project.js';
 import { scanComponentsToolDefinition } from './scan-components.js';
+import { componentMapToolDefinition } from './component-map.js';
 import { getAnnotationsToolDefinition } from './get-annotations.js';
 import { getDesignContextToolDefinition } from './get-design-context.js';
 import { getDocumentToolDefinition } from './get-document.js';
@@ -113,6 +114,7 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   // Server-local (filesystem; no plugin handler — like save_screenshots)
   analyzeProjectToolDefinition,
   scanComponentsToolDefinition,
+  componentMapToolDefinition,
   // Writes
   setFillsToolDefinition,
   setTextToolDefinition,
