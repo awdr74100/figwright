@@ -5,6 +5,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 // tool can't be half-wired) and that every input schema property declares a type.
 
 import { analyzeProjectToolDefinition } from './analyze-project.js';
+import { scanComponentsToolDefinition } from './scan-components.js';
 import { getAnnotationsToolDefinition } from './get-annotations.js';
 import { getDesignContextToolDefinition } from './get-design-context.js';
 import { getDocumentToolDefinition } from './get-document.js';
@@ -111,6 +112,7 @@ export const TOOL_DEFINITIONS: readonly Tool[] = [
   saveScreenshotsToolDefinition,
   // Server-local (filesystem; no plugin handler — like save_screenshots)
   analyzeProjectToolDefinition,
+  scanComponentsToolDefinition,
   // Writes
   setFillsToolDefinition,
   setTextToolDefinition,
