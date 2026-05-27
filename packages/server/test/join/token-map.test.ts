@@ -87,6 +87,28 @@ describe('joinTokens', () => {
     });
   });
 
+  describe('Tailwind/Figma namespace synonyms (B3)', () => {
+    it('matches Figma rounded/* to a Tailwind --radius-* token', () => {
+      const radii = [proj('radius-lg', '0.5rem', 'lg', 'radius')];
+      const [m] = joinTokens([fig('rounded/lg', 8, 'FLOAT')], radii, { threshold: 0.7 });
+      expect(m?.candidate?.token).toBe('radius-lg');
+      expect(m?.status).toBe('high');
+    });
+
+    it('does NOT alias size→text: Figma size/* is overloaded (font-size vs dimensions)', () => {
+      // size/base could be a dimension elsewhere, so it must not snap to --text-base (always font-size).
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      const [m] = joinTokens([fig('size/base', 16, 'FLOAT')], text, { threshold: 0.7 });
+      expect(m?.status).toBe('unmapped');
+    });
+
+    it('still gates on the step: rounded/md does not match radius-lg', () => {
+      const radii = [proj('radius-lg', '0.5rem', 'lg', 'radius')];
+      const [m] = joinTokens([fig('rounded/md', 6, 'FLOAT')], radii, { threshold: 0.7 });
+      expect(m?.status).toBe('unmapped');
+    });
+  });
+
   it('caps confidence when the name matches but a known color value disagrees (B1)', () => {
     // Same step + stem (grey-100), but the project shade drifted from Figma's — name says yes,
     // value says verify, so it must not read as a confirmed "high" reuse.

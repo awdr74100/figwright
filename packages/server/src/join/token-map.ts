@@ -80,11 +80,38 @@ const splitScale = (raw: string): Scaled => {
   };
 };
 
-/** Dice on stems, but only when the scale steps agree (or both sides have none); else no match. */
+// B3: Tailwind v4 renames several scales that Figma still labels by their CSS/semantic name. The stems
+// then differ purely by convention (Figma "rounded/lg" vs Tailwind "--radius-lg") and Dice scores them
+// apart, so the right token reads as a gap. A synonym table treats these stems as equivalent. Stems are
+// compared in splitScale's normalized form (lowercased, separators stripped), so entries carry no hyphens.
+//
+// Only *unambiguous* synonyms belong here. Notably NOT size↔text: Figma "size/*" is overloaded — it's
+// font sizes in a typography collection (Design A) but dimensions (width/height) elsewhere, so aliasing it
+// to Tailwind's --text-* (always font-size) would mis-map dimensional tokens. Disambiguating that needs
+// the Figma variable's collection/category, which the join doesn't carry yet — left as a future step.
+const STEM_SYNONYMS: readonly ReadonlySet<string>[] = [
+  new Set(['radius', 'rounded']), // --radius-*      ↔ rounded/*
+  new Set(['leading', 'lineheight']), // --leading-*     ↔ line-height/*
+  new Set(['fontweight', 'weight']), // --font-weight-* ↔ weight/*
+];
+
+/**
+ * True when two stems are the same scale by either an exact match or a Tailwind/Figma naming
+ * synonym.
+ */
+const stemsAlias = (a: string, b: string): boolean =>
+  a === b || STEM_SYNONYMS.some(group => group.has(a) && group.has(b));
+
+/**
+ * Stem similarity, gated on the scale step agreeing (or both sides having none). A synonym match
+ * counts as exact (1) so a renamed-by-convention scale isn't lost to Dice; otherwise fall back to
+ * Dice.
+ */
 const stepGatedScore = (figma: Scaled, candidate: Scaled): number => {
   if (figma.step !== null || candidate.step !== null) {
     if (figma.step !== candidate.step) return 0;
   }
+  if (stemsAlias(figma.stem, candidate.stem)) return 1;
   return diceSimilarity(figma.stem, candidate.stem);
 };
 
