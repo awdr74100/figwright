@@ -64,4 +64,37 @@ describe('joinTokens', () => {
     expect(m?.status).toBe('unmapped');
     expect(m?.candidate).toBeUndefined();
   });
+
+  describe('scale-step gating (B2)', () => {
+    it('does not snap a different scale step in the same family to the one that exists', () => {
+      // Project defines only primary-500; Primary/50 must NOT match it (50 ≠ 500).
+      const [m] = joinTokens([fig('Primary/50', '#F3F5FF')], tokens, { threshold: 0.7 });
+      expect(m?.status).toBe('unmapped');
+      expect(m?.candidate).toBeUndefined();
+    });
+
+    it('does not snap an arbitrary spacing value to the nearest defined step', () => {
+      const spacing = [proj('spacing-2', '8px', '2', 'spacing')];
+      const [m] = joinTokens([fig('spacing/24', 96, 'FLOAT')], spacing, { threshold: 0.7 });
+      expect(m?.status).toBe('unmapped');
+    });
+
+    it('still matches when the scale step agrees', () => {
+      const spacing = [proj('spacing-2', '8px', '2', 'spacing')];
+      const [m] = joinTokens([fig('spacing/2', 8, 'FLOAT')], spacing, { threshold: 0.7 });
+      expect(m?.candidate?.token).toBe('spacing-2');
+      expect(m?.status).toBe('high');
+    });
+  });
+
+  it('caps confidence when the name matches but a known color value disagrees (B1)', () => {
+    // Same step + stem (grey-100), but the project shade drifted from Figma's — name says yes,
+    // value says verify, so it must not read as a confirmed "high" reuse.
+    const greys = [proj('color-grey-100', '#EEEEEE', 'grey-100', 'color')];
+    const [m] = joinTokens([fig('Grey/100', '#F5F5F5')], greys, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-grey-100');
+    expect(m?.candidate?.matchedBy).toEqual(['name']);
+    expect(m?.candidate?.confidence).toBeLessThan(0.85);
+    expect(m?.status).not.toBe('high');
+  });
 });

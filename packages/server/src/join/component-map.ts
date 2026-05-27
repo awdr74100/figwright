@@ -176,21 +176,39 @@ export const joinComponents = (
 ): ComponentMapping[] => usages.map(u => joinOne(u, scanned, opts));
 
 /**
- * Walk a design-context tree and group INSTANCE nodes by their main component, so a component used
- * N times yields one usage with N instance ids (not N rows). Collapsed (deduped) subtrees still carry
- * the instance's own name / mainComponentId, so deduped instances are counted too.
+ * ComponentId → its containing component set, built from get_local_components (see
+ * handleComponentMap).
  */
-export const collectFigmaComponents = (root: DesignContextNode): FigmaComponentUsage[] => {
+export type ComponentSetIndex = ReadonlyMap<string, { id: string; name: string }>;
+
+/**
+ * Walk a design-context tree and group INSTANCE nodes by their main component, so a component used
+ * N times yields one usage with N instance ids (not N rows). Collapsed (deduped) subtrees still
+ * carry the instance's own name / mainComponentId, so deduped instances are counted too.
+ *
+ * Figma resolves a variant instance's `mainComponent` to the _variant_ ("Size=Large, State=Hover"),
+ * not the _set_ ("Button") — so without help every variant fragments into its own row and matches
+ * "Size"/"State" garbage. setIndex (componentId → set) lets us group by the set and name the usage
+ * after it, which is what the fuzzy match and the docs/figma-component-map.md override key on.
+ * Falls back to the variant/main name, then the node name, for components that aren't part of a
+ * set.
+ */
+export const collectFigmaComponents = (
+  root: DesignContextNode,
+  setIndex: ComponentSetIndex = new Map(),
+): FigmaComponentUsage[] => {
   const byKey = new Map<string, FigmaComponentUsage>();
 
   const visit = (node: DesignContextNode): void => {
     if (node.type === 'INSTANCE') {
-      const name = node.mainComponent?.name ?? node.name;
-      const mainComponentId = node.mainComponentId ?? node.mainComponent?.id;
-      const key = mainComponentId ?? name;
+      const variantId = node.mainComponentId ?? node.mainComponent?.id;
+      const set = variantId === undefined ? undefined : setIndex.get(variantId);
+      const name = set?.name ?? node.mainComponent?.name ?? node.name;
+      const groupId = set?.id ?? variantId;
+      const key = groupId ?? name;
       const usage: FigmaComponentUsage = byKey.get(key) ?? {
         name,
-        ...(mainComponentId === undefined ? {} : { mainComponentId }),
+        ...(groupId === undefined ? {} : { mainComponentId: groupId }),
         variantAxes: [],
         instanceNodeIds: [],
         instanceCount: 0,

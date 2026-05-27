@@ -27,8 +27,6 @@ export interface TokenMapping {
   status: MappingStatus;
 }
 
-const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-
 /** Normalize a hex color for comparison: expand shorthand, drop a fully-opaque alpha, uppercase. */
 const normHex = (raw: string): string | null => {
   const m = /^#([0-9a-fA-F]{3,8})$/.exec(raw.trim());
@@ -43,6 +41,53 @@ const normHex = (raw: string): string | null => {
 const matchNames = (token: ProjectToken): string[] =>
   token.utility === undefined ? [token.name] : [token.utility, token.name];
 
+// Scale-aware name matching. A numbered/sized token splits into a stem and a *step*: "Primary/500" →
+// (primary, 500), "spacing/24" → (spacing, 24), "rounded/lg" → (rounded, lg). The step is a hard key,
+// not a fuzzy tail — otherwise the family prefix dominates Dice and every step in a family snaps to
+// whatever step the project happens to define (Primary/50 → primary-500 @0.94, spacing/24 → spacing-2).
+// So stems are fuzzy-matched but steps must be equal (or both absent) for a name match to count.
+const SCALE_WORDS = new Set([
+  'xs',
+  'sm',
+  'md',
+  'lg',
+  'xl',
+  'base',
+  'full',
+  'default',
+  'none',
+  'px',
+]);
+const isScaleStep = (seg: string): boolean => /^\d/.test(seg) || SCALE_WORDS.has(seg);
+
+interface Scaled {
+  stem: string;
+  step: string | null;
+}
+
+/** Split a token-ish name into (stem, step), pulling a trailing run of scale segments off the end. */
+const splitScale = (raw: string): Scaled => {
+  const segs = raw
+    .toLowerCase()
+    .split(/[/\-_.\s]+/)
+    .filter(Boolean);
+  let cut = segs.length;
+  while (cut > 0 && isScaleStep(segs[cut - 1] as string)) cut -= 1;
+  const stepSegs = segs.slice(cut);
+  return {
+    stem: segs.slice(0, cut).join(''),
+    step: stepSegs.length > 0 ? stepSegs.join('').replace(/[^a-z0-9]/g, '') : null,
+  };
+};
+
+/** Dice on stems, but only when the scale steps agree (or both sides have none); else no match. */
+const stepGatedScore = (figma: Scaled, candidate: Scaled): number => {
+  if (figma.step !== null || candidate.step !== null) {
+    if (figma.step !== candidate.step) return 0;
+  }
+  return diceSimilarity(figma.stem, candidate.stem);
+};
+
 interface NameMatch {
   token: ProjectToken;
   score: number;
@@ -52,12 +97,12 @@ const bestNameMatch = (
   figmaName: string,
   projectTokens: readonly ProjectToken[],
 ): NameMatch | null => {
-  const target = norm(figmaName);
+  const target = splitScale(figmaName);
   let best: NameMatch | null = null;
   for (const token of projectTokens) {
     let score = 0;
     for (const name of matchNames(token))
-      score = Math.max(score, diceSimilarity(target, norm(name)));
+      score = Math.max(score, stepGatedScore(target, splitScale(name)));
     if (best === null || score > best.score) best = { token, score };
   }
   return best;
@@ -121,10 +166,16 @@ const joinOne = (
   }
 
   if (nameMatch !== null && nameMatch.score >= 0.5) {
+    // B1: the name agrees but, for a color whose hex is known on both sides, the value disagrees —
+    // the token's color drifted from Figma. Keep the (correct) token, but don't claim "high": cap
+    // below the high bar so it reads as "name match, verify the value" rather than a confirmed reuse.
+    const candHex = normHex(nameMatch.token.value);
+    const valueDisagrees = figmaHex !== null && candHex !== null && candHex !== figmaHex;
+    const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, nameMatch.score, ['name']),
-      status: statusFor(nameMatch.score, opts.threshold),
+      candidate: candidateFrom(nameMatch.token, confidence, ['name']),
+      status: statusFor(confidence, opts.threshold),
     };
   }
 

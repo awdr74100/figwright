@@ -1,19 +1,25 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { DesignContextNode, GetDesignContextResult } from '@figma-mcp-relay/shared';
+import type {
+  DesignContextNode,
+  GetDesignContextResult,
+  GetLocalComponentsResult,
+} from '@figma-mcp-relay/shared';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import * as v from 'valibot';
 
 import {
   collectFigmaComponents,
   type ComponentMapping,
+  type ComponentSetIndex,
   joinComponents,
   parseMapFile,
 } from '../join/component-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents } from '../scan/scan.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
+import { GET_LOCAL_COMPONENTS_TOOL_NAME } from './get-local-components.js';
 
 export const COMPONENT_MAP_TOOL_NAME = 'component_map';
 
@@ -88,15 +94,27 @@ export const handleComponentMap = async (
   const contextArgs: Record<string, unknown> = { detail: 'full', dedupeComponents: true };
   if (args.nodeId !== undefined) contextArgs.nodeId = args.nodeId;
 
-  const [context, profile, overrides] = await Promise.all([
+  const [context, profile, overrides, localComponents] = await Promise.all([
     dispatch(GET_DESIGN_CONTEXT_TOOL_NAME, contextArgs) as Promise<GetDesignContextResult>,
     analyzeProject(rootDir),
     readOverrides(rootDir),
+    dispatch(GET_LOCAL_COMPONENTS_TOOL_NAME, {}) as Promise<GetLocalComponentsResult>,
   ]);
 
   const scanned = await scanComponents(rootDir, profile.componentExtensions);
 
-  const usages = context.nodes.flatMap((n: DesignContextNode) => collectFigmaComponents(n));
+  // Map every variant component id to its set, so collectFigmaComponents can group instances by the
+  // set (and name them "btn/Default", not "Size=Medium, …"). Library/external instances aren't local,
+  // so they fall back to the main/node name inside collectFigmaComponents.
+  const setIndex: ComponentSetIndex = new Map(
+    localComponents.componentSets.flatMap(set =>
+      set.componentIds.map(id => [id, { id: set.id, name: set.name }] as const),
+    ),
+  );
+
+  const usages = context.nodes.flatMap((n: DesignContextNode) =>
+    collectFigmaComponents(n, setIndex),
+  );
   const mappings = joinComponents(usages, scanned, {
     threshold,
     ...(overrides.size > 0 ? { overrides } : {}),
