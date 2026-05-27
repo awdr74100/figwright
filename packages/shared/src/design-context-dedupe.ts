@@ -40,8 +40,11 @@ const channel = (n: number): string =>
     .toString(16)
     .padStart(2, '0');
 
-/** {r,g,b}(+optional alpha 0–1) → #RRGGBB or #RRGGBBAA (alpha only when < 1). Universal color literal. */
-const toHex = (c: SerializedColor, alpha?: number): string => {
+/**
+ * {r,g,b}(+optional alpha 0–1) → #RRGGBB or #RRGGBBAA (alpha only when < 1). Universal color
+ * literal.
+ */
+export const toHex = (c: SerializedColor, alpha?: number): string => {
   const base = `#${channel(c.r)}${channel(c.g)}${channel(c.b)}`;
   const withAlpha = alpha !== undefined && alpha < 1 ? base + channel(alpha) : base;
   return withAlpha.toUpperCase();
@@ -165,7 +168,9 @@ export const dedupeStyles = (
   return { nodes: nodes.map(transform), globalVars: { styles } };
 };
 
-const countTree = (nodes: readonly DesignContextNode[]): { nodeCount: number; maxDepth: number } => {
+const countTree = (
+  nodes: readonly DesignContextNode[],
+): { nodeCount: number; maxDepth: number } => {
   let nodeCount = 0;
   let maxDepth = 0;
   const walk = (n: DesignContextNode, depth: number): void => {
