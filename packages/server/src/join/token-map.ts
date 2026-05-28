@@ -95,23 +95,49 @@ const STEM_SYNONYMS: readonly ReadonlySet<string>[] = [
   new Set(['fontweight', 'weight']), // --font-weight-* ↔ weight/*
 ];
 
+// size↔text is the one synonym that's only safe *in context*. Figma "size/*" is a font size when it
+// lives in a typography collection (Design A groups them under "font") but a width/height dimension
+// elsewhere — so aliasing it to Tailwind's --text-* (always font-size) is gated on the variable's
+// collection rather than enabled globally. Carrying the collection through the join is exactly what
+// makes this safe to open without mis-mapping dimensional tokens.
+const TYPO_STEM_SYNONYM: ReadonlySet<string> = new Set(['size', 'text']);
+const TYPO_COLLECTION_WORDS = new Set([
+  'font',
+  'fonts',
+  'typography',
+  'type',
+  'text',
+  'typeface',
+  'typo',
+]);
+
+/** Whether a variable's collection name signals typography (word-level match, so "context" ≠ text). */
+const isTypographyCollection = (collection: string | undefined): boolean =>
+  collection !== undefined &&
+  collection
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .some(word => TYPO_COLLECTION_WORDS.has(word));
+
 /**
- * True when two stems are the same scale by either an exact match or a Tailwind/Figma naming
- * synonym.
+ * True when two stems are the same scale by an exact match, a Tailwind/Figma naming synonym, or —
+ * only when the Figma side is a typography variable — the context-gated size↔text synonym.
  */
-const stemsAlias = (a: string, b: string): boolean =>
-  a === b || STEM_SYNONYMS.some(group => group.has(a) && group.has(b));
+const stemsAlias = (a: string, b: string, typography: boolean): boolean =>
+  a === b ||
+  STEM_SYNONYMS.some(group => group.has(a) && group.has(b)) ||
+  (typography && TYPO_STEM_SYNONYM.has(a) && TYPO_STEM_SYNONYM.has(b));
 
 /**
  * Stem similarity, gated on the scale step agreeing (or both sides having none). A synonym match
  * counts as exact (1) so a renamed-by-convention scale isn't lost to Dice; otherwise fall back to
- * Dice.
+ * Dice. `typography` opens the context-gated size↔text synonym for the current Figma token.
  */
-const stepGatedScore = (figma: Scaled, candidate: Scaled): number => {
+const stepGatedScore = (figma: Scaled, candidate: Scaled, typography: boolean): number => {
   if (figma.step !== null || candidate.step !== null) {
     if (figma.step !== candidate.step) return 0;
   }
-  if (stemsAlias(figma.stem, candidate.stem)) return 1;
+  if (stemsAlias(figma.stem, candidate.stem, typography)) return 1;
   return diceSimilarity(figma.stem, candidate.stem);
 };
 
@@ -123,13 +149,14 @@ interface NameMatch {
 const bestNameMatch = (
   figmaName: string,
   projectTokens: readonly ProjectToken[],
+  typography: boolean,
 ): NameMatch | null => {
   const target = splitScale(figmaName);
   let best: NameMatch | null = null;
   for (const token of projectTokens) {
     let score = 0;
     for (const name of matchNames(token))
-      score = Math.max(score, stepGatedScore(target, splitScale(name)));
+      score = Math.max(score, stepGatedScore(target, splitScale(name), typography));
     if (best === null || score > best.score) best = { token, score };
   }
   return best;
@@ -173,7 +200,11 @@ const joinOne = (
     status: 'unmapped',
   };
 
-  const nameMatch = bestNameMatch(figma.name, projectTokens);
+  const nameMatch = bestNameMatch(
+    figma.name,
+    projectTokens,
+    isTypographyCollection(figma.collection),
+  );
 
   // Exact color value-match: strong, naming-independent evidence.
   const figmaHex = typeof figma.value === 'string' ? normHex(figma.value) : null;

@@ -36,6 +36,7 @@ describe('resolveFigmaTokens', () => {
     );
     expect(result[0]).toMatchObject({ name: 'Primary/500', type: 'COLOR' });
     expect(result[0]?.value).toBe('#6266F0');
+    expect(result[0]?.collection).toBe('Tokens'); // collection name carried through for the join
   });
 
   it('keeps FLOAT / STRING / BOOLEAN values as-is', () => {

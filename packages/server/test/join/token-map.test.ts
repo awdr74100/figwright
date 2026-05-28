@@ -4,10 +4,16 @@ import { joinTokens } from '../../src/join/token-map.js';
 import type { FigmaToken } from '../../src/tokens/figma-tokens.js';
 import type { ProjectToken } from '../../src/tokens/tokens.js';
 
-const fig = (name: string, value: FigmaToken['value'], type = 'COLOR'): FigmaToken => ({
+const fig = (
+  name: string,
+  value: FigmaToken['value'],
+  type = 'COLOR',
+  collection?: string,
+): FigmaToken => ({
   name,
   value,
   type,
+  ...(collection === undefined ? {} : { collection }),
 });
 
 const proj = (name: string, value: string, utility?: string, category?: string): ProjectToken => ({
@@ -95,11 +101,24 @@ describe('joinTokens', () => {
       expect(m?.status).toBe('high');
     });
 
-    it('does NOT alias size→text: Figma size/* is overloaded (font-size vs dimensions)', () => {
-      // size/base could be a dimension elsewhere, so it must not snap to --text-base (always font-size).
+    it('does NOT alias size→text outside a typography collection (size/* is overloaded)', () => {
       const text = [proj('text-base', '1rem', 'base', 'font-size')];
-      const [m] = joinTokens([fig('size/base', 16, 'FLOAT')], text, { threshold: 0.7 });
-      expect(m?.status).toBe('unmapped');
+      // In Design A the "size" collection actually holds radius/spacing dimensions, not font sizes, so a
+      // size/* there must not snap to --text-base (always font-size). No collection is treated the same.
+      expect(
+        joinTokens([fig('size/base', 16, 'FLOAT', 'size')], text, { threshold: 0.7 })[0]?.status,
+      ).toBe('unmapped');
+      expect(joinTokens([fig('size/base', 16, 'FLOAT')], text, { threshold: 0.7 })[0]?.status).toBe(
+        'unmapped',
+      );
+    });
+
+    it('aliases size→text when the Figma variable is in a typography collection', () => {
+      // Design A groups font sizes under a "font" collection → size/base is a font size → --text-base.
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      const [m] = joinTokens([fig('size/base', 16, 'FLOAT', 'font')], text, { threshold: 0.7 });
+      expect(m?.candidate?.token).toBe('text-base');
+      expect(m?.status).toBe('high');
     });
 
     it('still gates on the step: rounded/md does not match radius-lg', () => {

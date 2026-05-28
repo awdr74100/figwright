@@ -17,6 +17,12 @@ export interface FigmaToken {
   value: string | number | boolean | null;
   /** Figma resolvedType: COLOR | FLOAT | STRING | BOOLEAN. */
   type: string;
+  /**
+   * Display name of the variable's collection, e.g. "font" / "color" / "size". Lets the join
+   * disambiguate overloaded names — a "size/*" in a typography collection is a font size, while the
+   * same name in a dimension collection is a width/height. Absent if the collection has no name.
+   */
+  collection?: string;
 }
 
 const isAlias = (val: SerializedVariableValue): val is { type: 'VARIABLE_ALIAS'; id: string } =>
@@ -45,6 +51,7 @@ const valueAtDefaultMode = (
  */
 export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] => {
   const defaultModeByCollection = new Map(defs.collections.map(c => [c.id, c.defaultModeId]));
+  const nameByCollection = new Map(defs.collections.map(c => [c.id, c.name]));
   const byId = new Map(defs.variables.map(varDef => [varDef.id, varDef]));
 
   const resolve = (variable: SerializedVariable, seen: Set<string>): FigmaToken['value'] => {
@@ -60,9 +67,13 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
     return raw;
   };
 
-  return defs.variables.map(variable => ({
-    name: variable.name,
-    value: resolve(variable, new Set()),
-    type: variable.resolvedType,
-  }));
+  return defs.variables.map(variable => {
+    const collection = nameByCollection.get(variable.collectionId);
+    return {
+      name: variable.name,
+      value: resolve(variable, new Set()),
+      type: variable.resolvedType,
+      ...(collection === undefined || collection.length === 0 ? {} : { collection }),
+    };
+  });
 };
