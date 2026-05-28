@@ -62,6 +62,28 @@ describe('joinComponents', () => {
     expect(m?.candidate?.matchedProps).toEqual(['Size', 'Variant']);
   });
 
+  it('reports Figma axes the candidate lacks as unmatchedProps (extension TODOs)', () => {
+    const [m] = joinComponents(
+      [usage({ name: 'Button', variantAxes: ['Size', 'Variant', 'Show icon_L', 'State'] })],
+      scanned, // Button props: size, variant
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.matchedProps).toEqual(['Size', 'Variant']);
+    expect(m?.candidate?.unmatchedProps).toEqual(['Show icon_L', 'State']);
+  });
+
+  it('diffs props on the override path too, resolving the scanned component', () => {
+    const overrides = new Map([['btn', { name: 'Button', filePath: 'src/components/Button.tsx' }]]);
+    const [m] = joinComponents(
+      [usage({ name: 'btn', variantAxes: ['Size', 'Show icon_L'] })],
+      scanned, // Button at src/components/Button.tsx, props: size, variant
+      { threshold: 0.7, overrides },
+    );
+    expect(m?.source).toBe('map-file');
+    expect(m?.candidate?.matchedProps).toEqual(['Size']);
+    expect(m?.candidate?.unmatchedProps).toEqual(['Show icon_L']);
+  });
+
   it('flags unmapped when nothing is close', () => {
     const [m] = joinComponents([usage({ name: 'Tooltip' })], scanned, { threshold: 0.7 });
     expect(m?.status).toBe('unmapped');

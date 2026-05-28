@@ -49,6 +49,13 @@ export interface ComponentMapping {
     confidence: number;
     /** Variant axes that also exist as props on the matched component. */
     matchedProps: string[];
+    /**
+     * Figma component-property axes (variant / boolean / text) with no matching prop on the
+     * candidate — the actionable inverse of matchedProps. The component must be extended to carry
+     * them (e.g. a leading-icon toggle, a `required` flag, an active/selected state). Codegen
+     * surfaces these as component-extension TODOs instead of silently dropping the design intent.
+     */
+    unmatchedProps: string[];
   };
   status: MappingStatus;
   /** Which path produced the mapping. */
@@ -122,6 +129,35 @@ const statusFor = (confidence: number, threshold: number): MappingStatus => {
   return 'unmapped';
 };
 
+/**
+ * Split a usage's Figma axes into those the candidate already has as props (matchedProps) and those
+ * it lacks (unmatchedProps — the component-extension TODOs). Same casefold predicate for both, so
+ * matched ∪ unmatched == variantAxes.
+ */
+const partitionAxes = (
+  variantAxes: readonly string[],
+  component: ScannedComponent,
+): { matchedProps: string[]; unmatchedProps: string[] } => {
+  const codeProps = new Set(component.propNames.map(p => p.toLowerCase()));
+  const matchedProps: string[] = [];
+  const unmatchedProps: string[] = [];
+  for (const axis of variantAxes) {
+    (codeProps.has(axis.toLowerCase()) ? matchedProps : unmatchedProps).push(axis);
+  }
+  return { matchedProps, unmatchedProps };
+};
+
+/**
+ * The scanned component an override points to, so its props can be diffed against the Figma axes
+ * even on the map-file path. Match by repo-relative path first, then by component name.
+ */
+const resolveOverrideComponent = (
+  override: { name: string; filePath: string },
+  scanned: readonly ScannedComponent[],
+): ScannedComponent | undefined =>
+  scanned.find(c => c.filePath === override.filePath) ??
+  scanned.find(c => norm(c.name) === norm(override.name));
+
 export interface JoinOptions {
   threshold: number;
   /** Explicit figmaName → code target overrides (highest authority). */
@@ -144,13 +180,18 @@ const joinOne = (
 
   const override = opts.overrides?.get(usage.name) ?? opts.overrides?.get(norm(usage.name));
   if (override !== undefined) {
+    const component = resolveOverrideComponent(override, scanned);
+    const { matchedProps, unmatchedProps } = component
+      ? partitionAxes(usage.variantAxes, component)
+      : { matchedProps: [], unmatchedProps: [] };
     return {
       ...shared,
       candidate: {
         name: override.name,
         filePath: override.filePath,
         confidence: 1,
-        matchedProps: [],
+        matchedProps,
+        unmatchedProps,
       },
       status: 'high',
       source: 'map-file',
@@ -164,8 +205,7 @@ const joinOne = (
 
   // Variant bonus: reward code props that cover the instance's variant axes, but only once the name
   // already plausibly matches, so an unrelated component can't be promoted on prop overlap alone.
-  const codeProps = new Set(match.component.propNames.map(p => p.toLowerCase()));
-  const matchedProps = usage.variantAxes.filter(axis => codeProps.has(axis.toLowerCase()));
+  const { matchedProps, unmatchedProps } = partitionAxes(usage.variantAxes, match.component);
   const bonus = Math.min(MAX_VARIANT_BONUS, matchedProps.length * VARIANT_BONUS_PER_PROP);
   const confidence = Math.min(1, Number((match.score + bonus).toFixed(3)));
 
@@ -176,6 +216,7 @@ const joinOne = (
       filePath: match.component.filePath,
       confidence,
       matchedProps,
+      unmatchedProps,
     },
     status: statusFor(confidence, opts.threshold),
     source: 'scan',

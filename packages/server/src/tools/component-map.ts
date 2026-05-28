@@ -48,6 +48,8 @@ export const componentMapToolDefinition: Tool = {
     'they can be reused instead of regenerated. Joins the grounded Figma component names (and their ' +
     'variant axes) against an AST scan of the project; an explicit docs/figma-component-map.md row ' +
     'overrides the fuzzy match. Each distinct component is mapped once with all its instance ids. ' +
+    'A mapped candidate also reports matchedProps (Figma axes the component already has) and ' +
+    'unmatchedProps (axes it lacks → component-extension TODOs). ' +
     'Returns { mappings (candidate + confidence + status high/medium/low/unmapped), unmapped, profile }.',
   inputSchema: {
     type: 'object',

@@ -31,6 +31,9 @@ the rendered image.
    - Each entry's `instances[]` carries the per-instance `props` (resolved variant / boolean / text
      values, e.g. `{ Size: "Medium", Type: "Primary", "show 必填": true }`). Wire those onto the reused
      component — one element per instance, with its own props — instead of a single generic element.
+   - `candidate.unmatchedProps`: Figma axes the reused component has **no prop for** (e.g. a leading
+     icon, a `required` flag, an active state). Reuse the component, but surface these as
+     component-extension TODOs — don't silently drop them or fake them with ad-hoc markup.
 3. **`token_map`** → every Figma variable joined to a project token with `status` + `ref` (the Tailwind
    utility base or `var(--…)`) + `matchedBy` (`name` / `value`).
    - mapped: reference `candidate.ref` (e.g. `bg-primary-500`, `var(--color-primary-500)`) — never the
@@ -53,3 +56,4 @@ token references for color/spacing/radius/typography.
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.
+  `component_map` reports these directly as `candidate.unmatchedProps`; turn them into TODOs.
