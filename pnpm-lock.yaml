@@ -87,6 +87,9 @@ importers:
       ws:
         specifier: ^8.20.1
         version: 8.20.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/ws':
         specifier: ^8.18.1
