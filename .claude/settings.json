@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/scripts/format-on-edit.mjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/format-on-edit.mjs\"",
             "statusMessage": "oxfmt + oxlint on edited file"
           }
         ]
