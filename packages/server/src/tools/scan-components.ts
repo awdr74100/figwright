@@ -1,23 +1,20 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents, type ScannedComponent } from '../scan/scan.js';
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const SCAN_COMPONENTS_TOOL_NAME = 'scan_components';
 
-export const ScanComponentsInputSchema = v.object({
-  rootDir: v.optional(v.string()),
-  extensions: v.optional(v.array(v.string())),
-});
-export type ScanComponentsInput = v.InferOutput<typeof ScanComponentsInputSchema>;
+const inputShape = {
+  rootDir: z.string().describe('Project root to scan; defaults to the server cwd').optional(),
+  extensions: z
+    .array(z.string())
+    .describe('Component file extensions to scan; defaults to the detected profile')
+    .optional(),
+};
 
-export interface ScanComponentsResult {
-  components: ScannedComponent[];
-  profile: ProjectProfile;
-}
-
-export const scanComponentsToolDefinition: Tool = {
+export const scanComponentsTool: ToolSpec = {
   name: SCAN_COMPONENTS_TOOL_NAME,
   description:
     'Scan the local project for existing UI components so they can be reused instead of regenerated. ' +
@@ -25,22 +22,19 @@ export const scanComponentsToolDefinition: Tool = {
     'PascalCase, function-ish) rather than by folder layout, so any structure works. React (.tsx/.jsx) ' +
     'is parsed for name + props; Vue/Svelte yield filename-derived names. extensions defaults to the ' +
     "detected profile's; rootDir defaults to the server cwd. Returns { components, profile }.",
-  inputSchema: {
-    type: 'object',
-    properties: {
-      rootDir: { type: 'string', description: 'Project root to scan; defaults to the server cwd' },
-      extensions: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Component file extensions to scan; defaults to the detected profile',
-      },
-    },
-    additionalProperties: false,
-  },
+  inputShape,
+  kind: 'local',
 };
 
+export const scanComponentsToolDefinition = specToToolDefinition(scanComponentsTool);
+
+export interface ScanComponentsResult {
+  components: ScannedComponent[];
+  profile: ProjectProfile;
+}
+
 export const handleScanComponents = async (rawArgs: unknown): Promise<ScanComponentsResult> => {
-  const args = v.parse(ScanComponentsInputSchema, rawArgs);
+  const args = z.object(inputShape).parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const profile = await analyzeProject(rootDir);
   const extensions = args.extensions ?? profile.componentExtensions;

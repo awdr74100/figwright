@@ -2,25 +2,32 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { GetVariableDefsResult } from '@figma-mcp-relay/shared';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import { joinTokens, type TokenMapping } from '../join/token-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { resolveFigmaTokens } from '../tokens/figma-tokens.js';
 import { parseCssCustomProperties } from '../tokens/tokens.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from './get-variable-defs.js';
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const TOKEN_MAP_TOOL_NAME = 'token_map';
 
 const DEFAULT_THRESHOLD = 0.7;
 
-export const TokenMapInputSchema = v.object({
-  rootDir: v.optional(v.string()),
-  tokenSource: v.optional(v.string()),
-  threshold: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-});
-export type TokenMapInput = v.InferOutput<typeof TokenMapInputSchema>;
+const inputShape = {
+  rootDir: z.string().describe('Project root; defaults to the server cwd').optional(),
+  tokenSource: z
+    .string()
+    .describe('Path (relative to rootDir) to a CSS file holding the tokens; overrides detection')
+    .optional(),
+  threshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('Confidence at/above which a match counts as reliable (default 0.7)')
+    .optional(),
+};
 
 export interface TokenMapResult {
   mappings: TokenMapping[];
@@ -34,7 +41,7 @@ export interface TokenMapResult {
   note?: string;
 }
 
-export const tokenMapToolDefinition: Tool = {
+export const tokenMapTool: ToolSpec = {
   name: TOKEN_MAP_TOOL_NAME,
   description:
     "Map the document's Figma variables to the project's design tokens, so generated code references " +
@@ -44,25 +51,11 @@ export const tokenMapToolDefinition: Tool = {
     'detected styling config; rootDir defaults to the server cwd. Tailwind v3 JS configs are not yet ' +
     'parsed (pass tokenSource to a CSS file). Returns { mappings (candidate + confidence + status + ' +
     'matchedBy), unmapped, tokenSource, profile }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      rootDir: { type: 'string', description: 'Project root; defaults to the server cwd' },
-      tokenSource: {
-        type: 'string',
-        description:
-          'Path (relative to rootDir) to a CSS file holding the tokens; overrides detection',
-      },
-      threshold: {
-        type: 'number',
-        minimum: 0,
-        maximum: 1,
-        description: 'Confidence at/above which a match counts as reliable (default 0.7)',
-      },
-    },
-    additionalProperties: false,
-  },
+  inputShape,
+  kind: 'local',
 };
+
+export const tokenMapToolDefinition = specToToolDefinition(tokenMapTool);
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
@@ -93,7 +86,7 @@ export const handleTokenMap = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<TokenMapResult> => {
-  const args = v.parse(TokenMapInputSchema, rawArgs);
+  const args = z.object(inputShape).parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 

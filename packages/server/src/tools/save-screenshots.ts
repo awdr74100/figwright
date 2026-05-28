@@ -8,43 +8,34 @@ import {
   SCREENSHOT_FORMATS,
   type ScreenshotImage,
 } from '@figma-mcp-relay/shared';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
 
-export const SaveScreenshotsInputSchema = v.object({
-  nodeIds: v.array(v.string()),
-  outDir: v.string(),
-  format: v.optional(v.picklist(SCREENSHOT_FORMATS)),
-  scale: v.optional(v.pipe(v.number(), v.minValue(0))),
-});
-export type SaveScreenshotsInput = v.InferOutput<typeof SaveScreenshotsInputSchema>;
+const inputShape = {
+  nodeIds: z.array(z.string()).describe('Figma node ids to export'),
+  outDir: z.string().describe('Directory to write files into (created if missing)'),
+  format: z
+    .enum(SCREENSHOT_FORMATS)
+    .describe('Export format: PNG (default) / JPG / SVG')
+    .optional(),
+  scale: z.number().min(0).describe('Raster scale factor (PNG/JPG), default 1').optional(),
+};
 
-export const saveScreenshotsToolDefinition: Tool = {
+export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
   description:
     'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
     'path is null for missing or non-exportable nodes. Files are named after a sanitized node id.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Figma node ids to export' },
-      outDir: { type: 'string', description: 'Directory to write files into (created if missing)' },
-      format: {
-        type: 'string',
-        enum: [...SCREENSHOT_FORMATS],
-        description: 'Export format: PNG (default) / JPG / SVG',
-      },
-      scale: { type: 'number', minimum: 0, description: 'Raster scale factor (PNG/JPG), default 1' },
-    },
-    required: ['nodeIds', 'outDir'],
-    additionalProperties: false,
-  },
+  inputShape,
+  kind: 'local',
 };
+
+export const saveScreenshotsToolDefinition = specToToolDefinition(saveScreenshotsTool);
 
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
 
@@ -52,8 +43,8 @@ const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' 
 const sanitize = (id: string): string => id.replace(/[^\w.-]/g, '-');
 
 /**
- * Decode the base64 images into files under outDir (created if missing).
- * Pure-fs and dispatch-free so it can be unit-tested against a temp directory.
+ * Decode the base64 images into files under outDir (created if missing). Pure-fs and dispatch-free
+ * so it can be unit-tested against a temp directory.
  */
 export const writeScreenshots = async (
   outDir: string,
@@ -78,19 +69,22 @@ export const writeScreenshots = async (
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
 /**
- * Reuses the plugin-side get_screenshot export (no dedicated plugin handler) to fetch
- * base64 bytes, then lands them on the server filesystem — the first server-side write tool.
+ * Reuses the plugin-side get_screenshot export (no dedicated plugin handler) to fetch base64 bytes,
+ * then lands them on the server filesystem — the first server-side write tool.
  */
 export const handleSaveScreenshots = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<SaveScreenshotsResult> => {
-  const args = v.parse(SaveScreenshotsInputSchema, rawArgs);
+  const args = z.object(inputShape).parse(rawArgs);
 
   const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
   if (args.format !== undefined) screenshotArgs.format = args.format;
   if (args.scale !== undefined) screenshotArgs.scale = args.scale;
 
-  const { images } = (await dispatch(GET_SCREENSHOT_TOOL_NAME, screenshotArgs)) as GetScreenshotResult;
+  const { images } = (await dispatch(
+    GET_SCREENSHOT_TOOL_NAME,
+    screenshotArgs,
+  )) as GetScreenshotResult;
   return writeScreenshots(args.outDir, images);
 };
