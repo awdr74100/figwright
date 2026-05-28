@@ -1,15 +1,14 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const GET_FONTS_TOOL_NAME = 'get_fonts';
 
-export const getFontsToolDefinition: Tool = {
+export const getFontsTool: ToolSpec = {
   name: GET_FONTS_TOOL_NAME,
   description:
     'Return every font used on the current page as { fonts: [{ fontName, count }] }, sorted by ' +
     'usage frequency (descending). Mixed-font text contributes one count per styled segment.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-    additionalProperties: false,
-  },
+  inputShape: {},
+  kind: 'read',
 };
+
+export const getFontsToolDefinition = specToToolDefinition(getFontsTool);
