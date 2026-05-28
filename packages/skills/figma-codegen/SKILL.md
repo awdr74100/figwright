@@ -20,14 +20,25 @@ lifting so you are not guessing from a screenshot.
 Run these three tools against the selection, then generate. They are the grounding — trust them over
 the rendered image.
 
-1. **`get_design_context`** (detail `full`) on the node → the structural tree with **tokens already
-   resolved to names** (e.g. `Primary/500`, `spacing/4`), styles deduped into `globalVars`, and each
-   instance's `mainComponent` / `componentProperties` (variant values). This is the layout + binding
-   source of truth — there is no need to hand-resolve variable ids or read raw hex.
+1. **`get_design_context`** (detail `full`, `dedupeComponents: true`) on the node → the structural tree
+   with **tokens already resolved to names** (e.g. `Primary/500`, `spacing/4`), styles deduped into
+   `globalVars`, and each instance's `mainComponent` / `componentProperties` (variant values). This is
+   the layout + binding source of truth — there is no need to hand-resolve variable ids or read raw hex.
+   - **Keep `dedupeComponents: true`, and do not depth-limit a tree you intend to build from.** Dedupe
+     shows the **first** instance of each repeated component in full and collapses the rest to a
+     `"deduped": true` stub — so a 100-instance screen stays readable while every distinct component
+     keeps one complete copy. A `deduped` (or `truncated`) sibling means "identical to the first one,
+     reuse that structure"; a depth cap, by contrast, throws the structure away — that's the trap that
+     makes repeated rows/cards look empty.
 2. **`component_map`** on the same node → every Figma component grouped to a local code component with
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.
    - `unmapped`: build it new, in the project's style — and it's a candidate for a new shared component.
+     For a **repeated** unmapped component (`instanceCount > 1`, e.g. a table row or card), build from
+     its **first instance's** full subtree in the step-1 tree (the deduped siblings just repeat it). If
+     that subtree came back `deduped`/`truncated` because the overview was scoped down, drill it once:
+     `get_design_context` on the entry's `instances[0].nodeId` — don't reconstruct a repeated component
+     by eye from the screenshot.
    - Each entry's `instances[]` carries the per-instance `props` (resolved variant / boolean / text
      values, e.g. `{ Size: "Medium", Type: "Primary", "show 必填": true }`). Wire those onto the reused
      component — one element per instance, with its own props — instead of a single generic element.
