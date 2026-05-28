@@ -11,6 +11,20 @@ import type { ScannedComponent } from '../scan/scan.js';
 
 export type MappingStatus = 'high' | 'medium' | 'low' | 'unmapped';
 
+/**
+ * One instance of a component, with its resolved component-property values (variant / boolean /
+ * text).
+ */
+export interface FigmaInstance {
+  nodeId: string;
+  /**
+   * Property axis → value for this instance, e.g. { Size: "Medium", "show 必填": true }. Codegen
+   * wires these onto the reused component's props. Absent when the instance has no component
+   * properties.
+   */
+  props?: Record<string, string | boolean>;
+}
+
 /** A distinct Figma component as used in the design, with its instances grouped. */
 export interface FigmaComponentUsage {
   /** Logical name used for the join (the instance/main-component display name). */
@@ -18,8 +32,8 @@ export interface FigmaComponentUsage {
   mainComponentId?: string;
   /** Union of variant/boolean/text/swap axes seen across instances (component_map's variant source). */
   variantAxes: string[];
-  /** Node ids of every instance of this component — so it's mapped once, not per-instance. */
-  instanceNodeIds: string[];
+  /** Every instance of this component (so it's mapped once, not per-instance), each with its props. */
+  instances: FigmaInstance[];
   instanceCount: number;
 }
 
@@ -27,7 +41,7 @@ export interface ComponentMapping {
   figmaComponentName: string;
   mainComponentId?: string;
   variantAxes: string[];
-  instanceNodeIds: string[];
+  instances: FigmaInstance[];
   instanceCount: number;
   candidate?: {
     name: string;
@@ -124,7 +138,7 @@ const joinOne = (
     figmaComponentName: usage.name,
     ...(usage.mainComponentId === undefined ? {} : { mainComponentId: usage.mainComponentId }),
     variantAxes: usage.variantAxes,
-    instanceNodeIds: usage.instanceNodeIds,
+    instances: usage.instances,
     instanceCount: usage.instanceCount,
   };
 
@@ -210,17 +224,25 @@ export const collectFigmaComponents = (
         name,
         ...(groupId === undefined ? {} : { mainComponentId: groupId }),
         variantAxes: [],
-        instanceNodeIds: [],
+        instances: [],
         instanceCount: 0,
       };
       byKey.set(key, usage);
-      usage.instanceNodeIds.push(node.id);
       usage.instanceCount += 1;
-      for (const axis of Object.keys(node.componentProperties ?? {})) {
-        // Variant axis names in Figma can carry a disambiguation suffix ("Size#12:0"); keep the label.
+
+      // Resolve this instance's component-property values into { axis: value }, recording each axis on
+      // the union variantAxes. Figma axis names can carry a disambiguation suffix ("Size#12:0") — keep
+      // the label only. Codegen reads props to wire the reused component (size/state, required, …).
+      const props: Record<string, string | boolean> = {};
+      for (const [axis, prop] of Object.entries(node.componentProperties ?? {})) {
         const label = axis.split('#')[0] ?? axis;
+        props[label] = prop.value;
         if (!usage.variantAxes.includes(label)) usage.variantAxes.push(label);
       }
+      usage.instances.push({
+        nodeId: node.id,
+        ...(Object.keys(props).length > 0 ? { props } : {}),
+      });
     }
     for (const child of node.children ?? []) visit(child);
   };

@@ -28,7 +28,9 @@ the rendered image.
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.
    - `unmapped`: build it new, in the project's style — and it's a candidate for a new shared component.
-   - Variant axes (`variantAxes`) map to the component's props; pass the `componentProperties` values.
+   - Each entry's `instances[]` carries the per-instance `props` (resolved variant / boolean / text
+     values, e.g. `{ Size: "Medium", Type: "Primary", "show 必填": true }`). Wire those onto the reused
+     component — one element per instance, with its own props — instead of a single generic element.
 3. **`token_map`** → every Figma variable joined to a project token with `status` + `ref` (the Tailwind
    utility base or `var(--…)`) + `matchedBy` (`name` / `value`).
    - mapped: reference `candidate.ref` (e.g. `bg-primary-500`, `var(--color-primary-500)`) — never the

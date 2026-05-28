@@ -20,7 +20,7 @@ const comp = (name: string, propNames: string[] = []): ScannedComponent => ({
 
 const usage = (over: Partial<FigmaComponentUsage> & { name: string }): FigmaComponentUsage => ({
   variantAxes: [],
-  instanceNodeIds: ['1:1'],
+  instances: [{ nodeId: '1:1' }],
   instanceCount: 1,
   ...over,
 });
@@ -108,7 +108,10 @@ describe('collectFigmaComponents', () => {
     const [u] = collectFigmaComponents(tree);
     expect(u?.name).toBe('Button');
     expect(u?.instanceCount).toBe(2);
-    expect(u?.instanceNodeIds).toEqual(['1:1', '1:2']);
+    expect(u?.instances).toEqual([
+      { nodeId: '1:1', props: { Size: 'sm' } },
+      { nodeId: '1:2', props: { State: 'hover' } },
+    ]);
     expect(u?.variantAxes).toEqual(['Size', 'State']);
   });
 });

@@ -144,7 +144,11 @@ describe('handleComponentMap', () => {
     const btn = result.mappings.filter(m => m.figmaComponentName === 'btn/Default');
     expect(btn).toHaveLength(1);
     expect(btn[0]?.instanceCount).toBe(2);
-    expect(btn[0]?.instanceNodeIds).toEqual(['1:1', '1:2']);
+    // Each instance carries its own resolved component-property values for codegen to wire.
+    expect(btn[0]?.instances).toEqual([
+      { nodeId: '1:1', props: { Size: 'Large' } },
+      { nodeId: '1:2', props: { Size: 'Small' } },
+    ]);
     // The override keyed on the set name now fires.
     expect(btn[0]?.source).toBe('map-file');
     expect(btn[0]?.candidate?.name).toBe('Button');
