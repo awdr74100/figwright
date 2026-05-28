@@ -6,13 +6,19 @@ import {
 } from '@figma-mcp-relay/shared';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import { dispatchTool } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
+import { buildPrompt, PROMPT_DEFINITIONS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
@@ -55,10 +61,18 @@ await election.start();
 
 const mcp = new Server(
   { name: SERVER_NAME, version: SERVER_VERSION },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: {}, prompts: {} } },
 );
 
 mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [...TOOL_DEFINITIONS] }));
+
+mcp.setRequestHandler(ListPromptsRequestSchema, () => ({ prompts: [...PROMPT_DEFINITIONS] }));
+
+mcp.setRequestHandler(GetPromptRequestSchema, request => {
+  const result = buildPrompt(request.params.name, request.params.arguments);
+  if (result === null) throw new Error(`unknown prompt: ${request.params.name}`);
+  return result;
+});
 
 mcp.setRequestHandler(CallToolRequestSchema, async request => {
   const { name, arguments: args } = request.params;
