@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
-import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
+import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
+import { specToToolDefinition } from '../packages/server/src/tools/spec.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests
@@ -22,7 +23,7 @@ const SERVER_ONLY_TOOLS = new Set([
   'token_map',
 ]);
 
-const serverNames = TOOL_DEFINITIONS.map(d => d.name);
+const serverNames = ALL_TOOL_SPECS.map(s => s.name);
 const dispatchedNames = serverNames.filter(n => !SERVER_ONLY_TOOLS.has(n));
 // Factories only close over figmaCtx; building the map never touches Figma, so a stub is fine here.
 const handlerKeys = Object.keys(createSandboxHandlers({} as never));
@@ -77,7 +78,9 @@ describe('tool registry', () => {
 
   it('every input schema property declares a type (no untyped polymorphic params)', () => {
     const offenders: string[] = [];
-    for (const def of TOOL_DEFINITIONS) missingType(def.inputSchema, def.name, offenders);
+    for (const spec of ALL_TOOL_SPECS) {
+      missingType(specToToolDefinition(spec).inputSchema, spec.name, offenders);
+    }
     expect(offenders).toEqual([]);
   });
 });
