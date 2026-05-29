@@ -1,17 +1,17 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const RENAME_NODE_TOOL_NAME = 'rename_node';
 
-export const renameNodeToolDefinition: Tool = {
+export const renameNodeTool: ToolSpec = {
   name: RENAME_NODE_TOOL_NAME,
-  description: "Rename a node. Returns { ok, nodeId }.",
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'Figma node id' },
-      name: { type: 'string', description: 'New layer name' },
-    },
-    required: ['nodeId', 'name'],
-    additionalProperties: false,
+  description: 'Rename a node. Returns { ok, nodeId }.',
+  inputShape: {
+    nodeId: z.string().describe('Figma node id'),
+    name: z.string().describe('New layer name'),
   },
+  kind: 'write',
 };
+
+export const renameNodeToolDefinition = specToToolDefinition(renameNodeTool);

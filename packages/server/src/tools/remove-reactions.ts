@@ -1,16 +1,16 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const REMOVE_REACTIONS_TOOL_NAME = 'remove_reactions';
 
-export const removeReactionsToolDefinition: Tool = {
+export const removeReactionsTool: ToolSpec = {
   name: REMOVE_REACTIONS_TOOL_NAME,
   description: 'Clear all prototype reactions from a node. Returns { ok, nodeId }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'Node to clear reactions from' },
-    },
-    required: ['nodeId'],
-    additionalProperties: false,
+  inputShape: {
+    nodeId: z.string().describe('Node to clear reactions from'),
   },
+  kind: 'write',
 };
+
+export const removeReactionsToolDefinition = specToToolDefinition(removeReactionsTool);

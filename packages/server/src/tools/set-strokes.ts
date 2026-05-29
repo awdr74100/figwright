@@ -1,21 +1,20 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
-import { PAINT_ITEM_SCHEMA } from './paint-schema.js';
+import { paintItemSchema } from './paint-schema.js';
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const SET_STROKES_TOOL_NAME = 'set_strokes';
 
-export const setStrokesToolDefinition: Tool = {
+export const setStrokesTool: ToolSpec = {
   name: SET_STROKES_TOOL_NAME,
   description:
     "Set a node's strokes (SOLID or gradient paints, same shape as set_fills) and optional strokeWeight. Returns { ok, nodeId }.",
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'Figma node id' },
-      strokes: { type: 'array', description: 'Stroke paints', items: PAINT_ITEM_SCHEMA },
-      strokeWeight: { type: 'number', minimum: 0, description: 'Stroke thickness in px' },
-    },
-    required: ['nodeId', 'strokes'],
-    additionalProperties: false,
+  inputShape: {
+    nodeId: z.string().describe('Figma node id'),
+    strokes: z.array(paintItemSchema).describe('Stroke paints'),
+    strokeWeight: z.number().min(0).optional().describe('Stroke thickness in px'),
   },
+  kind: 'write',
 };
+
+export const setStrokesToolDefinition = specToToolDefinition(setStrokesTool);

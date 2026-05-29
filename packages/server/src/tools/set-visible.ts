@@ -1,17 +1,17 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const SET_VISIBLE_TOOL_NAME = 'set_visible';
 
-export const setVisibleToolDefinition: Tool = {
+export const setVisibleTool: ToolSpec = {
   name: SET_VISIBLE_TOOL_NAME,
-  description: "Show or hide a node. Returns { ok, nodeId }.",
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'Figma node id' },
-      visible: { type: 'boolean', description: 'true to show, false to hide' },
-    },
-    required: ['nodeId', 'visible'],
-    additionalProperties: false,
+  description: 'Show or hide a node. Returns { ok, nodeId }.',
+  inputShape: {
+    nodeId: z.string().describe('Figma node id'),
+    visible: z.boolean().describe('true to show, false to hide'),
   },
+  kind: 'write',
 };
+
+export const setVisibleToolDefinition = specToToolDefinition(setVisibleTool);

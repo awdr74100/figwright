@@ -1,18 +1,18 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const NAVIGATE_TO_PAGE_TOOL_NAME = 'navigate_to_page';
 
-export const navigateToPageToolDefinition: Tool = {
+export const navigateToPageTool: ToolSpec = {
   name: NAVIGATE_TO_PAGE_TOOL_NAME,
   description:
     'Switch the active page. Subsequent selection / read tools operate on this page. ' +
     'Returns { ok, nodeId }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      pageId: { type: 'string', description: 'Page id to navigate to' },
-    },
-    required: ['pageId'],
-    additionalProperties: false,
+  inputShape: {
+    pageId: z.string().describe('Page id to navigate to'),
   },
+  kind: 'write',
 };
+
+export const navigateToPageToolDefinition = specToToolDefinition(navigateToPageTool);

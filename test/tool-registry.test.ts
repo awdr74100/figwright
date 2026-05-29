@@ -6,7 +6,9 @@ import { TOOL_DEFINITIONS, WRITE_TOOL_NAMES } from '../packages/server/src/tools
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests
 // lock the server's advertised tools and the plugin's handler map to each other, and assert every
-// input schema property declares a type (the gap that let set_variable_value ship broken).
+// input schema property is typed — declares a `type`, or is a union (anyOf/oneOf) whose members are
+// each typed. The bug this guards: set_variable_value's `value` once shipped untyped and got coerced
+// to a string in transit; it is now a real Zod union, which is typed under this rule.
 
 // Tools the server handles on its own and never dispatches to the plugin, so they have no sandbox
 // handler. save_screenshots is composed server-side from get_screenshot + filesystem writes;
@@ -25,17 +27,30 @@ const dispatchedNames = serverNames.filter(n => !SERVER_ONLY_TOOLS.has(n));
 // Factories only close over figmaCtx; building the map never touches Figma, so a stub is fine here.
 const handlerKeys = Object.keys(createSandboxHandlers({} as never));
 
-/** Recursively assert every property object (any depth) declares a `type`. */
+/** A schema node is typed if it declares `type` or is a union (anyOf/oneOf) of typed members. */
+const isTyped = (schema: unknown): boolean => {
+  const s = schema as { type?: unknown; anyOf?: unknown[]; oneOf?: unknown[] };
+  if (s.type !== undefined) return true;
+  const union = s.anyOf ?? s.oneOf;
+  return Array.isArray(union) && union.length > 0 && union.every(isTyped);
+};
+
+/** Recursively assert every property object (any depth) is typed, descending through unions too. */
 const missingType = (schema: unknown, path: string, out: string[]): void => {
-  const s = schema as { type?: unknown; properties?: Record<string, unknown>; items?: unknown };
+  const s = schema as {
+    properties?: Record<string, unknown>;
+    items?: unknown;
+    anyOf?: unknown[];
+    oneOf?: unknown[];
+  };
   if (s.properties) {
     for (const [key, prop] of Object.entries(s.properties)) {
-      const p = prop as { type?: unknown };
-      if (p.type === undefined) out.push(`${path}.${key}`);
+      if (!isTyped(prop)) out.push(`${path}.${key}`);
       missingType(prop, `${path}.${key}`, out);
     }
   }
   if (s.items) missingType(s.items, `${path}[]`, out);
+  for (const member of s.anyOf ?? s.oneOf ?? []) missingType(member, `${path}|`, out);
 };
 
 describe('tool registry', () => {

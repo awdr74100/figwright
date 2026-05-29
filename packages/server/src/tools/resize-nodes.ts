@@ -1,19 +1,19 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import { specToToolDefinition, type ToolSpec } from './spec.js';
 
 export const RESIZE_NODES_TOOL_NAME = 'resize_nodes';
 
-export const resizeNodesToolDefinition: Tool = {
+export const resizeNodesTool: ToolSpec = {
   name: RESIZE_NODES_TOOL_NAME,
   description:
     'Resize nodes to the given width × height (positive). Non-resizable nodes are skipped. Returns { ok, affected }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Node ids to resize' },
-      width: { type: 'number', exclusiveMinimum: 0 },
-      height: { type: 'number', exclusiveMinimum: 0 },
-    },
-    required: ['nodeIds', 'width', 'height'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Node ids to resize'),
+    width: z.number().gt(0),
+    height: z.number().gt(0),
   },
+  kind: 'write',
 };
+
+export const resizeNodesToolDefinition = specToToolDefinition(resizeNodesTool);
