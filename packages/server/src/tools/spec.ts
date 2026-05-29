@@ -1,11 +1,10 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z, type ZodRawShape } from 'zod';
 
-// A tool's input schema as a single source of truth: a Zod raw shape. McpServer.registerTool consumes
-// `inputShape` directly (and auto-generates the advertised JSON Schema); during the migration, the
-// legacy ListTools path derives the JSON Schema from the same shape via specToToolDefinition, so the
-// description and constraints are written exactly once. `.describe()` on a field becomes its JSON
-// Schema description.
+// A tool's input schema as a single source of truth: a Zod raw shape. index.ts registers each spec
+// with McpServer.registerTool, which consumes `inputShape` directly and auto-generates the advertised
+// JSON Schema — so the live path never needs specToToolDefinition. `.describe()` on a field becomes
+// its JSON Schema description.
 
 export type ToolKind = 'read' | 'write' | 'local';
 
@@ -18,8 +17,9 @@ export interface ToolSpec {
 }
 
 /**
- * Derive the legacy MCP `Tool` definition (JSON Schema `inputSchema`) from a spec, for the
- * pre-cutover ListTools path. Removed in Phase 2 once McpServer generates the schema itself.
+ * Derive the MCP `Tool` definition (JSON Schema `inputSchema`) a spec advertises — the same JSON
+ * McpServer generates internally from `inputShape`. No longer on the live request path; retained so
+ * unit tests can assert the advertised schema each tool produces from its Zod shape.
  */
 export const specToToolDefinition = (spec: ToolSpec): Tool => ({
   name: spec.name,
