@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const BIND_VARIABLE_TO_NODE_TOOL_NAME = 'bind_variable_to_node';
 
@@ -16,5 +16,3 @@ export const bindVariableToNodeTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const bindVariableToNodeToolDefinition = specToToolDefinition(bindVariableToNodeTool);

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_COMPONENT_TOOL_NAME = 'create_component';
 
@@ -19,5 +19,3 @@ export const createComponentTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createComponentToolDefinition = specToToolDefinition(createComponentTool);

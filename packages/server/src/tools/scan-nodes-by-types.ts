@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SCAN_NODES_BY_TYPES_TOOL_NAME = 'scan_nodes_by_types';
 
@@ -15,5 +15,3 @@ export const scanNodesByTypesTool: ToolSpec = {
   },
   kind: 'read',
 };
-
-export const scanNodesByTypesToolDefinition = specToToolDefinition(scanNodesByTypesTool);

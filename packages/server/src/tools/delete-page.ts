@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const DELETE_PAGE_TOOL_NAME = 'delete_page';
 
@@ -14,5 +14,3 @@ export const deletePageTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const deletePageToolDefinition = specToToolDefinition(deletePageTool);

@@ -19,7 +19,7 @@ import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents } from '../scan/scan.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
 import { GET_LOCAL_COMPONENTS_TOOL_NAME } from './get-local-components.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const COMPONENT_MAP_TOOL_NAME = 'component_map';
 
@@ -58,9 +58,6 @@ export const componentMapTool: ToolSpec = {
   inputShape,
   kind: 'local',
 };
-
-export const componentMapToolDefinition = specToToolDefinition(componentMapTool);
-
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
 const readOverrides = async (rootDir: string): Promise<ReturnType<typeof parseMapFile>> => {

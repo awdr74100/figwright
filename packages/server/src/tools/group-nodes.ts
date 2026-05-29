@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GROUP_NODES_TOOL_NAME = 'group_nodes';
 
@@ -15,5 +15,3 @@ export const groupNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const groupNodesToolDefinition = specToToolDefinition(groupNodesTool);

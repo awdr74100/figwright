@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  GET_DOCUMENT_TOOL_NAME,
-  getDocumentToolDefinition,
-} from '../../src/tools/get-document.js';
+import { GET_DOCUMENT_TOOL_NAME, getDocumentTool } from '../../src/tools/get-document.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const getDocumentToolDefinition = toToolDefinition(getDocumentTool);
 
 describe('get_document tool definition', () => {
   it('exposes the canonical tool name', () => {

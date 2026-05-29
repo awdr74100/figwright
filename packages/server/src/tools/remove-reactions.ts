@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const REMOVE_REACTIONS_TOOL_NAME = 'remove_reactions';
 
@@ -12,5 +12,3 @@ export const removeReactionsTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const removeReactionsToolDefinition = specToToolDefinition(removeReactionsTool);

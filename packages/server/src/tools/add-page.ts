@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const ADD_PAGE_TOOL_NAME = 'add_page';
 
@@ -12,5 +12,3 @@ export const addPageTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const addPageToolDefinition = specToToolDefinition(addPageTool);

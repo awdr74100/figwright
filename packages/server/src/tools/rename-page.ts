@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const RENAME_PAGE_TOOL_NAME = 'rename_page';
 
@@ -13,5 +13,3 @@ export const renamePageTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const renamePageToolDefinition = specToToolDefinition(renamePageTool);

@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_SELECTION_TOOL_NAME = 'get_selection';
 
@@ -9,5 +9,3 @@ export const getSelectionTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getSelectionToolDefinition = specToToolDefinition(getSelectionTool);

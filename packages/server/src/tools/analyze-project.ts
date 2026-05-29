@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const ANALYZE_PROJECT_TOOL_NAME = 'analyze_project';
 
@@ -21,9 +21,6 @@ export const analyzeProjectTool: ToolSpec = {
   inputShape,
   kind: 'local',
 };
-
-export const analyzeProjectToolDefinition = specToToolDefinition(analyzeProjectTool);
-
 export const handleAnalyzeProject = async (rawArgs: unknown): Promise<ProjectProfile> => {
   const args = z.object(inputShape).parse(rawArgs);
   return analyzeProject(args.rootDir ?? process.cwd());

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const DETACH_INSTANCE_TOOL_NAME = 'detach_instance';
 
@@ -14,5 +14,3 @@ export const detachInstanceTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const detachInstanceToolDefinition = specToToolDefinition(detachInstanceTool);

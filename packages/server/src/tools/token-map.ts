@@ -9,7 +9,7 @@ import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { resolveFigmaTokens } from '../tokens/figma-tokens.js';
 import { parseCssCustomProperties } from '../tokens/tokens.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from './get-variable-defs.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const TOKEN_MAP_TOOL_NAME = 'token_map';
 
@@ -54,9 +54,6 @@ export const tokenMapTool: ToolSpec = {
   inputShape,
   kind: 'local',
 };
-
-export const tokenMapToolDefinition = specToToolDefinition(tokenMapTool);
-
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
 /** Pick the CSS token source: explicit override, else the detected styling config when it's CSS. */

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const MOVE_NODES_TOOL_NAME = 'move_nodes';
 
@@ -15,5 +15,3 @@ export const moveNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const moveNodesToolDefinition = specToToolDefinition(moveNodesTool);

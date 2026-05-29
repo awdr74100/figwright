@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const DELETE_NODES_TOOL_NAME = 'delete_nodes';
 
@@ -13,5 +13,3 @@ export const deleteNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const deleteNodesToolDefinition = specToToolDefinition(deleteNodesTool);

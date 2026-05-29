@@ -11,7 +11,7 @@ import {
 import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
 
@@ -34,9 +34,6 @@ export const saveScreenshotsTool: ToolSpec = {
   inputShape,
   kind: 'local',
 };
-
-export const saveScreenshotsToolDefinition = specToToolDefinition(saveScreenshotsTool);
-
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
 
 /** Map a Figma node id (e.g. "1:2") to a filesystem-safe basename, blocking path traversal. */

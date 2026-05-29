@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_AUTO_LAYOUT_TOOL_NAME = 'set_auto_layout';
 
@@ -23,5 +23,3 @@ export const setAutoLayoutTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setAutoLayoutToolDefinition = specToToolDefinition(setAutoLayoutTool);

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_NODES_INFO_TOOL_NAME = 'get_nodes_info';
 
@@ -11,5 +11,3 @@ export const getNodesInfoTool: ToolSpec = {
   inputShape: { nodeIds: z.array(z.string()).describe('Figma node ids to fetch') },
   kind: 'read',
 };
-
-export const getNodesInfoToolDefinition = specToToolDefinition(getNodesInfoTool);

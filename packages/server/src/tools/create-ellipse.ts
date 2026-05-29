@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_ELLIPSE_TOOL_NAME = 'create_ellipse';
 
@@ -19,5 +19,3 @@ export const createEllipseTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createEllipseToolDefinition = specToToolDefinition(createEllipseTool);

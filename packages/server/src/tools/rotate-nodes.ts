@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const ROTATE_NODES_TOOL_NAME = 'rotate_nodes';
 
@@ -14,5 +14,3 @@ export const rotateNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const rotateNodesToolDefinition = specToToolDefinition(rotateNodesTool);

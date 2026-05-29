@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CLONE_NODE_TOOL_NAME = 'clone_node';
 
@@ -13,5 +13,3 @@ export const cloneNodeTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const cloneNodeToolDefinition = specToToolDefinition(cloneNodeTool);

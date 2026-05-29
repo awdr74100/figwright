@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_TEXT_TOOL_NAME = 'set_text';
 
@@ -14,5 +14,3 @@ export const setTextTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setTextToolDefinition = specToToolDefinition(setTextTool);

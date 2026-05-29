@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const ADD_VARIABLE_MODE_TOOL_NAME = 'add_variable_mode';
 
@@ -13,5 +13,3 @@ export const addVariableModeTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const addVariableModeToolDefinition = specToToolDefinition(addVariableModeTool);

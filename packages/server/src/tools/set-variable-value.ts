@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_VARIABLE_VALUE_TOOL_NAME = 'set_variable_value';
 
@@ -32,5 +32,3 @@ export const setVariableValueTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setVariableValueToolDefinition = specToToolDefinition(setVariableValueTool);

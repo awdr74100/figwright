@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const APPLY_STYLE_TO_NODE_TOOL_NAME = 'apply_style_to_node';
 
@@ -16,5 +16,3 @@ export const applyStyleToNodeTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const applyStyleToNodeToolDefinition = specToToolDefinition(applyStyleToNodeTool);

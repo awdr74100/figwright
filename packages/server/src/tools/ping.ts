@@ -1,7 +1,7 @@
 import { dispatchTool } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const PING_TOOL_NAME = 'ping';
 
@@ -12,9 +12,6 @@ export const pingTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const pingToolDefinition = specToToolDefinition(pingTool);
-
 export type PingHop = 'server-only' | 'e2e';
 
 export interface PingServerInfo {

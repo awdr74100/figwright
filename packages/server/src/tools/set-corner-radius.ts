@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_CORNER_RADIUS_TOOL_NAME = 'set_corner_radius';
 
@@ -13,5 +13,3 @@ export const setCornerRadiusTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setCornerRadiusToolDefinition = specToToolDefinition(setCornerRadiusTool);

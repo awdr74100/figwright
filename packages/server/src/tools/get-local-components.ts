@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_LOCAL_COMPONENTS_TOOL_NAME = 'get_local_components';
 
@@ -11,5 +11,3 @@ export const getLocalComponentsTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getLocalComponentsToolDefinition = specToToolDefinition(getLocalComponentsTool);

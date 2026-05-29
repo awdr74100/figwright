@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { paintItemSchema } from './paint-schema.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_STROKES_TOOL_NAME = 'set_strokes';
 
@@ -16,5 +16,3 @@ export const setStrokesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setStrokesToolDefinition = specToToolDefinition(setStrokesTool);

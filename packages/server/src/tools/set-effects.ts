@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { effectItemSchema } from './effect-schema.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_EFFECTS_TOOL_NAME = 'set_effects';
 
@@ -16,5 +16,3 @@ export const setEffectsTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setEffectsToolDefinition = specToToolDefinition(setEffectsTool);

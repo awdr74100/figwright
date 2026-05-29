@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_OPACITY_TOOL_NAME = 'set_opacity';
 
@@ -13,5 +13,3 @@ export const setOpacityTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setOpacityToolDefinition = specToToolDefinition(setOpacityTool);

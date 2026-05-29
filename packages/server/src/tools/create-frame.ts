@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_FRAME_TOOL_NAME = 'create_frame';
 
@@ -22,5 +22,3 @@ export const createFrameTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createFrameToolDefinition = specToToolDefinition(createFrameTool);

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents, type ScannedComponent } from '../scan/scan.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SCAN_COMPONENTS_TOOL_NAME = 'scan_components';
 
@@ -25,9 +25,6 @@ export const scanComponentsTool: ToolSpec = {
   inputShape,
   kind: 'local',
 };
-
-export const scanComponentsToolDefinition = specToToolDefinition(scanComponentsTool);
-
 export interface ScanComponentsResult {
   components: ScannedComponent[];
   profile: ProjectProfile;

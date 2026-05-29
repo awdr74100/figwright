@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SEARCH_NODES_TOOL_NAME = 'search_nodes';
 
@@ -17,5 +17,3 @@ export const searchNodesTool: ToolSpec = {
   },
   kind: 'read',
 };
-
-export const searchNodesToolDefinition = specToToolDefinition(searchNodesTool);

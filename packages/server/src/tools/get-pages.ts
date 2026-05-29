@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_PAGES_TOOL_NAME = 'get_pages';
 
@@ -8,5 +8,3 @@ export const getPagesTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getPagesToolDefinition = specToToolDefinition(getPagesTool);

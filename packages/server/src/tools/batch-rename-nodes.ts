@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const BATCH_RENAME_NODES_TOOL_NAME = 'batch_rename_nodes';
 
@@ -16,5 +16,3 @@ export const batchRenameNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const batchRenameNodesToolDefinition = specToToolDefinition(batchRenameNodesTool);

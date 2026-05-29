@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SWAP_COMPONENT_TOOL_NAME = 'swap_component';
 
@@ -16,5 +16,3 @@ export const swapComponentTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const swapComponentToolDefinition = specToToolDefinition(swapComponentTool);

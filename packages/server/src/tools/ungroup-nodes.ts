@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const UNGROUP_NODES_TOOL_NAME = 'ungroup_nodes';
 
@@ -14,5 +14,3 @@ export const ungroupNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const ungroupNodesToolDefinition = specToToolDefinition(ungroupNodesTool);

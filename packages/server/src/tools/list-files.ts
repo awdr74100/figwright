@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const LIST_FILES_TOOL_NAME = 'list_files';
 
@@ -10,5 +10,3 @@ export const listFilesTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const listFilesToolDefinition = specToToolDefinition(listFilesTool);

@@ -1,7 +1,7 @@
 import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figma-mcp-relay/shared';
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 
@@ -21,9 +21,6 @@ export const getScreenshotTool: ToolSpec = {
   },
   kind: 'read',
 };
-
-export const getScreenshotToolDefinition = specToToolDefinition(getScreenshotTool);
-
 /** A subset of MCP tool-result content blocks this tool emits. */
 export type ScreenshotContent =
   | { type: 'text'; text: string }

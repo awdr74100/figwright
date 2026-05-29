@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_FONTS_TOOL_NAME = 'get_fonts';
 
@@ -10,5 +10,3 @@ export const getFontsTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getFontsToolDefinition = specToToolDefinition(getFontsTool);

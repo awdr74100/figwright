@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_DOCUMENT_TOOL_NAME = 'get_document';
 
@@ -9,5 +9,3 @@ export const getDocumentTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getDocumentToolDefinition = specToToolDefinition(getDocumentTool);

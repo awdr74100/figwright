@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_VARIABLE_COLLECTION_TOOL_NAME = 'create_variable_collection';
 
@@ -14,7 +14,3 @@ export const createVariableCollectionTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createVariableCollectionToolDefinition = specToToolDefinition(
-  createVariableCollectionTool,
-);

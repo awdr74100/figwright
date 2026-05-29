@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_REACTIONS_TOOL_NAME = 'get_reactions';
 
@@ -13,5 +13,3 @@ export const getReactionsTool: ToolSpec = {
   inputShape: { nodeId: z.string().describe('Figma node id to read reactions from') },
   kind: 'read',
 };
-
-export const getReactionsToolDefinition = specToToolDefinition(getReactionsTool);

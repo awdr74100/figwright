@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const BATCH_TOOL_NAME = 'batch';
 
@@ -32,5 +32,3 @@ export const batchTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const batchToolDefinition = specToToolDefinition(batchTool);

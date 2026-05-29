@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { paintItemSchema } from './paint-schema.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_FILLS_TOOL_NAME = 'set_fills';
 
@@ -17,5 +17,3 @@ export const setFillsTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setFillsToolDefinition = specToToolDefinition(setFillsTool);

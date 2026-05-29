@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_BLEND_MODE_TOOL_NAME = 'set_blend_mode';
 
@@ -14,5 +14,3 @@ export const setBlendModeTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setBlendModeToolDefinition = specToToolDefinition(setBlendModeTool);

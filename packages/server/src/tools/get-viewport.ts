@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_VIEWPORT_TOOL_NAME = 'get_viewport';
 
@@ -10,5 +10,3 @@ export const getViewportTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getViewportToolDefinition = specToToolDefinition(getViewportTool);

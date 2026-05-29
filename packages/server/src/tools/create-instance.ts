@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_INSTANCE_TOOL_NAME = 'create_instance';
 
@@ -20,5 +20,3 @@ export const createInstanceTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createInstanceToolDefinition = specToToolDefinition(createInstanceTool);

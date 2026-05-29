@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const LOCK_NODES_TOOL_NAME = 'lock_nodes';
 
@@ -12,5 +12,3 @@ export const lockNodesTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const lockNodesToolDefinition = specToToolDefinition(lockNodesTool);

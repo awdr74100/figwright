@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const SET_CONSTRAINTS_TOOL_NAME = 'set_constraints';
 
@@ -16,5 +16,3 @@ export const setConstraintsTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const setConstraintsToolDefinition = specToToolDefinition(setConstraintsTool);

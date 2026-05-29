@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_VARIABLE_DEFS_TOOL_NAME = 'get_variable_defs';
 
@@ -11,5 +11,3 @@ export const getVariableDefsTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getVariableDefsToolDefinition = specToToolDefinition(getVariableDefsTool);

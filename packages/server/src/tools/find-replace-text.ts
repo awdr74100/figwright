@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const FIND_REPLACE_TEXT_TOOL_NAME = 'find_replace_text';
 
@@ -18,5 +18,3 @@ export const findReplaceTextTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const findReplaceTextToolDefinition = specToToolDefinition(findReplaceTextTool);

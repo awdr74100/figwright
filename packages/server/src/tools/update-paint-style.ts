@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { paintItemSchema } from './paint-schema.js';
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const UPDATE_PAINT_STYLE_TOOL_NAME = 'update_paint_style';
 
@@ -18,5 +18,3 @@ export const updatePaintStyleTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const updatePaintStyleToolDefinition = specToToolDefinition(updatePaintStyleTool);

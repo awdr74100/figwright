@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
-import { specToToolDefinition } from '../packages/server/src/tools/spec.js';
+import { toToolDefinition } from '../packages/server/test/tool-schema.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests
@@ -79,7 +79,7 @@ describe('tool registry', () => {
   it('every input schema property declares a type (no untyped polymorphic params)', () => {
     const offenders: string[] = [];
     for (const spec of ALL_TOOL_SPECS) {
-      missingType(specToToolDefinition(spec).inputSchema, spec.name, offenders);
+      missingType(toToolDefinition(spec).inputSchema, spec.name, offenders);
     }
     expect(offenders).toEqual([]);
   });

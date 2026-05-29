@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_GRID_STYLE_TOOL_NAME = 'create_grid_style';
 
@@ -25,5 +25,3 @@ export const createGridStyleTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createGridStyleToolDefinition = specToToolDefinition(createGridStyleTool);

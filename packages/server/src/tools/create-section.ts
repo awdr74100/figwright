@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const CREATE_SECTION_TOOL_NAME = 'create_section';
 
@@ -19,5 +19,3 @@ export const createSectionTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const createSectionToolDefinition = specToToolDefinition(createSectionTool);

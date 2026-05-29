@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_ANNOTATIONS_TOOL_NAME = 'get_annotations';
 
@@ -18,5 +18,3 @@ export const getAnnotationsTool: ToolSpec = {
   },
   kind: 'read',
 };
-
-export const getAnnotationsToolDefinition = specToToolDefinition(getAnnotationsTool);

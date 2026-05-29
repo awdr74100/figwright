@@ -2,16 +2,23 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { GetScreenshotResult, SaveScreenshotsResult, ScreenshotImage } from '@figma-mcp-relay/shared';
+import type {
+  GetScreenshotResult,
+  SaveScreenshotsResult,
+  ScreenshotImage,
+} from '@figma-mcp-relay/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   handleSaveScreenshots,
   SAVE_SCREENSHOTS_TOOL_NAME,
-  saveScreenshotsToolDefinition,
+  saveScreenshotsTool,
   type ToolDispatcher,
   writeScreenshots,
 } from '../../src/tools/save-screenshots.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const saveScreenshotsToolDefinition = toToolDefinition(saveScreenshotsTool);
 
 const emptyDispatch: ToolDispatcher = async () => ({ images: [] }) satisfies GetScreenshotResult;
 
@@ -75,7 +82,9 @@ describe('handleSaveScreenshots', () => {
     let dispatched: { tool: string; args: unknown } | null = null;
     const dispatch: ToolDispatcher = async (tool, args) => {
       dispatched = { tool, args };
-      return { images: [{ nodeId: '1:1', format: 'PNG', base64: 'AAAA' }] } satisfies GetScreenshotResult;
+      return {
+        images: [{ nodeId: '1:1', format: 'PNG', base64: 'AAAA' }],
+      } satisfies GetScreenshotResult;
     };
 
     const result = (await handleSaveScreenshots(dispatch, {
@@ -95,7 +104,12 @@ describe('handleSaveScreenshots', () => {
       forwarded = args;
       return { images: [] } satisfies GetScreenshotResult;
     };
-    await handleSaveScreenshots(dispatch, { nodeIds: ['1:1'], outDir: dir, format: 'JPG', scale: 2 });
+    await handleSaveScreenshots(dispatch, {
+      nodeIds: ['1:1'],
+      outDir: dir,
+      format: 'JPG',
+      scale: 2,
+    });
     expect(forwarded).toEqual({ nodeIds: ['1:1'], format: 'JPG', scale: 2 });
   });
 

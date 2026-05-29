@@ -1,4 +1,4 @@
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const GET_METADATA_TOOL_NAME = 'get_metadata';
 
@@ -8,5 +8,3 @@ export const getMetadataTool: ToolSpec = {
   inputShape: {},
   kind: 'read',
 };
-
-export const getMetadataToolDefinition = specToToolDefinition(getMetadataTool);

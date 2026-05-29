@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { specToToolDefinition, type ToolSpec } from './spec.js';
+import type { ToolSpec } from './spec.js';
 
 export const NAVIGATE_TO_PAGE_TOOL_NAME = 'navigate_to_page';
 
@@ -14,5 +14,3 @@ export const navigateToPageTool: ToolSpec = {
   },
   kind: 'write',
 };
-
-export const navigateToPageToolDefinition = specToToolDefinition(navigateToPageTool);
