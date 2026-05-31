@@ -1,42 +1,42 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 export const PLUGIN_BRIDGE_TAG = '@figma-mcp-relay/bridge';
 
 const baseFields = {
-  tag: v.literal(PLUGIN_BRIDGE_TAG),
-  id: v.string(),
+  tag: z.literal(PLUGIN_BRIDGE_TAG),
+  id: z.string(),
 };
 
-export const PluginToolCallSchema = v.object({
+export const PluginToolCallSchema = z.object({
   ...baseFields,
-  kind: v.literal('tool-call'),
-  method: v.string(),
-  params: v.optional(v.unknown()),
+  kind: z.literal('tool-call'),
+  method: z.string(),
+  params: z.unknown().optional(),
 });
 
-export const PluginToolResultSchema = v.object({
+export const PluginToolResultSchema = z.object({
   ...baseFields,
-  kind: v.literal('tool-result'),
-  result: v.optional(v.unknown()),
+  kind: z.literal('tool-result'),
+  result: z.unknown().optional(),
 });
 
-export const PluginToolErrorSchema = v.object({
+export const PluginToolErrorSchema = z.object({
   ...baseFields,
-  kind: v.literal('tool-error'),
-  code: v.string(),
-  message: v.string(),
+  kind: z.literal('tool-error'),
+  code: z.string(),
+  message: z.string(),
 });
 
-export const PluginBridgeMessageSchema = v.variant('kind', [
+export const PluginBridgeMessageSchema = z.discriminatedUnion('kind', [
   PluginToolCallSchema,
   PluginToolResultSchema,
   PluginToolErrorSchema,
 ]);
 
-export type PluginToolCall = v.InferOutput<typeof PluginToolCallSchema>;
-export type PluginToolResult = v.InferOutput<typeof PluginToolResultSchema>;
-export type PluginToolError = v.InferOutput<typeof PluginToolErrorSchema>;
-export type PluginBridgeMessage = v.InferOutput<typeof PluginBridgeMessageSchema>;
+export type PluginToolCall = z.infer<typeof PluginToolCallSchema>;
+export type PluginToolResult = z.infer<typeof PluginToolResultSchema>;
+export type PluginToolError = z.infer<typeof PluginToolErrorSchema>;
+export type PluginBridgeMessage = z.infer<typeof PluginBridgeMessageSchema>;
 
 export const createToolCall = (input: {
   id: string;
@@ -50,10 +50,7 @@ export const createToolCall = (input: {
   ...(input.params === undefined ? {} : { params: input.params }),
 });
 
-export const createToolResult = (input: {
-  id: string;
-  result?: unknown;
-}): PluginToolResult => ({
+export const createToolResult = (input: { id: string; result?: unknown }): PluginToolResult => ({
   tag: PLUGIN_BRIDGE_TAG,
   kind: 'tool-result',
   id: input.id,
@@ -75,38 +72,41 @@ export const createToolError = (input: {
 export const isPluginBridgeMessage = (raw: unknown): raw is PluginBridgeMessage => {
   if (typeof raw !== 'object' || raw === null) return false;
   if (!('tag' in raw) || (raw as { tag: unknown }).tag !== PLUGIN_BRIDGE_TAG) return false;
-  return v.safeParse(PluginBridgeMessageSchema, raw).success;
+  return PluginBridgeMessageSchema.safeParse(raw).success;
 };
 
 // ── sandbox → UI context push ────────────────────────────────────────────────
 // A one-way event the sandbox emits (on init / page change / selection change) so the UI can show
 // what the plugin currently sees. Kept out of the tool-call request/response variant on purpose.
 
-/** Cap on per-node selection detail carried in a context event (selectionCount keeps the true total). */
+/**
+ * Cap on per-node selection detail carried in a context event (selectionCount keeps the true
+ * total).
+ */
 export const SELECTION_DETAIL_LIMIT = 25;
 
-export const SelectionItemSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  type: v.string(),
-  width: v.number(),
-  height: v.number(),
+export const SelectionItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  width: z.number(),
+  height: z.number(),
 });
-export type SelectionItem = v.InferOutput<typeof SelectionItemSchema>;
+export type SelectionItem = z.infer<typeof SelectionItemSchema>;
 
-export const PluginContextEventSchema = v.object({
-  tag: v.literal(PLUGIN_BRIDGE_TAG),
-  kind: v.literal('context'),
-  fileName: v.string(),
-  pageId: v.string(),
-  pageName: v.string(),
-  selectionCount: v.number(),
+export const PluginContextEventSchema = z.object({
+  tag: z.literal(PLUGIN_BRIDGE_TAG),
+  kind: z.literal('context'),
+  fileName: z.string(),
+  pageId: z.string(),
+  pageName: z.string(),
+  selectionCount: z.number(),
   /** Per-node detail for the first SELECTION_DETAIL_LIMIT selected nodes. */
-  selection: v.array(SelectionItemSchema),
-  editorType: v.string(),
-  apiVersion: v.string(),
+  selection: z.array(SelectionItemSchema),
+  editorType: z.string(),
+  apiVersion: z.string(),
 });
-export type PluginContextEvent = v.InferOutput<typeof PluginContextEventSchema>;
+export type PluginContextEvent = z.infer<typeof PluginContextEventSchema>;
 
 export const createPluginContextEvent = (
   input: Omit<PluginContextEvent, 'tag' | 'kind'>,
@@ -115,5 +115,5 @@ export const createPluginContextEvent = (
 export const isPluginContextEvent = (raw: unknown): raw is PluginContextEvent => {
   if (typeof raw !== 'object' || raw === null) return false;
   if (!('tag' in raw) || (raw as { tag: unknown }).tag !== PLUGIN_BRIDGE_TAG) return false;
-  return v.safeParse(PluginContextEventSchema, raw).success;
+  return PluginContextEventSchema.safeParse(raw).success;
 };

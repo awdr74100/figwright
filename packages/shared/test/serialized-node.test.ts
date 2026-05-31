@@ -1,4 +1,3 @@
-import { parse } from 'valibot';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -41,7 +40,7 @@ describe('serializeNode (base-only factory)', () => {
       height: 50,
       parentId: '1:1',
     });
-    expect(parse(SerializedNodeSchema, out)).toEqual(out);
+    expect(SerializedNodeSchema.parse(out)).toEqual(out);
   });
 
   it('emits parentId=null when node has no parent', () => {
@@ -57,11 +56,9 @@ describe('SerializedNode optional fields', () => {
       rotation: 45,
       opacity: 0.5,
       cornerRadius: 8,
-      fills: [
-        { type: 'SOLID', visible: true, opacity: 1, color: { r: 1, g: 0, b: 0 } },
-      ],
+      fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 1, g: 0, b: 0 } }],
     };
-    expect(parse(SerializedNodeSchema, node)).toEqual(node);
+    expect(SerializedNodeSchema.parse(node)).toEqual(node);
   });
 
   it("accepts cornerRadius='mixed' and fills='mixed'", () => {
@@ -70,7 +67,7 @@ describe('SerializedNode optional fields', () => {
       cornerRadius: MIXED,
       fills: MIXED,
     };
-    expect(parse(SerializedNodeSchema, node)).toEqual(node);
+    expect(SerializedNodeSchema.parse(node)).toEqual(node);
   });
 
   it('round-trips a recursive children tree', () => {
@@ -83,7 +80,7 @@ describe('SerializedNode optional fields', () => {
       ...serializeNode(baseInput({ id: '1:1', type: 'FRAME', parent: null })),
       children: [branch],
     };
-    expect(parse(SerializedNodeSchema, root)).toEqual(root);
+    expect(SerializedNodeSchema.parse(root)).toEqual(root);
   });
 });
 
@@ -95,7 +92,7 @@ describe('SerializedPaint variant', () => {
       opacity: 0.8,
       color: { r: 0.1, g: 0.2, b: 0.3 },
     };
-    expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
+    expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
   });
 
   it('accepts a gradient paint with stops + transform', () => {
@@ -109,24 +106,24 @@ describe('SerializedPaint variant', () => {
         [0, 1, 0],
       ],
     };
-    expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
+    expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
   });
 
   it('accepts an IMAGE/VIDEO/PATTERN paint (type only, no gradient detail)', () => {
     const paint = { type: 'IMAGE' as const, visible: false, opacity: 1 };
-    expect(parse(SerializedPaintSchema, paint)).toEqual(paint);
+    expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
   });
 
   it('rejects a gradient paint missing stops', () => {
     expect(() =>
-      parse(SerializedPaintSchema, { type: 'GRADIENT_LINEAR', visible: true, opacity: 1 }),
+      SerializedPaintSchema.parse({ type: 'GRADIENT_LINEAR', visible: true, opacity: 1 }),
     ).toThrow(/gradientStops/);
   });
 
   it('rejects SOLID paint missing color', () => {
-    expect(() =>
-      parse(SerializedPaintSchema, { type: 'SOLID', visible: true, opacity: 1 }),
-    ).toThrow(/color/i);
+    expect(() => SerializedPaintSchema.parse({ type: 'SOLID', visible: true, opacity: 1 })).toThrow(
+      /color/i,
+    );
   });
 });
 
@@ -137,7 +134,7 @@ describe('GetSelectionResult / GetDocumentResult schemas', () => {
       pageName: 'Cover',
       nodes: [serializeNode(baseInput()), serializeNode(baseInput({ id: '1:3' }))],
     };
-    expect(parse(GetSelectionResultSchema, payload)).toEqual(payload);
+    expect(GetSelectionResultSchema.parse(payload)).toEqual(payload);
   });
 
   it('GetDocumentResult round-trips with recursive children', () => {
@@ -145,18 +142,21 @@ describe('GetSelectionResult / GetDocumentResult schemas', () => {
       pageId: 'page-1',
       pageName: 'Cover',
       children: [
-        { ...serializeNode(baseInput({ id: '1:2', type: 'FRAME' })), children: [serializeNode(baseInput({ id: '1:3' }))] },
+        {
+          ...serializeNode(baseInput({ id: '1:2', type: 'FRAME' })),
+          children: [serializeNode(baseInput({ id: '1:3' }))],
+        },
       ],
     };
-    expect(parse(GetDocumentResultSchema, payload)).toEqual(payload);
+    expect(GetDocumentResultSchema.parse(payload)).toEqual(payload);
   });
 });
 
 describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
   it('GetNodeResult accepts a node or null', async () => {
     const { GetNodeResultSchema } = await import('../src/serialized-node.js');
-    expect(parse(GetNodeResultSchema, { node: serializeNode(baseInput()) }).node).not.toBeNull();
-    expect(parse(GetNodeResultSchema, { node: null }).node).toBeNull();
+    expect(GetNodeResultSchema.parse({ node: serializeNode(baseInput()) }).node).not.toBeNull();
+    expect(GetNodeResultSchema.parse({ node: null }).node).toBeNull();
   });
 
   it('GetNodesInfoResult preserves input order with nullable slots', async () => {
@@ -164,7 +164,7 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
     const payload = {
       nodes: [serializeNode(baseInput()), null, serializeNode(baseInput({ id: '1:5' }))],
     };
-    expect(parse(GetNodesInfoResultSchema, payload)).toEqual(payload);
+    expect(GetNodesInfoResultSchema.parse(payload)).toEqual(payload);
   });
 
   it('GetMetadataResult validates fileName + pages + currentPage', async () => {
@@ -177,7 +177,7 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
         { id: 'p-2', name: 'Details' },
       ],
     };
-    expect(parse(GetMetadataResultSchema, payload)).toEqual(payload);
+    expect(GetMetadataResultSchema.parse(payload)).toEqual(payload);
   });
 
   it('GetPagesResult validates pages array of {id, name}', async () => {
@@ -188,6 +188,6 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
         { id: 'p-2', name: 'Details' },
       ],
     };
-    expect(parse(GetPagesResultSchema, payload)).toEqual(payload);
+    expect(GetPagesResultSchema.parse(payload)).toEqual(payload);
   });
 });

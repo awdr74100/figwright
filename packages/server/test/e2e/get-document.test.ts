@@ -4,13 +4,11 @@ import {
   MIXED,
   type SerializedNode,
 } from '@figma-mcp-relay/shared';
-import { parse } from 'valibot';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 
 import { dispatchTool } from '../../src/dispatch.js';
 import { GET_DOCUMENT_TOOL_NAME } from '../../src/tools/get-document.js';
-
 import {
   closeSocket,
   connectFakePlugin,
@@ -57,9 +55,7 @@ describe('e2e get_document', () => {
           rotation: 0,
           opacity: 1,
           cornerRadius: 8,
-          fills: [
-            { type: 'SOLID', visible: true, opacity: 1, color: { r: 1, g: 1, b: 1 } },
-          ],
+          fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 1, g: 1, b: 1 } }],
           children: [
             node({ id: '1:3', type: 'TEXT', parentId: '1:2' }),
             {
@@ -85,7 +81,7 @@ describe('e2e get_document', () => {
       {},
     )) as unknown;
 
-    expect(parse(GetDocumentResultSchema, result)).toEqual(tree);
+    expect(GetDocumentResultSchema.parse(result)).toEqual(tree);
   });
 
   it('returns empty children when page has no nodes', async () => {

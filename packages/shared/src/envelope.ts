@@ -1,70 +1,70 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import { ErrorCode, PROTOCOL_VERSION } from './protocol.js';
 
 const baseFields = {
-  v: v.literal(PROTOCOL_VERSION),
-  id: v.string(),
-  ts: v.number(),
-  sessionId: v.string(),
+  v: z.literal(PROTOCOL_VERSION),
+  id: z.string(),
+  ts: z.number(),
+  sessionId: z.string(),
 };
 
-export const RequestEnvelopeSchema = v.object({
+export const RequestEnvelopeSchema = z.object({
   ...baseFields,
-  kind: v.literal('req'),
-  method: v.string(),
-  params: v.optional(v.unknown()),
+  kind: z.literal('req'),
+  method: z.string(),
+  params: z.unknown().optional(),
 });
 
-export const ResponseEnvelopeSchema = v.object({
+export const ResponseEnvelopeSchema = z.object({
   ...baseFields,
-  kind: v.literal('res'),
-  result: v.optional(v.unknown()),
+  kind: z.literal('res'),
+  result: z.unknown().optional(),
 });
 
-export const ErrorEnvelopeSchema = v.object({
+export const ErrorEnvelopeSchema = z.object({
   ...baseFields,
-  kind: v.literal('err'),
-  error: v.object({
-    code: v.string(),
-    message: v.string(),
-    data: v.optional(v.unknown()),
+  kind: z.literal('err'),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    data: z.unknown().optional(),
   }),
 });
 
-export const EventEnvelopeSchema = v.object({
+export const EventEnvelopeSchema = z.object({
   ...baseFields,
-  kind: v.literal('evt'),
-  method: v.string(),
-  params: v.optional(v.unknown()),
+  kind: z.literal('evt'),
+  method: z.string(),
+  params: z.unknown().optional(),
 });
 
-export const EnvelopeSchema = v.variant('kind', [
+export const EnvelopeSchema = z.discriminatedUnion('kind', [
   RequestEnvelopeSchema,
   ResponseEnvelopeSchema,
   ErrorEnvelopeSchema,
   EventEnvelopeSchema,
 ]);
 
-export type RequestEnvelope = v.InferOutput<typeof RequestEnvelopeSchema>;
-export type ResponseEnvelope = v.InferOutput<typeof ResponseEnvelopeSchema>;
-export type ErrorEnvelope = v.InferOutput<typeof ErrorEnvelopeSchema>;
-export type EventEnvelope = v.InferOutput<typeof EventEnvelopeSchema>;
-export type Envelope = v.InferOutput<typeof EnvelopeSchema>;
+export type RequestEnvelope = z.infer<typeof RequestEnvelopeSchema>;
+export type ResponseEnvelope = z.infer<typeof ResponseEnvelopeSchema>;
+export type ErrorEnvelope = z.infer<typeof ErrorEnvelopeSchema>;
+export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
+export type Envelope = z.infer<typeof EnvelopeSchema>;
 
-export const HelloParamsSchema = v.object({
-  clientType: v.picklist(['plugin']),
-  clientVersion: v.string(),
-  protocolVersion: v.literal(PROTOCOL_VERSION),
+export const HelloParamsSchema = z.object({
+  clientType: z.enum(['plugin']),
+  clientVersion: z.string(),
+  protocolVersion: z.literal(PROTOCOL_VERSION),
 });
-export type HelloParams = v.InferOutput<typeof HelloParamsSchema>;
+export type HelloParams = z.infer<typeof HelloParamsSchema>;
 
-export const HelloResultSchema = v.object({
-  serverVersion: v.string(),
-  protocolVersion: v.literal(PROTOCOL_VERSION),
-  sessionResumed: v.boolean(),
+export const HelloResultSchema = z.object({
+  serverVersion: z.string(),
+  protocolVersion: z.literal(PROTOCOL_VERSION),
+  sessionResumed: z.boolean(),
 });
-export type HelloResult = v.InferOutput<typeof HelloResultSchema>;
+export type HelloResult = z.infer<typeof HelloResultSchema>;
 
 type CreateInput = {
   id: string;
@@ -84,9 +84,7 @@ export const createRequest = (
   ...(input.params === undefined ? {} : { params: input.params }),
 });
 
-export const createResponse = (
-  input: CreateInput & { result?: unknown },
-): ResponseEnvelope => ({
+export const createResponse = (input: CreateInput & { result?: unknown }): ResponseEnvelope => ({
   v: PROTOCOL_VERSION,
   kind: 'res',
   id: input.id,
