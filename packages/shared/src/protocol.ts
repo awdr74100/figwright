@@ -22,6 +22,12 @@ export const SystemMethod = {
   Hello: '$hello',
   Ping: '$ping',
   Echo: '$echo',
+  /**
+   * Plugin → leader event emitted whenever the sandbox sees user interaction (selection/page
+   * change). The leader uses these to bump session priority for multi-plugin routing — heartbeats
+   * and tool replies are explicitly NOT activity, only this event is.
+   */
+  Activity: '$activity',
 } as const;
 export type SystemMethod = (typeof SystemMethod)[keyof typeof SystemMethod];
 

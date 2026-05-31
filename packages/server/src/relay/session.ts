@@ -10,6 +10,12 @@ export interface Session {
   clientVersion: string;
   connectedAt: number;
   reconnectedAt: number | null;
+  /** Updated on every `$activity` event from this session; multi-plugin routing picks the max. */
+  lastActivityAt: number;
+  /** Latest file + page reported by this session's `$activity` events — for ping observability. */
+  fileName: string | null;
+  pageId: string | null;
+  pageName: string | null;
   heartbeat: HeartbeatMonitor | null;
   disconnectTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -19,11 +25,10 @@ export const DEFAULT_DISCONNECT_GRACE_MS = 30_000;
 export class SessionManager {
   private readonly sessions = new Map<string, Session>();
 
-  register(input: {
-    id: string;
-    socket: WebSocket;
-    clientVersion: string;
-  }): { session: Session; resumed: boolean } {
+  register(input: { id: string; socket: WebSocket; clientVersion: string }): {
+    session: Session;
+    resumed: boolean;
+  } {
     const existing = this.sessions.get(input.id);
     let resumed = false;
 
@@ -39,13 +44,22 @@ export class SessionManager {
       resumed = true;
     }
 
+    const now = Date.now();
     const session: Session = {
       id: input.id,
       socket: input.socket,
       state: 'connected',
       clientVersion: input.clientVersion,
-      connectedAt: existing?.connectedAt ?? Date.now(),
-      reconnectedAt: existing !== undefined ? Date.now() : null,
+      connectedAt: existing?.connectedAt ?? now,
+      reconnectedAt: existing !== undefined ? now : null,
+      // A fresh connection counts as the most recent activity — when a user opens the plugin in
+      // a newly-focused file it should immediately win routing against an idle older session.
+      lastActivityAt: now,
+      // Filled in by the first `$activity` event; null until then (a plugin that hasn't sent any
+      // context push yet — e.g. mid-handshake — is still routable but won't have a display label).
+      fileName: existing?.fileName ?? null,
+      pageId: existing?.pageId ?? null,
+      pageName: existing?.pageName ?? null,
       heartbeat: null,
       disconnectTimer: null,
     };

@@ -21,10 +21,33 @@ export interface PingServerInfo {
   ts: number;
 }
 
+/**
+ * Multi-plugin observability. `connectedCount` lets a user see when more than one Figma file has
+ * the plugin open; `routedSessionId` names the session that handled this call (most-recently-active
+ * wins). `routedFileName` / `routedPageName` come from the routed session's last `$activity` event
+ * — null until that session has pushed at least one context update.
+ */
+export interface PingSessionInfo {
+  id: string;
+  fileName: string | null;
+  pageName: string | null;
+  lastActivityAt: number;
+}
+
+export interface PingSessionsInfo {
+  connectedCount: number;
+  routedSessionId: string | null;
+  routedFileName: string | null;
+  routedPageName: string | null;
+  /** All connected sessions, newest activity first — quick `who's connected and where` table. */
+  all: readonly PingSessionInfo[];
+}
+
 export interface PingResult {
   ok: true;
   hop: PingHop;
   server: PingServerInfo;
+  sessions?: PingSessionsInfo;
   plugin: unknown | null;
   dispatchError?: string;
 }
@@ -45,14 +68,61 @@ const serverInfo = (ctx: PingContext): PingServerInfo => ({
 
 export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const server = serverInfo(ctx);
+  const relay = ctx.node.isLeader() ? ctx.node.getLeader()?.relay : undefined;
 
-  if (ctx.node.isLeader()) {
-    const connected = ctx.node.getLeader()?.relay.sessions.connected().length ?? 0;
-    if (connected === 0) {
-      return { ok: true, hop: 'server-only', server, plugin: null };
+  if (relay !== undefined) {
+    const connected = relay.sessions.connected();
+    if (connected.length === 0) {
+      return {
+        ok: true,
+        hop: 'server-only',
+        server,
+        sessions: {
+          connectedCount: 0,
+          routedSessionId: null,
+          routedFileName: null,
+          routedPageName: null,
+          all: [],
+        },
+        plugin: null,
+      };
+    }
+    const routed = relay.pickActiveSession();
+    const all: PingSessionInfo[] = [...connected]
+      .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+      .map(s => ({
+        id: s.id,
+        fileName: s.fileName,
+        pageName: s.pageName,
+        lastActivityAt: s.lastActivityAt,
+      }));
+    const sessions: PingSessionsInfo = {
+      connectedCount: connected.length,
+      routedSessionId: routed?.id ?? null,
+      routedFileName: routed?.fileName ?? null,
+      routedPageName: routed?.pageName ?? null,
+      all,
+    };
+
+    try {
+      const plugin = await dispatchTool(
+        {
+          node: ctx.node,
+          follower: ctx.follower,
+          ...(ctx.log === undefined ? {} : { log: ctx.log }),
+        },
+        'ping',
+        {},
+      );
+      return { ok: true, hop: 'e2e', server, sessions, plugin };
+    } catch (err) {
+      const dispatchError = err instanceof Error ? err.message : String(err);
+      ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
+      return { ok: true, hop: 'server-only', server, sessions, plugin: null, dispatchError };
     }
   }
 
+  // Follower path — no direct relay visibility, so no sessions info.
   try {
     const plugin = await dispatchTool(
       {

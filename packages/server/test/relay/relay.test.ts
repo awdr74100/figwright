@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import {
+  createEvent,
   createRequest,
   createResponse,
   decodeEnvelope,
@@ -104,9 +105,7 @@ describe('Relay hello loop', () => {
     const { port } = await startRelay();
     const ws = await connect(port);
     ws.send(
-      encodeEnvelope(
-        createRequest({ id: 'x', sessionId: newId(), method: 'something_else' }),
-      ),
+      encodeEnvelope(createRequest({ id: 'x', sessionId: newId(), method: 'something_else' })),
     );
     const res = decodeEnvelope(await nextMessage(ws));
     expect(res.kind).toBe('err');
@@ -140,9 +139,7 @@ describe('Relay hello loop', () => {
       ),
     );
     await nextMessage(ws);
-    ws.send(
-      encodeEnvelope(createRequest({ id: 'p', sessionId, method: SystemMethod.Ping })),
-    );
+    ws.send(encodeEnvelope(createRequest({ id: 'p', sessionId, method: SystemMethod.Ping })));
     const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
     expect(res.kind).toBe('res');
     expect(res.id).toBe('p');
@@ -196,9 +193,7 @@ describe('Relay hello loop', () => {
     ws.on('message', d => {
       const env = decodeEnvelope(d as ArrayBuffer);
       if (env.kind === 'req' && env.method === SystemMethod.Ping) {
-        ws.send(
-          encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })),
-        );
+        ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })));
       }
     });
 
@@ -322,5 +317,70 @@ describe('Relay hello loop', () => {
     expect(relay.sessions.list()).toHaveLength(2);
     ws1.close();
     ws2.close();
+  });
+
+  it('routes to the most-recently-active session, not the oldest', async () => {
+    const { port, relay } = await startRelay();
+    const sidA = newId();
+    const sidB = newId();
+
+    const wsA = await connect(port);
+    wsA.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hA',
+          sessionId: sidA,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsA);
+
+    // Ensure clock advances so timestamps strictly differ; Date.now()'s ms granularity makes
+    // back-to-back registers risk a tie otherwise.
+    await new Promise(r => setTimeout(r, 5));
+
+    const wsB = await connect(port);
+    wsB.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hB',
+          sessionId: sidB,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsB);
+
+    // B connected later → its fresh `lastActivityAt` wins routing.
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    // Now A's plugin pushes an explicit $activity event (the signal sandbox emits when the user
+    // selects/changes page). This bumps A's activity past B's. A heartbeat reply or tool response
+    // intentionally would NOT — only $activity does, so the two sessions don't race to a coin
+    // flip every heartbeat interval.
+    await new Promise(r => setTimeout(r, 5));
+    wsA.send(
+      encodeEnvelope(
+        createEvent({
+          id: 'a1',
+          sessionId: sidA,
+          method: SystemMethod.Activity,
+          params: { fileName: 'Project A', pageId: 'p-1', pageName: 'Cover' },
+        }),
+      ),
+    );
+    // No reply expected for an event; let the server process it.
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(relay.pickActiveSession()?.id).toBe(sidA);
+    // The activity event also seeds the session with its file/page label for ping observability.
+    expect(relay.pickActiveSession()?.fileName).toBe('Project A');
+    expect(relay.pickActiveSession()?.pageName).toBe('Cover');
+
+    wsA.close();
+    wsB.close();
   });
 });

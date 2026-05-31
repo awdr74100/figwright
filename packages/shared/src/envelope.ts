@@ -66,6 +66,18 @@ export const HelloResultSchema = z.object({
 });
 export type HelloResult = z.infer<typeof HelloResultSchema>;
 
+/**
+ * Params for the plugin → leader `$activity` event. Sent when sandbox emits a context push
+ * (selection / page change). Carries enough file/page identity so the leader can advertise "you are
+ * routed to file X, page Y" back through `ping` for multi-plugin debugging.
+ */
+export const ActivityParamsSchema = z.object({
+  fileName: z.string(),
+  pageId: z.string(),
+  pageName: z.string(),
+});
+export type ActivityParams = z.infer<typeof ActivityParamsSchema>;
+
 type CreateInput = {
   id: string;
   sessionId: string;

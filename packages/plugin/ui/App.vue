@@ -3,7 +3,12 @@ import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figma
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { createSandboxBridge } from './bridge/sandbox.js';
-import { type ActivityStatus, RelayClient, type RelayClientState, type RelayStatus } from './relay/client.js';
+import {
+  type ActivityStatus,
+  RelayClient,
+  type RelayClientState,
+  type RelayStatus,
+} from './relay/client.js';
 
 type Tab = 'activity' | 'context' | 'debug';
 const tabs = [
@@ -70,7 +75,17 @@ let unsubscribe: (() => void) | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
 const onWindowMessage = (event: MessageEvent): void => {
   const msg = (event.data as { pluginMessage?: unknown } | null)?.pluginMessage;
-  if (isPluginContextEvent(msg)) context.value = msg;
+  if (isPluginContextEvent(msg)) {
+    context.value = msg;
+    // Each context push from sandbox means the user just interacted (open / selection-change /
+    // page-change). Tell the leader — params carry file/page identity so ping can report which
+    // file is being routed instead of an opaque session id.
+    client.notifyActivity({
+      fileName: msg.fileName,
+      pageId: msg.pageId,
+      pageName: msg.pageName,
+    });
+  }
 };
 
 onMounted(() => {
@@ -129,7 +144,9 @@ onBeforeUnmount(() => {
             <span class="ml-auto shrink-0 text-relay-muted">
               {{ e.durationMs === undefined ? '' : `${e.durationMs}ms` }}
             </span>
-            <span class="w-9 shrink-0 text-right text-relay-muted">{{ formatAgo(e.startedAt) }}</span>
+            <span class="w-9 shrink-0 text-right text-relay-muted">{{
+              formatAgo(e.startedAt)
+            }}</span>
           </li>
         </ul>
         <p v-else class="text-relay-muted">No activity yet — waiting for Claude…</p>
@@ -149,7 +166,9 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex justify-between gap-2">
               <dt class="shrink-0 text-relay-muted">Editor</dt>
-              <dd class="text-right font-mono">{{ context.editorType }} · API {{ context.apiVersion }}</dd>
+              <dd class="text-right font-mono">
+                {{ context.editorType }} · API {{ context.apiVersion }}
+              </dd>
             </div>
           </dl>
           <div>
@@ -158,12 +177,11 @@ onBeforeUnmount(() => {
               <li v-for="n in context.selection" :key="n.id" class="flex items-center gap-2">
                 <span class="truncate">{{ n.name }}</span>
                 <span class="ml-auto shrink-0 text-relay-muted">{{ n.type }}</span>
-                <span class="w-14 shrink-0 text-right text-relay-muted">{{ n.width }}×{{ n.height }}</span>
+                <span class="w-14 shrink-0 text-right text-relay-muted"
+                  >{{ n.width }}×{{ n.height }}</span
+                >
               </li>
-              <li
-                v-if="context.selectionCount > context.selection.length"
-                class="text-relay-muted"
-              >
+              <li v-if="context.selectionCount > context.selection.length" class="text-relay-muted">
                 …and {{ context.selectionCount - context.selection.length }} more
               </li>
             </ul>

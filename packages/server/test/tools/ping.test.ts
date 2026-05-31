@@ -41,8 +41,20 @@ describe('ping tool', () => {
     expect(result.server.port).toBe(3055);
   });
 
-  it('returns e2e hop with plugin info when dispatch succeeds (leader path)', async () => {
+  it('returns e2e hop with plugin info + sessions when dispatch succeeds (leader path)', async () => {
     const pluginInfo = { apiVersion: '1.0.0', currentPageId: 'p1' };
+    const sessA = {
+      id: 'sess-a',
+      fileName: 'Design A',
+      pageName: 'Mockup',
+      lastActivityAt: 1000,
+    };
+    const sessB = {
+      id: 'sess-b',
+      fileName: 'Design B',
+      pageName: 'Cover',
+      lastActivityAt: 2000,
+    };
     const node = makeNode({
       role: NodeRole.Leader,
       isLeader: () => true,
@@ -50,7 +62,8 @@ describe('ping tool', () => {
         ({
           port: 3055,
           relay: {
-            sessions: { connected: () => [{}] },
+            sessions: { connected: () => [sessA, sessB] },
+            pickActiveSession: () => sessB,
             sendRequest: async () => pluginInfo,
           },
           http: undefined as never,
@@ -63,6 +76,12 @@ describe('ping tool', () => {
     });
     expect(result.hop).toBe('e2e');
     expect(result.plugin).toEqual(pluginInfo);
+    expect(result.sessions?.connectedCount).toBe(2);
+    expect(result.sessions?.routedSessionId).toBe('sess-b');
+    expect(result.sessions?.routedFileName).toBe('Design B');
+    expect(result.sessions?.routedPageName).toBe('Cover');
+    // All sessions sorted newest-active first.
+    expect(result.sessions?.all.map(s => s.id)).toEqual(['sess-b', 'sess-a']);
   });
 
   it('falls back to server-only when dispatch throws (follower path)', async () => {

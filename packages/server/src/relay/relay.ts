@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 
 import {
+  ActivityParamsSchema,
   createError,
   createRequest,
   createResponse,
@@ -85,7 +86,7 @@ export class Relay {
       }, timeoutMs);
       const entry: Pending = { resolve, reject, timer, method, params, dispatched: false };
       this.pending.set(id, entry);
-      const session = this.sessions.connected()[0];
+      const session = this.pickActiveSession();
       if (session !== undefined && session.socket !== null) {
         this.dispatchPending(id, entry, session);
       } else {
@@ -102,6 +103,20 @@ export class Relay {
     let n = 0;
     for (const [, p] of this.pending) if (!p.dispatched) n += 1;
     return n;
+  }
+
+  /**
+   * Pick the connected session with the highest `lastActivityAt`. When the user opens the plugin in
+   * a newly-focused Figma file, that fresh session wins routing over an older idle one — the effect
+   * a user expects when they "switch which file Claude is looking at". With one plugin it's just
+   * that plugin; with N it's the most-recently-active.
+   */
+  pickActiveSession(): Session | undefined {
+    let best: Session | undefined;
+    for (const s of this.sessions.connected()) {
+      if (best === undefined || s.lastActivityAt > best.lastActivityAt) best = s;
+    }
+    return best;
   }
 
   private dispatchPending(id: string, entry: Pending, session: Session): void {
@@ -215,6 +230,21 @@ export class Relay {
 
   private handleEnvelope(session: Session, env: Envelope): void {
     session.heartbeat?.notifyReceived();
+    // Routing priority: only an explicit $activity event counts as user interaction. Heartbeat
+    // replies and tool responses must NOT bump lastActivityAt — both fire on a timer / on
+    // server-initiated calls and would race the two sessions to a coin flip every 15s.
+    if (env.kind === 'evt' && env.method === SystemMethod.Activity) {
+      session.lastActivityAt = Date.now();
+      const parsed = ActivityParamsSchema.safeParse(env.params);
+      if (parsed.success) {
+        // Params carry the current file/page so `ping` can advertise it; routing decision and
+        // user-facing label come off the same event.
+        session.fileName = parsed.data.fileName;
+        session.pageId = parsed.data.pageId;
+        session.pageName = parsed.data.pageName;
+      }
+      return;
+    }
     if (env.kind === 'req' && env.method === SystemMethod.Ping) {
       if (session.socket !== null) this.sendResponse(session.socket, env, { ok: true });
       return;

@@ -1,5 +1,7 @@
 import {
+  type ActivityParams,
   createError,
+  createEvent,
   createRequest,
   createResponse,
   decodeEnvelope,
@@ -101,8 +103,7 @@ export class RelayClient {
       helloTimeoutMs: opts.helloTimeoutMs ?? DEFAULT_HELLO_TIMEOUT_MS,
       heartbeatIntervalMs: opts.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS,
       heartbeatMaxMisses: opts.heartbeatMaxMisses ?? HEARTBEAT_MAX_MISSES,
-      reconnectInitialDelayMs:
-        opts.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS,
+      reconnectInitialDelayMs: opts.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS,
       reconnectMaxDelayMs: opts.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS,
     };
   }
@@ -113,6 +114,27 @@ export class RelayClient {
 
   setToolHandler(handler: ToolHandler | null): void {
     this.toolHandler = handler;
+  }
+
+  /**
+   * Tell the leader that this session just saw user interaction (sandbox sent a context event for
+   * selection/page change). The leader uses this to pick the most-recently-active session when more
+   * than one plugin is connected. `params` also carry file + page identity so the leader can report
+   * "routed to file X, page Y" back through `ping` — the routing decision and the user-facing label
+   * both live on the same signal. Silently no-ops while disconnected.
+   */
+  notifyActivity(params: ActivityParams): void {
+    if (this.socket === null || this.state.status !== 'connected') return;
+    this.socket.send(
+      encodeEnvelope(
+        createEvent({
+          id: newId(),
+          sessionId: this.sessionId,
+          method: SystemMethod.Activity,
+          params,
+        }),
+      ),
+    );
   }
 
   subscribe(fn: (s: RelayClientState) => void): () => void {
@@ -182,7 +204,10 @@ export class RelayClient {
         reject(new Error(msg));
       };
 
-      const timer = setTimeout(() => fail(`hello timeout on port ${port}`), this.opts.helloTimeoutMs);
+      const timer = setTimeout(
+        () => fail(`hello timeout on port ${port}`),
+        this.opts.helloTimeoutMs,
+      );
 
       ws.onopen = () => {
         const helloParams: HelloParams = {
@@ -233,9 +258,7 @@ export class RelayClient {
           lastError: null,
           connectedAt: Date.now(),
         });
-        this.opts.log(
-          `[relay-client] connected to :${port} (resumed=${result.sessionResumed})`,
-        );
+        this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);
         resolve();
       };
 
@@ -257,7 +280,9 @@ export class RelayClient {
       this.heartbeat?.notifyReceived();
       if (env.kind === 'req' && env.method === SystemMethod.Ping) {
         ws.send(
-          encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result: { ok: true } })),
+          encodeEnvelope(
+            createResponse({ id: env.id, sessionId: env.sessionId, result: { ok: true } }),
+          ),
         );
         return;
       }
