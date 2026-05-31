@@ -1,4 +1,3 @@
-import { parse } from 'valibot';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -23,7 +22,7 @@ describe('plugin-bridge envelope factories', () => {
       method: 'ping',
       params: { foo: 1 },
     });
-    expect(parse(PluginBridgeMessageSchema, msg)).toEqual(msg);
+    expect(PluginBridgeMessageSchema.parse(msg)).toEqual(msg);
   });
 
   it('createToolCall omits params when undefined', () => {
@@ -34,21 +33,19 @@ describe('plugin-bridge envelope factories', () => {
   it('createToolResult omits result when undefined', () => {
     const msg = createToolResult({ id: 'r-1' });
     expect('result' in msg).toBe(false);
-    expect(parse(PluginBridgeMessageSchema, msg).kind).toBe('tool-result');
+    expect(PluginBridgeMessageSchema.parse(msg).kind).toBe('tool-result');
   });
 
   it('createToolError carries code and message', () => {
     const msg = createToolError({ id: 'r-2', code: 'METHOD_NOT_FOUND', message: 'no such' });
     expect(msg.kind).toBe('tool-error');
-    expect(parse(PluginBridgeMessageSchema, msg)).toEqual(msg);
+    expect(PluginBridgeMessageSchema.parse(msg)).toEqual(msg);
   });
 });
 
 describe('isPluginBridgeMessage type guard', () => {
   it('accepts a well-formed tool-call', () => {
-    expect(
-      isPluginBridgeMessage(createToolCall({ id: 'x', method: 'ping' })),
-    ).toBe(true);
+    expect(isPluginBridgeMessage(createToolCall({ id: 'x', method: 'ping' }))).toBe(true);
   });
 
   it('rejects messages without the bridge tag', () => {
@@ -68,12 +65,10 @@ describe('isPluginBridgeMessage type guard', () => {
   });
 
   it('rejects tagged objects that fail schema validation', () => {
-    expect(
-      isPluginBridgeMessage({ tag: PLUGIN_BRIDGE_TAG, kind: 'tool-call', id: 'x' }),
-    ).toBe(false);
-    expect(
-      isPluginBridgeMessage({ tag: PLUGIN_BRIDGE_TAG, kind: 'nope', id: 'x' }),
-    ).toBe(false);
+    expect(isPluginBridgeMessage({ tag: PLUGIN_BRIDGE_TAG, kind: 'tool-call', id: 'x' })).toBe(
+      false,
+    );
+    expect(isPluginBridgeMessage({ tag: PLUGIN_BRIDGE_TAG, kind: 'nope', id: 'x' })).toBe(false);
   });
 });
 
@@ -94,7 +89,7 @@ describe('plugin context event', () => {
   it('createPluginContextEvent tags and round-trips through schema', () => {
     const msg = createPluginContextEvent(ctx);
     expect(msg).toEqual({ tag: PLUGIN_BRIDGE_TAG, kind: 'context', ...ctx });
-    expect(parse(PluginContextEventSchema, msg)).toEqual(msg);
+    expect(PluginContextEventSchema.parse(msg)).toEqual(msg);
     expect(msg.selection[0]).toMatchObject({ type: 'FRAME', width: 480, height: 270 });
   });
 

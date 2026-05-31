@@ -1,19 +1,17 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const MOVE_NODES_TOOL_NAME = 'move_nodes';
 
-export const moveNodesToolDefinition: Tool = {
+export const moveNodesTool: ToolSpec = {
   name: MOVE_NODES_TOOL_NAME,
   description:
     'Translate nodes by (dx, dy). Nodes without a position are skipped. Returns { ok, affected }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Node ids to move' },
-      dx: { type: 'number', description: 'Horizontal delta (default 0)' },
-      dy: { type: 'number', description: 'Vertical delta (default 0)' },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Node ids to move'),
+    dx: z.number().optional().describe('Horizontal delta (default 0)'),
+    dy: z.number().optional().describe('Vertical delta (default 0)'),
   },
+  kind: 'write',
 };

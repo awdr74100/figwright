@@ -1,16 +1,14 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const UNLOCK_NODES_TOOL_NAME = 'unlock_nodes';
 
-export const unlockNodesToolDefinition: Tool = {
+export const unlockNodesTool: ToolSpec = {
   name: UNLOCK_NODES_TOOL_NAME,
   description: 'Unlock nodes. Returns { ok, affected }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Node ids to unlock' },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Node ids to unlock'),
   },
+  kind: 'write',
 };

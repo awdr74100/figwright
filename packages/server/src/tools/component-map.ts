@@ -6,8 +6,7 @@ import type {
   GetDesignContextResult,
   GetLocalComponentsResult,
 } from '@figma-mcp-relay/shared';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import {
   collectFigmaComponents,
@@ -20,18 +19,23 @@ import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents } from '../scan/scan.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
 import { GET_LOCAL_COMPONENTS_TOOL_NAME } from './get-local-components.js';
+import type { ToolSpec } from './spec.js';
 
 export const COMPONENT_MAP_TOOL_NAME = 'component_map';
 
 const DEFAULT_THRESHOLD = 0.7;
 const MAP_FILE = 'docs/figma-component-map.md';
 
-export const ComponentMapInputSchema = v.object({
-  nodeId: v.optional(v.string()),
-  threshold: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
-  rootDir: v.optional(v.string()),
-});
-export type ComponentMapInput = v.InferOutput<typeof ComponentMapInputSchema>;
+const inputShape = {
+  nodeId: z.string().describe('Root node id; omit to use the selection or current page').optional(),
+  threshold: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe('Confidence at/above which a match counts as a reliable reuse (default 0.7)')
+    .optional(),
+  rootDir: z.string().describe('Project root to scan; defaults to the server cwd').optional(),
+};
 
 export interface ComponentMapResult {
   mappings: ComponentMapping[];
@@ -41,7 +45,7 @@ export interface ComponentMapResult {
   scannedComponentCount: number;
 }
 
-export const componentMapToolDefinition: Tool = {
+export const componentMapTool: ToolSpec = {
   name: COMPONENT_MAP_TOOL_NAME,
   description:
     'Map the Figma component instances in a selection/subtree to existing local code components, so ' +
@@ -51,25 +55,9 @@ export const componentMapToolDefinition: Tool = {
     'A mapped candidate also reports matchedProps (Figma axes the component already has) and ' +
     'unmatchedProps (axes it lacks → component-extension TODOs). ' +
     'Returns { mappings (candidate + confidence + status high/medium/low/unmapped), unmapped, profile }.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: {
-        type: 'string',
-        description: 'Root node id; omit to use the selection or current page',
-      },
-      threshold: {
-        type: 'number',
-        minimum: 0,
-        maximum: 1,
-        description: 'Confidence at/above which a match counts as a reliable reuse (default 0.7)',
-      },
-      rootDir: { type: 'string', description: 'Project root to scan; defaults to the server cwd' },
-    },
-    additionalProperties: false,
-  },
+  inputShape,
+  kind: 'local',
 };
-
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
 const readOverrides = async (rootDir: string): Promise<ReturnType<typeof parseMapFile>> => {
@@ -89,7 +77,7 @@ export const handleComponentMap = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ComponentMapResult> => {
-  const args = v.parse(ComponentMapInputSchema, rawArgs);
+  const args = z.object(inputShape).parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 

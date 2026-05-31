@@ -17,7 +17,6 @@ import {
   PROTOCOL_VERSION,
   SystemMethod,
 } from '@figma-mcp-relay/shared';
-import * as v from 'valibot';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
@@ -123,7 +122,8 @@ export class Relay {
       this.dispatchPending(id, entry, session);
       flushed += 1;
     }
-    if (flushed > 0) this.opts.log(`[relay] flushed ${flushed} queued request(s) to session ${session.id}`);
+    if (flushed > 0)
+      this.opts.log(`[relay] flushed ${flushed} queued request(s) to session ${session.id}`);
   }
 
   private handleConnection(socket: WebSocket): void {
@@ -179,7 +179,7 @@ export class Relay {
       return null;
     }
 
-    const parsed = v.safeParse(HelloParamsSchema, env.params);
+    const parsed = HelloParamsSchema.safeParse(env.params);
     if (!parsed.success) {
       this.sendError(socket, env, ErrorCode.InvalidParams, 'invalid $hello params');
       return null;
@@ -188,7 +188,7 @@ export class Relay {
     const { session, resumed } = this.sessions.register({
       id: env.sessionId,
       socket,
-      clientVersion: parsed.output.clientVersion,
+      clientVersion: parsed.data.clientVersion,
     });
 
     session.heartbeat = new HeartbeatMonitor({
@@ -256,19 +256,10 @@ export class Relay {
   }
 
   private sendResponse(socket: WebSocket, req: Envelope, result: unknown): void {
-    socket.send(
-      encodeEnvelope(
-        createResponse({ id: req.id, sessionId: req.sessionId, result }),
-      ),
-    );
+    socket.send(encodeEnvelope(createResponse({ id: req.id, sessionId: req.sessionId, result })));
   }
 
-  private sendError(
-    socket: WebSocket,
-    req: Envelope,
-    code: string,
-    message: string,
-  ): void {
+  private sendError(socket: WebSocket, req: Envelope, code: string, message: string): void {
     socket.send(
       encodeEnvelope(
         createError({

@@ -1,17 +1,15 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const DELETE_NODES_TOOL_NAME = 'delete_nodes';
 
-export const deleteNodesToolDefinition: Tool = {
+export const deleteNodesTool: ToolSpec = {
   name: DELETE_NODES_TOOL_NAME,
   description:
     'Delete nodes by id. Missing / non-removable nodes are skipped. Returns { ok, affected } — the ids actually removed.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Node ids to delete' },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Node ids to delete'),
   },
+  kind: 'write',
 };

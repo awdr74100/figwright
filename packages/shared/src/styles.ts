@@ -1,4 +1,4 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 // SerializedEffect / SerializedLayoutGrid / SerializedLineHeight / SerializedLetterSpacing now live
 // in serialized-node.ts (shared by node + style serialization) and reach consumers via the barrel.
@@ -12,43 +12,43 @@ import {
 } from './serialized-node.js';
 
 const styleBase = {
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
-  description: v.string(),
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
+  description: z.string(),
 } as const;
 
-export const SerializedPaintStyleSchema = v.object({
+export const SerializedPaintStyleSchema = z.object({
   ...styleBase,
-  paints: v.array(SerializedPaintSchema),
+  paints: z.array(SerializedPaintSchema),
 });
-export type SerializedPaintStyle = v.InferOutput<typeof SerializedPaintStyleSchema>;
+export type SerializedPaintStyle = z.infer<typeof SerializedPaintStyleSchema>;
 
-export const SerializedTextStyleSchema = v.object({
+export const SerializedTextStyleSchema = z.object({
   ...styleBase,
   fontName: SerializedFontNameSchema,
-  fontSize: v.number(),
+  fontSize: z.number(),
   lineHeight: SerializedLineHeightSchema,
   letterSpacing: SerializedLetterSpacingSchema,
 });
-export type SerializedTextStyle = v.InferOutput<typeof SerializedTextStyleSchema>;
+export type SerializedTextStyle = z.infer<typeof SerializedTextStyleSchema>;
 
-export const SerializedEffectStyleSchema = v.object({
+export const SerializedEffectStyleSchema = z.object({
   ...styleBase,
-  effects: v.array(SerializedEffectSchema),
+  effects: z.array(SerializedEffectSchema),
 });
-export type SerializedEffectStyle = v.InferOutput<typeof SerializedEffectStyleSchema>;
+export type SerializedEffectStyle = z.infer<typeof SerializedEffectStyleSchema>;
 
-export const SerializedGridStyleSchema = v.object({
+export const SerializedGridStyleSchema = z.object({
   ...styleBase,
-  grids: v.array(SerializedLayoutGridSchema),
+  grids: z.array(SerializedLayoutGridSchema),
 });
-export type SerializedGridStyle = v.InferOutput<typeof SerializedGridStyleSchema>;
+export type SerializedGridStyle = z.infer<typeof SerializedGridStyleSchema>;
 
-export const GetStylesResultSchema = v.object({
-  paints: v.array(SerializedPaintStyleSchema),
-  texts: v.array(SerializedTextStyleSchema),
-  effects: v.array(SerializedEffectStyleSchema),
-  grids: v.array(SerializedGridStyleSchema),
+export const GetStylesResultSchema = z.object({
+  paints: z.array(SerializedPaintStyleSchema),
+  texts: z.array(SerializedTextStyleSchema),
+  effects: z.array(SerializedEffectStyleSchema),
+  grids: z.array(SerializedGridStyleSchema),
 });
-export type GetStylesResult = v.InferOutput<typeof GetStylesResultSchema>;
+export type GetStylesResult = z.infer<typeof GetStylesResultSchema>;

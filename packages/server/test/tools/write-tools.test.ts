@@ -1,31 +1,62 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLONE_NODE_TOOL_NAME, cloneNodeToolDefinition } from '../../src/tools/clone-node.js';
-import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from '../../src/tools/create-frame.js';
-import { LOCK_NODES_TOOL_NAME, lockNodesToolDefinition } from '../../src/tools/lock-nodes.js';
-import { ROTATE_NODES_TOOL_NAME, rotateNodesToolDefinition } from '../../src/tools/rotate-nodes.js';
-import { SET_AUTO_LAYOUT_TOOL_NAME, setAutoLayoutToolDefinition } from '../../src/tools/set-auto-layout.js';
-import { SET_BLEND_MODE_TOOL_NAME, setBlendModeToolDefinition } from '../../src/tools/set-blend-mode.js';
-import { SET_CONSTRAINTS_TOOL_NAME, setConstraintsToolDefinition } from '../../src/tools/set-constraints.js';
-import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from '../../src/tools/unlock-nodes.js';
-import { CREATE_RECTANGLE_TOOL_NAME, createRectangleToolDefinition } from '../../src/tools/create-rectangle.js';
-import { CREATE_TEXT_TOOL_NAME, createTextToolDefinition } from '../../src/tools/create-text.js';
-import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from '../../src/tools/delete-nodes.js';
-import { MOVE_NODES_TOOL_NAME, moveNodesToolDefinition } from '../../src/tools/move-nodes.js';
-import { RENAME_NODE_TOOL_NAME, renameNodeToolDefinition } from '../../src/tools/rename-node.js';
-import { RESIZE_NODES_TOOL_NAME, resizeNodesToolDefinition } from '../../src/tools/resize-nodes.js';
-import { SET_CORNER_RADIUS_TOOL_NAME, setCornerRadiusToolDefinition } from '../../src/tools/set-corner-radius.js';
-import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from '../../src/tools/set-fills.js';
-import { SET_OPACITY_TOOL_NAME, setOpacityToolDefinition } from '../../src/tools/set-opacity.js';
-import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from '../../src/tools/set-strokes.js';
-import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from '../../src/tools/set-text.js';
-import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from '../../src/tools/set-visible.js';
-import { BATCH_TOOL_NAME, batchToolDefinition } from '../../src/tools/batch.js';
-import { CREATE_INSTANCE_TOOL_NAME, createInstanceToolDefinition } from '../../src/tools/create-instance.js';
+import { BATCH_TOOL_NAME, batchTool } from '../../src/tools/batch.js';
+import { CLONE_NODE_TOOL_NAME, cloneNodeTool } from '../../src/tools/clone-node.js';
+import { CREATE_FRAME_TOOL_NAME, createFrameTool } from '../../src/tools/create-frame.js';
+import { CREATE_INSTANCE_TOOL_NAME, createInstanceTool } from '../../src/tools/create-instance.js';
+import {
+  CREATE_RECTANGLE_TOOL_NAME,
+  createRectangleTool,
+} from '../../src/tools/create-rectangle.js';
+import { CREATE_TEXT_TOOL_NAME, createTextTool } from '../../src/tools/create-text.js';
+import { DELETE_NODES_TOOL_NAME, deleteNodesTool } from '../../src/tools/delete-nodes.js';
+import { LOCK_NODES_TOOL_NAME, lockNodesTool } from '../../src/tools/lock-nodes.js';
+import { MOVE_NODES_TOOL_NAME, moveNodesTool } from '../../src/tools/move-nodes.js';
+import { RENAME_NODE_TOOL_NAME, renameNodeTool } from '../../src/tools/rename-node.js';
+import { RESIZE_NODES_TOOL_NAME, resizeNodesTool } from '../../src/tools/resize-nodes.js';
+import { ROTATE_NODES_TOOL_NAME, rotateNodesTool } from '../../src/tools/rotate-nodes.js';
+import { SET_AUTO_LAYOUT_TOOL_NAME, setAutoLayoutTool } from '../../src/tools/set-auto-layout.js';
+import { SET_BLEND_MODE_TOOL_NAME, setBlendModeTool } from '../../src/tools/set-blend-mode.js';
+import { SET_CONSTRAINTS_TOOL_NAME, setConstraintsTool } from '../../src/tools/set-constraints.js';
+import {
+  SET_CORNER_RADIUS_TOOL_NAME,
+  setCornerRadiusTool,
+} from '../../src/tools/set-corner-radius.js';
+import { SET_FILLS_TOOL_NAME, setFillsTool } from '../../src/tools/set-fills.js';
+import { SET_OPACITY_TOOL_NAME, setOpacityTool } from '../../src/tools/set-opacity.js';
+import { SET_STROKES_TOOL_NAME, setStrokesTool } from '../../src/tools/set-strokes.js';
 import {
   SET_TEXT_PROPERTIES_TOOL_NAME,
-  setTextPropertiesToolDefinition,
+  setTextPropertiesTool,
 } from '../../src/tools/set-text-properties.js';
+import { SET_TEXT_TOOL_NAME, setTextTool } from '../../src/tools/set-text.js';
+import { SET_VISIBLE_TOOL_NAME, setVisibleTool } from '../../src/tools/set-visible.js';
+import { UNLOCK_NODES_TOOL_NAME, unlockNodesTool } from '../../src/tools/unlock-nodes.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const batchToolDefinition = toToolDefinition(batchTool);
+const cloneNodeToolDefinition = toToolDefinition(cloneNodeTool);
+const createFrameToolDefinition = toToolDefinition(createFrameTool);
+const createInstanceToolDefinition = toToolDefinition(createInstanceTool);
+const createRectangleToolDefinition = toToolDefinition(createRectangleTool);
+const createTextToolDefinition = toToolDefinition(createTextTool);
+const deleteNodesToolDefinition = toToolDefinition(deleteNodesTool);
+const lockNodesToolDefinition = toToolDefinition(lockNodesTool);
+const moveNodesToolDefinition = toToolDefinition(moveNodesTool);
+const renameNodeToolDefinition = toToolDefinition(renameNodeTool);
+const resizeNodesToolDefinition = toToolDefinition(resizeNodesTool);
+const rotateNodesToolDefinition = toToolDefinition(rotateNodesTool);
+const setAutoLayoutToolDefinition = toToolDefinition(setAutoLayoutTool);
+const setBlendModeToolDefinition = toToolDefinition(setBlendModeTool);
+const setConstraintsToolDefinition = toToolDefinition(setConstraintsTool);
+const setCornerRadiusToolDefinition = toToolDefinition(setCornerRadiusTool);
+const setFillsToolDefinition = toToolDefinition(setFillsTool);
+const setOpacityToolDefinition = toToolDefinition(setOpacityTool);
+const setStrokesToolDefinition = toToolDefinition(setStrokesTool);
+const setTextPropertiesToolDefinition = toToolDefinition(setTextPropertiesTool);
+const setTextToolDefinition = toToolDefinition(setTextTool);
+const setVisibleToolDefinition = toToolDefinition(setVisibleTool);
+const unlockNodesToolDefinition = toToolDefinition(unlockNodesTool);
 
 describe('M2 write tool definitions', () => {
   it('set_fills requires nodeId + fills', () => {
@@ -56,7 +87,8 @@ describe('M2 write tool definitions', () => {
         height: { type: 'number' },
       },
     });
-    expect(createFrameToolDefinition.inputSchema.required).toEqual([]);
+    // All inputs optional → Zod omits `required` entirely (vs an empty array).
+    expect(createFrameToolDefinition.inputSchema.required).toBeUndefined();
   });
 
   it('set_opacity / set_visible / rename_node declare nodeId + their value, required', () => {
@@ -92,18 +124,22 @@ describe('M2 write tool definitions', () => {
       properties: { characters: { type: 'string' } },
     });
     expect(createRectangleToolDefinition.name).toBe(CREATE_RECTANGLE_TOOL_NAME);
-    expect(createRectangleToolDefinition.inputSchema.required).toEqual([]);
+    expect(createRectangleToolDefinition.inputSchema.required).toBeUndefined();
   });
 
   it('set_corner_radius / set_strokes / move_nodes / resize_nodes declare their inputs', () => {
     expect(setCornerRadiusToolDefinition.name).toBe(SET_CORNER_RADIUS_TOOL_NAME);
-    expect(setCornerRadiusToolDefinition.inputSchema).toMatchObject({ required: ['nodeId', 'radius'] });
+    expect(setCornerRadiusToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId', 'radius'],
+    });
     expect(setStrokesToolDefinition.name).toBe(SET_STROKES_TOOL_NAME);
     expect(setStrokesToolDefinition.inputSchema).toMatchObject({ required: ['nodeId', 'strokes'] });
     expect(moveNodesToolDefinition.name).toBe(MOVE_NODES_TOOL_NAME);
     expect(moveNodesToolDefinition.inputSchema).toMatchObject({ required: ['nodeIds'] });
     expect(resizeNodesToolDefinition.name).toBe(RESIZE_NODES_TOOL_NAME);
-    expect(resizeNodesToolDefinition.inputSchema).toMatchObject({ required: ['nodeIds', 'width', 'height'] });
+    expect(resizeNodesToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeIds', 'width', 'height'],
+    });
   });
 
   it('set_auto_layout / set_blend_mode / set_constraints / rotate_nodes / clone_node / lock+unlock declare inputs', () => {
@@ -113,13 +149,17 @@ describe('M2 write tool definitions', () => {
       properties: { layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL'] } },
     });
     expect(setBlendModeToolDefinition.name).toBe(SET_BLEND_MODE_TOOL_NAME);
-    expect(setBlendModeToolDefinition.inputSchema).toMatchObject({ required: ['nodeId', 'blendMode'] });
+    expect(setBlendModeToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId', 'blendMode'],
+    });
     expect(setConstraintsToolDefinition.name).toBe(SET_CONSTRAINTS_TOOL_NAME);
     expect(setConstraintsToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId', 'horizontal', 'vertical'],
     });
     expect(rotateNodesToolDefinition.name).toBe(ROTATE_NODES_TOOL_NAME);
-    expect(rotateNodesToolDefinition.inputSchema).toMatchObject({ required: ['nodeIds', 'rotation'] });
+    expect(rotateNodesToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeIds', 'rotation'],
+    });
     expect(cloneNodeToolDefinition.name).toBe(CLONE_NODE_TOOL_NAME);
     expect(cloneNodeToolDefinition.inputSchema).toMatchObject({ required: ['nodeId'] });
     expect(lockNodesToolDefinition.name).toBe(LOCK_NODES_TOOL_NAME);
@@ -139,7 +179,7 @@ describe('M2 write tool definitions', () => {
         parentId: { type: 'string' },
       },
     });
-    expect(createInstanceToolDefinition.inputSchema.required).toEqual([]);
+    expect(createInstanceToolDefinition.inputSchema.required).toBeUndefined();
   });
 
   it('set_text_properties requires nodeId; truncation/maxLines/autoResize optional', () => {
@@ -148,7 +188,7 @@ describe('M2 write tool definitions', () => {
       required: ['nodeId'],
       properties: {
         textTruncation: { enum: ['DISABLED', 'ENDING'] },
-        maxLines: { type: ['number', 'null'] },
+        maxLines: { anyOf: [{ type: 'number' }, { type: 'null' }] },
         textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
       },
     });

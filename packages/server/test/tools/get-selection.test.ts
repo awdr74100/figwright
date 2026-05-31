@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  GET_SELECTION_TOOL_NAME,
-  getSelectionToolDefinition,
-} from '../../src/tools/get-selection.js';
+import { GET_SELECTION_TOOL_NAME, getSelectionTool } from '../../src/tools/get-selection.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const getSelectionToolDefinition = toToolDefinition(getSelectionTool);
 
 describe('get_selection tool definition', () => {
   it('exposes the canonical tool name', () => {

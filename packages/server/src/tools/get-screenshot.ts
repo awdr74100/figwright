@@ -1,38 +1,26 @@
 import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figma-mcp-relay/shared';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 
-export const GetScreenshotInputSchema = v.object({
-  nodeIds: v.array(v.string()),
-  format: v.optional(v.picklist(SCREENSHOT_FORMATS)),
-  scale: v.optional(v.pipe(v.number(), v.minValue(0))),
-});
-export type GetScreenshotInput = v.InferOutput<typeof GetScreenshotInputSchema>;
-
-export const getScreenshotToolDefinition: Tool = {
+export const getScreenshotTool: ToolSpec = {
   name: GET_SCREENSHOT_TOOL_NAME,
   description:
     'Export nodes as base64 images: { images: [{ nodeId, format, base64 }] }. format is PNG (default) ' +
     '/ JPG / SVG; scale applies to raster formats (default 1). base64 is null for missing or ' +
     'non-exportable nodes.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Figma node ids to export' },
-      format: {
-        type: 'string',
-        enum: [...SCREENSHOT_FORMATS],
-        description: 'Export format: PNG (default) / JPG / SVG',
-      },
-      scale: { type: 'number', minimum: 0, description: 'Raster scale factor (PNG/JPG), default 1' },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Figma node ids to export'),
+    format: z
+      .enum(SCREENSHOT_FORMATS)
+      .describe('Export format: PNG (default) / JPG / SVG')
+      .optional(),
+    scale: z.number().min(0).describe('Raster scale factor (PNG/JPG), default 1').optional(),
   },
+  kind: 'read',
 };
-
 /** A subset of MCP tool-result content blocks this tool emits. */
 export type ScreenshotContent =
   | { type: 'text'; text: string }
@@ -41,7 +29,7 @@ export type ScreenshotContent =
 const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'image/jpeg' };
 
 /**
- * Turn a get_screenshot result into MCP content blocks so the model can actually *see* raster
+ * Turn a get_screenshot result into MCP content blocks so the model can actually _see_ raster
  * exports (PNG/JPG as image blocks) instead of receiving an opaque base64 string. SVG is returned
  * as readable markup text; missing/non-exportable nodes become a short text note.
  */

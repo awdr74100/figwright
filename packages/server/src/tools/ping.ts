@@ -1,21 +1,17 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-
 import { dispatchTool } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
+import type { ToolSpec } from './spec.js';
 
-export const pingToolDefinition: Tool = {
-  name: 'ping',
+export const PING_TOOL_NAME = 'ping';
+
+export const pingTool: ToolSpec = {
+  name: PING_TOOL_NAME,
   description:
     'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the Figma sandbox.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-    required: [],
-    additionalProperties: false,
-  },
+  inputShape: {},
+  kind: 'read',
 };
-
 export type PingHop = 'server-only' | 'e2e';
 
 export interface PingServerInfo {

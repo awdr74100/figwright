@@ -1,26 +1,29 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
-export const RpcRequestSchema = v.object({
-  requestId: v.string(),
-  toolName: v.string(),
-  args: v.optional(v.unknown()),
+export const RpcRequestSchema = z.object({
+  requestId: z.string(),
+  toolName: z.string(),
+  args: z.unknown().optional(),
 });
-export type RpcRequest = v.InferOutput<typeof RpcRequestSchema>;
+export type RpcRequest = z.infer<typeof RpcRequestSchema>;
 
-export const RpcOkResponseSchema = v.object({
-  kind: v.literal('ok'),
-  requestId: v.string(),
-  result: v.unknown(),
+export const RpcOkResponseSchema = z.object({
+  kind: z.literal('ok'),
+  requestId: z.string(),
+  result: z.unknown(),
 });
-export type RpcOkResponse = v.InferOutput<typeof RpcOkResponseSchema>;
+export type RpcOkResponse = z.infer<typeof RpcOkResponseSchema>;
 
-export const RpcErrResponseSchema = v.object({
-  kind: v.literal('err'),
-  requestId: v.string(),
-  code: v.string(),
-  message: v.string(),
+export const RpcErrResponseSchema = z.object({
+  kind: z.literal('err'),
+  requestId: z.string(),
+  code: z.string(),
+  message: z.string(),
 });
-export type RpcErrResponse = v.InferOutput<typeof RpcErrResponseSchema>;
+export type RpcErrResponse = z.infer<typeof RpcErrResponseSchema>;
 
-export const RpcResponseSchema = v.variant('kind', [RpcOkResponseSchema, RpcErrResponseSchema]);
-export type RpcResponse = v.InferOutput<typeof RpcResponseSchema>;
+export const RpcResponseSchema = z.discriminatedUnion('kind', [
+  RpcOkResponseSchema,
+  RpcErrResponseSchema,
+]);
+export type RpcResponse = z.infer<typeof RpcResponseSchema>;

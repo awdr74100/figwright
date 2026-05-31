@@ -1,45 +1,48 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import { SerializedRGBASchema } from './serialized-node.js';
 
-export const SerializedVariableAliasSchema = v.object({
-  type: v.literal('VARIABLE_ALIAS'),
-  id: v.string(),
+export const SerializedVariableAliasSchema = z.object({
+  type: z.literal('VARIABLE_ALIAS'),
+  id: z.string(),
 });
-export type SerializedVariableAlias = v.InferOutput<typeof SerializedVariableAliasSchema>;
+export type SerializedVariableAlias = z.infer<typeof SerializedVariableAliasSchema>;
 
-/** A resolved value for one mode: primitive, color (RGB normalised to RGBA), or an alias to another variable. */
-export const SerializedVariableValueSchema = v.union([
-  v.boolean(),
-  v.number(),
-  v.string(),
+/**
+ * A resolved value for one mode: primitive, color (RGB normalised to RGBA), or an alias to another
+ * variable.
+ */
+export const SerializedVariableValueSchema = z.union([
+  z.boolean(),
+  z.number(),
+  z.string(),
   SerializedRGBASchema,
   SerializedVariableAliasSchema,
 ]);
-export type SerializedVariableValue = v.InferOutput<typeof SerializedVariableValueSchema>;
+export type SerializedVariableValue = z.infer<typeof SerializedVariableValueSchema>;
 
-export const SerializedVariableCollectionSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
-  defaultModeId: v.string(),
-  modes: v.array(v.object({ modeId: v.string(), name: v.string() })),
-  variableIds: v.array(v.string()),
+export const SerializedVariableCollectionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
+  defaultModeId: z.string(),
+  modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
+  variableIds: z.array(z.string()),
 });
-export type SerializedVariableCollection = v.InferOutput<typeof SerializedVariableCollectionSchema>;
+export type SerializedVariableCollection = z.infer<typeof SerializedVariableCollectionSchema>;
 
-export const SerializedVariableSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
-  resolvedType: v.string(),
-  collectionId: v.string(),
-  valuesByMode: v.record(v.string(), SerializedVariableValueSchema),
+export const SerializedVariableSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
+  resolvedType: z.string(),
+  collectionId: z.string(),
+  valuesByMode: z.record(z.string(), SerializedVariableValueSchema),
 });
-export type SerializedVariable = v.InferOutput<typeof SerializedVariableSchema>;
+export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 
-export const GetVariableDefsResultSchema = v.object({
-  collections: v.array(SerializedVariableCollectionSchema),
-  variables: v.array(SerializedVariableSchema),
+export const GetVariableDefsResultSchema = z.object({
+  collections: z.array(SerializedVariableCollectionSchema),
+  variables: z.array(SerializedVariableSchema),
 });
-export type GetVariableDefsResult = v.InferOutput<typeof GetVariableDefsResultSchema>;
+export type GetVariableDefsResult = z.infer<typeof GetVariableDefsResultSchema>;

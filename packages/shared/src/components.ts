@@ -1,31 +1,31 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
-export const SerializedComponentInfoSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
-  description: v.string(),
-  parentId: v.nullable(v.string()),
+export const SerializedComponentInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
+  description: z.string(),
+  parentId: z.string().nullable(),
   /** Variant assignments for a component inside a set, e.g. { Size: "Large", State: "Hover" }. */
-  variantProperties: v.exactOptional(v.record(v.string(), v.string())),
+  variantProperties: z.record(z.string(), z.string()).optional(),
 });
-export type SerializedComponentInfo = v.InferOutput<typeof SerializedComponentInfoSchema>;
+export type SerializedComponentInfo = z.infer<typeof SerializedComponentInfoSchema>;
 
-export const SerializedComponentSetInfoSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
-  description: v.string(),
+export const SerializedComponentSetInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
+  description: z.string(),
   /** Available values per variant axis, e.g. { Size: { values: ["Small", "Large"] } }. */
-  variantGroupProperties: v.exactOptional(
-    v.record(v.string(), v.object({ values: v.array(v.string()) })),
-  ),
-  componentIds: v.array(v.string()),
+  variantGroupProperties: z
+    .record(z.string(), z.object({ values: z.array(z.string()) }))
+    .optional(),
+  componentIds: z.array(z.string()),
 });
-export type SerializedComponentSetInfo = v.InferOutput<typeof SerializedComponentSetInfoSchema>;
+export type SerializedComponentSetInfo = z.infer<typeof SerializedComponentSetInfoSchema>;
 
-export const GetLocalComponentsResultSchema = v.object({
-  components: v.array(SerializedComponentInfoSchema),
-  componentSets: v.array(SerializedComponentSetInfoSchema),
+export const GetLocalComponentsResultSchema = z.object({
+  components: z.array(SerializedComponentInfoSchema),
+  componentSets: z.array(SerializedComponentSetInfoSchema),
 });
-export type GetLocalComponentsResult = v.InferOutput<typeof GetLocalComponentsResultSchema>;
+export type GetLocalComponentsResult = z.infer<typeof GetLocalComponentsResultSchema>;

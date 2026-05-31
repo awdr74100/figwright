@@ -3,13 +3,11 @@ import {
   GetSelectionResultSchema,
   serializeNode,
 } from '@figma-mcp-relay/shared';
-import { parse } from 'valibot';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 
 import { dispatchTool } from '../../src/dispatch.js';
 import { GET_SELECTION_TOOL_NAME } from '../../src/tools/get-selection.js';
-
 import {
   closeSocket,
   connectFakePlugin,
@@ -77,7 +75,7 @@ describe('e2e get_selection', () => {
       {},
     )) as unknown;
 
-    expect(parse(GetSelectionResultSchema, result)).toEqual(sandboxResponse);
+    expect(GetSelectionResultSchema.parse(result)).toEqual(sandboxResponse);
   });
 
   it('returns empty selection when sandbox reports no selected nodes', async () => {

@@ -8,7 +8,6 @@ import {
   EnvelopeSchema,
 } from '../src/envelope.js';
 import { ErrorCode, PROTOCOL_VERSION } from '../src/protocol.js';
-import { parse } from 'valibot';
 
 const baseInput = { id: 'req-1', sessionId: 'sess-1', ts: 1_000 };
 
@@ -24,7 +23,7 @@ describe('envelope factories', () => {
       method: 'foo',
       params: { bar: 1 },
     });
-    expect(parse(EnvelopeSchema, env)).toEqual(env);
+    expect(EnvelopeSchema.parse(env)).toEqual(env);
   });
 
   it('omits params when undefined (exactOptionalPropertyTypes friendly)', () => {
@@ -40,23 +39,23 @@ describe('envelope factories', () => {
       message: 'no such method',
     });
     const evt = createEvent({ ...baseInput, method: 'tick' });
-    expect(parse(EnvelopeSchema, res).kind).toBe('res');
-    expect(parse(EnvelopeSchema, err).kind).toBe('err');
-    expect(parse(EnvelopeSchema, evt).kind).toBe('evt');
+    expect(EnvelopeSchema.parse(res).kind).toBe('res');
+    expect(EnvelopeSchema.parse(err).kind).toBe('err');
+    expect(EnvelopeSchema.parse(evt).kind).toBe('evt');
   });
 
   it('rejects envelope with wrong protocol version', () => {
     const env = { ...createRequest({ ...baseInput, method: 'foo' }), v: '9.9.9' };
-    expect(() => parse(EnvelopeSchema, env)).toThrow(Error);
+    expect(() => EnvelopeSchema.parse(env)).toThrow(Error);
   });
 
   it('rejects envelope with unknown kind', () => {
     const env = { ...createRequest({ ...baseInput, method: 'foo' }), kind: 'nope' };
-    expect(() => parse(EnvelopeSchema, env)).toThrow(Error);
+    expect(() => EnvelopeSchema.parse(env)).toThrow(Error);
   });
 
   it('rejects err envelope missing required error field', () => {
     const env = { ...createRequest({ ...baseInput, method: 'foo' }), kind: 'err' };
-    expect(() => parse(EnvelopeSchema, env)).toThrow(Error);
+    expect(() => EnvelopeSchema.parse(env)).toThrow(Error);
   });
 });

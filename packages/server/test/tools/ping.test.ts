@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { Follower } from '../../src/election/follower.js';
 import { type Node, NodeRole } from '../../src/election/node.js';
-import { handlePing, pingToolDefinition } from '../../src/tools/ping.js';
+import { handlePing, pingTool } from '../../src/tools/ping.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const pingToolDefinition = toToolDefinition(pingTool);
 
 const makeNode = (overrides: Partial<Node> & { role?: NodeRole }): Node =>
   overrides as unknown as Node;

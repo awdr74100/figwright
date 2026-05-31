@@ -1,19 +1,17 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const GROUP_NODES_TOOL_NAME = 'group_nodes';
 
-export const groupNodesToolDefinition: Tool = {
+export const groupNodesTool: ToolSpec = {
   name: GROUP_NODES_TOOL_NAME,
   description:
     'Group nodes under their shared parent. nodeIds must be a non-empty list. ' +
     'Returns { ok, nodeId, name, type } for the new group.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: { type: 'array', items: { type: 'string' }, description: 'Node ids to group' },
-      name: { type: 'string', description: 'Optional name for the new group' },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
+  inputShape: {
+    nodeIds: z.array(z.string()).describe('Node ids to group'),
+    name: z.string().optional().describe('Optional name for the new group'),
   },
+  kind: 'write',
 };

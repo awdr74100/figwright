@@ -1,4 +1,5 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 // The cross-client twin of the figma-codegen Claude Code skill: a distilled, guided workflow any MCP
 // client (Cursor / Windsurf / Claude Desktop) can surface as a slash command. The deep version lives
@@ -30,6 +31,7 @@ Emit code in the detected stack (the profile is returned on component_map / toke
 
 export const figmaToCodePrompt: {
   definition: Prompt;
+  argsSchema: { nodeId: z.ZodOptional<z.ZodString> };
   build: (args: Record<string, string> | undefined) => GetPromptResult;
 } = {
   definition: {
@@ -45,6 +47,14 @@ export const figmaToCodePrompt: {
         required: false,
       },
     ],
+  },
+  // McpServer.registerPrompt builds the advertised `arguments` list from this shape; prompt args are
+  // always strings, so an optional string mirrors the `nodeId` argument above.
+  argsSchema: {
+    nodeId: z
+      .string()
+      .optional()
+      .describe('Figma node id to generate from; omit to use the current selection'),
   },
   build: (args): GetPromptResult => ({
     description: 'Figma → code via the three grounded tools (reuse components, reference tokens)',

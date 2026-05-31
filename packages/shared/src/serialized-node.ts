@@ -1,167 +1,170 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 export const MIXED = 'mixed' as const;
 export type Mixed = typeof MIXED;
 
-export const SerializedColorSchema = v.object({
-  r: v.number(),
-  g: v.number(),
-  b: v.number(),
+export const SerializedColorSchema = z.object({
+  r: z.number(),
+  g: z.number(),
+  b: z.number(),
 });
-export type SerializedColor = v.InferOutput<typeof SerializedColorSchema>;
+export type SerializedColor = z.infer<typeof SerializedColorSchema>;
 
 /** RGBA color (effects / variable color values carry alpha). RGB inputs are normalised to a=1. */
-export const SerializedRGBASchema = v.object({
-  r: v.number(),
-  g: v.number(),
-  b: v.number(),
-  a: v.number(),
+export const SerializedRGBASchema = z.object({
+  r: z.number(),
+  g: z.number(),
+  b: z.number(),
+  a: z.number(),
 });
-export type SerializedRGBA = v.InferOutput<typeof SerializedRGBASchema>;
+export type SerializedRGBA = z.infer<typeof SerializedRGBASchema>;
 
-const SolidPaintSchema = v.object({
-  type: v.literal('SOLID'),
-  visible: v.boolean(),
-  opacity: v.number(),
+const SolidPaintSchema = z.object({
+  type: z.literal('SOLID'),
+  visible: z.boolean(),
+  opacity: z.number(),
   color: SerializedColorSchema,
 });
 
 /** A gradient color stop: position 0–1 along the gradient + its RGBA color. */
-export const SerializedColorStopSchema = v.object({
-  position: v.number(),
+export const SerializedColorStopSchema = z.object({
+  position: z.number(),
   color: SerializedRGBASchema,
 });
-export type SerializedColorStop = v.InferOutput<typeof SerializedColorStopSchema>;
+export type SerializedColorStop = z.infer<typeof SerializedColorStopSchema>;
 
 /**
  * Gradient paint. `gradientTransform` is the Figma Plugin API's 2×3 affine matrix (rows of 3) that
  * positions the gradient — it round-trips directly into write tools (unlike the REST API's
  * gradientHandlePositions, which we don't use plugin-side).
  */
-const GradientPaintSchema = v.object({
-  type: v.picklist(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
-  visible: v.boolean(),
-  opacity: v.number(),
-  gradientStops: v.array(SerializedColorStopSchema),
-  gradientTransform: v.array(v.array(v.number())),
+const GradientPaintSchema = z.object({
+  type: z.enum(['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
+  visible: z.boolean(),
+  opacity: z.number(),
+  gradientStops: z.array(SerializedColorStopSchema),
+  gradientTransform: z.array(z.array(z.number())),
 });
 
 /** IMAGE / VIDEO / PATTERN: type-only for now (raster/pattern detail is out of scope). */
-const OtherPaintSchema = v.object({
-  type: v.picklist(['IMAGE', 'VIDEO', 'PATTERN']),
-  visible: v.boolean(),
-  opacity: v.number(),
+const OtherPaintSchema = z.object({
+  type: z.enum(['IMAGE', 'VIDEO', 'PATTERN']),
+  visible: z.boolean(),
+  opacity: z.number(),
 });
 
-export const SerializedPaintSchema = v.variant('type', [
+export const SerializedPaintSchema = z.discriminatedUnion('type', [
   SolidPaintSchema,
   GradientPaintSchema,
   OtherPaintSchema,
 ]);
-export type SerializedPaint = v.InferOutput<typeof SerializedPaintSchema>;
+export type SerializedPaint = z.infer<typeof SerializedPaintSchema>;
 
-export const SerializedFontNameSchema = v.object({
-  family: v.string(),
-  style: v.string(),
+export const SerializedFontNameSchema = z.object({
+  family: z.string(),
+  style: z.string(),
 });
-export type SerializedFontName = v.InferOutput<typeof SerializedFontNameSchema>;
+export type SerializedFontName = z.infer<typeof SerializedFontNameSchema>;
 
 /**
  * Bounded effect wire-format: shadows carry color / offset / spread; blurs & textures carry radius;
- * noise / glass carry only type + visible. `type` is the Figma effect type literal.
- * (Lives here, not in styles.ts, so both node serialization and style serialization can share it.)
+ * noise / glass carry only type + visible. `type` is the Figma effect type literal. (Lives here,
+ * not in styles.ts, so both node serialization and style serialization can share it.)
  */
-export const SerializedEffectSchema = v.object({
-  type: v.string(),
-  visible: v.boolean(),
-  radius: v.exactOptional(v.number()),
-  color: v.exactOptional(SerializedRGBASchema),
-  offset: v.exactOptional(v.object({ x: v.number(), y: v.number() })),
-  spread: v.exactOptional(v.number()),
+export const SerializedEffectSchema = z.object({
+  type: z.string(),
+  visible: z.boolean(),
+  radius: z.number().optional(),
+  color: SerializedRGBASchema.optional(),
+  offset: z.object({ x: z.number(), y: z.number() }).optional(),
+  spread: z.number().optional(),
 });
-export type SerializedEffect = v.InferOutput<typeof SerializedEffectSchema>;
+export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
 /** `pattern` is ROWS / COLUMNS / GRID; column/row grids add count / gutterSize / alignment. */
-export const SerializedLayoutGridSchema = v.object({
-  pattern: v.string(),
-  visible: v.boolean(),
-  sectionSize: v.exactOptional(v.number()),
-  count: v.exactOptional(v.number()),
-  gutterSize: v.exactOptional(v.number()),
-  alignment: v.exactOptional(v.string()),
+export const SerializedLayoutGridSchema = z.object({
+  pattern: z.string(),
+  visible: z.boolean(),
+  sectionSize: z.number().optional(),
+  count: z.number().optional(),
+  gutterSize: z.number().optional(),
+  alignment: z.string().optional(),
 });
-export type SerializedLayoutGrid = v.InferOutput<typeof SerializedLayoutGridSchema>;
+export type SerializedLayoutGrid = z.infer<typeof SerializedLayoutGridSchema>;
 
 /** Auto Layout summary (only present when a node's layoutMode is HORIZONTAL / VERTICAL). */
-export const SerializedAutoLayoutSchema = v.object({
-  mode: v.picklist(['HORIZONTAL', 'VERTICAL']),
-  paddingTop: v.number(),
-  paddingRight: v.number(),
-  paddingBottom: v.number(),
-  paddingLeft: v.number(),
-  itemSpacing: v.number(),
-  primaryAxisAlignItems: v.string(),
-  counterAxisAlignItems: v.string(),
-  layoutWrap: v.exactOptional(v.string()),
+export const SerializedAutoLayoutSchema = z.object({
+  mode: z.enum(['HORIZONTAL', 'VERTICAL']),
+  paddingTop: z.number(),
+  paddingRight: z.number(),
+  paddingBottom: z.number(),
+  paddingLeft: z.number(),
+  itemSpacing: z.number(),
+  primaryAxisAlignItems: z.string(),
+  counterAxisAlignItems: z.string(),
+  layoutWrap: z.string().optional(),
 });
-export type SerializedAutoLayout = v.InferOutput<typeof SerializedAutoLayoutSchema>;
+export type SerializedAutoLayout = z.infer<typeof SerializedAutoLayoutSchema>;
 
-/** Non-auto-layout positioning constraints (horizontal / vertical), e.g. MIN / CENTER / STRETCH / SCALE. */
-export const SerializedConstraintsSchema = v.object({
-  horizontal: v.string(),
-  vertical: v.string(),
+/**
+ * Non-auto-layout positioning constraints (horizontal / vertical), e.g. MIN / CENTER / STRETCH /
+ * SCALE.
+ */
+export const SerializedConstraintsSchema = z.object({
+  horizontal: z.string(),
+  vertical: z.string(),
 });
-export type SerializedConstraints = v.InferOutput<typeof SerializedConstraintsSchema>;
+export type SerializedConstraints = z.infer<typeof SerializedConstraintsSchema>;
 
-/** unit is PIXELS / PERCENT / AUTO; AUTO omits value. (Shared by node + text-style serialization.) */
-export const SerializedLineHeightSchema = v.object({
-  unit: v.string(),
-  value: v.exactOptional(v.number()),
+/** Unit is PIXELS / PERCENT / AUTO; AUTO omits value. (Shared by node + text-style serialization.) */
+export const SerializedLineHeightSchema = z.object({
+  unit: z.string(),
+  value: z.number().optional(),
 });
-export type SerializedLineHeight = v.InferOutput<typeof SerializedLineHeightSchema>;
+export type SerializedLineHeight = z.infer<typeof SerializedLineHeightSchema>;
 
-export const SerializedLetterSpacingSchema = v.object({
-  unit: v.string(),
-  value: v.number(),
+export const SerializedLetterSpacingSchema = z.object({
+  unit: z.string(),
+  value: z.number(),
 });
-export type SerializedLetterSpacing = v.InferOutput<typeof SerializedLetterSpacingSchema>;
+export type SerializedLetterSpacing = z.infer<typeof SerializedLetterSpacingSchema>;
 
 /** Bound shared-style ids (link a node to design-system styles → tokens for codegen). */
-export const SerializedStyleIdsSchema = v.object({
-  fill: v.exactOptional(v.string()),
-  stroke: v.exactOptional(v.string()),
-  effect: v.exactOptional(v.string()),
-  text: v.exactOptional(v.string()),
+export const SerializedStyleIdsSchema = z.object({
+  fill: z.string().optional(),
+  stroke: z.string().optional(),
+  effect: z.string().optional(),
+  text: z.string().optional(),
 });
-export type SerializedStyleIds = v.InferOutput<typeof SerializedStyleIdsSchema>;
+export type SerializedStyleIds = z.infer<typeof SerializedStyleIdsSchema>;
 
 /** One instance component property (variant / boolean / text / instance-swap). */
-export const SerializedComponentPropertySchema = v.object({
-  type: v.string(),
-  value: v.union([v.string(), v.boolean()]),
+export const SerializedComponentPropertySchema = z.object({
+  type: z.string(),
+  value: z.union([z.string(), z.boolean()]),
 });
-export type SerializedComponentProperty = v.InferOutput<typeof SerializedComponentPropertySchema>;
+export type SerializedComponentProperty = z.infer<typeof SerializedComponentPropertySchema>;
 
 /** The main component an INSTANCE points to (lets codegen map the instance to a library component). */
-export const SerializedMainComponentSchema = v.object({
-  id: v.string(),
-  name: v.string(),
-  key: v.string(),
+export const SerializedMainComponentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  key: z.string(),
 });
-export type SerializedMainComponent = v.InferOutput<typeof SerializedMainComponentSchema>;
+export type SerializedMainComponent = z.infer<typeof SerializedMainComponentSchema>;
 
 /** A run of uniformly-styled characters within a mixed-style TEXT node (→ inline spans / links). */
-export const SerializedTextSegmentSchema = v.object({
-  characters: v.string(),
-  start: v.number(),
-  end: v.number(),
+export const SerializedTextSegmentSchema = z.object({
+  characters: z.string(),
+  start: z.number(),
+  end: z.number(),
   fontName: SerializedFontNameSchema,
-  fontSize: v.number(),
-  fills: v.array(SerializedPaintSchema),
-  textDecoration: v.string(),
-  textCase: v.string(),
+  fontSize: z.number(),
+  fills: z.array(SerializedPaintSchema),
+  textDecoration: z.string(),
+  textCase: z.string(),
 });
-export type SerializedTextSegment = v.InferOutput<typeof SerializedTextSegmentSchema>;
+export type SerializedTextSegment = z.infer<typeof SerializedTextSegmentSchema>;
 
 export interface SerializedNode {
   id: string;
@@ -218,56 +221,58 @@ export interface SerializedNode {
   children?: readonly SerializedNode[];
 }
 
-export const SerializedNodeSchema: v.GenericSchema<SerializedNode> = v.lazy(() =>
-  v.object({
-    id: v.string(),
-    name: v.string(),
-    type: v.string(),
-    visible: v.boolean(),
-    locked: v.boolean(),
-    parentId: v.nullable(v.string()),
-    x: v.number(),
-    y: v.number(),
-    width: v.number(),
-    height: v.number(),
-    rotation: v.exactOptional(v.number()),
-    opacity: v.exactOptional(v.number()),
-    cornerRadius: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    fills: v.exactOptional(v.union([v.array(SerializedPaintSchema), v.literal(MIXED)])),
-    strokes: v.exactOptional(v.array(SerializedPaintSchema)),
-    strokeWeight: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    strokeAlign: v.exactOptional(v.string()),
-    effects: v.exactOptional(v.array(SerializedEffectSchema)),
-    layout: v.exactOptional(SerializedAutoLayoutSchema),
-    layoutSizingHorizontal: v.exactOptional(v.string()),
-    layoutSizingVertical: v.exactOptional(v.string()),
-    layoutGrow: v.exactOptional(v.number()),
-    layoutAlign: v.exactOptional(v.string()),
-    layoutPositioning: v.exactOptional(v.string()),
-    constraints: v.exactOptional(SerializedConstraintsSchema),
-    clipsContent: v.exactOptional(v.boolean()),
-    styleIds: v.exactOptional(SerializedStyleIdsSchema),
-    boundVariables: v.exactOptional(v.record(v.string(), v.array(v.string()))),
-    componentProperties: v.exactOptional(v.record(v.string(), SerializedComponentPropertySchema)),
-    mainComponent: v.exactOptional(SerializedMainComponentSchema),
-    characters: v.exactOptional(v.string()),
-    fontSize: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    fontName: v.exactOptional(v.union([SerializedFontNameSchema, v.literal(MIXED)])),
-    textAlignHorizontal: v.exactOptional(v.string()),
-    textAlignVertical: v.exactOptional(v.string()),
-    lineHeight: v.exactOptional(v.union([SerializedLineHeightSchema, v.literal(MIXED)])),
-    letterSpacing: v.exactOptional(v.union([SerializedLetterSpacingSchema, v.literal(MIXED)])),
-    textCase: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
-    textDecoration: v.exactOptional(v.union([v.string(), v.literal(MIXED)])),
-    textAutoResize: v.exactOptional(v.string()),
-    textTruncation: v.exactOptional(v.string()),
-    maxLines: v.exactOptional(v.nullable(v.number())),
-    paragraphSpacing: v.exactOptional(v.number()),
-    paragraphIndent: v.exactOptional(v.number()),
-    segments: v.exactOptional(v.array(SerializedTextSegmentSchema)),
-    children: v.exactOptional(v.array(SerializedNodeSchema)),
+// Cast through unknown: zod's .optional() outputs `T | undefined`, while SerializedNode uses bare
+// optional (`rotation?: number`) under exactOptionalPropertyTypes. Functionally identical at runtime.
+export const SerializedNodeSchema = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    visible: z.boolean(),
+    locked: z.boolean(),
+    parentId: z.string().nullable(),
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+    rotation: z.number().optional(),
+    opacity: z.number().optional(),
+    cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
+    strokes: z.array(SerializedPaintSchema).optional(),
+    strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
+    strokeAlign: z.string().optional(),
+    effects: z.array(SerializedEffectSchema).optional(),
+    layout: SerializedAutoLayoutSchema.optional(),
+    layoutSizingHorizontal: z.string().optional(),
+    layoutSizingVertical: z.string().optional(),
+    layoutGrow: z.number().optional(),
+    layoutAlign: z.string().optional(),
+    layoutPositioning: z.string().optional(),
+    constraints: SerializedConstraintsSchema.optional(),
+    clipsContent: z.boolean().optional(),
+    styleIds: SerializedStyleIdsSchema.optional(),
+    boundVariables: z.record(z.string(), z.array(z.string())).optional(),
+    componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
+    mainComponent: SerializedMainComponentSchema.optional(),
+    characters: z.string().optional(),
+    fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
+    fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),
+    textAlignHorizontal: z.string().optional(),
+    textAlignVertical: z.string().optional(),
+    lineHeight: z.union([SerializedLineHeightSchema, z.literal(MIXED)]).optional(),
+    letterSpacing: z.union([SerializedLetterSpacingSchema, z.literal(MIXED)]).optional(),
+    textCase: z.union([z.string(), z.literal(MIXED)]).optional(),
+    textDecoration: z.union([z.string(), z.literal(MIXED)]).optional(),
+    textAutoResize: z.string().optional(),
+    textTruncation: z.string().optional(),
+    maxLines: z.number().nullable().optional(),
+    paragraphSpacing: z.number().optional(),
+    paragraphIndent: z.number().optional(),
+    segments: z.array(SerializedTextSegmentSchema).optional(),
+    children: z.array(SerializedNodeSchema).optional(),
   }),
-);
+) as unknown as z.ZodType<SerializedNode>;
 
 export interface SceneNodeLike {
   id: string;
@@ -295,52 +300,52 @@ export const serializeNode = (node: SceneNodeLike): SerializedNode => ({
   parentId: node.parent === null ? null : node.parent.id,
 });
 
-export const GetSelectionResultSchema = v.object({
-  pageId: v.string(),
-  pageName: v.string(),
-  nodes: v.array(SerializedNodeSchema),
+export const GetSelectionResultSchema = z.object({
+  pageId: z.string(),
+  pageName: z.string(),
+  nodes: z.array(SerializedNodeSchema),
 });
-export type GetSelectionResult = v.InferOutput<typeof GetSelectionResultSchema>;
+export type GetSelectionResult = z.infer<typeof GetSelectionResultSchema>;
 
-export const GetDocumentResultSchema = v.object({
-  pageId: v.string(),
-  pageName: v.string(),
-  children: v.array(SerializedNodeSchema),
+export const GetDocumentResultSchema = z.object({
+  pageId: z.string(),
+  pageName: z.string(),
+  children: z.array(SerializedNodeSchema),
 });
-export type GetDocumentResult = v.InferOutput<typeof GetDocumentResultSchema>;
+export type GetDocumentResult = z.infer<typeof GetDocumentResultSchema>;
 
-export const PageRefSchema = v.object({
-  id: v.string(),
-  name: v.string(),
+export const PageRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
 });
-export type PageRef = v.InferOutput<typeof PageRefSchema>;
+export type PageRef = z.infer<typeof PageRefSchema>;
 
-export const GetNodeResultSchema = v.object({
-  node: v.nullable(SerializedNodeSchema),
+export const GetNodeResultSchema = z.object({
+  node: SerializedNodeSchema.nullable(),
 });
-export type GetNodeResult = v.InferOutput<typeof GetNodeResultSchema>;
+export type GetNodeResult = z.infer<typeof GetNodeResultSchema>;
 
-export const GetNodesInfoResultSchema = v.object({
-  nodes: v.array(v.nullable(SerializedNodeSchema)),
+export const GetNodesInfoResultSchema = z.object({
+  nodes: z.array(SerializedNodeSchema.nullable()),
 });
-export type GetNodesInfoResult = v.InferOutput<typeof GetNodesInfoResultSchema>;
+export type GetNodesInfoResult = z.infer<typeof GetNodesInfoResultSchema>;
 
-export const GetMetadataResultSchema = v.object({
-  fileName: v.string(),
+export const GetMetadataResultSchema = z.object({
+  fileName: z.string(),
   currentPage: PageRefSchema,
-  pages: v.array(PageRefSchema),
+  pages: z.array(PageRefSchema),
 });
-export type GetMetadataResult = v.InferOutput<typeof GetMetadataResultSchema>;
+export type GetMetadataResult = z.infer<typeof GetMetadataResultSchema>;
 
-export const GetPagesResultSchema = v.object({
-  pages: v.array(PageRefSchema),
+export const GetPagesResultSchema = z.object({
+  pages: z.array(PageRefSchema),
 });
-export type GetPagesResult = v.InferOutput<typeof GetPagesResultSchema>;
+export type GetPagesResult = z.infer<typeof GetPagesResultSchema>;
 
 /** Shared shape for the tree-traversal tools: a flat array of matching nodes. */
-export const NodeListResultSchema = v.object({
-  nodes: v.array(SerializedNodeSchema),
+export const NodeListResultSchema = z.object({
+  nodes: z.array(SerializedNodeSchema),
 });
-export type SearchNodesResult = v.InferOutput<typeof NodeListResultSchema>;
-export type ScanTextNodesResult = v.InferOutput<typeof NodeListResultSchema>;
-export type ScanNodesByTypesResult = v.InferOutput<typeof NodeListResultSchema>;
+export type SearchNodesResult = z.infer<typeof NodeListResultSchema>;
+export type ScanTextNodesResult = z.infer<typeof NodeListResultSchema>;
+export type ScanNodesByTypesResult = z.infer<typeof NodeListResultSchema>;

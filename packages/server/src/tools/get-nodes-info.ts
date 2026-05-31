@@ -1,25 +1,13 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import * as v from 'valibot';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const GET_NODES_INFO_TOOL_NAME = 'get_nodes_info';
 
-export const GetNodesInfoInputSchema = v.object({ nodeIds: v.array(v.string()) });
-export type GetNodesInfoInput = v.InferOutput<typeof GetNodesInfoInputSchema>;
-
-export const getNodesInfoToolDefinition: Tool = {
+export const getNodesInfoTool: ToolSpec = {
   name: GET_NODES_INFO_TOOL_NAME,
   description:
     'Return multiple Figma nodes by id. Output preserves input order; missing ids slot null.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeIds: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Figma node ids to fetch',
-      },
-    },
-    required: ['nodeIds'],
-    additionalProperties: false,
-  },
+  inputShape: { nodeIds: z.array(z.string()).describe('Figma node ids to fetch') },
+  kind: 'read',
 };

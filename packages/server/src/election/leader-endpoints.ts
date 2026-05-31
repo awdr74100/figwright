@@ -1,8 +1,7 @@
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import { decode, encode } from '@msgpack/msgpack';
 import { ErrorCode, RpcRequestSchema, type RpcResponse } from '@figma-mcp-relay/shared';
-import * as v from 'valibot';
+import { decode, encode } from '@msgpack/msgpack';
 
 import type { Relay } from '../relay/relay.js';
 
@@ -44,10 +43,7 @@ const writeJson = (res: ServerResponse, status: number, body: unknown): void => 
   res.end(json);
 };
 
-export const attachLeaderEndpoints = (
-  http: HttpServer,
-  deps: LeaderEndpointDeps,
-): (() => void) => {
+export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps): (() => void) => {
   const { relay, serverVersion } = deps;
   const log = deps.log ?? ((): void => {});
   const rpcTimeoutMs = deps.rpcTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS;
@@ -87,7 +83,7 @@ export const attachLeaderEndpoints = (
           return;
         }
 
-        const rpc = v.safeParse(RpcRequestSchema, parsed);
+        const rpc = RpcRequestSchema.safeParse(parsed);
         if (!rpc.success) {
           writeMsgpack(res, 400, {
             kind: 'err',
@@ -98,7 +94,7 @@ export const attachLeaderEndpoints = (
           return;
         }
 
-        const { requestId, toolName, args } = rpc.output;
+        const { requestId, toolName, args } = rpc.data;
         try {
           const result = await relay.sendRequest(toolName, args, rpcTimeoutMs);
           writeMsgpack(res, 200, { kind: 'ok', requestId, result });

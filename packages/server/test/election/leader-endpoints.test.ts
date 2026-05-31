@@ -1,7 +1,6 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { decode, encode } from '@msgpack/msgpack';
 import {
   createRequest,
   createResponse,
@@ -16,15 +15,11 @@ import {
   RpcResponseSchema,
   SystemMethod,
 } from '@figma-mcp-relay/shared';
-import * as v from 'valibot';
+import { decode, encode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import {
-  attachLeaderEndpoints,
-  PING_PATH,
-  RPC_PATH,
-} from '../../src/election/leader-endpoints.js';
+import { attachLeaderEndpoints, PING_PATH, RPC_PATH } from '../../src/election/leader-endpoints.js';
 import { Relay } from '../../src/relay/relay.js';
 
 interface Bound {
@@ -85,11 +80,13 @@ const attachFakePlugin = async (
       helloResolved = null;
       return;
     }
-    if (env.kind === 'req' && env.method !== SystemMethod.Ping && env.method !== SystemMethod.Hello) {
+    if (
+      env.kind === 'req' &&
+      env.method !== SystemMethod.Ping &&
+      env.method !== SystemMethod.Hello
+    ) {
       const result = await handle(env.method, env.params);
-      ws.send(
-        encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })),
-      );
+      ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
     }
   });
 
@@ -115,7 +112,7 @@ const callRpc = async (port: number, req: RpcRequest): Promise<RpcResponse> => {
     body: Buffer.from(encode(req)),
   });
   const buf = new Uint8Array(await res.arrayBuffer());
-  return v.parse(RpcResponseSchema, decode(buf));
+  return RpcResponseSchema.parse(decode(buf));
 };
 
 describe('leader endpoints', () => {
@@ -231,7 +228,7 @@ describe('leader endpoints', () => {
     });
     expect(res.status).toBe(400);
     const buf = new Uint8Array(await res.arrayBuffer());
-    const parsed = v.parse(RpcResponseSchema, decode(buf));
+    const parsed = RpcResponseSchema.parse(decode(buf));
     if (parsed.kind !== 'err') throw new Error(`expected err, got ${parsed.kind}`);
     expect(parsed.code).toBe(ErrorCode.InvalidParams);
   });

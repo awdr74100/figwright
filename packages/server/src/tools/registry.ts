@@ -1,262 +1,182 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 // Single source of truth for what the MCP server advertises and which tools are writes. index.ts
-// consumes these; a registry test asserts they stay in sync with the plugin's handler map (so a new
-// tool can't be half-wired) and that every input schema property declares a type.
+// registers every spec with McpServer (which generates the advertised JSON Schema from each Zod
+// inputShape); the write set is derived from `kind`, not maintained by hand. A registry test asserts
+// these stay in sync with the plugin's handler map so a new tool can't be half-wired.
 
-import { ADD_PAGE_TOOL_NAME, addPageToolDefinition } from './add-page.js';
-import { ADD_VARIABLE_MODE_TOOL_NAME, addVariableModeToolDefinition } from './add-variable-mode.js';
-import { analyzeProjectToolDefinition } from './analyze-project.js';
-import {
-  APPLY_STYLE_TO_NODE_TOOL_NAME,
-  applyStyleToNodeToolDefinition,
-} from './apply-style-to-node.js';
-import {
-  BATCH_RENAME_NODES_TOOL_NAME,
-  batchRenameNodesToolDefinition,
-} from './batch-rename-nodes.js';
-import { BATCH_TOOL_NAME, batchToolDefinition } from './batch.js';
-import {
-  BIND_VARIABLE_TO_NODE_TOOL_NAME,
-  bindVariableToNodeToolDefinition,
-} from './bind-variable-to-node.js';
-import { CLONE_NODE_TOOL_NAME, cloneNodeToolDefinition } from './clone-node.js';
-import { componentMapToolDefinition } from './component-map.js';
-import { CREATE_COMPONENT_TOOL_NAME, createComponentToolDefinition } from './create-component.js';
-import {
-  CREATE_EFFECT_STYLE_TOOL_NAME,
-  createEffectStyleToolDefinition,
-} from './create-effect-style.js';
-import { CREATE_ELLIPSE_TOOL_NAME, createEllipseToolDefinition } from './create-ellipse.js';
-import { CREATE_FRAME_TOOL_NAME, createFrameToolDefinition } from './create-frame.js';
-import { CREATE_GRID_STYLE_TOOL_NAME, createGridStyleToolDefinition } from './create-grid-style.js';
-import { CREATE_INSTANCE_TOOL_NAME, createInstanceToolDefinition } from './create-instance.js';
-import {
-  CREATE_PAINT_STYLE_TOOL_NAME,
-  createPaintStyleToolDefinition,
-} from './create-paint-style.js';
-import { CREATE_RECTANGLE_TOOL_NAME, createRectangleToolDefinition } from './create-rectangle.js';
-import { CREATE_SECTION_TOOL_NAME, createSectionToolDefinition } from './create-section.js';
-import { CREATE_TEXT_STYLE_TOOL_NAME, createTextStyleToolDefinition } from './create-text-style.js';
-import { CREATE_TEXT_TOOL_NAME, createTextToolDefinition } from './create-text.js';
-import {
-  CREATE_VARIABLE_COLLECTION_TOOL_NAME,
-  createVariableCollectionToolDefinition,
-} from './create-variable-collection.js';
-import { CREATE_VARIABLE_TOOL_NAME, createVariableToolDefinition } from './create-variable.js';
-import { DELETE_NODES_TOOL_NAME, deleteNodesToolDefinition } from './delete-nodes.js';
-import { DELETE_PAGE_TOOL_NAME, deletePageToolDefinition } from './delete-page.js';
-import { DELETE_STYLE_TOOL_NAME, deleteStyleToolDefinition } from './delete-style.js';
-import { DELETE_VARIABLE_TOOL_NAME, deleteVariableToolDefinition } from './delete-variable.js';
-import { DETACH_INSTANCE_TOOL_NAME, detachInstanceToolDefinition } from './detach-instance.js';
-import { FIND_REPLACE_TEXT_TOOL_NAME, findReplaceTextToolDefinition } from './find-replace-text.js';
-import { getAnnotationsToolDefinition } from './get-annotations.js';
-import { getDesignContextToolDefinition } from './get-design-context.js';
-import { getDocumentToolDefinition } from './get-document.js';
-import { getFontsToolDefinition } from './get-fonts.js';
-import { getLocalComponentsToolDefinition } from './get-local-components.js';
-import { getMetadataToolDefinition } from './get-metadata.js';
-import { getNodeToolDefinition } from './get-node.js';
-import { getNodesInfoToolDefinition } from './get-nodes-info.js';
-import { getPagesToolDefinition } from './get-pages.js';
-import { getReactionsToolDefinition } from './get-reactions.js';
-import { getScreenshotToolDefinition } from './get-screenshot.js';
-import { getSelectionToolDefinition } from './get-selection.js';
-import { getStylesToolDefinition } from './get-styles.js';
-import { getVariableDefsToolDefinition } from './get-variable-defs.js';
-import { getViewportToolDefinition } from './get-viewport.js';
-import { GROUP_NODES_TOOL_NAME, groupNodesToolDefinition } from './group-nodes.js';
-import { IMPORT_IMAGE_TOOL_NAME, importImageToolDefinition } from './import-image.js';
-import { listFilesToolDefinition } from './list-files.js';
-import { LOCK_NODES_TOOL_NAME, lockNodesToolDefinition } from './lock-nodes.js';
-import { MOVE_NODES_TOOL_NAME, moveNodesToolDefinition } from './move-nodes.js';
-import { NAVIGATE_TO_PAGE_TOOL_NAME, navigateToPageToolDefinition } from './navigate-to-page.js';
-import { pingToolDefinition } from './ping.js';
-import { REMOVE_REACTIONS_TOOL_NAME, removeReactionsToolDefinition } from './remove-reactions.js';
-import { RENAME_NODE_TOOL_NAME, renameNodeToolDefinition } from './rename-node.js';
-import { RENAME_PAGE_TOOL_NAME, renamePageToolDefinition } from './rename-page.js';
-import { REORDER_NODES_TOOL_NAME, reorderNodesToolDefinition } from './reorder-nodes.js';
-import { REPARENT_NODES_TOOL_NAME, reparentNodesToolDefinition } from './reparent-nodes.js';
-import { RESIZE_NODES_TOOL_NAME, resizeNodesToolDefinition } from './resize-nodes.js';
-import { ROTATE_NODES_TOOL_NAME, rotateNodesToolDefinition } from './rotate-nodes.js';
-import { saveScreenshotsToolDefinition } from './save-screenshots.js';
-import { scanComponentsToolDefinition } from './scan-components.js';
-import { scanNodesByTypesToolDefinition } from './scan-nodes-by-types.js';
-import { scanTextNodesToolDefinition } from './scan-text-nodes.js';
-import { searchNodesToolDefinition } from './search-nodes.js';
-import { SET_AUTO_LAYOUT_TOOL_NAME, setAutoLayoutToolDefinition } from './set-auto-layout.js';
-import { SET_BLEND_MODE_TOOL_NAME, setBlendModeToolDefinition } from './set-blend-mode.js';
-import { SET_CONSTRAINTS_TOOL_NAME, setConstraintsToolDefinition } from './set-constraints.js';
-import { SET_CORNER_RADIUS_TOOL_NAME, setCornerRadiusToolDefinition } from './set-corner-radius.js';
-import { SET_EFFECTS_TOOL_NAME, setEffectsToolDefinition } from './set-effects.js';
-import { SET_FILLS_TOOL_NAME, setFillsToolDefinition } from './set-fills.js';
-import { SET_OPACITY_TOOL_NAME, setOpacityToolDefinition } from './set-opacity.js';
-import { SET_REACTIONS_TOOL_NAME, setReactionsToolDefinition } from './set-reactions.js';
-import { SET_STROKES_TOOL_NAME, setStrokesToolDefinition } from './set-strokes.js';
-import {
-  SET_TEXT_PROPERTIES_TOOL_NAME,
-  setTextPropertiesToolDefinition,
-} from './set-text-properties.js';
-import { SET_TEXT_TOOL_NAME, setTextToolDefinition } from './set-text.js';
-import {
-  SET_VARIABLE_VALUE_TOOL_NAME,
-  setVariableValueToolDefinition,
-} from './set-variable-value.js';
-import { SET_VISIBLE_TOOL_NAME, setVisibleToolDefinition } from './set-visible.js';
-import { SWAP_COMPONENT_TOOL_NAME, swapComponentToolDefinition } from './swap-component.js';
-import { tokenMapToolDefinition } from './token-map.js';
-import { UNGROUP_NODES_TOOL_NAME, ungroupNodesToolDefinition } from './ungroup-nodes.js';
-import { UNLOCK_NODES_TOOL_NAME, unlockNodesToolDefinition } from './unlock-nodes.js';
-import {
-  UPDATE_PAINT_STYLE_TOOL_NAME,
-  updatePaintStyleToolDefinition,
-} from './update-paint-style.js';
+import { addPageTool } from './add-page.js';
+import { addVariableModeTool } from './add-variable-mode.js';
+import { analyzeProjectTool } from './analyze-project.js';
+import { applyStyleToNodeTool } from './apply-style-to-node.js';
+import { batchRenameNodesTool } from './batch-rename-nodes.js';
+import { batchTool } from './batch.js';
+import { bindVariableToNodeTool } from './bind-variable-to-node.js';
+import { cloneNodeTool } from './clone-node.js';
+import { componentMapTool } from './component-map.js';
+import { createComponentTool } from './create-component.js';
+import { createEffectStyleTool } from './create-effect-style.js';
+import { createEllipseTool } from './create-ellipse.js';
+import { createFrameTool } from './create-frame.js';
+import { createGridStyleTool } from './create-grid-style.js';
+import { createInstanceTool } from './create-instance.js';
+import { createPaintStyleTool } from './create-paint-style.js';
+import { createRectangleTool } from './create-rectangle.js';
+import { createSectionTool } from './create-section.js';
+import { createTextStyleTool } from './create-text-style.js';
+import { createTextTool } from './create-text.js';
+import { createVariableCollectionTool } from './create-variable-collection.js';
+import { createVariableTool } from './create-variable.js';
+import { deleteNodesTool } from './delete-nodes.js';
+import { deletePageTool } from './delete-page.js';
+import { deleteStyleTool } from './delete-style.js';
+import { deleteVariableTool } from './delete-variable.js';
+import { detachInstanceTool } from './detach-instance.js';
+import { findReplaceTextTool } from './find-replace-text.js';
+import { getAnnotationsTool } from './get-annotations.js';
+import { getDesignContextTool } from './get-design-context.js';
+import { getDocumentTool } from './get-document.js';
+import { getFontsTool } from './get-fonts.js';
+import { getLocalComponentsTool } from './get-local-components.js';
+import { getMetadataTool } from './get-metadata.js';
+import { getNodeTool } from './get-node.js';
+import { getNodesInfoTool } from './get-nodes-info.js';
+import { getPagesTool } from './get-pages.js';
+import { getReactionsTool } from './get-reactions.js';
+import { getScreenshotTool } from './get-screenshot.js';
+import { getSelectionTool } from './get-selection.js';
+import { getStylesTool } from './get-styles.js';
+import { getVariableDefsTool } from './get-variable-defs.js';
+import { getViewportTool } from './get-viewport.js';
+import { groupNodesTool } from './group-nodes.js';
+import { importImageTool } from './import-image.js';
+import { listFilesTool } from './list-files.js';
+import { lockNodesTool } from './lock-nodes.js';
+import { moveNodesTool } from './move-nodes.js';
+import { navigateToPageTool } from './navigate-to-page.js';
+import { pingTool } from './ping.js';
+import { removeReactionsTool } from './remove-reactions.js';
+import { renameNodeTool } from './rename-node.js';
+import { renamePageTool } from './rename-page.js';
+import { reorderNodesTool } from './reorder-nodes.js';
+import { reparentNodesTool } from './reparent-nodes.js';
+import { resizeNodesTool } from './resize-nodes.js';
+import { rotateNodesTool } from './rotate-nodes.js';
+import { saveScreenshotsTool } from './save-screenshots.js';
+import { scanComponentsTool } from './scan-components.js';
+import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
+import { scanTextNodesTool } from './scan-text-nodes.js';
+import { searchNodesTool } from './search-nodes.js';
+import { setAutoLayoutTool } from './set-auto-layout.js';
+import { setBlendModeTool } from './set-blend-mode.js';
+import { setConstraintsTool } from './set-constraints.js';
+import { setCornerRadiusTool } from './set-corner-radius.js';
+import { setEffectsTool } from './set-effects.js';
+import { setFillsTool } from './set-fills.js';
+import { setOpacityTool } from './set-opacity.js';
+import { setReactionsTool } from './set-reactions.js';
+import { setStrokesTool } from './set-strokes.js';
+import { setTextPropertiesTool } from './set-text-properties.js';
+import { setTextTool } from './set-text.js';
+import { setVariableValueTool } from './set-variable-value.js';
+import { setVisibleTool } from './set-visible.js';
+import type { ToolSpec } from './spec.js';
+import { swapComponentTool } from './swap-component.js';
+import { tokenMapTool } from './token-map.js';
+import { ungroupNodesTool } from './ungroup-nodes.js';
+import { unlockNodesTool } from './unlock-nodes.js';
+import { updatePaintStyleTool } from './update-paint-style.js';
 
-/** Every tool the MCP server advertises, in ListTools order. */
-export const TOOL_DEFINITIONS: readonly Tool[] = [
+/** Every tool the MCP server registers, in ListTools order. */
+export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   // Reads
-  pingToolDefinition,
-  getSelectionToolDefinition,
-  getDocumentToolDefinition,
-  getNodeToolDefinition,
-  getNodesInfoToolDefinition,
-  getMetadataToolDefinition,
-  getPagesToolDefinition,
-  searchNodesToolDefinition,
-  scanTextNodesToolDefinition,
-  scanNodesByTypesToolDefinition,
-  getStylesToolDefinition,
-  getVariableDefsToolDefinition,
-  getLocalComponentsToolDefinition,
-  getViewportToolDefinition,
-  getFontsToolDefinition,
-  getAnnotationsToolDefinition,
-  getReactionsToolDefinition,
-  listFilesToolDefinition,
-  getDesignContextToolDefinition,
-  getScreenshotToolDefinition,
-  saveScreenshotsToolDefinition,
+  pingTool,
+  getSelectionTool,
+  getDocumentTool,
+  getNodeTool,
+  getNodesInfoTool,
+  getMetadataTool,
+  getPagesTool,
+  searchNodesTool,
+  scanTextNodesTool,
+  scanNodesByTypesTool,
+  getStylesTool,
+  getVariableDefsTool,
+  getLocalComponentsTool,
+  getViewportTool,
+  getFontsTool,
+  getAnnotationsTool,
+  getReactionsTool,
+  listFilesTool,
+  getDesignContextTool,
+  getScreenshotTool,
+  saveScreenshotsTool,
   // Server-local (filesystem; no plugin handler — like save_screenshots). analyze_project is an
   // optional standalone probe; scan_components / component_map also run detection internally.
-  analyzeProjectToolDefinition,
-  scanComponentsToolDefinition,
-  componentMapToolDefinition,
-  tokenMapToolDefinition,
+  analyzeProjectTool,
+  scanComponentsTool,
+  componentMapTool,
+  tokenMapTool,
   // Writes
-  setFillsToolDefinition,
-  setTextToolDefinition,
-  setTextPropertiesToolDefinition,
-  createFrameToolDefinition,
-  setOpacityToolDefinition,
-  setVisibleToolDefinition,
-  renameNodeToolDefinition,
-  deleteNodesToolDefinition,
-  createTextToolDefinition,
-  createRectangleToolDefinition,
-  setCornerRadiusToolDefinition,
-  setStrokesToolDefinition,
-  moveNodesToolDefinition,
-  resizeNodesToolDefinition,
-  setAutoLayoutToolDefinition,
-  setBlendModeToolDefinition,
-  setConstraintsToolDefinition,
-  rotateNodesToolDefinition,
-  lockNodesToolDefinition,
-  unlockNodesToolDefinition,
-  cloneNodeToolDefinition,
-  setEffectsToolDefinition,
-  createPaintStyleToolDefinition,
-  createTextStyleToolDefinition,
-  createEffectStyleToolDefinition,
-  createGridStyleToolDefinition,
-  updatePaintStyleToolDefinition,
-  applyStyleToNodeToolDefinition,
-  deleteStyleToolDefinition,
-  createVariableCollectionToolDefinition,
-  addVariableModeToolDefinition,
-  createVariableToolDefinition,
-  setVariableValueToolDefinition,
-  bindVariableToNodeToolDefinition,
-  deleteVariableToolDefinition,
-  groupNodesToolDefinition,
-  ungroupNodesToolDefinition,
-  reparentNodesToolDefinition,
-  reorderNodesToolDefinition,
-  findReplaceTextToolDefinition,
-  batchRenameNodesToolDefinition,
-  addPageToolDefinition,
-  deletePageToolDefinition,
-  renamePageToolDefinition,
-  navigateToPageToolDefinition,
-  setReactionsToolDefinition,
-  removeReactionsToolDefinition,
-  swapComponentToolDefinition,
-  detachInstanceToolDefinition,
-  importImageToolDefinition,
-  createEllipseToolDefinition,
-  createComponentToolDefinition,
-  createSectionToolDefinition,
-  createInstanceToolDefinition,
-  batchToolDefinition,
+  setFillsTool,
+  setTextTool,
+  setTextPropertiesTool,
+  createFrameTool,
+  setOpacityTool,
+  setVisibleTool,
+  renameNodeTool,
+  deleteNodesTool,
+  createTextTool,
+  createRectangleTool,
+  setCornerRadiusTool,
+  setStrokesTool,
+  moveNodesTool,
+  resizeNodesTool,
+  setAutoLayoutTool,
+  setBlendModeTool,
+  setConstraintsTool,
+  rotateNodesTool,
+  lockNodesTool,
+  unlockNodesTool,
+  cloneNodeTool,
+  setEffectsTool,
+  createPaintStyleTool,
+  createTextStyleTool,
+  createEffectStyleTool,
+  createGridStyleTool,
+  updatePaintStyleTool,
+  applyStyleToNodeTool,
+  deleteStyleTool,
+  createVariableCollectionTool,
+  addVariableModeTool,
+  createVariableTool,
+  setVariableValueTool,
+  bindVariableToNodeTool,
+  deleteVariableTool,
+  groupNodesTool,
+  ungroupNodesTool,
+  reparentNodesTool,
+  reorderNodesTool,
+  findReplaceTextTool,
+  batchRenameNodesTool,
+  addPageTool,
+  deletePageTool,
+  renamePageTool,
+  navigateToPageTool,
+  setReactionsTool,
+  removeReactionsTool,
+  swapComponentTool,
+  detachInstanceTool,
+  importImageTool,
+  createEllipseTool,
+  createComponentTool,
+  createSectionTool,
+  createInstanceTool,
+  batchTool,
 ];
 
 /**
  * Write tools get a server-generated requestId (stable across dispatch retries) so the plugin can
- * dedupe side-effects. Reads don't need it.
+ * dedupe side-effects. Reads don't need it. Derived from each spec's kind — no hand-kept list.
  */
-export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
-  SET_FILLS_TOOL_NAME,
-  SET_TEXT_TOOL_NAME,
-  SET_TEXT_PROPERTIES_TOOL_NAME,
-  CREATE_FRAME_TOOL_NAME,
-  SET_OPACITY_TOOL_NAME,
-  SET_VISIBLE_TOOL_NAME,
-  RENAME_NODE_TOOL_NAME,
-  DELETE_NODES_TOOL_NAME,
-  CREATE_TEXT_TOOL_NAME,
-  CREATE_RECTANGLE_TOOL_NAME,
-  SET_CORNER_RADIUS_TOOL_NAME,
-  SET_STROKES_TOOL_NAME,
-  MOVE_NODES_TOOL_NAME,
-  RESIZE_NODES_TOOL_NAME,
-  SET_AUTO_LAYOUT_TOOL_NAME,
-  SET_BLEND_MODE_TOOL_NAME,
-  SET_CONSTRAINTS_TOOL_NAME,
-  ROTATE_NODES_TOOL_NAME,
-  LOCK_NODES_TOOL_NAME,
-  UNLOCK_NODES_TOOL_NAME,
-  CLONE_NODE_TOOL_NAME,
-  SET_EFFECTS_TOOL_NAME,
-  CREATE_PAINT_STYLE_TOOL_NAME,
-  CREATE_TEXT_STYLE_TOOL_NAME,
-  CREATE_EFFECT_STYLE_TOOL_NAME,
-  CREATE_GRID_STYLE_TOOL_NAME,
-  UPDATE_PAINT_STYLE_TOOL_NAME,
-  APPLY_STYLE_TO_NODE_TOOL_NAME,
-  DELETE_STYLE_TOOL_NAME,
-  CREATE_VARIABLE_COLLECTION_TOOL_NAME,
-  ADD_VARIABLE_MODE_TOOL_NAME,
-  CREATE_VARIABLE_TOOL_NAME,
-  SET_VARIABLE_VALUE_TOOL_NAME,
-  BIND_VARIABLE_TO_NODE_TOOL_NAME,
-  DELETE_VARIABLE_TOOL_NAME,
-  GROUP_NODES_TOOL_NAME,
-  UNGROUP_NODES_TOOL_NAME,
-  REPARENT_NODES_TOOL_NAME,
-  REORDER_NODES_TOOL_NAME,
-  FIND_REPLACE_TEXT_TOOL_NAME,
-  BATCH_RENAME_NODES_TOOL_NAME,
-  ADD_PAGE_TOOL_NAME,
-  DELETE_PAGE_TOOL_NAME,
-  RENAME_PAGE_TOOL_NAME,
-  NAVIGATE_TO_PAGE_TOOL_NAME,
-  SET_REACTIONS_TOOL_NAME,
-  REMOVE_REACTIONS_TOOL_NAME,
-  SWAP_COMPONENT_TOOL_NAME,
-  DETACH_INSTANCE_TOOL_NAME,
-  IMPORT_IMAGE_TOOL_NAME,
-  CREATE_ELLIPSE_TOOL_NAME,
-  CREATE_COMPONENT_TOOL_NAME,
-  CREATE_SECTION_TOOL_NAME,
-  CREATE_INSTANCE_TOOL_NAME,
-  BATCH_TOOL_NAME,
-]);
+export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(
+  ALL_TOOL_SPECS.filter(spec => spec.kind === 'write').map(spec => spec.name),
+);

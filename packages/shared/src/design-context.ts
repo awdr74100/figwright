@@ -1,4 +1,4 @@
-import * as v from 'valibot';
+import { z } from 'zod';
 
 import {
   MIXED,
@@ -22,11 +22,12 @@ export type DetailLevel = (typeof DETAIL_LEVELS)[number];
 
 /**
  * Token-efficient, depth-limited tree node for LLM exploration. Fields populate by detail level:
- * - minimal: id / name / type
- * - compact: + visible / x / y / width / height
- * - full: + rotation / opacity / cornerRadius / fills / text mixin
- * `truncated` marks children dropped at the depth limit; `deduped` marks an instance whose main
- * component was already expanded (its children are omitted), with `mainComponentId` for cross-ref.
+ *
+ * - Minimal: id / name / type
+ * - Compact: + visible / x / y / width / height
+ * - Full: + rotation / opacity / cornerRadius / fills / text mixin `truncated` marks children dropped
+ *   at the depth limit; `deduped` marks an instance whose main component was already expanded (its
+ *   children are omitted), with `mainComponentId` for cross-ref.
  *
  * Grounding fields (M3): `styleIds` / `boundVariables` link a node to design-system styles and
  * variables (id → token name, resolved downstream); `componentProperties` carries an INSTANCE's
@@ -46,23 +47,23 @@ export interface DesignContextNode {
   rotation?: number;
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
-  fills?: readonly v.InferOutput<typeof SerializedPaintSchema>[] | typeof MIXED;
+  fills?: readonly z.infer<typeof SerializedPaintSchema>[] | typeof MIXED;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | typeof MIXED;
   strokeAlign?: string;
   effects?: readonly SerializedEffect[];
   characters?: string;
   fontSize?: number | typeof MIXED;
-  fontName?: v.InferOutput<typeof SerializedFontNameSchema> | typeof MIXED;
+  fontName?: z.infer<typeof SerializedFontNameSchema> | typeof MIXED;
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
   mainComponentId?: string;
   /**
-   * globalVars refs (P3): when style dedup runs (full detail), inline `fills` / `strokes` /
-   * `effects` / (`fontSize` + `fontName`) are replaced by these refs into `globalVars.styles` —
-   * a style shared by N nodes costs one entry + N refs. `fill` / `stroke` point at paint arrays,
+   * GlobalVars refs (P3): when style dedup runs (full detail), inline `fills` / `strokes` /
+   * `effects` / (`fontSize` + `fontName`) are replaced by these refs into `globalVars.styles` — a
+   * style shared by N nodes costs one entry + N refs. `fill` / `stroke` point at paint arrays,
    * `effect` at a shadow/blur array, `textStyle` at a typography bundle.
    */
   fill?: string;
@@ -74,54 +75,56 @@ export interface DesignContextNode {
   children?: readonly DesignContextNode[];
 }
 
-export const DesignContextNodeSchema: v.GenericSchema<DesignContextNode> = v.lazy(() =>
-  v.object({
-    id: v.string(),
-    name: v.string(),
-    type: v.string(),
-    visible: v.exactOptional(v.boolean()),
-    x: v.exactOptional(v.number()),
-    y: v.exactOptional(v.number()),
-    width: v.exactOptional(v.number()),
-    height: v.exactOptional(v.number()),
-    rotation: v.exactOptional(v.number()),
-    opacity: v.exactOptional(v.number()),
-    cornerRadius: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    fills: v.exactOptional(v.union([v.array(SerializedPaintSchema), v.literal(MIXED)])),
-    strokes: v.exactOptional(v.array(SerializedPaintSchema)),
-    strokeWeight: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    strokeAlign: v.exactOptional(v.string()),
-    effects: v.exactOptional(v.array(SerializedEffectSchema)),
-    characters: v.exactOptional(v.string()),
-    fontSize: v.exactOptional(v.union([v.number(), v.literal(MIXED)])),
-    fontName: v.exactOptional(v.union([SerializedFontNameSchema, v.literal(MIXED)])),
-    styleIds: v.exactOptional(SerializedStyleIdsSchema),
-    boundVariables: v.exactOptional(v.record(v.string(), v.array(v.string()))),
-    componentProperties: v.exactOptional(v.record(v.string(), SerializedComponentPropertySchema)),
-    mainComponent: v.exactOptional(SerializedMainComponentSchema),
-    mainComponentId: v.exactOptional(v.string()),
-    fill: v.exactOptional(v.string()),
-    stroke: v.exactOptional(v.string()),
-    effect: v.exactOptional(v.string()),
-    textStyle: v.exactOptional(v.string()),
-    deduped: v.exactOptional(v.boolean()),
-    truncated: v.exactOptional(v.boolean()),
-    children: v.exactOptional(v.array(DesignContextNodeSchema)),
+// Cast through unknown: zod's .optional() outputs `T | undefined`, while DesignContextNode uses
+// bare optionals under exactOptionalPropertyTypes. Functionally identical at runtime.
+export const DesignContextNodeSchema = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    visible: z.boolean().optional(),
+    x: z.number().optional(),
+    y: z.number().optional(),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    rotation: z.number().optional(),
+    opacity: z.number().optional(),
+    cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
+    strokes: z.array(SerializedPaintSchema).optional(),
+    strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
+    strokeAlign: z.string().optional(),
+    effects: z.array(SerializedEffectSchema).optional(),
+    characters: z.string().optional(),
+    fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
+    fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),
+    styleIds: SerializedStyleIdsSchema.optional(),
+    boundVariables: z.record(z.string(), z.array(z.string())).optional(),
+    componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
+    mainComponent: SerializedMainComponentSchema.optional(),
+    mainComponentId: z.string().optional(),
+    fill: z.string().optional(),
+    stroke: z.string().optional(),
+    effect: z.string().optional(),
+    textStyle: z.string().optional(),
+    deduped: z.boolean().optional(),
+    truncated: z.boolean().optional(),
+    children: z.array(DesignContextNodeSchema).optional(),
   }),
-);
+) as unknown as z.ZodType<DesignContextNode>;
 
 /**
  * A resolved design-system token: the human name a node's `styleIds` / `boundVariables` id points
  * to (e.g. `Primary/500`, `size/sm`, `Body/Bold`) plus its kind. Resolution is deduped into the
- * top-level `variables` / `styles` maps so a token referenced by 100 nodes costs one entry —
- * nodes keep the id, the consumer joins id → name. The node's own inline value (fill color,
- * fontSize, …) remains the fallback when a ref is unresolved (e.g. a library var not subscribed).
+ * top-level `variables` / `styles` maps so a token referenced by 100 nodes costs one entry — nodes
+ * keep the id, the consumer joins id → name. The node's own inline value (fill color, fontSize, …)
+ * remains the fallback when a ref is unresolved (e.g. a library var not subscribed).
  */
-export const ResolvedTokenSchema = v.object({
-  name: v.string(),
-  type: v.string(),
+export const ResolvedTokenSchema = z.object({
+  name: z.string(),
+  type: z.string(),
 });
-export type ResolvedToken = v.InferOutput<typeof ResolvedTokenSchema>;
+export type ResolvedToken = z.infer<typeof ResolvedTokenSchema>;
 
 /**
  * Deduplicated style table (P3). Keys are content-hash ids (`fill_AB12CD`, `text_9F3K2L`) so the
@@ -129,31 +132,31 @@ export type ResolvedToken = v.InferOutput<typeof ResolvedTokenSchema>;
  * Framelink's random ids). Values are opaque style bundles (paint arrays / typography); the
  * consumer renders them per profile (Tailwind class / CSS var / …) via an adapter.
  */
-export const GlobalVarsSchema = v.object({
-  styles: v.record(v.string(), v.unknown()),
+export const GlobalVarsSchema = z.object({
+  styles: z.record(z.string(), z.unknown()),
 });
-export type GlobalVars = v.InferOutput<typeof GlobalVarsSchema>;
+export type GlobalVars = z.infer<typeof GlobalVarsSchema>;
 
 /** Quantifies the simplification — chiefly the dedup win (inline vs deduped byte size). */
-export const DesignContextMetricsSchema = v.object({
-  nodeCount: v.number(),
-  maxDepth: v.number(),
-  styleCount: v.number(),
-  tokenCount: v.number(),
-  inlineSizeKb: v.number(),
-  dedupedSizeKb: v.number(),
+export const DesignContextMetricsSchema = z.object({
+  nodeCount: z.number(),
+  maxDepth: z.number(),
+  styleCount: z.number(),
+  tokenCount: z.number(),
+  inlineSizeKb: z.number(),
+  dedupedSizeKb: z.number(),
 });
-export type DesignContextMetrics = v.InferOutput<typeof DesignContextMetricsSchema>;
+export type DesignContextMetrics = z.infer<typeof DesignContextMetricsSchema>;
 
-export const GetDesignContextResultSchema = v.object({
-  nodes: v.array(DesignContextNodeSchema),
+export const GetDesignContextResultSchema = z.object({
+  nodes: z.array(DesignContextNodeSchema),
   /** Deduplicated style table; nodes carry `fill` / `textStyle` refs into it. Full detail only. */
-  globalVars: v.exactOptional(GlobalVarsSchema),
-  /** id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */
-  variables: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
-  /** id → token, for shared-style ids referenced by any node's `styleIds`. Omitted when empty. */
-  styles: v.exactOptional(v.record(v.string(), ResolvedTokenSchema)),
+  globalVars: GlobalVarsSchema.optional(),
+  /** Id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */
+  variables: z.record(z.string(), ResolvedTokenSchema).optional(),
+  /** Id → token, for shared-style ids referenced by any node's `styleIds`. Omitted when empty. */
+  styles: z.record(z.string(), ResolvedTokenSchema).optional(),
   /** Simplification metrics; full detail only. */
-  metrics: v.exactOptional(DesignContextMetricsSchema),
+  metrics: DesignContextMetricsSchema.optional(),
 });
-export type GetDesignContextResult = v.InferOutput<typeof GetDesignContextResultSchema>;
+export type GetDesignContextResult = z.infer<typeof GetDesignContextResultSchema>;

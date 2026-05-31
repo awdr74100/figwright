@@ -1,18 +1,16 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+
+import type { ToolSpec } from './spec.js';
 
 export const SET_TEXT_TOOL_NAME = 'set_text';
 
-export const setTextToolDefinition: Tool = {
+export const setTextTool: ToolSpec = {
   name: SET_TEXT_TOOL_NAME,
   description:
     "Replace a TEXT node's characters. The plugin loads the node's fonts first. Returns { ok, nodeId }.",
-  inputSchema: {
-    type: 'object',
-    properties: {
-      nodeId: { type: 'string', description: 'TEXT node id to update' },
-      characters: { type: 'string', description: 'New text content' },
-    },
-    required: ['nodeId', 'characters'],
-    additionalProperties: false,
+  inputShape: {
+    nodeId: z.string().describe('TEXT node id to update'),
+    characters: z.string().describe('New text content'),
   },
+  kind: 'write',
 };

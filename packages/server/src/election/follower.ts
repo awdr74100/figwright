@@ -1,4 +1,3 @@
-import { decode, encode } from '@msgpack/msgpack';
 import {
   ErrorCode,
   newId,
@@ -6,7 +5,7 @@ import {
   type RpcResponse,
   RpcResponseSchema,
 } from '@figma-mcp-relay/shared';
-import * as v from 'valibot';
+import { decode, encode } from '@msgpack/msgpack';
 
 import { PING_PATH, RPC_PATH } from './leader-endpoints.js';
 
@@ -91,7 +90,7 @@ export class Follower {
       };
     }
 
-    const safe = v.safeParse(RpcResponseSchema, parsed);
+    const safe = RpcResponseSchema.safeParse(parsed);
     if (!safe.success) {
       return {
         kind: 'err',
@@ -100,6 +99,6 @@ export class Follower {
         message: 'invalid rpc response from leader',
       };
     }
-    return safe.output;
+    return safe.data;
   }
 }

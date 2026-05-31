@@ -1,49 +1,53 @@
 import { describe, expect, it } from 'vitest';
 
-import { GET_METADATA_TOOL_NAME, getMetadataToolDefinition } from '../../src/tools/get-metadata.js';
-import { GET_NODE_TOOL_NAME, getNodeToolDefinition } from '../../src/tools/get-node.js';
-import {
-  GET_NODES_INFO_TOOL_NAME,
-  getNodesInfoToolDefinition,
-} from '../../src/tools/get-nodes-info.js';
-import {
-  GET_ANNOTATIONS_TOOL_NAME,
-  getAnnotationsToolDefinition,
-} from '../../src/tools/get-annotations.js';
+import { GET_ANNOTATIONS_TOOL_NAME, getAnnotationsTool } from '../../src/tools/get-annotations.js';
 import {
   GET_DESIGN_CONTEXT_TOOL_NAME,
-  getDesignContextToolDefinition,
+  getDesignContextTool,
 } from '../../src/tools/get-design-context.js';
-import { GET_FONTS_TOOL_NAME, getFontsToolDefinition } from '../../src/tools/get-fonts.js';
+import { GET_FONTS_TOOL_NAME, getFontsTool } from '../../src/tools/get-fonts.js';
 import {
   GET_LOCAL_COMPONENTS_TOOL_NAME,
-  getLocalComponentsToolDefinition,
+  getLocalComponentsTool,
 } from '../../src/tools/get-local-components.js';
-import { GET_PAGES_TOOL_NAME, getPagesToolDefinition } from '../../src/tools/get-pages.js';
-import {
-  GET_REACTIONS_TOOL_NAME,
-  getReactionsToolDefinition,
-} from '../../src/tools/get-reactions.js';
-import {
-  GET_SCREENSHOT_TOOL_NAME,
-  getScreenshotToolDefinition,
-} from '../../src/tools/get-screenshot.js';
-import { GET_STYLES_TOOL_NAME, getStylesToolDefinition } from '../../src/tools/get-styles.js';
+import { GET_METADATA_TOOL_NAME, getMetadataTool } from '../../src/tools/get-metadata.js';
+import { GET_NODE_TOOL_NAME, getNodeTool } from '../../src/tools/get-node.js';
+import { GET_NODES_INFO_TOOL_NAME, getNodesInfoTool } from '../../src/tools/get-nodes-info.js';
+import { GET_PAGES_TOOL_NAME, getPagesTool } from '../../src/tools/get-pages.js';
+import { GET_REACTIONS_TOOL_NAME, getReactionsTool } from '../../src/tools/get-reactions.js';
+import { GET_SCREENSHOT_TOOL_NAME, getScreenshotTool } from '../../src/tools/get-screenshot.js';
+import { GET_STYLES_TOOL_NAME, getStylesTool } from '../../src/tools/get-styles.js';
 import {
   GET_VARIABLE_DEFS_TOOL_NAME,
-  getVariableDefsToolDefinition,
+  getVariableDefsTool,
 } from '../../src/tools/get-variable-defs.js';
-import { GET_VIEWPORT_TOOL_NAME, getViewportToolDefinition } from '../../src/tools/get-viewport.js';
-import { LIST_FILES_TOOL_NAME, listFilesToolDefinition } from '../../src/tools/list-files.js';
+import { GET_VIEWPORT_TOOL_NAME, getViewportTool } from '../../src/tools/get-viewport.js';
+import { LIST_FILES_TOOL_NAME, listFilesTool } from '../../src/tools/list-files.js';
 import {
   SCAN_NODES_BY_TYPES_TOOL_NAME,
-  scanNodesByTypesToolDefinition,
+  scanNodesByTypesTool,
 } from '../../src/tools/scan-nodes-by-types.js';
-import {
-  SCAN_TEXT_NODES_TOOL_NAME,
-  scanTextNodesToolDefinition,
-} from '../../src/tools/scan-text-nodes.js';
-import { SEARCH_NODES_TOOL_NAME, searchNodesToolDefinition } from '../../src/tools/search-nodes.js';
+import { SCAN_TEXT_NODES_TOOL_NAME, scanTextNodesTool } from '../../src/tools/scan-text-nodes.js';
+import { SEARCH_NODES_TOOL_NAME, searchNodesTool } from '../../src/tools/search-nodes.js';
+import { toToolDefinition } from '../tool-schema.js';
+
+const getAnnotationsToolDefinition = toToolDefinition(getAnnotationsTool);
+const getDesignContextToolDefinition = toToolDefinition(getDesignContextTool);
+const getFontsToolDefinition = toToolDefinition(getFontsTool);
+const getLocalComponentsToolDefinition = toToolDefinition(getLocalComponentsTool);
+const getMetadataToolDefinition = toToolDefinition(getMetadataTool);
+const getNodeToolDefinition = toToolDefinition(getNodeTool);
+const getNodesInfoToolDefinition = toToolDefinition(getNodesInfoTool);
+const getPagesToolDefinition = toToolDefinition(getPagesTool);
+const getReactionsToolDefinition = toToolDefinition(getReactionsTool);
+const getScreenshotToolDefinition = toToolDefinition(getScreenshotTool);
+const getStylesToolDefinition = toToolDefinition(getStylesTool);
+const getVariableDefsToolDefinition = toToolDefinition(getVariableDefsTool);
+const getViewportToolDefinition = toToolDefinition(getViewportTool);
+const listFilesToolDefinition = toToolDefinition(listFilesTool);
+const scanNodesByTypesToolDefinition = toToolDefinition(scanNodesByTypesTool);
+const scanTextNodesToolDefinition = toToolDefinition(scanTextNodesTool);
+const searchNodesToolDefinition = toToolDefinition(searchNodesTool);
 
 describe('M1 read tools — definitions', () => {
   it('get_node declares nodeId string input as required', () => {
