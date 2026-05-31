@@ -84,11 +84,19 @@ export const handleComponentMap = async (
   const contextArgs: Record<string, unknown> = { detail: 'full', dedupeComponents: true };
   if (args.nodeId !== undefined) contextArgs.nodeId = args.nodeId;
 
+  // get_local_components is best-effort: large multi-page files can take >30s on loadAllPagesAsync
+  // and trip the relay timeout. When that happens we still want a useful mapping — without the
+  // set index, variants surface as raw "Type=X, State=Y" rows (A2 backlog territory), but everything
+  // else (scan + override + design context) still works.
+  const localComponentsOrEmpty = (
+    dispatch(GET_LOCAL_COMPONENTS_TOOL_NAME, {}) as Promise<GetLocalComponentsResult>
+  ).catch((): GetLocalComponentsResult => ({ components: [], componentSets: [] }));
+
   const [context, profile, overrides, localComponents] = await Promise.all([
     dispatch(GET_DESIGN_CONTEXT_TOOL_NAME, contextArgs) as Promise<GetDesignContextResult>,
     analyzeProject(rootDir),
     readOverrides(rootDir),
-    dispatch(GET_LOCAL_COMPONENTS_TOOL_NAME, {}) as Promise<GetLocalComponentsResult>,
+    localComponentsOrEmpty,
   ]);
 
   const scanned = await scanComponents(rootDir, profile.componentExtensions);
