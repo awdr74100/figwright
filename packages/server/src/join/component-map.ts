@@ -237,9 +237,12 @@ export const joinComponents = (
 export type ComponentSetIndex = ReadonlyMap<string, { id: string; name: string }>;
 
 /**
- * Walk a design-context tree and group INSTANCE nodes by their main component, so a component used
- * N times yields one usage with N instance ids (not N rows). Collapsed (deduped) subtrees still
- * carry the instance's own name / mainComponentId, so deduped instances are counted too.
+ * Walk the design-context trees and group INSTANCE nodes by their main component, so a component
+ * used N times yields one usage with N instance ids (not N rows). Takes ALL top-level roots and
+ * shares one group map across them, so a component reused across sibling frames (e.g. scanning a
+ * whole page, not a single frame) collapses to one usage instead of one-per-frame. Collapsed
+ * (deduped) subtrees still carry the instance's own name / mainComponentId, so deduped instances
+ * are counted too.
  *
  * Figma resolves a variant instance's `mainComponent` to the _variant_ ("Size=Large, State=Hover"),
  * not the _set_ ("Button") — so without help every variant fragments into its own row and matches
@@ -249,7 +252,7 @@ export type ComponentSetIndex = ReadonlyMap<string, { id: string; name: string }
  * set.
  */
 export const collectFigmaComponents = (
-  root: DesignContextNode,
+  roots: readonly DesignContextNode[],
   setIndex: ComponentSetIndex = new Map(),
 ): FigmaComponentUsage[] => {
   const byKey = new Map<string, FigmaComponentUsage>();
@@ -297,7 +300,7 @@ export const collectFigmaComponents = (
     for (const child of node.children ?? []) visit(child);
   };
 
-  visit(root);
+  for (const root of roots) visit(root);
   return [...byKey.values()];
 };
 

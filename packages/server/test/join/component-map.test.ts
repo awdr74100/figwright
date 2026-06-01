@@ -127,7 +127,7 @@ describe('collectFigmaComponents', () => {
         },
       ],
     };
-    const [u] = collectFigmaComponents(tree);
+    const [u] = collectFigmaComponents([tree]);
     expect(u?.name).toBe('Button');
     expect(u?.instanceCount).toBe(2);
     expect(u?.instances).toEqual([
@@ -174,11 +174,41 @@ describe('collectFigmaComponents', () => {
         },
       ],
     };
-    const usages = collectFigmaComponents(tree);
+    const usages = collectFigmaComponents([tree]);
     expect(usages).toHaveLength(1);
     expect(usages[0]?.name).toBe('Button');
     expect(usages[0]?.mainComponentId).toBe('set1');
     expect(usages[0]?.instanceCount).toBe(2);
+  });
+
+  it('merges the same component across sibling top-level frames into one usage', () => {
+    // Whole-page scans pass multiple top-level frames. The same component (same set) used in two
+    // frames must collapse to ONE usage with the instances from both — not one usage per frame.
+    const frame = (frameId: string, instId: string): DesignContextNode => ({
+      id: frameId,
+      name: 'Frame',
+      type: 'FRAME',
+      children: [
+        {
+          id: instId,
+          name: 'btn',
+          type: 'INSTANCE',
+          mainComponent: {
+            id: 'v1',
+            name: 'Size=Large',
+            key: 'k',
+            componentSetId: 'set1',
+            componentSetName: 'Button',
+          },
+          mainComponentId: 'v1',
+        },
+      ],
+    });
+    const usages = collectFigmaComponents([frame('F:1', '1:1'), frame('F:2', '2:1')]);
+    expect(usages).toHaveLength(1);
+    expect(usages[0]?.name).toBe('Button');
+    expect(usages[0]?.instanceCount).toBe(2);
+    expect(usages[0]?.instances.map(i => i.nodeId)).toEqual(['1:1', '2:1']);
   });
 });
 

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { DesignContextNode, GetDesignContextResult } from '@figma-mcp-relay/shared';
+import type { GetDesignContextResult } from '@figma-mcp-relay/shared';
 import { z } from 'zod';
 
 import {
@@ -90,7 +90,7 @@ export const handleComponentMap = async (
 
   const scanned = await scanComponents(rootDir, profile.componentExtensions);
 
-  const usages = context.nodes.flatMap((n: DesignContextNode) => collectFigmaComponents(n));
+  const usages = collectFigmaComponents(context.nodes);
   const mappings = joinComponents(usages, scanned, {
     threshold,
     ...(overrides.size > 0 ? { overrides } : {}),
