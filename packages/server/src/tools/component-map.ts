@@ -1,24 +1,18 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type {
-  DesignContextNode,
-  GetDesignContextResult,
-  GetLocalComponentsResult,
-} from '@figma-mcp-relay/shared';
+import type { DesignContextNode, GetDesignContextResult } from '@figma-mcp-relay/shared';
 import { z } from 'zod';
 
 import {
   collectFigmaComponents,
   type ComponentMapping,
-  type ComponentSetIndex,
   joinComponents,
   parseMapFile,
 } from '../join/component-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { scanComponents } from '../scan/scan.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
-import { GET_LOCAL_COMPONENTS_TOOL_NAME } from './get-local-components.js';
 import type { ToolSpec } from './spec.js';
 
 export const COMPONENT_MAP_TOOL_NAME = 'component_map';
@@ -84,35 +78,19 @@ export const handleComponentMap = async (
   const contextArgs: Record<string, unknown> = { detail: 'full', dedupeComponents: true };
   if (args.nodeId !== undefined) contextArgs.nodeId = args.nodeId;
 
-  // get_local_components is best-effort: large multi-page files can take >30s on loadAllPagesAsync
-  // and trip the relay timeout. When that happens we still want a useful mapping — without the
-  // set index, variants surface as raw "Type=X, State=Y" rows (A2 backlog territory), but everything
-  // else (scan + override + design context) still works.
-  const localComponentsOrEmpty = (
-    dispatch(GET_LOCAL_COMPONENTS_TOOL_NAME, {}) as Promise<GetLocalComponentsResult>
-  ).catch((): GetLocalComponentsResult => ({ components: [], componentSets: [] }));
-
-  const [context, profile, overrides, localComponents] = await Promise.all([
+  // No doc-wide get_local_components here: get_design_context now carries each variant instance's
+  // owning COMPONENT_SET (id + name) on its mainComponent, so collectFigmaComponents can group/name
+  // by the set directly. The old scan called findAllWithCriteria over the whole document (68s+ /
+  // 30s-timeout on large multi-page files) just to recover those set names.
+  const [context, profile, overrides] = await Promise.all([
     dispatch(GET_DESIGN_CONTEXT_TOOL_NAME, contextArgs) as Promise<GetDesignContextResult>,
     analyzeProject(rootDir),
     readOverrides(rootDir),
-    localComponentsOrEmpty,
   ]);
 
   const scanned = await scanComponents(rootDir, profile.componentExtensions);
 
-  // Map every variant component id to its set, so collectFigmaComponents can group instances by the
-  // set (and name them "btn/Default", not "Size=Medium, …"). Library/external instances aren't local,
-  // so they fall back to the main/node name inside collectFigmaComponents.
-  const setIndex: ComponentSetIndex = new Map(
-    localComponents.componentSets.flatMap(set =>
-      set.componentIds.map(id => [id, { id: set.id, name: set.name }] as const),
-    ),
-  );
-
-  const usages = context.nodes.flatMap((n: DesignContextNode) =>
-    collectFigmaComponents(n, setIndex),
-  );
+  const usages = context.nodes.flatMap((n: DesignContextNode) => collectFigmaComponents(n));
   const mappings = joinComponents(usages, scanned, {
     threshold,
     ...(overrides.size > 0 ? { overrides } : {}),

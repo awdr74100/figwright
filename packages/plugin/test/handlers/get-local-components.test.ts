@@ -10,6 +10,7 @@ const fakeFigma = (found: unknown[]): typeof figma => {
       loaded = true;
     },
     root: {
+      children: [{ id: 'page-1' }],
       findAllWithCriteria: () => {
         if (!loaded) throw new Error('must loadAllPagesAsync first');
         return found;
@@ -26,7 +27,10 @@ describe('get_local_components handler', () => {
       name: 'Button',
       key: 'csk',
       description: 'btn',
-      variantGroupProperties: { Size: { values: ['S', 'L'] }, State: { values: ['Default', 'Hover'] } },
+      variantGroupProperties: {
+        Size: { values: ['S', 'L'] },
+        State: { values: ['Default', 'Hover'] },
+      },
       children: [{ id: 'C:1' }, { id: 'C:2' }],
     };
     const standalone = {
@@ -65,7 +69,9 @@ describe('get_local_components handler', () => {
   });
 
   it('loads all pages before scanning and returns empty when none found', async () => {
-    const result = (await createGetLocalComponentsHandler(fakeFigma([]))(undefined)) as GetLocalComponentsResult;
+    const result = (await createGetLocalComponentsHandler(fakeFigma([]))(
+      undefined,
+    )) as GetLocalComponentsResult;
     expect(result).toEqual({ components: [], componentSets: [] });
   });
 });

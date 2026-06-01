@@ -8,7 +8,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
-import { dispatchTool } from './dispatch.js';
+import { dispatchTool, resolveRoutingSession } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
@@ -62,6 +62,15 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 const dispatch = (tool: string, args: unknown): Promise<unknown> =>
   dispatchTool({ node, follower, log }, tool, args);
 
+// A session-pinned dispatcher for multi-call tools: resolve the active plugin once, then route
+// every sub-call to that exact session so they can't drift across plugins if routing flips
+// mid-flight. Resolving to undefined (no plugin connected) falls back to live per-call routing.
+const routedDispatch = async (): Promise<typeof dispatch> => {
+  const sessionId = await resolveRoutingSession({ node, follower, log });
+  const opts = sessionId === undefined ? {} : { sessionId };
+  return (tool, args) => dispatchTool({ node, follower, log }, tool, args, opts);
+};
+
 const textResult = (data: unknown): CallToolResult => ({
   content: [{ type: 'text', text: JSON.stringify(data) }],
 });
@@ -89,7 +98,8 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   }),
   [ANALYZE_PROJECT_TOOL_NAME]: async args => textResult(await handleAnalyzeProject(args)),
   [SCAN_COMPONENTS_TOOL_NAME]: async args => textResult(await handleScanComponents(args)),
-  [COMPONENT_MAP_TOOL_NAME]: async args => textResult(await handleComponentMap(dispatch, args)),
+  [COMPONENT_MAP_TOOL_NAME]: async args =>
+    textResult(await handleComponentMap(await routedDispatch(), args)),
   [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
 };
 

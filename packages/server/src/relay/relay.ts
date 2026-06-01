@@ -38,6 +38,12 @@ interface Pending {
   method: string;
   params: unknown;
   dispatched: boolean;
+  // When set, this request is pinned to one session: it only dispatches/flushes to that session,
+  // never to whoever happens to be most-active. Used to keep a multi-call tool's sub-calls together.
+  pinnedSessionId: string | undefined;
+  // Epoch ms the request entered the relay — used to log server-observed round-trip time, so a slow
+  // tool's real cost can be told apart from a client-side give-up (see routing/timeout stability work).
+  startedAt: number;
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -77,6 +83,7 @@ export class Relay {
     method: string,
     params?: unknown,
     timeoutMs: number = DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS,
+    sessionId?: string,
   ): Promise<unknown> {
     const id = newId();
     return new Promise<unknown>((resolve, reject) => {
@@ -84,8 +91,40 @@ export class Relay {
         this.pending.delete(id);
         reject(new Error(`plugin request timeout (method=${method})`));
       }, timeoutMs);
-      const entry: Pending = { resolve, reject, timer, method, params, dispatched: false };
+      const entry: Pending = {
+        resolve,
+        reject,
+        timer,
+        method,
+        params,
+        dispatched: false,
+        pinnedSessionId: sessionId,
+        startedAt: Date.now(),
+      };
       this.pending.set(id, entry);
+
+      if (sessionId !== undefined) {
+        // Pinned: route only to this session. If it's fully gone (not even within the disconnect
+        // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
+        // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
+        // when that same session reconnects (session ids survive resume).
+        const target = this.sessions.get(sessionId);
+        if (target === undefined) {
+          clearTimeout(timer);
+          this.pending.delete(id);
+          reject(
+            new Error(`pinned session not connected (sessionId=${sessionId}, method=${method})`),
+          );
+          return;
+        }
+        if (target.socket !== null && target.state === 'connected') {
+          this.dispatchPending(id, entry, target);
+        } else {
+          this.opts.log(`[relay] queued ${method} (pinned session ${sessionId} reconnecting)`);
+        }
+        return;
+      }
+
       const session = this.pickActiveSession();
       if (session !== undefined && session.socket !== null) {
         this.dispatchPending(id, entry, session);
@@ -119,6 +158,16 @@ export class Relay {
     return best;
   }
 
+  /**
+   * The id of the session routing would currently pick. A multi-call tool resolves this once up
+   * front and then pins every sub-call to it, so the group can't drift across plugins if activity
+   * flips mid-flight. Returns undefined when no plugin is connected (caller falls back to unpinned
+   * live routing, which is the right cold-start behavior).
+   */
+  pickActiveSessionId(): string | undefined {
+    return this.pickActiveSession()?.id;
+  }
+
   private dispatchPending(id: string, entry: Pending, session: Session): void {
     if (session.socket === null) return;
     entry.dispatched = true;
@@ -134,6 +183,9 @@ export class Relay {
     let flushed = 0;
     for (const [id, entry] of this.pending) {
       if (entry.dispatched) continue;
+      // A pinned request only flushes to its own session — never to whichever plugin reconnects
+      // first. An unpinned queued request flushes to whoever shows up.
+      if (entry.pinnedSessionId !== undefined && entry.pinnedSessionId !== session.id) continue;
       this.dispatchPending(id, entry, session);
       flushed += 1;
     }
@@ -254,6 +306,7 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        this.logRoundTrip(p, 'ok');
         p.resolve(env.result);
       }
       return;
@@ -263,6 +316,7 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        this.logRoundTrip(p, 'err');
         p.reject(new Error(`${env.error.code}: ${env.error.message}`));
       }
       return;
@@ -270,6 +324,16 @@ export class Relay {
     this.opts.log(
       `[relay] session ${session.id} <- ${env.kind} ${'method' in env ? env.method : ''}`,
     );
+  }
+
+  // Server-observed round-trip time for a completed plugin request. Lets a slow tool's real cost be
+  // separated from a client-side give-up (e.g. an MCP wrapper that abandons a call at 10s while the
+  // plugin is still working). Only logs the slow ones so it isn't noise on the hot path.
+  private logRoundTrip(p: Pending, outcome: 'ok' | 'err'): void {
+    const elapsed = Date.now() - p.startedAt;
+    if (elapsed >= 2_000) {
+      this.opts.log(`[relay] ${p.method} ${outcome} in ${elapsed}ms (server-observed round-trip)`);
+    }
   }
 
   private sendPing(session: Session): void {

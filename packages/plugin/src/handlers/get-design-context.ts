@@ -131,7 +131,7 @@ interface BuildCtx {
   seen: Set<string>;
 }
 
-/** remainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
+/** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
 const buildNode = async (
   node: SceneNode,
   remainingDepth: number,
@@ -148,7 +148,20 @@ const buildNode = async (
     if (main !== null) {
       out.mainComponentId = main.id;
       if (ctx.detail === 'full') {
-        out.mainComponent = { id: main.id, name: main.name, key: main.key };
+        const mc: NonNullable<DesignContextNode['mainComponent']> = {
+          id: main.id,
+          name: main.name,
+          key: main.key,
+        };
+        // A variant component's parent is the COMPONENT_SET. Carry its identity so component_map can
+        // group/name by the set ("Button") instead of the variant signature ("Size=…, State=…") —
+        // resolving it here (the parent is already loaded) avoids a doc-wide get_local_components scan.
+        const parent = main.parent;
+        if (parent != null && parent.type === 'COMPONENT_SET') {
+          mc.componentSetId = parent.id;
+          mc.componentSetName = parent.name;
+        }
+        out.mainComponent = mc;
       }
       if (ctx.dedupe) {
         if (ctx.seen.has(main.id)) {

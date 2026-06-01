@@ -150,6 +150,12 @@ export const SerializedMainComponentSchema = z.object({
   id: z.string(),
   name: z.string(),
   key: z.string(),
+  // When the main component is a variant (child of a COMPONENT_SET), `name` is the variant signature
+  // ("Size=Large, State=Hover") — useless for reuse. These carry the owning set's identity so a
+  // consumer can group/name by the set ("Button") without a doc-wide scan. Absent for standalone
+  // components (no set parent).
+  componentSetId: z.string().optional(),
+  componentSetName: z.string().optional(),
 });
 export type SerializedMainComponent = z.infer<typeof SerializedMainComponentSchema>;
 

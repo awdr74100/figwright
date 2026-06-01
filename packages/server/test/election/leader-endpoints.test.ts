@@ -131,6 +131,40 @@ describe('leader endpoints', () => {
     expect(body2.plugins).toBe(1);
   });
 
+  it('GET /ping exposes activeSessionId for follower-side pin resolution', async () => {
+    const b = await startLeader();
+    const res = await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`);
+    const body = (await res.json()) as { activeSessionId: string | null };
+    expect(body.activeSessionId).toBeNull();
+
+    await attachFakePlugin(b, async () => ({ noop: true }));
+    const res2 = await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`);
+    const body2 = (await res2.json()) as { activeSessionId: string | null };
+    expect(body2.activeSessionId).toBe(b.relay.pickActiveSessionId());
+    expect(typeof body2.activeSessionId).toBe('string');
+  });
+
+  it('POST /rpc honors a sessionId pin and rejects an unknown one', async () => {
+    const b = await startLeader();
+    await attachFakePlugin(b, async () => ({ pinned: true }));
+    const sid = b.relay.pickActiveSessionId();
+    expect(typeof sid).toBe('string');
+
+    const ok = await callRpc(b.port, {
+      requestId: 'r1',
+      toolName: 'get_design_context',
+      sessionId: sid,
+    });
+    expect(ok).toMatchObject({ kind: 'ok', result: { pinned: true } });
+
+    const bad = await callRpc(b.port, {
+      requestId: 'r2',
+      toolName: 'get_design_context',
+      sessionId: 'ghost',
+    });
+    expect(bad).toMatchObject({ kind: 'err', code: ErrorCode.PluginDisconnected });
+  });
+
   it('POST /rpc forwards to plugin and returns its result', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async (method, params) => {

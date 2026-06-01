@@ -13,9 +13,7 @@ import {
   serializeNode as serializeBase,
 } from '@figma-mcp-relay/shared';
 
-const isGradient = (
-  paint: Paint,
-): paint is GradientPaint =>
+const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||
   paint.type === 'GRADIENT_RADIAL' ||
   paint.type === 'GRADIENT_ANGULAR' ||
@@ -118,7 +116,9 @@ const aliasIds = (val: unknown): string[] => {
 
 const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   const styleIds: SerializedStyleIds = {};
-  const pick = (key: 'fillStyleId' | 'strokeStyleId' | 'effectStyleId' | 'textStyleId'): string | undefined => {
+  const pick = (
+    key: 'fillStyleId' | 'strokeStyleId' | 'effectStyleId' | 'textStyleId',
+  ): string | undefined => {
     const value = (node as unknown as Record<string, unknown>)[key];
     return typeof value === 'string' && value !== '' ? value : undefined;
   };
@@ -166,7 +166,10 @@ const collectComponentProperties = (node: SceneNode, out: SerializedNode): void 
   const props: Record<string, SerializedComponentProperty> = {};
   for (const [name, def] of Object.entries(raw)) {
     const d = def as { type?: unknown; value?: unknown };
-    if (typeof d.type === 'string' && (typeof d.value === 'string' || typeof d.value === 'boolean')) {
+    if (
+      typeof d.type === 'string' &&
+      (typeof d.value === 'string' || typeof d.value === 'boolean')
+    ) {
       props[name] = { type: d.type, value: d.value };
     }
   }
@@ -234,7 +237,10 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     }
   }
 
-  if ('clipsContent' in node && typeof (node as { clipsContent: unknown }).clipsContent === 'boolean') {
+  if (
+    'clipsContent' in node &&
+    typeof (node as { clipsContent: unknown }).clipsContent === 'boolean'
+  ) {
     out.clipsContent = (node as { clipsContent: boolean }).clipsContent;
   }
 
@@ -290,17 +296,34 @@ const toBase = (node: SceneNode): SerializedNode =>
     parent: node.parent === null ? null : { id: node.parent.id },
   });
 
-/** Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g.
- * the depth/detail-gated get_design_context view. */
+/**
+ * Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g. the
+ * depth/detail-gated get_design_context view.
+ */
 export const serializeFlatSync = (node: SceneNode): SerializedNode =>
   enrichWithMixins(node, toBase(node));
 
 /** Resolve the main component of an INSTANCE (async; tolerates unavailable/missing components). */
-const resolveMainComponent = async (node: SceneNode): Promise<void | SerializedNode['mainComponent']> => {
+const resolveMainComponent = async (
+  node: SceneNode,
+): Promise<void | SerializedNode['mainComponent']> => {
   if (node.type !== 'INSTANCE') return undefined;
   try {
     const main = await (node as InstanceNode).getMainComponentAsync();
-    return main === null ? undefined : { id: main.id, name: main.name, key: main.key };
+    if (main === null) return undefined;
+    const out: NonNullable<SerializedNode['mainComponent']> = {
+      id: main.id,
+      name: main.name,
+      key: main.key,
+    };
+    // Carry the owning COMPONENT_SET (already loaded as the main component's parent) so consumers can
+    // name a variant instance by its set without a doc-wide scan.
+    const parent = main.parent;
+    if (parent != null && parent.type === 'COMPONENT_SET') {
+      out.componentSetId = parent.id;
+      out.componentSetName = parent.name;
+    }
+    return out;
   } catch {
     return undefined;
   }

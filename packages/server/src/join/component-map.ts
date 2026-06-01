@@ -257,7 +257,16 @@ export const collectFigmaComponents = (
   const visit = (node: DesignContextNode): void => {
     if (node.type === 'INSTANCE') {
       const variantId = node.mainComponentId ?? node.mainComponent?.id;
-      const set = variantId === undefined ? undefined : setIndex.get(variantId);
+      // Prefer the COMPONENT_SET carried on the grounded mainComponent: get_design_context resolves it
+      // for free off the variant's parent, so component_map needs no doc-wide get_local_components
+      // scan (which was 68s+ on large files). setIndex (legacy / override-built) is the fallback.
+      const carriedSetName = node.mainComponent?.componentSetName;
+      const set: { id: string | undefined; name: string } | undefined =
+        carriedSetName !== undefined
+          ? { id: node.mainComponent?.componentSetId, name: carriedSetName }
+          : variantId === undefined
+            ? undefined
+            : setIndex.get(variantId);
       const name = set?.name ?? node.mainComponent?.name ?? node.name;
       const groupId = set?.id ?? variantId;
       const key = groupId ?? name;

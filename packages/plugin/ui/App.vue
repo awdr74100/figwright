@@ -73,6 +73,16 @@ const headerMeta = computed(() => {
 
 let unsubscribe: (() => void) | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
+
+// Re-assert this session's activity from the latest known context. The leader routes to the
+// most-recently-active session, so emitting bumps this plugin to the front. No-op until the sandbox
+// has pushed at least one context (file/page identity is required by ActivityParams).
+const emitActivity = (): void => {
+  const c = context.value;
+  if (c === null) return;
+  client.notifyActivity({ fileName: c.fileName, pageId: c.pageId, pageName: c.pageName });
+};
+
 const onWindowMessage = (event: MessageEvent): void => {
   const msg = (event.data as { pluginMessage?: unknown } | null)?.pluginMessage;
   if (isPluginContextEvent(msg)) {
@@ -80,12 +90,17 @@ const onWindowMessage = (event: MessageEvent): void => {
     // Each context push from sandbox means the user just interacted (open / selection-change /
     // page-change). Tell the leader — params carry file/page identity so ping can report which
     // file is being routed instead of an opaque session id.
-    client.notifyActivity({
-      fileName: msg.fileName,
-      pageId: msg.pageId,
-      pageName: msg.pageName,
-    });
+    emitActivity();
   }
+};
+
+// When this plugin's window/tab regains focus or becomes visible, the user is now looking at THIS
+// file — re-assert activity so routing follows the focused file even without a fresh canvas click
+// (the sandbox emits no event on a bare window focus). This is focus-DRIVEN, not periodic: only the
+// window the user actually focused emits, so two visible plugins don't race each other.
+const onFocus = (): void => emitActivity();
+const onVisibility = (): void => {
+  if (document.visibilityState === 'visible') emitActivity();
 };
 
 onMounted(() => {
@@ -96,6 +111,8 @@ onMounted(() => {
     now.value = Date.now();
   }, 1000);
   globalThis.addEventListener('message', onWindowMessage);
+  globalThis.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onVisibility);
   client.connect().catch(err => console.warn('[relay-client] initial connect failed:', err));
 });
 
@@ -103,6 +120,8 @@ onBeforeUnmount(() => {
   unsubscribe?.();
   if (ticker !== null) clearInterval(ticker);
   globalThis.removeEventListener('message', onWindowMessage);
+  globalThis.removeEventListener('focus', onFocus);
+  document.removeEventListener('visibilitychange', onVisibility);
   bridge.dispose();
   client.disconnect().catch(() => {});
 });
