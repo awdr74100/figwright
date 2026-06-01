@@ -41,9 +41,6 @@ interface Pending {
   // When set, this request is pinned to one session: it only dispatches/flushes to that session,
   // never to whoever happens to be most-active. Used to keep a multi-call tool's sub-calls together.
   pinnedSessionId: string | undefined;
-  // Epoch ms the request entered the relay — used to log server-observed round-trip time, so a slow
-  // tool's real cost can be told apart from a client-side give-up (see routing/timeout stability work).
-  startedAt: number;
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -99,7 +96,6 @@ export class Relay {
         params,
         dispatched: false,
         pinnedSessionId: sessionId,
-        startedAt: Date.now(),
       };
       this.pending.set(id, entry);
 
@@ -306,7 +302,6 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
-        this.logRoundTrip(p, 'ok');
         p.resolve(env.result);
       }
       return;
@@ -316,7 +311,6 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
-        this.logRoundTrip(p, 'err');
         p.reject(new Error(`${env.error.code}: ${env.error.message}`));
       }
       return;
@@ -324,16 +318,6 @@ export class Relay {
     this.opts.log(
       `[relay] session ${session.id} <- ${env.kind} ${'method' in env ? env.method : ''}`,
     );
-  }
-
-  // Server-observed round-trip time for a completed plugin request. Lets a slow tool's real cost be
-  // separated from a client-side give-up (e.g. an MCP wrapper that abandons a call at 10s while the
-  // plugin is still working). Only logs the slow ones so it isn't noise on the hot path.
-  private logRoundTrip(p: Pending, outcome: 'ok' | 'err'): void {
-    const elapsed = Date.now() - p.startedAt;
-    if (elapsed >= 2_000) {
-      this.opts.log(`[relay] ${p.method} ${outcome} in ${elapsed}ms (server-observed round-trip)`);
-    }
   }
 
   private sendPing(session: Session): void {

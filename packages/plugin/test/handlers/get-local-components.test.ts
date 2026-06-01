@@ -10,7 +10,6 @@ const fakeFigma = (found: unknown[]): typeof figma => {
       loaded = true;
     },
     root: {
-      children: [{ id: 'page-1' }],
       findAllWithCriteria: () => {
         if (!loaded) throw new Error('must loadAllPagesAsync first');
         return found;
