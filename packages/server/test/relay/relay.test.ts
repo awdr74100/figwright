@@ -384,3 +384,135 @@ describe('Relay hello loop', () => {
     wsB.close();
   });
 });
+
+describe('Relay session pinning', () => {
+  const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
+  const hello = async (ws: WebSocket, sid: string): Promise<void> => {
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: newId(),
+          sessionId: sid,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+  };
+
+  // Read the id of the i-th collected request, asserting it exists (keeps the type checker happy
+  // under noUncheckedIndexedAccess and fails loudly if the request never arrived).
+  const reqId = (reqs: Envelope[], i: number): string => {
+    const env = reqs[i];
+    if (env === undefined) throw new Error(`expected request #${i}, collected ${reqs.length}`);
+    return env.id;
+  };
+
+  // Collect dispatched tool requests (ignoring server $ping) so a test can assert which plugin
+  // socket a sendRequest landed on.
+  const collectRequests = (ws: WebSocket): Envelope[] => {
+    const reqs: Envelope[] = [];
+    ws.on('message', data => {
+      const env = decodeEnvelope(data as ArrayBuffer);
+      if (env.kind === 'req' && env.method !== SystemMethod.Ping) reqs.push(env);
+    });
+    return reqs;
+  };
+
+  // Set up two connected sessions A and B, with B most-recently-active so unpinned routing prefers
+  // it. Returns sockets, ids, and per-socket request collectors.
+  const twoSessions = async (
+    relay: Relay,
+    port: number,
+  ): Promise<{
+    wsA: WebSocket;
+    wsB: WebSocket;
+    sidA: string;
+    sidB: string;
+    reqsA: Envelope[];
+    reqsB: Envelope[];
+  }> => {
+    const sidA = newId();
+    const sidB = newId();
+    const wsA = await connect(port);
+    await hello(wsA, sidA);
+    await delay(5);
+    const wsB = await connect(port);
+    await hello(wsB, sidB);
+    // B is most-active.
+    expect(relay.pickActiveSessionId()).toBe(sidB);
+    return { wsA, wsB, sidA, sidB, reqsA: collectRequests(wsA), reqsB: collectRequests(wsB) };
+  };
+
+  it('routes a pinned request to its session even when another is more active', async () => {
+    const { port, relay } = await startRelay();
+    const { wsA, wsB, sidA, reqsA, reqsB } = await twoSessions(relay, port);
+
+    // Pin to A although B is the most-active session.
+    const p = relay.sendRequest('get_design_context', { a: 1 }, 5_000, sidA);
+    await delay(20);
+    expect(reqsB).toHaveLength(0);
+    expect(reqsA).toHaveLength(1);
+
+    // Reply from A so the promise resolves.
+    wsA.send(
+      encodeEnvelope(createResponse({ id: reqId(reqsA, 0), sessionId: sidA, result: { ok: 'A' } })),
+    );
+    await expect(p).resolves.toEqual({ ok: 'A' });
+    wsA.close();
+    wsB.close();
+  });
+
+  it('keeps a pinned group together when activity flips mid-flight', async () => {
+    const { port, relay } = await startRelay();
+    const { wsA, wsB, sidA, sidB, reqsA, reqsB } = await twoSessions(relay, port);
+
+    // First pinned sub-call goes to A.
+    const p1 = relay.sendRequest('get_design_context', {}, 5_000, sidA);
+    await delay(20);
+    expect(reqsA).toHaveLength(1);
+    wsA.send(
+      encodeEnvelope(createResponse({ id: reqId(reqsA, 0), sessionId: sidA, result: { n: 1 } })),
+    );
+    await p1;
+
+    // B now becomes the most-active session (user clicks in the other file).
+    wsB.send(
+      encodeEnvelope(
+        createEvent({
+          id: newId(),
+          sessionId: sidB,
+          method: SystemMethod.Activity,
+          params: { fileName: 'B', pageId: 'p', pageName: 'P' },
+        }),
+      ),
+    );
+    await delay(20);
+    expect(relay.pickActiveSessionId()).toBe(sidB);
+
+    // Second pinned sub-call must STILL go to A, not the now-most-active B.
+    const p2 = relay.sendRequest('get_local_components', {}, 5_000, sidA);
+    await delay(20);
+    expect(reqsB).toHaveLength(0);
+    expect(reqsA).toHaveLength(2);
+    wsA.send(
+      encodeEnvelope(createResponse({ id: reqId(reqsA, 1), sessionId: sidA, result: { n: 2 } })),
+    );
+    await expect(p2).resolves.toEqual({ n: 2 });
+    wsA.close();
+    wsB.close();
+  });
+
+  it('rejects a request pinned to a session that is not connected', async () => {
+    const { port, relay } = await startRelay();
+    const wsA = await connect(port);
+    await hello(wsA, newId());
+
+    await expect(
+      relay.sendRequest('get_design_context', {}, 5_000, 'ghost-session'),
+    ).rejects.toThrow(/pinned session not connected/);
+    wsA.close();
+  });
+});

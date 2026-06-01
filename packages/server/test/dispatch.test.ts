@@ -1,7 +1,7 @@
 import { ErrorCode, type RpcResponse } from '@figma-mcp-relay/shared';
 import { describe, expect, it } from 'vitest';
 
-import { DispatchError, dispatchTool } from '../src/dispatch.js';
+import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
 import type { Node } from '../src/election/node.js';
 
@@ -140,5 +140,64 @@ describe('dispatchTool', () => {
       dispatchTool({ node, follower }, 'x', {}, { retryDelayMs: 1, maxAttempts: 2 }),
     ).rejects.toBeInstanceOf(DispatchError);
     expect(attempts).toBe(2);
+  });
+
+  it('threads opts.sessionId into Relay.sendRequest on the leader path', async () => {
+    let pinned: string | undefined = 'unset';
+    const node = makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: {
+            sendRequest: async (_n: string, _a: unknown, _t?: number, sessionId?: string) => {
+              pinned = sessionId;
+              return { ok: true };
+            },
+          },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    await dispatchTool({ node, follower: makeFollower({}) }, 'x', {}, { sessionId: 'sess-7' });
+    expect(pinned).toBe('sess-7');
+  });
+
+  it('threads opts.sessionId into Follower.sendRpc on the follower path', async () => {
+    let pinned: string | undefined = 'unset';
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({
+      sendRpc: async (
+        _t: string,
+        _a?: unknown,
+        _r?: string,
+        sessionId?: string,
+      ): Promise<RpcResponse> => {
+        pinned = sessionId;
+        return { kind: 'ok', requestId: 'r', result: {} };
+      },
+    });
+    await dispatchTool({ node, follower }, 'x', {}, { sessionId: 'sess-9' });
+    expect(pinned).toBe('sess-9');
+  });
+});
+
+describe('resolveRoutingSession', () => {
+  it('resolves locally from the relay when leader', async () => {
+    const node = makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: { pickActiveSessionId: () => 'leader-sess' },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    expect(await resolveRoutingSession({ node, follower: makeFollower({}) })).toBe('leader-sess');
+  });
+
+  it('asks the leader over the follower when not leader', async () => {
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({ resolveActiveSession: async () => 'remote-sess' });
+    expect(await resolveRoutingSession({ node, follower })).toBe('remote-sess');
   });
 });

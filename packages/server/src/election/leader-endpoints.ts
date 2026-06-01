@@ -54,6 +54,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         ok: true,
         serverVersion,
         plugins: relay.sessions.connected().length,
+        // Lets a follower resolve the leader's current routing target once, then pin a multi-call
+        // tool's sub-calls to it. Absent/undefined when no plugin is connected.
+        activeSessionId: relay.pickActiveSessionId() ?? null,
       });
       return;
     }
@@ -94,17 +97,18 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
           return;
         }
 
-        const { requestId, toolName, args } = rpc.data;
+        const { requestId, toolName, args, sessionId } = rpc.data;
         try {
-          const result = await relay.sendRequest(toolName, args, rpcTimeoutMs);
+          const result = await relay.sendRequest(toolName, args, rpcTimeoutMs, sessionId);
           writeMsgpack(res, 200, { kind: 'ok', requestId, result });
         } catch (err) {
           const message = (err as Error).message;
-          const code = message.startsWith('no plugin connected')
-            ? ErrorCode.PluginDisconnected
-            : message.includes('timeout')
-              ? ErrorCode.Timeout
-              : ErrorCode.Internal;
+          const code =
+            message.startsWith('no plugin connected') || message.startsWith('pinned session')
+              ? ErrorCode.PluginDisconnected
+              : message.includes('timeout')
+                ? ErrorCode.Timeout
+                : ErrorCode.Internal;
           writeMsgpack(res, 200, { kind: 'err', requestId, code, message });
         }
       })();

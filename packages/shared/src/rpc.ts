@@ -4,6 +4,10 @@ export const RpcRequestSchema = z.object({
   requestId: z.string(),
   toolName: z.string(),
   args: z.unknown().optional(),
+  // Pins this call to a specific plugin session on the leader. A follower running a multi-call tool
+  // (e.g. component_map) resolves the active session once, then sends every sub-call with the same
+  // sessionId so they can't drift to different plugins mid-flight. Absent = route to most-active.
+  sessionId: z.string().optional(),
 });
 export type RpcRequest = z.infer<typeof RpcRequestSchema>;
 

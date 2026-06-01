@@ -15,8 +15,8 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import { attachLeaderEndpoints } from '../../src/election/leader-endpoints.js';
 import { Follower } from '../../src/election/follower.js';
+import { attachLeaderEndpoints } from '../../src/election/leader-endpoints.js';
 import { Relay } from '../../src/relay/relay.js';
 
 interface Bound {
@@ -86,11 +86,13 @@ const attachFakePlugin = async (
       helloResolved = null;
       return;
     }
-    if (env.kind === 'req' && env.method !== SystemMethod.Ping && env.method !== SystemMethod.Hello) {
+    if (
+      env.kind === 'req' &&
+      env.method !== SystemMethod.Ping &&
+      env.method !== SystemMethod.Hello
+    ) {
       const result = await handle(env.method, env.params);
-      ws.send(
-        encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })),
-      );
+      ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
     }
   });
 
@@ -160,5 +162,34 @@ describe('Follower HTTP client', () => {
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(resp.code).toBe(ErrorCode.Internal);
     expect(resp.requestId).toBe('r-dead');
+  });
+
+  it('resolveActiveSession reads the leader-picked session id', async () => {
+    const b = await startLeader();
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
+    // No plugin yet → undefined, caller falls back to unpinned routing.
+    expect(await f.resolveActiveSession()).toBeUndefined();
+
+    await attachFakePlugin(b, async () => ({ noop: true }));
+    expect(await f.resolveActiveSession()).toBe(b.relay.pickActiveSessionId());
+  });
+
+  it('resolveActiveSession returns undefined when the leader is unreachable', async () => {
+    const f = new Follower({ leaderUrl: 'http://127.0.0.1:1', pingTimeoutMs: 200 });
+    expect(await f.resolveActiveSession()).toBeUndefined();
+  });
+
+  it('sendRpc threads sessionId so the leader pins the call', async () => {
+    const b = await startLeader();
+    await attachFakePlugin(b, async () => ({ ok: true }));
+    const sid = b.relay.pickActiveSessionId();
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
+
+    const ok = await f.sendRpc('get_design_context', {}, 'r-pin', sid);
+    expect(ok.kind).toBe('ok');
+
+    const bad = await f.sendRpc('get_design_context', {}, 'r-ghost', 'ghost-session');
+    if (bad.kind !== 'err') throw new Error(`expected err, got ${bad.kind}`);
+    expect(bad.code).toBe(ErrorCode.PluginDisconnected);
   });
 });

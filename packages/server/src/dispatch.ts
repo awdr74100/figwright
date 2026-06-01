@@ -10,6 +10,9 @@ export interface DispatchOptions {
   maxAttempts?: number;
   retryDelayMs?: number;
   perCallTimeoutMs?: number;
+  // Pin this call to a specific plugin session (resolved once via resolveRoutingSession) so a
+  // multi-call tool's sub-calls can't drift across plugins if routing flips mid-flight.
+  sessionId?: string;
 }
 
 export interface DispatchContext {
@@ -45,18 +48,26 @@ export const dispatchTool = async (
     if (ctx.node.isLeader()) {
       const leader = ctx.node.getLeader();
       if (leader === null) {
-        lastError = new DispatchError(ErrorCode.Internal, 'leader resources missing despite Leader role');
+        lastError = new DispatchError(
+          ErrorCode.Internal,
+          'leader resources missing despite Leader role',
+        );
         break;
       }
       try {
-        return await leader.relay.sendRequest(toolName, args, opts.perCallTimeoutMs);
+        return await leader.relay.sendRequest(
+          toolName,
+          args,
+          opts.perCallTimeoutMs,
+          opts.sessionId,
+        );
       } catch (err) {
         lastError = err as Error;
         break;
       }
     }
 
-    const resp = await ctx.follower.sendRpc(toolName, args);
+    const resp = await ctx.follower.sendRpc(toolName, args, undefined, opts.sessionId);
     if (resp.kind === 'ok') return resp.result;
 
     const isTransient =
@@ -65,11 +76,26 @@ export const dispatchTool = async (
       throw new DispatchError(resp.code, resp.message);
     }
 
-    log(`[dispatch] transient leader error, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxAttempts})`);
+    log(
+      `[dispatch] transient leader error, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxAttempts})`,
+    );
     await new Promise<void>(resolve => setTimeout(resolve, retryDelayMs));
   }
   /* eslint-enable no-await-in-loop */
 
   if (lastError !== null) throw lastError;
   throw new DispatchError(ErrorCode.Internal, 'dispatch exhausted retries');
+};
+
+/**
+ * Resolve the plugin session routing would currently pick, so a multi-call tool can pin every
+ * sub-call to one plugin (see DispatchOptions.sessionId). Leader resolves locally; follower asks
+ * the leader over /ping. Returns undefined when no plugin is connected or the leader is unreachable
+ * — in that case sub-calls run unpinned, i.e. the pre-existing most-active routing on each call.
+ */
+export const resolveRoutingSession = async (ctx: DispatchContext): Promise<string | undefined> => {
+  if (ctx.node.isLeader()) {
+    return ctx.node.getLeader()?.relay.pickActiveSessionId();
+  }
+  return ctx.follower.resolveActiveSession();
 };

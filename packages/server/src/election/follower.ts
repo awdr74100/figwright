@@ -50,11 +50,40 @@ export class Follower {
     }
   }
 
-  async sendRpc(toolName: string, args?: unknown, requestId?: string): Promise<RpcResponse> {
+  /**
+   * Ask the leader which plugin session routing would currently pick, so a multi-call tool can pin
+   * all its sub-calls to it. Returns undefined on any failure (no plugin, transport error,
+   * malformed body) — the caller then dispatches unpinned, which is the safe pre-existing
+   * behavior.
+   */
+  async resolveActiveSession(): Promise<string | undefined> {
+    try {
+      const res = await this.opts.fetch(`${this.opts.leaderUrl}${PING_PATH}`, {
+        signal: AbortSignal.timeout(this.opts.pingTimeoutMs),
+      });
+      if (!res.ok) return undefined;
+      const body: unknown = await res.json();
+      const id =
+        typeof body === 'object' && body !== null
+          ? (body as { activeSessionId?: unknown }).activeSessionId
+          : undefined;
+      return typeof id === 'string' ? id : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async sendRpc(
+    toolName: string,
+    args?: unknown,
+    requestId?: string,
+    sessionId?: string,
+  ): Promise<RpcResponse> {
     const rpc: RpcRequest = {
       requestId: requestId ?? newId(),
       toolName,
       ...(args === undefined ? {} : { args }),
+      ...(sessionId === undefined ? {} : { sessionId }),
     };
     const bytes = encode(rpc);
     const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
