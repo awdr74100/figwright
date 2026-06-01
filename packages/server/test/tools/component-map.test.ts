@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { GetDesignContextResult, GetLocalComponentsResult } from '@figma-mcp-relay/shared';
+import type { GetDesignContextResult } from '@figma-mcp-relay/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -11,9 +11,6 @@ import {
   type ToolDispatcher,
 } from '../../src/tools/component-map.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from '../../src/tools/get-design-context.js';
-import { GET_LOCAL_COMPONENTS_TOOL_NAME } from '../../src/tools/get-local-components.js';
-
-const noLocalComponents: GetLocalComponentsResult = { components: [], componentSets: [] };
 
 const fakeContext: GetDesignContextResult = {
   nodes: [
@@ -44,9 +41,10 @@ const fakeContext: GetDesignContextResult = {
 
 describe('handleComponentMap', () => {
   let dir: string;
+  // Only get_design_context is dispatched now — the set name rides on its mainComponent. Any other
+  // dispatch (notably the dropped doc-wide get_local_components) is a regression and throws.
   const dispatch: ToolDispatcher = async tool => {
     if (tool === GET_DESIGN_CONTEXT_TOOL_NAME) return fakeContext;
-    if (tool === GET_LOCAL_COMPONENTS_TOOL_NAME) return noLocalComponents;
     throw new Error(`unexpected dispatch: ${tool}`);
   };
 
@@ -93,8 +91,9 @@ describe('handleComponentMap', () => {
 
   it('groups variant instances by their component set, not the variant name', async () => {
     // Figma resolves a variant instance's mainComponent to the variant ("Size=Large, State=Hover"),
-    // whose name fuzzy-matches nothing. get_local_components supplies the set, so the usage is named
-    // "btn/Default" — which is also what the override file keys on.
+    // whose name fuzzy-matches nothing. get_design_context now carries the owning set on the
+    // mainComponent (componentSetName), so the usage is named "btn/Default" — which is also what the
+    // override file keys on — with no doc-wide get_local_components scan.
     const variantContext: GetDesignContextResult = {
       nodes: [
         {
@@ -106,7 +105,13 @@ describe('handleComponentMap', () => {
               id: '1:1',
               name: 'btn/Default',
               type: 'INSTANCE',
-              mainComponent: { id: 'v1', name: 'Size=Large, State=Hover', key: 'k1' },
+              mainComponent: {
+                id: 'v1',
+                name: 'Size=Large, State=Hover',
+                key: 'k1',
+                componentSetId: 'set1',
+                componentSetName: 'btn/Default',
+              },
               mainComponentId: 'v1',
               componentProperties: { Size: { type: 'VARIANT', value: 'Large' } },
             },
@@ -114,7 +119,13 @@ describe('handleComponentMap', () => {
               id: '1:2',
               name: 'btn/Default',
               type: 'INSTANCE',
-              mainComponent: { id: 'v2', name: 'Size=Small, State=Default', key: 'k2' },
+              mainComponent: {
+                id: 'v2',
+                name: 'Size=Small, State=Default',
+                key: 'k2',
+                componentSetId: 'set1',
+                componentSetName: 'btn/Default',
+              },
               mainComponentId: 'v2',
               componentProperties: { Size: { type: 'VARIANT', value: 'Small' } },
             },
@@ -122,15 +133,8 @@ describe('handleComponentMap', () => {
         },
       ],
     };
-    const localComponents: GetLocalComponentsResult = {
-      components: [],
-      componentSets: [
-        { id: 'set1', name: 'btn/Default', key: 'sk', description: '', componentIds: ['v1', 'v2'] },
-      ],
-    };
     const variantDispatch: ToolDispatcher = async tool => {
       if (tool === GET_DESIGN_CONTEXT_TOOL_NAME) return variantContext;
-      if (tool === GET_LOCAL_COMPONENTS_TOOL_NAME) return localComponents;
       throw new Error(`unexpected dispatch: ${tool}`);
     };
 

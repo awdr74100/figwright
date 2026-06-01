@@ -59,7 +59,7 @@ describe('serializeFlat', () => {
     ]);
   });
 
-  it("marks cornerRadius=mixed when value is not a number (figma.mixed symbol)", () => {
+  it('marks cornerRadius=mixed when value is not a number (figma.mixed symbol)', () => {
     const out = serializeFlatSync(fake({ cornerRadius: Symbol('figma.mixed') }));
     expect(out.cornerRadius).toBe(MIXED);
   });
@@ -107,7 +107,9 @@ describe('serializeFlat', () => {
   });
 
   it('serializes IMAGE/VIDEO/PATTERN paints as type-only (no gradient detail)', () => {
-    const out = serializeFlatSync(fake({ fills: [{ type: 'IMAGE', visible: false, opacity: 0.8 }] }));
+    const out = serializeFlatSync(
+      fake({ fills: [{ type: 'IMAGE', visible: false, opacity: 0.8 }] }),
+    );
     expect(out.fills).toEqual([{ type: 'IMAGE', visible: false, opacity: 0.8 }]);
   });
 
@@ -281,7 +283,9 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
   });
 
   it('falls back to constraints when parent is not auto-layout', () => {
-    const out = serializeFlatSync(fake({ constraints: { horizontal: 'STRETCH', vertical: 'MIN' } }));
+    const out = serializeFlatSync(
+      fake({ constraints: { horizontal: 'STRETCH', vertical: 'MIN' } }),
+    );
     expect(out.constraints).toEqual({ horizontal: 'STRETCH', vertical: 'MIN' });
     expect(out.layoutSizingHorizontal).toBeUndefined();
   });
@@ -293,7 +297,9 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
 
 describe('serializeFlat — style links / component properties', () => {
   it('collects non-empty style ids and skips empty ones', () => {
-    const out = serializeFlatSync(fake({ fillStyleId: 'S:abc', strokeStyleId: '', effectStyleId: 'S:def' }));
+    const out = serializeFlatSync(
+      fake({ fillStyleId: 'S:abc', strokeStyleId: '', effectStyleId: 'S:def' }),
+    );
     expect(out.styleIds).toEqual({ fill: 'S:abc', effect: 'S:def' });
   });
 
@@ -353,11 +359,19 @@ describe('serializeFlat — typography', () => {
   });
 
   it('serializes AUTO lineHeight and marks mixed values', () => {
-    expect(serializeFlatSync(fake({ type: 'TEXT', characters: 'a', lineHeight: { unit: 'AUTO' } })).lineHeight).toEqual({
+    expect(
+      serializeFlatSync(fake({ type: 'TEXT', characters: 'a', lineHeight: { unit: 'AUTO' } }))
+        .lineHeight,
+    ).toEqual({
       unit: 'AUTO',
     });
     const mixed = serializeFlatSync(
-      fake({ type: 'TEXT', characters: 'a', lineHeight: Symbol('figma.mixed'), textCase: Symbol('m') }),
+      fake({
+        type: 'TEXT',
+        characters: 'a',
+        lineHeight: Symbol('figma.mixed'),
+        textCase: Symbol('m'),
+      }),
     );
     expect(mixed.lineHeight).toBe(MIXED);
     expect(mixed.textCase).toBe(MIXED);
@@ -455,6 +469,26 @@ describe('serializeFlat (async) — mainComponent', () => {
     expect(out.mainComponent).toEqual({ id: '10:1', name: 'Button', key: 'abc123' });
   });
 
+  it('carries the owning COMPONENT_SET id/name when the main component is a variant', async () => {
+    const node = fake({
+      type: 'INSTANCE',
+      getMainComponentAsync: async () => ({
+        id: '10:2',
+        name: 'Size=Large, State=Hover',
+        key: 'xyz',
+        parent: { id: '9:1', type: 'COMPONENT_SET', name: 'Button' },
+      }),
+    });
+    const out = await serializeFlat(node);
+    expect(out.mainComponent).toEqual({
+      id: '10:2',
+      name: 'Size=Large, State=Hover',
+      key: 'xyz',
+      componentSetId: '9:1',
+      componentSetName: 'Button',
+    });
+  });
+
   it('omits mainComponent for non-instances and when resolution fails', async () => {
     expect((await serializeFlat(fake({ type: 'FRAME' }))).mainComponent).toBeUndefined();
     const broken = fake({
@@ -501,7 +535,11 @@ describe('serializeEffect', () => {
   });
 
   it('serializes blurs with only type / visible / radius', () => {
-    const out = serializeEffect({ type: 'LAYER_BLUR', visible: false, radius: 8 } as unknown as Effect);
+    const out = serializeEffect({
+      type: 'LAYER_BLUR',
+      visible: false,
+      radius: 8,
+    } as unknown as Effect);
     expect(out).toEqual({ type: 'LAYER_BLUR', visible: false, radius: 8 });
   });
 });

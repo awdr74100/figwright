@@ -136,6 +136,50 @@ describe('collectFigmaComponents', () => {
     ]);
     expect(u?.variantAxes).toEqual(['Size', 'State']);
   });
+
+  it('groups variant instances by the set carried on mainComponent — no setIndex needed', () => {
+    // Each variant's mainComponent.name is the variant signature, but componentSetName/Id carry the
+    // owning set (now resolved by get_design_context). Two distinct variant ids must still collapse
+    // into one usage named after the set, with the set id as the group id.
+    const tree: DesignContextNode = {
+      id: '0:1',
+      name: 'Page',
+      type: 'FRAME',
+      children: [
+        {
+          id: '1:1',
+          name: 'btn',
+          type: 'INSTANCE',
+          mainComponent: {
+            id: 'v1',
+            name: 'Size=Large',
+            key: 'k1',
+            componentSetId: 'set1',
+            componentSetName: 'Button',
+          },
+          mainComponentId: 'v1',
+        },
+        {
+          id: '1:2',
+          name: 'btn',
+          type: 'INSTANCE',
+          mainComponent: {
+            id: 'v2',
+            name: 'Size=Small',
+            key: 'k2',
+            componentSetId: 'set1',
+            componentSetName: 'Button',
+          },
+          mainComponentId: 'v2',
+        },
+      ],
+    };
+    const usages = collectFigmaComponents(tree);
+    expect(usages).toHaveLength(1);
+    expect(usages[0]?.name).toBe('Button');
+    expect(usages[0]?.mainComponentId).toBe('set1');
+    expect(usages[0]?.instanceCount).toBe(2);
+  });
 });
 
 describe('parseMapFile', () => {
