@@ -80,6 +80,12 @@ let ticker: ReturnType<typeof setInterval> | null = null;
 const emitActivity = (): void => {
   const c = context.value;
   if (c === null) return;
+  // Only the foreground tab reports `visible`; background tabs are `hidden` (verified empirically on
+  // Figma desktop). Gating activity on visibility means only the file the user is actually looking at
+  // ever claims routing — so switching tabs auto-follows the foreground file, and a background tab can
+  // never steal routing via a broadcast focus/visibility event. This is the core of selection/visibility
+  // -driven routing. See [[project-routing-stability-backlog]].
+  if (document.visibilityState !== 'visible') return;
   client.notifyActivity({ fileName: c.fileName, pageId: c.pageId, pageName: c.pageName });
 };
 
@@ -94,14 +100,13 @@ const onWindowMessage = (event: MessageEvent): void => {
   }
 };
 
-// When this plugin's window/tab regains focus or becomes visible, the user is now looking at THIS
-// file — re-assert activity so routing follows the focused file even without a fresh canvas click
-// (the sandbox emits no event on a bare window focus). This is focus-DRIVEN, not periodic: only the
-// window the user actually focused emits, so two visible plugins don't race each other.
-const onFocus = (): void => emitActivity();
-const onVisibility = (): void => {
-  if (document.visibilityState === 'visible') emitActivity();
-};
+// When this tab becomes the foreground (visibilitychange → visible), re-assert activity so routing
+// follows the file the user switched to — even with no canvas click. We deliberately do NOT listen on
+// window `focus`: that fires on EVERY tab when the user returns to the Figma app (it's not per-tab),
+// which is exactly the broadcast that made background files steal routing. `visibilitychange` only
+// fires on the tab whose visibility actually changed, and emitActivity's `visible` gate ensures the
+// background side (going → hidden) stays silent.
+const onVisibility = (): void => emitActivity();
 
 onMounted(() => {
   unsubscribe = client.subscribe(s => {
@@ -111,7 +116,6 @@ onMounted(() => {
     now.value = Date.now();
   }, 1000);
   globalThis.addEventListener('message', onWindowMessage);
-  globalThis.addEventListener('focus', onFocus);
   document.addEventListener('visibilitychange', onVisibility);
   client.connect().catch(err => console.warn('[relay-client] initial connect failed:', err));
 });
@@ -120,7 +124,6 @@ onBeforeUnmount(() => {
   unsubscribe?.();
   if (ticker !== null) clearInterval(ticker);
   globalThis.removeEventListener('message', onWindowMessage);
-  globalThis.removeEventListener('focus', onFocus);
   document.removeEventListener('visibilitychange', onVisibility);
   bridge.dispose();
   client.disconnect().catch(() => {});

@@ -227,7 +227,13 @@ export const createGetDesignContextHandler =
     } else if (figmaCtx.currentPage.selection.length > 0) {
       roots = figmaCtx.currentPage.selection;
     } else {
-      roots = figmaCtx.currentPage.children;
+      // No nodeId and nothing selected: refuse rather than fall back to the whole page. A bare
+      // currentPage.children scan times out on large pages, and the selection is also the signal
+      // that tells the user which frame they actually want generated. Ask for one explicitly.
+      throw new Error(
+        'Nothing selected. Select one or more frames/layers in Figma (or pass an explicit nodeId). ' +
+          'get_design_context no longer scans the whole page — it is too large and ambiguous.',
+      );
     }
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));

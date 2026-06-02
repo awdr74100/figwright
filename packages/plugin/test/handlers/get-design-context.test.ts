@@ -39,7 +39,7 @@ describe('get_design_context handler', () => {
     const grandchild = node({ id: 'gc', type: 'RECTANGLE' });
     const child = node({ id: 'c', children: [grandchild] });
     const root = node({ id: 'r', children: [child] });
-    const handler = createGetDesignContextHandler(fakeFigma({ pageChildren: [root] }));
+    const handler = createGetDesignContextHandler(fakeFigma({ selection: [root] }));
 
     const result = (await handler({ depth: 1, detail: 'minimal' })) as GetDesignContextResult;
     const r = result.nodes[0];
@@ -59,18 +59,18 @@ describe('get_design_context handler', () => {
       fontName: { family: 'Inter', style: 'Bold' },
       opacity: 0.5,
     });
-    const min = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [text] }))({
+    const min = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'minimal',
     })) as GetDesignContextResult;
     expect(min.nodes[0]).toEqual({ id: 't', name: 'x', type: 'TEXT' });
 
-    const compact = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [text] }))({
+    const compact = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'compact',
     })) as GetDesignContextResult;
     expect(compact.nodes[0]).toMatchObject({ id: 't', visible: true, width: 10 });
     expect(compact.nodes[0]?.characters).toBeUndefined();
 
-    const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [text] }))({
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'full',
     })) as GetDesignContextResult;
     // P3: fontSize + fontName are deduped into a globalVars textStyle ref; characters/opacity stay inline
@@ -86,7 +86,7 @@ describe('get_design_context handler', () => {
     });
   });
 
-  it('defaults to selection, then falls back to the page', async () => {
+  it('uses the selection, and throws when nothing is selected', async () => {
     const sel = node({ id: 'sel' });
     const pageNode = node({ id: 'page' });
     const withSel = (await createGetDesignContextHandler(
@@ -94,10 +94,10 @@ describe('get_design_context handler', () => {
     )({})) as GetDesignContextResult;
     expect(withSel.nodes.map(n => n.id)).toEqual(['sel']);
 
-    const noSel = (await createGetDesignContextHandler(
-      fakeFigma({ selection: [], pageChildren: [pageNode] }),
-    )({})) as GetDesignContextResult;
-    expect(noSel.nodes.map(n => n.id)).toEqual(['page']);
+    // No selection and no nodeId now refuses rather than scanning the whole page.
+    await expect(
+      createGetDesignContextHandler(fakeFigma({ selection: [], pageChildren: [pageNode] }))({}),
+    ).rejects.toThrow(/Nothing selected/);
   });
 
   it('dedupes repeated component instances', async () => {
@@ -110,7 +110,7 @@ describe('get_design_context handler', () => {
         getMainComponentAsync: async () => main,
       });
     const handler = createGetDesignContextHandler(
-      fakeFigma({ pageChildren: [mkInstance('i1'), mkInstance('i2')] }),
+      fakeFigma({ selection: [mkInstance('i1'), mkInstance('i2')] }),
     );
     const result = (await handler({
       dedupeComponents: true,
@@ -139,7 +139,7 @@ describe('get_design_context handler', () => {
       },
     });
 
-    const full = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [grounded] }))({
       detail: 'full',
     })) as GetDesignContextResult;
     expect(full.nodes[0]).toMatchObject({
@@ -152,7 +152,7 @@ describe('get_design_context handler', () => {
     });
 
     // compact must not leak the full-tier grounding fields
-    const compact = (await createGetDesignContextHandler(fakeFigma({ pageChildren: [grounded] }))({
+    const compact = (await createGetDesignContextHandler(fakeFigma({ selection: [grounded] }))({
       detail: 'compact',
     })) as GetDesignContextResult;
     expect(compact.nodes[0]?.styleIds).toBeUndefined();
@@ -178,7 +178,7 @@ describe('get_design_context handler', () => {
         getMainComponentAsync: async () => main,
       });
     const result = (await createGetDesignContextHandler(
-      fakeFigma({ pageChildren: [mkInstance('i1', 'primary'), mkInstance('i2', 'outline')] }),
+      fakeFigma({ selection: [mkInstance('i1', 'primary'), mkInstance('i2', 'outline')] }),
     )({ dedupeComponents: true, detail: 'full' })) as GetDesignContextResult;
 
     // first instance: full main component (with its owning set) + its own variant
@@ -224,7 +224,7 @@ describe('get_design_context handler', () => {
 
     const handler = createGetDesignContextHandler(
       fakeFigma({
-        pageChildren: [a, b],
+        selection: [a, b],
         variables: { 'VariableID:181:4147': { name: 'Primary/500', resolvedType: 'COLOR' } },
         styles: { 'S:text1': { name: 'Body/Bold', type: 'TEXT' } },
       }),
@@ -249,7 +249,7 @@ describe('get_design_context handler', () => {
     // compact: grounding fields not surfaced → no resolution
     const compact = (await createGetDesignContextHandler(
       fakeFigma({
-        pageChildren: [ref],
+        selection: [ref],
         variables: { 'VariableID:9:9': { name: 'X', resolvedType: 'COLOR' } },
       }),
     )({ detail: 'compact' })) as GetDesignContextResult;
@@ -257,7 +257,7 @@ describe('get_design_context handler', () => {
 
     // full but the lookup returns null (e.g. unsubscribed library var) → map omitted, no throw
     const full = (await createGetDesignContextHandler(
-      fakeFigma({ pageChildren: [ref], variables: {} }),
+      fakeFigma({ selection: [ref], variables: {} }),
     )({ detail: 'full' })) as GetDesignContextResult;
     expect(full.variables).toBeUndefined();
     expect(full.nodes[0]?.boundVariables).toEqual({ fills: ['VariableID:9:9'] }); // raw id stays as fallback
