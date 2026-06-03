@@ -14,7 +14,7 @@ const promptText = (nodeId: string | undefined): string => {
   const target = nodeId === undefined ? 'the current Figma selection' : `Figma node ${nodeId}`;
   const arg =
     nodeId === undefined ? '(they default to the current selection)' : `with nodeId "${nodeId}"`;
-  return `Generate code for ${target} that matches this project — reuse what already exists, build only what is missing. Do not guess from a screenshot; ground every decision in these three tools, called ${arg}:
+  return `Generate code for ${target} that matches this project — reuse what already exists, build only what is missing. Do not guess layout from a screenshot; ground every decision in these tools, called ${arg}:
 
 1. get_design_context (detail: full, dedupeComponents: true) — the layout tree with tokens resolved to names and each instance's componentProperties. Do not depth-limit a subtree you intend to build from: the first instance of a repeated component keeps its full structure while later ones show "deduped".
 
@@ -26,7 +26,9 @@ const promptText = (nodeId: string | undefined): string => {
 
 3. token_map — every Figma variable joined to a project token. Reference candidate.ref (e.g. bg-primary-500 or var(--color-primary-500)), never the raw hex/px. For an unmapped variable, use the value but call out the gap — do not hardcode it silently.
 
-Emit code in the detected stack (the profile is returned on component_map / token_map). Rules: reuse beats regenerate, reference tokens not literals, and mirror the project's existing import style, file layout, and naming.`;
+4. get_screenshot (or save_screenshots to write straight to disk) — export the assets grounding can't encode. Logos, photos, and icons have no pixels in the layout tree and otherwise render as grey blocks, often half the visible surface. For each visual-only leaf — a node with an IMAGE fill (a photo), a VECTOR / boolean-op, or an icon instance (e.g. mainComponent.name under Icons/…) — export it (SVG for vector/icon, PNG scale 2 for photos) into the project's asset dir and import the real file. Logos and brand marks are always exported, never typed by hand.
+
+Emit code in the detected stack (the profile is returned on component_map / token_map). Rules: reuse beats regenerate, reference tokens not literals, export visual assets rather than faking them with grey boxes or hand-typed wordmarks, and mirror the project's existing import style, file layout, and naming.`;
 };
 
 export const figmaToCodePrompt: {

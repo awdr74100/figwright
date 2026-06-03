@@ -52,6 +52,16 @@ the rendered image.
    - `matchedBy: ['name']` on a color (value drifted): use it, but flag the value mismatch to the user.
    - in `unmapped`: the design uses a token the project hasn't defined. Don't hardcode silently — use the
      value but call out the gap (and offer to add it, or hand off to **figma-sync-tokens**).
+4. **`get_screenshot` — export the assets the structural tools can't carry.** Geometry + text grounding
+   has **no pixels**: logos, photos, and icons otherwise come out as grey blocks, which is the single
+   biggest fidelity gap on real-world files (often half the visible surface). For each visual-only leaf,
+   export the node instead of placeholdering or hand-typesetting it:
+   - a node with an **`IMAGE` fill** (a photo/product-shot rectangle) → `get_screenshot` `PNG` (scale 2);
+   - a **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
+     small square instance) → `get_screenshot` `SVG`;
+   - **logos / brand marks are always exported**, never typed by hand.
+     Save under the project's asset dir (`src/assets`, `public/…`) and wire the real file in. This is the
+     one place you go to the image — not to guess layout, but to fetch a pixel asset grounding can't encode.
 
 Then emit code in the detected stack (the profile comes back on `component_map` / `token_map`; you do
 not call `analyze_project` yourself). Compose the reused components, wrap unmapped pieces, and apply
@@ -64,6 +74,9 @@ token references for color/spacing/radius/typography.
 - **Reference tokens, not literals.** If `token_map` maps a variable, emit its `ref`; reserve raw values
   for the `unmapped` gaps, and surface those gaps rather than burying them.
 - **Match the project, not a house style.** Mirror the existing import style, file layout, and naming.
+- **Export visual assets, don't fake them.** Logos, photos, and icons have no grounding pixels —
+  `get_screenshot` the node and import the file. A grey box or a hand-typed wordmark is a miss, not a
+  fallback.
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.
