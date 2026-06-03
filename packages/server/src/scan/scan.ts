@@ -155,10 +155,14 @@ export const scanComponents = async (
   extensions: readonly string[],
 ): Promise<ScannedComponent[]> => {
   const exts = new Set(extensions.map(e => (e.startsWith('.') ? e : `.${e}`)));
-  const pattern = `**/*{${[...exts].join(',')}}`;
+  // One glob per extension rather than a `{a,b}` brace group: Node's fs glob does NOT expand a
+  // single-element brace (`**/*{.vue}` matches literally and finds nothing), which silently sank
+  // every single-extension profile — i.e. all of Vue and Svelte. An array of plain patterns has no
+  // such edge case.
+  const patterns = [...exts].map(e => `**/*${e}`);
   const out: ScannedComponent[] = [];
 
-  for await (const entry of glob(pattern, { cwd: rootDir })) {
+  for await (const entry of glob(patterns, { cwd: rootDir })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
     if (rel.split('/').some(seg => IGNORED_DIRS.has(seg))) continue;
     const framework = frameworkForExt(extname(rel));

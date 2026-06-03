@@ -95,4 +95,22 @@ describe('scanComponents (real fs)', () => {
     expect(names).toEqual(['Button', 'CartItem']);
     expect(comps.every(c => !c.filePath.includes('node_modules'))).toBe(true);
   });
+
+  // Regression: a single-extension profile (Vue/Svelte) must not be silently dropped by a
+  // single-element brace pattern that Node's glob refuses to expand (`**/*{.vue}` → no matches).
+  it('finds components for a single-extension profile (Vue filename baseline)', async () => {
+    const vueDir = await mkdtemp(join(tmpdir(), 'scan-vue-'));
+    try {
+      await mkdir(join(vueDir, 'src', 'components'), { recursive: true });
+      await writeFile(
+        join(vueDir, 'src', 'components', 'Button.vue'),
+        '<script setup lang="ts">defineProps<{ size?: string }>()</script><template><button/></template>',
+      );
+      const comps = await scanComponents(vueDir, ['.vue']);
+      expect(comps.map(c => c.name)).toEqual(['Button']);
+      expect(comps[0]?.framework).toBe('vue');
+    } finally {
+      await rm(vueDir, { recursive: true, force: true });
+    }
+  });
 });
