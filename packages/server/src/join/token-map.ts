@@ -27,7 +27,8 @@ export interface TokenMapping {
   /**
    * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
    * to. There is no project token to reuse — for scale "spacing", compose the step with the bound
-   * property (p-4 / gap-4 / m-4); for "line-height", use leading-{step} (e.g. leading-7).
+   * property (p-4 / gap-4 / m-4); for "line-height", use leading-{step} (leading-7); for
+   * "font-weight", use font-{step} (font-bold).
    */
   builtin?: { scale: string; step: string };
   status: MappingStatus;
@@ -206,8 +207,33 @@ const BUILTIN_NUMERIC_STEMS: ReadonlyMap<string, string> = new Map([
   ['lineheight', 'line-height'],
 ]);
 
-/** Parse a Tailwind step: an integer, a Figma dash-written half-step (1-5 → 1.5), or px. Else null. */
-const parseBuiltinStep = (raw: string): string | null => {
+// Named built-in scale: font-weight. Projects almost never declare it in @theme (you just write
+// font-bold), yet designs routinely tokenize it — so weight/* otherwise reads as a false gap. The step
+// is a font-style name; map it to Tailwind's font-weight utility name (the one rename is Regular →
+// normal). Keys are normalized (lowercased, separators stripped) to absorb "Semi Bold" / "ExtraLight".
+const FONT_WEIGHT_STEPS: ReadonlyMap<string, string> = new Map([
+  ['thin', 'thin'],
+  ['hairline', 'thin'],
+  ['extralight', 'extralight'],
+  ['ultralight', 'extralight'],
+  ['light', 'light'],
+  ['regular', 'normal'],
+  ['normal', 'normal'],
+  ['book', 'normal'],
+  ['medium', 'medium'],
+  ['semibold', 'semibold'],
+  ['demibold', 'semibold'],
+  ['bold', 'bold'],
+  ['extrabold', 'extrabold'],
+  ['ultrabold', 'extrabold'],
+  ['black', 'black'],
+  ['heavy', 'black'],
+]);
+
+const normSeg = (raw: string): string => raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Parse a numeric Tailwind step: an integer, a Figma dash-written half-step (1-5 → 1.5), or px. */
+const parseNumericStep = (raw: string): string | null => {
   const r = raw.trim().toLowerCase();
   if (r === 'px') return 'px';
   // Figma can't put a dot in a name segment, so 1.5 is authored as "1-5" (value confirms: spacing/1-5
@@ -217,26 +243,30 @@ const parseBuiltinStep = (raw: string): string | null => {
 };
 
 /**
- * Recognize a Figma variable as a Tailwind built-in numeric scale step, by name only. Deliberately
- * conservative — it fires only for the stems in the table above (notably NOT size/*, which is a
- * dimension or a font size depending on collection), and only as a fallback after the project-token
- * join declined, so it can never override a real reuse. The Figma group separator is "/", so split
- * on it: the last segment is the step (its own dash is a half-step), the earlier segments are the
- * stem (whose own dashes, e.g. line-height, are part of the name). Returns the scale + step, or
- * null.
+ * Recognize a Figma variable as a Tailwind built-in scale step, by name only. Deliberately
+ * conservative — it fires only for the stems below (notably NOT size/*, a dimension or a font size
+ * depending on collection), and only as a fallback after the project-token join declined, so it can
+ * never override a real reuse. The Figma group separator is "/", so split on it: the last segment
+ * is the step, the earlier segments are the stem (whose own dashes, e.g. line-height, are part of
+ * the name). Numeric scales (spacing, line-height) are open-ended; font-weight is a fixed name map.
+ * Returns the scale + step to compose into a utility (p-4 / leading-7 / font-bold), or null.
  */
 const tailwindBuiltinScale = (figmaName: string): { scale: string; step: string } | null => {
   const segs = figmaName.trim().split('/');
   if (segs.length < 2) return null;
-  const stem = segs
-    .slice(0, -1)
-    .join('')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-  const scale = BUILTIN_NUMERIC_STEMS.get(stem);
-  if (scale === undefined) return null;
-  const step = parseBuiltinStep(segs[segs.length - 1] as string);
-  return step === null ? null : { scale, step };
+  const stem = normSeg(segs.slice(0, -1).join(''));
+  const stepRaw = segs[segs.length - 1] as string;
+
+  const numericScale = BUILTIN_NUMERIC_STEMS.get(stem);
+  if (numericScale !== undefined) {
+    const step = parseNumericStep(stepRaw);
+    return step === null ? null : { scale: numericScale, step };
+  }
+  if (stem === 'weight' || stem === 'fontweight') {
+    const step = FONT_WEIGHT_STEPS.get(normSeg(stepRaw));
+    return step === undefined ? null : { scale: 'font-weight', step };
+  }
+  return null;
 };
 
 const joinOne = (

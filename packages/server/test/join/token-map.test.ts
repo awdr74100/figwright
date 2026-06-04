@@ -180,6 +180,36 @@ describe('joinTokens', () => {
       expect(m?.builtin).toEqual({ scale: 'line-height', step: '7' });
     });
 
+    it('maps weight/* to a font-weight built-in, renaming Regular → normal', () => {
+      const bold = joinTokens([fig('weight/Bold', 'Bold', 'STRING')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      })[0];
+      expect(bold?.status).toBe('framework-builtin');
+      expect(bold?.builtin).toEqual({ scale: 'font-weight', step: 'bold' });
+
+      const regular = joinTokens([fig('weight/Regular', 'Regular', 'STRING')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      })[0];
+      expect(regular?.builtin).toEqual({ scale: 'font-weight', step: 'normal' });
+
+      // Tolerates spacing/casing variants of the style name.
+      const semi = joinTokens([fig('weight/Semi Bold', 'Semi Bold', 'STRING')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      })[0];
+      expect(semi?.builtin?.step).toBe('semibold');
+    });
+
+    it('leaves an unknown weight name unmapped (conservative)', () => {
+      const [m] = joinTokens([fig('weight/Condensed', 'Condensed', 'STRING')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      });
+      expect(m?.status).toBe('unmapped');
+    });
+
     it('does not fire on a non-Tailwind project (flag off) — stays unmapped', () => {
       const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], tokens, { threshold: 0.7 });
       expect(m?.status).toBe('unmapped');

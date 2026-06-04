@@ -56,12 +56,12 @@ the rendered image.
    - mapped: reference `candidate.ref` (e.g. `bg-primary-500`, `var(--color-primary-500)`) — never the
      raw hex/px that `get_design_context` resolved.
    - `matchedBy: ['name']` on a color (value drifted): use it, but flag the value mismatch to the user.
-   - `framework-builtin` (Tailwind projects): the variable is a built-in numeric scale step the project
-     never redeclares in `@theme` — e.g. `spacing/4`, `line-height/7`. It carries `builtin: { scale,
-step }`: for `spacing`, compose the step with the property `get_design_context` bound it to (`p-4`
-     / `gap-4` / `m-4`); for `line-height`, use `leading-{step}` (e.g. `leading-7`). Use the utility,
-     **not** an arbitrary value like `p-[16px]`. This is **not** a gap — never report it as a missing
-     token.
+   - `framework-builtin` (Tailwind projects): the variable is a built-in scale step the project never
+     redeclares in `@theme` — e.g. `spacing/4`, `line-height/7`, `weight/Bold`. It carries `builtin: {
+scale, step }`: for `spacing`, compose the step with the property `get_design_context` bound it to
+     (`p-4` / `gap-4` / `m-4`); for `line-height`, use `leading-{step}` (`leading-7`); for `font-weight`,
+     use `font-{step}` (`font-bold`). Use the utility, **not** an arbitrary value like `p-[16px]`. This
+     is **not** a gap — never report it as a missing token.
    - in `unmapped`: the design uses a token the project hasn't defined. Don't hardcode silently — use the
      value but call out the gap (and offer to add it, or hand off to **figma-sync-tokens**).
 4. **`get_screenshot` — export the assets the structural tools can't carry.** Geometry + text grounding
