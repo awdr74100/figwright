@@ -47,10 +47,13 @@ export const tokenMapTool: ToolSpec = {
     "Map the document's Figma variables to the project's design tokens, so generated code references " +
     'existing tokens instead of hard-coded values. Joins the grounded Figma variable names + values ' +
     'against tokens parsed from the project CSS (Tailwind v4 @theme or :root custom properties); the ' +
-    'match is name-based with an exact color value-match as confirmation. tokenSource overrides the ' +
+    'match is name-based with an exact color value-match as confirmation. On a Tailwind project a ' +
+    'variable that hits a framework built-in numeric scale (spacing/N, line-height/N) is reported as ' +
+    "status 'framework-builtin' with { builtin: { scale, step } } rather than unmapped — it has no " +
+    '@theme token but the utility (p-4 / gap-4, leading-7) is still usable. tokenSource overrides the ' +
     'detected styling config; rootDir defaults to the server cwd. Tailwind v3 JS configs are not yet ' +
     'parsed (pass tokenSource to a CSS file). Returns { mappings (candidate + confidence + status + ' +
-    'matchedBy), unmapped, tokenSource, profile }.',
+    'matchedBy + builtin), unmapped, tokenSource, profile }.',
   inputShape,
   kind: 'local',
 };
@@ -105,7 +108,10 @@ export const handleTokenMap = async (
   }
 
   const figmaTokens = resolveFigmaTokens(defs);
-  const mappings = joinTokens(figmaTokens, projectTokens, { threshold });
+  const mappings = joinTokens(figmaTokens, projectTokens, {
+    threshold,
+    tailwind: profile.styling.system === 'tailwind',
+  });
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.figmaName);
 
   const readNote =

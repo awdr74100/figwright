@@ -128,6 +128,79 @@ describe('joinTokens', () => {
     });
   });
 
+  describe('Tailwind framework built-in scale fallback (B1)', () => {
+    it('flags a numeric spacing/N as framework-builtin (not a false gap) on a Tailwind project', () => {
+      // Real Tailwind projects never redeclare the default spacing scale in @theme, so there is no
+      // project token — but spacing/4 is still a usable utility step (p-4 / gap-4 / m-4).
+      const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      });
+      expect(m?.status).toBe('framework-builtin');
+      expect(m?.builtin).toEqual({ scale: 'spacing', step: '4' });
+      expect(m?.candidate).toBeUndefined();
+    });
+
+    it('recognizes Figma dash-written half-steps (spacing/1-5 → 1.5) and the px step', () => {
+      // Figma can't put a dot in a name segment, so 1.5 is authored as "1-5" (value confirms: 6px).
+      const half = joinTokens([fig('spacing/1-5', 6, 'FLOAT')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      })[0];
+      expect(half?.status).toBe('framework-builtin');
+      expect(half?.builtin?.step).toBe('1.5');
+
+      const px = joinTokens([fig('spacing/px', 1, 'FLOAT')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      })[0];
+      expect(px?.status).toBe('framework-builtin');
+      expect(px?.builtin?.step).toBe('px');
+    });
+
+    it('NEVER overrides a real project match: declared spacing-4 wins as high (guarantee 1)', () => {
+      const spacing = [proj('spacing-4', '16px', '4', 'spacing')];
+      const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], spacing, {
+        threshold: 0.7,
+        tailwind: true,
+      });
+      expect(m?.status).toBe('high');
+      expect(m?.candidate?.token).toBe('spacing-4');
+      expect(m?.builtin).toBeUndefined();
+    });
+
+    it('recognizes line-height/N as a framework-builtin (leading-N), despite the dash in the stem', () => {
+      // line-height/7 = 28px = leading-7 (v4 leading is calc(var(--spacing) * 7) too). The stem's own
+      // dash must not be mistaken for a half-step separator — split on "/" first.
+      const [m] = joinTokens([fig('line-height/7', 28, 'FLOAT')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+      });
+      expect(m?.status).toBe('framework-builtin');
+      expect(m?.builtin).toEqual({ scale: 'line-height', step: '7' });
+    });
+
+    it('does not fire on a non-Tailwind project (flag off) — stays unmapped', () => {
+      const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], tokens, { threshold: 0.7 });
+      expect(m?.status).toBe('unmapped');
+      expect(m?.builtin).toBeUndefined();
+    });
+
+    it('only blesses unambiguous namespaces: non-numeric spacing and size/* stay unmapped (guarantee 2)', () => {
+      expect(
+        joinTokens([fig('spacing/banner', 16, 'FLOAT')], tokens, {
+          threshold: 0.7,
+          tailwind: true,
+        })[0]?.status,
+      ).toBe('unmapped');
+      // size/* is overloaded (font size vs dimension), so it is deliberately not treated as a built-in.
+      expect(
+        joinTokens([fig('size/68', 68, 'FLOAT')], tokens, { threshold: 0.7, tailwind: true })[0]
+          ?.status,
+      ).toBe('unmapped');
+    });
+  });
+
   it('caps confidence when the name matches but a known color value disagrees (B1)', () => {
     // Same step + stem (grey-100), but the project shade drifted from Figma's — name says yes,
     // value says verify, so it must not read as a confirmed "high" reuse.

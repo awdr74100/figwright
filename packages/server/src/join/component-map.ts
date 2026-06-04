@@ -9,7 +9,10 @@ import type { ScannedComponent } from '../scan/scan.js';
 // code component's props. An explicit docs/figma-component-map.md row, when present, overrides the
 // fuzzy guess. All scoring lives in pure functions so the join is unit-testable without Figma or fs.
 
-export type MappingStatus = 'high' | 'medium' | 'low' | 'unmapped';
+// 'framework-builtin' is token-map only: a Figma variable that maps to a Tailwind built-in scale step
+// (e.g. spacing/4 → the `-4` step) which real projects never redeclare in @theme, so it has no project
+// token to join against yet is not a real gap. The component join never produces it.
+export type MappingStatus = 'high' | 'medium' | 'low' | 'unmapped' | 'framework-builtin';
 
 /**
  * One instance of a component, with its resolved component-property values (variant / boolean /

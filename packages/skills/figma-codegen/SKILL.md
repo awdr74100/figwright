@@ -30,6 +30,12 @@ the rendered image.
      keeps one complete copy. A `deduped` (or `truncated`) sibling means "identical to the first one,
      reuse that structure"; a depth cap, by contrast, throws the structure away — that's the trap that
      makes repeated rows/cards look empty.
+   - **Carry per-node visual properties, not just layout.** Each node also exposes `fills`, `strokes`,
+     `cornerRadius`, `opacity`, and **`effects` / `styleIds.effect`** — translate every one to the
+     stack's equivalent. **Effects (drop/inner shadow, blur) are the easiest fidelity to lose**: they
+     come from a _shared effect style_ so they read as one field on the node and quietly vanish in
+     generation. A card that has a shadow in Figma but flat output is the classic miss (e.g. a
+     `DROP_SHADOW 0/4/8 #0000000D` → `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`).
 2. **`component_map`** on the same node → every Figma component grouped to a local code component with
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.
@@ -50,6 +56,12 @@ the rendered image.
    - mapped: reference `candidate.ref` (e.g. `bg-primary-500`, `var(--color-primary-500)`) — never the
      raw hex/px that `get_design_context` resolved.
    - `matchedBy: ['name']` on a color (value drifted): use it, but flag the value mismatch to the user.
+   - `framework-builtin` (Tailwind projects): the variable is a built-in numeric scale step the project
+     never redeclares in `@theme` — e.g. `spacing/4`, `line-height/7`. It carries `builtin: { scale,
+step }`: for `spacing`, compose the step with the property `get_design_context` bound it to (`p-4`
+     / `gap-4` / `m-4`); for `line-height`, use `leading-{step}` (e.g. `leading-7`). Use the utility,
+     **not** an arbitrary value like `p-[16px]`. This is **not** a gap — never report it as a missing
+     token.
    - in `unmapped`: the design uses a token the project hasn't defined. Don't hardcode silently — use the
      value but call out the gap (and offer to add it, or hand off to **figma-sync-tokens**).
 4. **`get_screenshot` — export the assets the structural tools can't carry.** Geometry + text grounding
@@ -77,6 +89,8 @@ token references for color/spacing/radius/typography.
 - **Export visual assets, don't fake them.** Logos, photos, and icons have no grounding pixels —
   `get_screenshot` the node and import the file. A grey box or a hand-typed wordmark is a miss, not a
   fallback.
+- **Don't drop effects.** A node's `effects` / shared `styleIds.effect` is in the context — emit the
+  shadow/blur. Flat cards where the design has a drop shadow is a grounding miss, not a simplification.
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.

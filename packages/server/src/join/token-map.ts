@@ -24,6 +24,12 @@ export interface TokenMapping {
     /** Which signals agreed: name similarity and/or exact color value. */
     matchedBy: ('name' | 'value')[];
   };
+  /**
+   * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
+   * to. There is no project token to reuse — for scale "spacing", compose the step with the bound
+   * property (p-4 / gap-4 / m-4); for "line-height", use leading-{step} (e.g. leading-7).
+   */
+  builtin?: { scale: string; step: string };
   status: MappingStatus;
 }
 
@@ -186,7 +192,52 @@ const statusFor = (confidence: number, threshold: number): MappingStatus => {
 
 export interface TokenJoinOptions {
   threshold: number;
+  /** The project is a Tailwind project — enables the framework built-in scale fallback below. */
+  tailwind?: boolean;
 }
+
+// Tailwind ships open-ended numeric built-in scales that real projects don't redeclare in @theme — so
+// the project CSS has no token to join against and a perfectly usable variable reads as a false gap.
+// Both spacing and line-height are `calc(var(--spacing) * N)` in v4, so any step N is a valid utility
+// (spacing → composed with the bound property p-/gap-/m-; line-height → leading-N). Keyed by the Figma
+// stem normalized like splitScale (lowercased, separators stripped, so "line-height" → "lineheight").
+const BUILTIN_NUMERIC_STEMS: ReadonlyMap<string, string> = new Map([
+  ['spacing', 'spacing'],
+  ['lineheight', 'line-height'],
+]);
+
+/** Parse a Tailwind step: an integer, a Figma dash-written half-step (1-5 → 1.5), or px. Else null. */
+const parseBuiltinStep = (raw: string): string | null => {
+  const r = raw.trim().toLowerCase();
+  if (r === 'px') return 'px';
+  // Figma can't put a dot in a name segment, so 1.5 is authored as "1-5" (value confirms: spacing/1-5
+  // = 6px = 1.5 × 4). Normalize that dash to a decimal; reject anything non-numeric (spacing/banner).
+  const step = r.replace(/^(\d+)-(\d+)$/, '$1.$2');
+  return /^\d+(?:\.\d+)?$/.test(step) ? step : null;
+};
+
+/**
+ * Recognize a Figma variable as a Tailwind built-in numeric scale step, by name only. Deliberately
+ * conservative — it fires only for the stems in the table above (notably NOT size/*, which is a
+ * dimension or a font size depending on collection), and only as a fallback after the project-token
+ * join declined, so it can never override a real reuse. The Figma group separator is "/", so split
+ * on it: the last segment is the step (its own dash is a half-step), the earlier segments are the
+ * stem (whose own dashes, e.g. line-height, are part of the name). Returns the scale + step, or
+ * null.
+ */
+const tailwindBuiltinScale = (figmaName: string): { scale: string; step: string } | null => {
+  const segs = figmaName.trim().split('/');
+  if (segs.length < 2) return null;
+  const stem = segs
+    .slice(0, -1)
+    .join('')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const scale = BUILTIN_NUMERIC_STEMS.get(stem);
+  if (scale === undefined) return null;
+  const step = parseBuiltinStep(segs[segs.length - 1] as string);
+  return step === null ? null : { scale, step };
+};
 
 const joinOne = (
   figma: FigmaToken,
@@ -235,6 +286,14 @@ const joinOne = (
       candidate: candidateFrom(nameMatch.token, confidence, ['name']),
       status: statusFor(confidence, opts.threshold),
     };
+  }
+
+  // Fallback (B1): nothing in the project matched, but on a Tailwind project a built-in scale step
+  // (spacing/N) is still a usable utility — flag it framework-builtin instead of a false gap. This is
+  // reached only here, after every project-token path declined, so it can never shadow a real reuse.
+  if (opts.tailwind === true) {
+    const builtin = tailwindBuiltinScale(figma.name);
+    if (builtin !== null) return { ...base, builtin, status: 'framework-builtin' };
   }
 
   return base;
