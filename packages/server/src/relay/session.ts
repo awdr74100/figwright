@@ -52,9 +52,13 @@ export class SessionManager {
       clientVersion: input.clientVersion,
       connectedAt: existing?.connectedAt ?? now,
       reconnectedAt: existing !== undefined ? now : null,
-      // A fresh connection counts as the most recent activity — when a user opens the plugin in
-      // a newly-focused file it should immediately win routing against an idle older session.
-      lastActivityAt: now,
+      // A *fresh* session (new sessionId = a plugin opened in a newly-focused file) counts as the most
+      // recent activity and should immediately win routing against an idle older session. But a
+      // *resumed* session — the same sessionId reconnecting after a websocket flap, which a backgrounded
+      // plugin iframe triggers when timer throttling makes it miss a heartbeat — must NOT bump: a
+      // reconnect is not user interaction, and re-registering it as "now" silently steals routing from
+      // the file the user is actually in (observed live). Preserve the resumed session's prior value.
+      lastActivityAt: existing === undefined ? now : existing.lastActivityAt,
       // Filled in by the first `$activity` event; null until then (a plugin that hasn't sent any
       // context push yet — e.g. mid-handshake — is still routable but won't have a display label).
       fileName: existing?.fileName ?? null,

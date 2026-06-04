@@ -383,6 +383,69 @@ describe('Relay hello loop', () => {
     wsA.close();
     wsB.close();
   });
+
+  it('a reconnect (resumed session) does NOT bump routing — only a fresh session does', async () => {
+    const { port, relay } = await startRelay();
+    const sidA = newId();
+    const sidB = newId();
+
+    // A connects first.
+    const wsA = await connect(port);
+    wsA.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hA',
+          sessionId: sidA,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsA);
+
+    await new Promise(r => setTimeout(r, 5));
+
+    // B connects later → fresh session wins routing.
+    const wsB = await connect(port);
+    wsB.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hB',
+          sessionId: sidB,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsB);
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    // A's websocket flaps: drop and reconnect with the SAME sessionId within grace (what a
+    // backgrounded, throttled plugin does when it misses a heartbeat). This must NOT steal routing
+    // back to A — a reconnect is not user interaction.
+    await new Promise(r => setTimeout(r, 5));
+    wsA.close();
+    await new Promise(r => setTimeout(r, 10));
+    const wsA2 = await connect(port);
+    wsA2.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hA2',
+          sessionId: sidA,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    const resA2 = decodeEnvelope(await nextMessage(wsA2)) as ResponseEnvelope;
+    expect((resA2.result as { sessionResumed?: boolean }).sessionResumed).toBe(true);
+
+    // Routing still on B — the reconnect did not bump A's lastActivityAt.
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    wsA2.close();
+    wsB.close();
+  });
 });
 
 describe('Relay session pinning', () => {
