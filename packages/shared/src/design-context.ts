@@ -27,7 +27,10 @@ export type DetailLevel = (typeof DETAIL_LEVELS)[number];
  * - Compact: + visible / x / y / width / height
  * - Full: + rotation / opacity / cornerRadius / fills / text mixin `truncated` marks children dropped
  *   at the depth limit; `deduped` marks an instance whose main component was already expanded (its
- *   children are omitted), with `mainComponentId` for cross-ref.
+ *   children are omitted), with `mainComponentId` for cross-ref. A deduped instance keeps its own
+ *   `textOverrides` — the visible text it actually renders — so codegen gets per-instance content
+ *   without re-expanding the collapsed subtree (every card title / list item / form label
+ *   differs).
  *
  * Grounding fields (M3): `styleIds` / `boundVariables` link a node to design-system styles and
  * variables (id → token name, resolved downstream); `componentProperties` carries an INSTANCE's
@@ -71,6 +74,14 @@ export interface DesignContextNode {
   effect?: string;
   textStyle?: string;
   deduped?: boolean;
+  /**
+   * Per-instance text content of a deduped instance: every visible TEXT descendant's actual
+   * `characters` ({ name, characters }, DFS order). Only emitted on deduped instances (the
+   * non-deduped first instance still carries its text inline in the expanded subtree). Text-only by
+   * design — structure/style stay collapsed, so the codegen "un-deduped vs N-drill" tradeoff goes
+   * away while the output stays small.
+   */
+  textOverrides?: readonly { name: string; characters: string }[];
   truncated?: boolean;
   children?: readonly DesignContextNode[];
 }
@@ -108,6 +119,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     effect: z.string().optional(),
     textStyle: z.string().optional(),
     deduped: z.boolean().optional(),
+    textOverrides: z.array(z.object({ name: z.string(), characters: z.string() })).optional(),
     truncated: z.boolean().optional(),
     children: z.array(DesignContextNodeSchema).optional(),
   }),

@@ -131,6 +131,32 @@ interface BuildCtx {
   seen: Set<string>;
 }
 
+/**
+ * The visible text a deduped instance actually renders — every visible TEXT descendant's
+ * `characters` in DFS order. Text-only on purpose: the structure/style subtree stays collapsed
+ * (that's the dedup win), but per-instance content (card titles, list items, form labels) survives
+ * so codegen needn't re-expand the tree. Hidden nodes are skipped (whole subtree) since they don't
+ * render; empty strings are dropped as noise.
+ */
+const collectTextOverrides = (instance: SceneNode): { name: string; characters: string }[] => {
+  const out: { name: string; characters: string }[] = [];
+  const visit = (n: SceneNode): void => {
+    if (n.visible === false) return;
+    if (n.type === 'TEXT') {
+      const chars = (n as TextNode).characters;
+      if (chars !== '') out.push({ name: n.name, characters: chars });
+      return;
+    }
+    if ('children' in n) {
+      for (const c of (n as SceneNode & { children: readonly SceneNode[] }).children) visit(c);
+    }
+  };
+  if ('children' in instance) {
+    for (const c of (instance as SceneNode & { children: readonly SceneNode[] }).children) visit(c);
+  }
+  return out;
+};
+
 /** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
 const buildNode = async (
   node: SceneNode,
@@ -167,6 +193,8 @@ const buildNode = async (
         if (ctx.seen.has(main.id)) {
           out.deduped = true;
           expandChildren = false;
+          const overrides = collectTextOverrides(node);
+          if (overrides.length > 0) out.textOverrides = overrides;
         } else {
           ctx.seen.add(main.id);
         }

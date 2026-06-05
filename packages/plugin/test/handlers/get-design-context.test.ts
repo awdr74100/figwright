@@ -125,6 +125,47 @@ describe('get_design_context handler', () => {
     expect(result.nodes[1]?.children).toBeUndefined();
   });
 
+  it('carries per-instance textOverrides on a deduped instance (text-only, nested, skipping hidden/empty)', async () => {
+    const main = { id: 'M:1' };
+    // Each instance's own text differs (the whole point: card titles etc. vary per instance).
+    const mkInstance = (id: string, title: string, desc: string): SceneNode =>
+      node({
+        id,
+        type: 'INSTANCE',
+        children: [
+          node({ id: `${id}-title`, name: 'Title', type: 'TEXT', characters: title }),
+          // nested one level deep — collector must recurse
+          node({
+            id: `${id}-wrap`,
+            type: 'FRAME',
+            children: [node({ id: `${id}-desc`, name: 'Desc', type: 'TEXT', characters: desc })],
+          }),
+          // hidden TEXT → skipped (doesn't render)
+          node({ id: `${id}-hid`, name: 'Hidden', type: 'TEXT', characters: 'x', visible: false }),
+          // empty TEXT → dropped as noise
+          node({ id: `${id}-empty`, name: 'Empty', type: 'TEXT', characters: '' }),
+        ],
+        getMainComponentAsync: async () => main,
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({
+        selection: [mkInstance('i1', 'First', 'Alpha'), mkInstance('i2', 'Second', 'Beta')],
+      }),
+    )({ dedupeComponents: true, detail: 'minimal' })) as GetDesignContextResult;
+
+    // first instance expands normally and has NO textOverrides (its text is inline in children)
+    expect(result.nodes[0]?.deduped).toBeUndefined();
+    expect(result.nodes[0]?.textOverrides).toBeUndefined();
+
+    // second instance is collapsed but keeps its own visible text (DFS order, nested included)
+    expect(result.nodes[1]?.deduped).toBe(true);
+    expect(result.nodes[1]?.children).toBeUndefined();
+    expect(result.nodes[1]?.textOverrides).toEqual([
+      { name: 'Title', characters: 'Second' },
+      { name: 'Desc', characters: 'Beta' },
+    ]);
+  });
+
   it('surfaces grounding fields (styleIds / boundVariables / componentProperties) at full detail only', async () => {
     const grounded = node({
       id: 'g',

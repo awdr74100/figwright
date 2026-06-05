@@ -12,7 +12,9 @@ export const getDesignContextTool: ToolSpec = {
     'get_document. Starts from nodeId, else the current selection, else the current page. ' +
     'depth limits child levels (omit or 0 = unlimited). detail is minimal / compact / full. ' +
     'dedupeComponents collapses repeated component instances (children of an already-seen main ' +
-    'component are omitted and flagged deduped).',
+    'component are omitted and flagged deduped). A deduped instance still carries textOverrides — ' +
+    'the visible text it renders ({ name, characters }) — so per-instance content (card titles, ' +
+    'list items, form labels) is available without re-expanding the collapsed subtree.',
   inputShape: {
     nodeId: z
       .string()
