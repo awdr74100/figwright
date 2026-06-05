@@ -30,6 +30,10 @@ the rendered image.
      keeps one complete copy. A `deduped` (or `truncated`) sibling means "identical to the first one,
      reuse that structure"; a depth cap, by contrast, throws the structure away — that's the trap that
      makes repeated rows/cards look empty.
+   - **Same structure, different content: read each deduped instance's `textOverrides`.** A `deduped`
+     stub carries its own `textOverrides` (`{ name, characters }` for every visible TEXT it renders) —
+     fill each repeated element's text from that, so the cards/rows/form-fields get their distinct
+     titles / labels / values without re-expanding the un-deduped tree or drilling per instance.
    - **Carry per-node visual properties, not just layout.** Each node also exposes `fills`, `strokes`,
      `cornerRadius`, `opacity`, and **`effects` / `styleIds.effect`** — translate every one to the
      stack's equivalent. **Effects (drop/inner shadow, blur) are the easiest fidelity to lose**: they
