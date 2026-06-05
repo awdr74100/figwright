@@ -21,6 +21,13 @@ export const STYLING_SYSTEMS = [
 ] as const;
 export type StylingSystem = (typeof STYLING_SYSTEMS)[number];
 
+// How the project consumes `import X from './icon.svg'`: `component` when a loader turns the svg into
+// a renderable component (svgr / vite-svg-loader / …) so codegen can emit `<Icon/>`; `url` otherwise
+// (the bundler default resolves svg to a URL string → `<img src>` or inline svg). Picking wrong
+// produces an import that doesn't run, so the icon-export step grounds this off the project.
+export const SVG_IMPORT_MODES = ['component', 'url'] as const;
+export type SvgImportMode = (typeof SVG_IMPORT_MODES)[number];
+
 export interface ProjectProfile {
   rootDir: string;
   framework: Framework;
@@ -37,6 +44,22 @@ export interface ProjectProfile {
     configPath?: string;
     /** Tailwind major version (3 or 4) — v4 is CSS-first, changing where tokens are defined. */
     tailwindVersion?: number;
+  };
+  /**
+   * How the project turns an imported .svg into something renderable — so codegen imports/uses
+   * exported icons the way the build actually supports (a wrong guess ships an import that won't
+   * run).
+   */
+  svg: {
+    /** `component` (a loader is present → `<Icon/>`) or `url` (no loader → `<img src>` / inline). */
+    mode: SvgImportMode;
+    /** The detected loader/plugin enabling component mode (svgr / vite-svg-loader / …), if any. */
+    loader?: string;
+    /**
+     * A ready import example for the detected loader — the form differs (`?react` vs `?component`
+     * vs `{ ReactComponent }`), so codegen can copy this rather than guess the syntax.
+     */
+    importHint?: string;
   };
   /** File extensions that hold components for this framework — drives the scanner's glob. */
   componentExtensions: string[];
@@ -239,6 +262,73 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
   return { system: 'unknown', reason: 'no styling signal in manifest' };
 };
 
+interface SvgResult {
+  mode: SvgImportMode;
+  loader?: string;
+  importHint?: string;
+  reason: string;
+}
+
+// Ordered by specificity; the import form is loader-specific (Vite's svgr uses `?react`, vite-svg-
+// loader uses `?component`, classic @svgr/webpack exports `ReactComponent`), so each carries its own
+// ready example. Dep presence is the signal — the loader still has to be wired in the bundler config,
+// so the guidance reminds codegen to confirm, but a present dep is a strong intent signal.
+const SVG_LOADERS: { dep: string; loader: string; hint: string }[] = [
+  {
+    dep: 'vite-plugin-svgr',
+    loader: 'vite-plugin-svgr',
+    hint: "import Icon from './icon.svg?react'",
+  },
+  {
+    dep: 'vite-svg-loader',
+    loader: 'vite-svg-loader',
+    hint: "import Icon from './icon.svg?component'",
+  },
+  {
+    dep: '@svgr/webpack',
+    loader: '@svgr/webpack',
+    hint: "import { ReactComponent as Icon } from './icon.svg'",
+  },
+  { dep: '@svgr/rollup', loader: '@svgr/rollup', hint: "import Icon from './icon.svg'" },
+  {
+    dep: 'unplugin-icons',
+    loader: 'unplugin-icons',
+    hint: "import Icon from '~icons/{collection}/{name}' (local svg via FileSystemIconLoader)",
+  },
+  {
+    dep: 'nuxt-svgo',
+    loader: 'nuxt-svgo',
+    hint: "import Icon from './icon.svg?component' (or <NuxtIcon>)",
+  },
+  {
+    dep: 'nuxt-svgo-loader',
+    loader: 'nuxt-svgo-loader',
+    hint: "import Icon from './icon.svg?component' (or a <SvgoIcon name> macro)",
+  },
+  { dep: '@nuxtjs/svg', loader: '@nuxtjs/svg', hint: "import Icon from './icon.svg?component'" },
+];
+
+/**
+ * Detect how .svg imports resolve, from the dependency manifest. Component mode when a known svg
+ * loader is present, else url mode (the bundler default). Pure over deps.
+ */
+const detectSvgHandling = (deps: Record<string, string>): SvgResult => {
+  for (const sig of SVG_LOADERS) {
+    if (sig.dep in deps) {
+      return {
+        mode: 'component',
+        loader: sig.loader,
+        importHint: sig.hint,
+        reason: `${sig.dep} → svg imports as a component`,
+      };
+    }
+  }
+  return {
+    mode: 'url',
+    reason: 'no svg loader dep → svg imports resolve to a URL (use <img src> or inline svg)',
+  };
+};
+
 /** Pure decision function over the gathered snapshot — the unit under test. */
 export const detectProfile = (input: ProjectInput): ProjectProfile => {
   const deps = allDeps(input.packageJson);
@@ -257,6 +347,11 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
     `styling=${styling.system}${styling.tailwindVersion === undefined ? '' : ` v${styling.tailwindVersion}`}: ${styling.reason}`,
   );
 
+  const svg = detectSvgHandling(deps);
+  evidence.push(
+    `svg=${svg.mode}${svg.loader === undefined ? '' : ` (${svg.loader})`}: ${svg.reason}`,
+  );
+
   return {
     rootDir: input.rootDir,
     framework,
@@ -267,6 +362,11 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
       ...(styling.tailwindVersion === undefined
         ? {}
         : { tailwindVersion: styling.tailwindVersion }),
+    },
+    svg: {
+      mode: svg.mode,
+      ...(svg.loader === undefined ? {} : { loader: svg.loader }),
+      ...(svg.importHint === undefined ? {} : { importHint: svg.importHint }),
     },
     componentExtensions: COMPONENT_EXTENSIONS[framework],
     evidence,

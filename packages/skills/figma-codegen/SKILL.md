@@ -80,6 +80,14 @@ scale, step }`: for `spacing`, compose the step with the property `get_design_co
    - a **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
      small square instance) → `get_screenshot` `SVG`;
    - **logos / brand marks are always exported**, never typed by hand.
+   - **Import svg icons per `profile.svg`** (returned on `component_map` / `token_map`):
+     - `mode: 'component'` — a loader (svgr / vite-svg-loader / …) is set up; `profile.svg.importHint`
+       gives the **exact** import form, which differs by loader (`?react` vs `?component` vs
+       `{ ReactComponent }`). Import once and render `<Icon/>`, **reusing the same import across every
+       occurrence** (dedupe: one file, one import, many uses).
+     - `mode: 'url'` — no loader; `import url from './icon.svg'` + `<img src>`, or inline the svg when
+       you need `currentColor` / CSS control. **Never emit `<Icon/>` in url mode** — that import won't run.
+
      Save under the project's asset dir (`src/assets`, `public/…`) and wire the real file in. This is the
      one place you go to the image — not to guess layout, but to fetch a pixel asset grounding can't encode.
 

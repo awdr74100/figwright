@@ -13,11 +13,12 @@ export const analyzeProjectTool: ToolSpec = {
   name: ANALYZE_PROJECT_TOOL_NAME,
   description:
     'Detect the local project profile (framework, language, styling system, component file ' +
-    'extensions) by reading manifests and config — the foundation scan_components / component_map ' +
+    'extensions, svg handling) by reading manifests and config — the foundation scan_components / component_map ' +
     'switch on. Optional standalone probe: those tools run detection internally and return the same ' +
     'profile, so call this only to inspect detection in isolation (no Figma, no file scan). Runs on ' +
     'the server filesystem. rootDir defaults to the server cwd. Detects Tailwind v3 (config file) and ' +
-    'v4 (CSS-first @import/@theme) and reports tailwindVersion.',
+    'v4 (CSS-first @import/@theme) and reports tailwindVersion; detects svg loader (svgr / ' +
+    'vite-svg-loader / …) → svg.mode component vs url + an import hint.',
   inputShape,
   kind: 'local',
 };
