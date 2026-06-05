@@ -189,6 +189,11 @@ export interface SerializedNode {
   fills?: readonly SerializedPaint[] | Mixed;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | Mixed;
+  /**
+   * Per-side stroke weights, only when strokeWeight is `mixed` (the sides differ). A side with 0
+   * has no border; non-zero sides map to border-t / border-r / border-b / border-l.
+   */
+  strokeWeights?: { top: number; right: number; bottom: number; left: number };
   strokeAlign?: string;
   effects?: readonly SerializedEffect[];
   layout?: SerializedAutoLayout;
@@ -247,6 +252,14 @@ export const SerializedNodeSchema = z.lazy(() =>
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
+    strokeWeights: z
+      .object({
+        top: z.number(),
+        right: z.number(),
+        bottom: z.number(),
+        left: z.number(),
+      })
+      .optional(),
     strokeAlign: z.string().optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     layout: SerializedAutoLayoutSchema.optional(),

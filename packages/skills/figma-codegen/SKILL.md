@@ -40,6 +40,10 @@ the rendered image.
      come from a _shared effect style_ so they read as one field on the node and quietly vanish in
      generation. A card that has a shadow in Figma but flat output is the classic miss (e.g. a
      `DROP_SHADOW 0/4/8 #0000000D` → `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`).
+   - **Per-side borders.** When `strokeWeight` is `mixed`, the node carries `strokeWeights`
+     `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
+     **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row
+     divider or an underline input into a full grid (a common, easy-to-miss fidelity bug).
 2. **`component_map`** on the same node → every Figma component grouped to a local code component with
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.

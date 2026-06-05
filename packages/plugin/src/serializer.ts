@@ -198,7 +198,25 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     if (Array.isArray(strokes) && strokes.length > 0) {
       out.strokes = strokes.map(p => serializePaint(p as Paint));
       const weight = (node as { strokeWeight?: unknown }).strokeWeight;
-      out.strokeWeight = typeof weight === 'number' ? weight : MIXED;
+      if (typeof weight === 'number') {
+        out.strokeWeight = weight;
+      } else {
+        // strokeWeight is figma.mixed → the sides differ. Surface each per-side weight so codegen
+        // can emit individual borders (border-t / border-b / …) instead of a uniform border —
+        // table row dividers, underline inputs and top-accent rules are all per-side, and
+        // collapsing to a single "mixed" loses which edges actually have a stroke.
+        out.strokeWeight = MIXED;
+        const n = node as Record<string, unknown>;
+        const sides = {
+          top: n.strokeTopWeight,
+          right: n.strokeRightWeight,
+          bottom: n.strokeBottomWeight,
+          left: n.strokeLeftWeight,
+        };
+        if (Object.values(sides).every(v => typeof v === 'number')) {
+          out.strokeWeights = sides as { top: number; right: number; bottom: number; left: number };
+        }
+      }
       const align = (node as { strokeAlign?: unknown }).strokeAlign;
       if (typeof align === 'string') out.strokeAlign = align;
     }

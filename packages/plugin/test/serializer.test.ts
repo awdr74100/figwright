@@ -183,6 +183,31 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
     expect(out.strokeWeight).toBe(MIXED);
   });
 
+  it('surfaces per-side strokeWeights when strokeWeight is mixed (e.g. a top/bottom-only border)', () => {
+    const out = serializeFlatSync(
+      fake({
+        strokes: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        strokeWeight: Symbol('figma.mixed'),
+        strokeTopWeight: 1,
+        strokeRightWeight: 0,
+        strokeBottomWeight: 1,
+        strokeLeftWeight: 0,
+      }),
+    );
+    expect(out.strokeWeight).toBe(MIXED);
+    expect(out.strokeWeights).toEqual({ top: 1, right: 0, bottom: 1, left: 0 });
+  });
+
+  it('omits strokeWeights when per-side weights are unavailable (not all numeric)', () => {
+    const out = serializeFlatSync(
+      fake({
+        strokes: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        strokeWeight: Symbol('figma.mixed'),
+      }),
+    );
+    expect(out.strokeWeights).toBeUndefined();
+  });
+
   it('omits stroke fields when strokes is empty', () => {
     const out = serializeFlatSync(fake({ strokes: [], strokeWeight: 1 }));
     expect(out.strokes).toBeUndefined();

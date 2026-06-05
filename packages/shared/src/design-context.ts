@@ -53,6 +53,11 @@ export interface DesignContextNode {
   fills?: readonly z.infer<typeof SerializedPaintSchema>[] | typeof MIXED;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | typeof MIXED;
+  /**
+   * Per-side stroke weights when strokeWeight is `mixed`; 0 = no border on that side, non-zero →
+   * border-t / border-r / border-b / border-l.
+   */
+  strokeWeights?: { top: number; right: number; bottom: number; left: number };
   strokeAlign?: string;
   effects?: readonly SerializedEffect[];
   characters?: string;
@@ -104,6 +109,9 @@ export const DesignContextNodeSchema = z.lazy(() =>
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
+    strokeWeights: z
+      .object({ top: z.number(), right: z.number(), bottom: z.number(), left: z.number() })
+      .optional(),
     strokeAlign: z.string().optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     characters: z.string().optional(),

@@ -36,6 +36,7 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.fills !== undefined) out.fills = flat.fills;
   if (flat.strokes !== undefined) out.strokes = flat.strokes;
   if (flat.strokeWeight !== undefined) out.strokeWeight = flat.strokeWeight;
+  if (flat.strokeWeights !== undefined) out.strokeWeights = flat.strokeWeights;
   if (flat.strokeAlign !== undefined) out.strokeAlign = flat.strokeAlign;
   if (flat.effects !== undefined) out.effects = flat.effects;
   if (flat.characters !== undefined) out.characters = flat.characters;
