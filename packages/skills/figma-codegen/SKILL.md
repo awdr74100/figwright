@@ -87,6 +87,30 @@ Then emit code in the detected stack (the profile comes back on `component_map` 
 not call `analyze_project` yourself). Compose the reused components, wrap unmapped pieces, and apply
 token references for color/spacing/radius/typography.
 
+## Responsive by default
+
+Real designs ship multiple breakpoints and modern output is expected to be responsive — so **never
+hardcode the artboard width** (a root `w-[1920px]` scrolls on every smaller screen). The root is
+`w-full`; sections stay fluid with content centered in a `max-w`. Ground the breakpoints instead of
+guessing them:
+
+1. **Find the other breakpoints.** `search_nodes` (type `FRAME`, scoped to the file/page) lists
+   sibling frames with widths. Match the desktop frame to its narrower counterparts by **width
+   buckets** (~1920/1440 desktop · ~768 tablet · ~375 mobile), **name normalization** (strip device
+   prefixes — `W_`/`Ｍ_`, `Desktop`/`Mobile`, `PC`/`SP`), and **content similarity** (same section
+   order + matching `textOverrides` text — works even with no naming convention). `get_design_context`
+   each matched frame.
+2. **Diff into one mobile-first base + `lg:`/`xl:` variants.** Most differences are **reflow** — a
+   single markup with utilities (`flex-col lg:flex-row`, `grid-cols-1 xl:grid-cols-3`, `hidden
+xl:block`, alignment swaps). Only a **structure swap** needs twin `xl:hidden` / `hidden xl:block`
+   markup: when the content _semantics_ differ (a CTA `登入` on mobile vs `聯絡我們` on desktop) or
+   the layout systems are incompatible (hamburger vs full nav, an absolute hero vs a flow stack).
+3. **A fixed-width desktop layout's breakpoint must be ≥ its content width** — gate a 1180px row at
+   `xl:`/1280, not `lg:`/1024, or it overflows at in-between sizes; below it, fall back to the stack.
+
+No other-breakpoint frame? Still output best-effort RWD (fluid container + sensible reflow) and note
+the responsive behaviour is inferred, not grounded.
+
 ## Rules
 
 - **Reuse beats regenerate.** A `high`/`medium` `component_map` candidate must be imported and used, not
@@ -99,6 +123,13 @@ token references for color/spacing/radius/typography.
   fallback.
 - **Don't drop effects.** A node's `effects` / shared `styleIds.effect` is in the context — emit the
   shadow/blur. Flat cards where the design has a drop shadow is a grounding miss, not a simplification.
+- **Per-side borders.** A `strokeWeight: "mixed"` node carries `strokeWeights { top, right, bottom,
+left }` — emit only the non-zero sides (`border-t`/`border-b`), never a uniform `border` (that turns
+  a row divider or underline input into a grid).
+- **Responsive by default.** Root is `w-full`, never the artboard's fixed width (it scrolls on smaller
+  screens). When the file has other-breakpoint frames, find them (`search_nodes` + width/name/content
+  matching) and ground the responsive behaviour from their diff — reflow with breakpoint utilities,
+  twin markup only for structure swaps.
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.
