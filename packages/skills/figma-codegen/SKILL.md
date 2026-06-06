@@ -138,6 +138,12 @@ left }` — emit only the non-zero sides (`border-t`/`border-b`), never a unifor
   screens). When the file has other-breakpoint frames, find them (`search_nodes` + width/name/content
   matching) and ground the responsive behaviour from their diff — reflow with breakpoint utilities,
   twin markup only for structure swaps.
+- **Full-bleed pages need a body reset — but check first.** An edge-to-edge page must zero the body
+  margin (a missing reset shows as a full-page white gutter + horizontal overflow; scoped / CSS-module
+  styles can't reach `html`/`body`). Don't blindly add one: Tailwind's preflight
+  (`profile.styling.system === 'tailwind'`) and any existing reset/normalize already handle it. Add a
+  minimal global reset (`body { margin: 0 }` + `box-sizing`) **only** when the project is non-Tailwind
+  and has none — and never duplicate one that's already there.
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.
