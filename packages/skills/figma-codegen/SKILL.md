@@ -142,8 +142,11 @@ left }` — emit only the non-zero sides (`border-t`/`border-b`), never a unifor
   margin (a missing reset shows as a full-page white gutter + horizontal overflow; scoped / CSS-module
   styles can't reach `html`/`body`). Don't blindly add one: Tailwind's preflight
   (`profile.styling.system === 'tailwind'`) and any existing reset/normalize already handle it. Add a
-  minimal global reset (`body { margin: 0 }` + `box-sizing`) **only** when the project is non-Tailwind
-  and has none — and never duplicate one that's already there.
+  minimal global reset **only** when the project is non-Tailwind and has none — and never duplicate one
+  that's already there. Make the reset complete: zero the body margin **and** default block-element
+  margins (`h1`–`h6`, `p`, `ul`, `figure`, …) + `box-sizing`. A body-only reset still leaves default
+  `<p>`/heading margins that inflate every stacked text block (a footer's contact rows space out and the
+  footer grows too tall).
 - Never write a config file or wizard prompt; everything is inferred from the project + the three tools.
 - If a reused component lacks a prop the design needs (e.g. a `required` field, a password toggle), say
   so — that's a real extension the component needs, not something to fake with ad-hoc markup.
