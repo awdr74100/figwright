@@ -144,20 +144,23 @@ describe('scanComponents (real fs)', () => {
       join(dir, 'src', 'features', 'cart', 'cart-item.tsx'),
       'export default function CartItem() { return <li/>; }',
     );
-    // vendored file must be ignored
+    // vendored files must be ignored — node_modules and a PHP-style vendor/ (even when they hold a
+    // matching .tsx). vendor/ is the case a post-filter alone wouldn't help: it's pruned at the walk.
     await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true });
     await writeFile(join(dir, 'node_modules', 'pkg', 'Evil.tsx'), 'export function Evil() {}');
+    await mkdir(join(dir, 'vendor', 'pkg'), { recursive: true });
+    await writeFile(join(dir, 'vendor', 'pkg', 'Vendored.tsx'), 'export function Vendored() {}');
   });
 
   afterAll(async () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('finds components across heterogeneous folders and skips node_modules', async () => {
+  it('finds components across heterogeneous folders and skips node_modules + vendor', async () => {
     const comps = await scanComponents(dir, ['.tsx', '.jsx']);
     const names = comps.map(c => c.name).toSorted();
-    expect(names).toEqual(['Button', 'CartItem']);
-    expect(comps.every(c => !c.filePath.includes('node_modules'))).toBe(true);
+    expect(names).toEqual(['Button', 'CartItem']); // not Evil (node_modules) or Vendored (vendor)
+    expect(comps.every(c => !/node_modules|vendor/.test(c.filePath))).toBe(true);
   });
 
   // Regression: a single-extension profile (Vue/Svelte) must not be silently dropped by a

@@ -3,7 +3,7 @@ import { basename, dirname, extname, join } from 'node:path';
 
 import { parseSync } from 'oxc-parser';
 
-import { isIgnoredPath } from '../ignored-dirs.js';
+import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
 
 // Component scanner — finds the project's existing components so component_map can join Figma names
 // against them. The guiding principle: never pattern-match the directory layout (feature-based, atomic,
@@ -326,7 +326,9 @@ export const scanComponents = async (
   const patterns = [...exts].map(e => `**/*${e}`);
   const out: ScannedComponent[] = [];
 
-  for await (const entry of glob(patterns, { cwd: rootDir })) {
+  // exclude prunes node_modules/vendor at the walk level (traversal cost independent of their size);
+  // isIgnoredPath stays as a defense-in-depth post-filter in case a runtime ignores exclude.
+  for await (const entry of glob(patterns, { cwd: rootDir, exclude: globExclude })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
     if (isIgnoredPath(rel)) continue;
     const framework = frameworkForExt(extname(rel));

@@ -1,7 +1,7 @@
 import { glob, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 
-import { isIgnoredPath } from '../ignored-dirs.js';
+import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
 
 // Project Profile — the structured "how this project writes code" that the join tools (component_map,
 // token_map) switch their target side on. Detection is split in two: gatherProjectInput does the IO
@@ -127,7 +127,7 @@ const readJson = async <T>(path: string): Promise<T | null> => {
  */
 const findTailwindCssEntry = async (root: string): Promise<string | undefined> => {
   let scanned = 0;
-  for await (const entry of glob('**/*.css', { cwd: root })) {
+  for await (const entry of glob('**/*.css', { cwd: root, exclude: globExclude })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
     if (isIgnoredPath(rel)) continue;
     if (scanned >= 200) break; // safety cap against pathological repos

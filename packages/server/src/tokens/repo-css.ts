@@ -1,7 +1,7 @@
 import { glob, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { isIgnoredPath } from '../ignored-dirs.js';
+import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
 import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
 
 // The token join's right-hand side when there's no single detected CSS config — i.e. a non-Tailwind
@@ -32,7 +32,7 @@ export const aggregateRepoCssTokens = async (rootDir: string): Promise<Aggregate
   const files: string[] = [];
   let scanned = 0;
 
-  for await (const entry of glob('**/*.css', { cwd: rootDir })) {
+  for await (const entry of glob('**/*.css', { cwd: rootDir, exclude: globExclude })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
     if (isIgnoredPath(rel)) continue;
     if (scanned >= MAX_CSS_FILES) break;
