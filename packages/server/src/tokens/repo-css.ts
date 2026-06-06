@@ -1,7 +1,7 @@
-import { glob, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
+import { walkRepoFiles } from '../repo-walk.js';
 import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
 
 // The token join's right-hand side when there's no single detected CSS config — i.e. a non-Tailwind
@@ -22,21 +22,16 @@ export interface AggregatedCss {
 }
 
 /**
- * Walk every CSS file in the repo (skipping vendored/build dirs), parse its custom properties, and
- * pool them. Tokens are kept as-is (no cross-file de-dup): the join prefers an exact value-match,
- * so a name collision across files resolves to the right-valued token when the Figma side carries a
- * hex.
+ * Walk every CSS file in the repo, parse its custom properties, and pool them. Directory pruning +
+ * .gitignore handling live in walkRepoFiles. Tokens are kept as-is (no cross-file de-dup): the join
+ * prefers an exact value-match, so a name collision across files resolves to the right-valued token
+ * when the Figma side carries a hex.
  */
 export const aggregateRepoCssTokens = async (rootDir: string): Promise<AggregatedCss> => {
   const tokens: ProjectToken[] = [];
   const files: string[] = [];
-  let scanned = 0;
 
-  for await (const entry of glob('**/*.css', { cwd: rootDir, exclude: globExclude })) {
-    const rel = typeof entry === 'string' ? entry : String(entry);
-    if (isIgnoredPath(rel)) continue;
-    if (scanned >= MAX_CSS_FILES) break;
-    scanned += 1;
+  for await (const rel of walkRepoFiles(rootDir, { extensions: ['.css'], cap: MAX_CSS_FILES })) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential repo walk; clarity over batching

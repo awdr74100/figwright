@@ -1,7 +1,7 @@
-import { glob, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 
-import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
+import { walkRepoFiles } from '../repo-walk.js';
 
 // Project Profile — the structured "how this project writes code" that the join tools (component_map,
 // token_map) switch their target side on. Detection is split in two: gatherProjectInput does the IO
@@ -121,17 +121,11 @@ const readJson = async <T>(path: string): Promise<T | null> => {
 };
 
 /**
- * Walk the repo's CSS files (skipping vendored/build dirs) looking for the Tailwind v4 markers.
- * Returns the first matching file's repo-relative path, or undefined. Bounded by the small number
- * of hand-authored CSS files a project has; the heavy directories are excluded up front.
+ * Walk the repo's CSS files looking for the Tailwind v4 markers; returns the first matching file's
+ * repo-relative path, or undefined. Directory pruning + .gitignore handling live in walkRepoFiles.
  */
 const findTailwindCssEntry = async (root: string): Promise<string | undefined> => {
-  let scanned = 0;
-  for await (const entry of glob('**/*.css', { cwd: root, exclude: globExclude })) {
-    const rel = typeof entry === 'string' ? entry : String(entry);
-    if (isIgnoredPath(rel)) continue;
-    if (scanned >= 200) break; // safety cap against pathological repos
-    scanned += 1;
+  for await (const rel of walkRepoFiles(root, { extensions: ['.css'], cap: 1000 })) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential scan, stops at first match

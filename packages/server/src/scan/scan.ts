@@ -1,9 +1,9 @@
-import { glob, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 
 import { parseSync } from 'oxc-parser';
 
-import { globExclude, isIgnoredPath } from '../ignored-dirs.js';
+import { walkRepoFiles } from '../repo-walk.js';
 
 // Component scanner — finds the project's existing components so component_map can join Figma names
 // against them. The guiding principle: never pattern-match the directory layout (feature-based, atomic,
@@ -310,27 +310,16 @@ const frameworkForExt = (ext: string): ComponentFramework | null => {
 };
 
 /**
- * Walk the repo for files matching the profile's component extensions, skipping vendored/build
- * dirs, and extract their components. Returns repo-relative paths. Parse failures on individual
- * files are swallowed so one bad file can't sink the whole scan.
+ * Walk the repo for files matching the profile's component extensions and extract their components.
+ * Directory pruning + .gitignore handling live in walkRepoFiles; parse failures on individual files
+ * are swallowed so one bad file can't sink the whole scan.
  */
 export const scanComponents = async (
   rootDir: string,
   extensions: readonly string[],
 ): Promise<ScannedComponent[]> => {
-  const exts = new Set(extensions.map(e => (e.startsWith('.') ? e : `.${e}`)));
-  // One glob per extension rather than a `{a,b}` brace group: Node's fs glob does NOT expand a
-  // single-element brace (`**/*{.vue}` matches literally and finds nothing), which silently sank
-  // every single-extension profile — i.e. all of Vue and Svelte. An array of plain patterns has no
-  // such edge case.
-  const patterns = [...exts].map(e => `**/*${e}`);
   const out: ScannedComponent[] = [];
-
-  // exclude prunes node_modules/vendor at the walk level (traversal cost independent of their size);
-  // isIgnoredPath stays as a defense-in-depth post-filter in case a runtime ignores exclude.
-  for await (const entry of glob(patterns, { cwd: rootDir, exclude: globExclude })) {
-    const rel = typeof entry === 'string' ? entry : String(entry);
-    if (isIgnoredPath(rel)) continue;
+  for await (const rel of walkRepoFiles(rootDir, { extensions })) {
     const framework = frameworkForExt(extname(rel));
     if (framework === null) continue;
     let code: string;
