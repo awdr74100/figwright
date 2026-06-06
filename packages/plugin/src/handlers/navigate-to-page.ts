@@ -7,7 +7,8 @@ export const createNavigateToPageHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { pageId?: unknown };
-    if (typeof p.pageId !== 'string') throw new TypeError('navigate_to_page: pageId must be a string');
+    if (typeof p.pageId !== 'string')
+      throw new TypeError('navigate_to_page: pageId must be a string');
 
     const node = await figmaCtx.getNodeByIdAsync(p.pageId);
     if (node === null || node.type !== 'PAGE') {

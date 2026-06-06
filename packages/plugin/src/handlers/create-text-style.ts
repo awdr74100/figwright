@@ -29,7 +29,8 @@ export const createCreateTextStyleHandler =
       style.fontName = { family: fn.family, style: fn.style };
     }
     if (typeof p.fontSize === 'number') style.fontSize = p.fontSize;
-    if (p.lineHeight !== undefined) style.lineHeight = toFigmaLineHeight(p.lineHeight as SerializedLineHeight);
+    if (p.lineHeight !== undefined)
+      style.lineHeight = toFigmaLineHeight(p.lineHeight as SerializedLineHeight);
     if (p.letterSpacing !== undefined) {
       const ls = p.letterSpacing as SerializedLetterSpacing;
       style.letterSpacing = { unit: ls.unit as 'PIXELS' | 'PERCENT', value: ls.value };

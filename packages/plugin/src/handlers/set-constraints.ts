@@ -8,9 +8,12 @@ export const createSetConstraintsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { nodeId?: unknown; horizontal?: unknown; vertical?: unknown };
-    if (typeof p.nodeId !== 'string') throw new TypeError('set_constraints: nodeId must be a string');
+    if (typeof p.nodeId !== 'string')
+      throw new TypeError('set_constraints: nodeId must be a string');
     if (typeof p.horizontal !== 'string' || !VALUES.has(p.horizontal)) {
-      throw new TypeError('set_constraints: horizontal must be MIN / CENTER / MAX / STRETCH / SCALE');
+      throw new TypeError(
+        'set_constraints: horizontal must be MIN / CENTER / MAX / STRETCH / SCALE',
+      );
     }
     if (typeof p.vertical !== 'string' || !VALUES.has(p.vertical)) {
       throw new TypeError('set_constraints: vertical must be MIN / CENTER / MAX / STRETCH / SCALE');

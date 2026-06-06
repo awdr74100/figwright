@@ -4,8 +4,8 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Convert a serialized paint back to a Figma Paint. SOLID and the four gradient types are supported
- * (gradients round-trip serializePaint's gradientStops + gradientTransform). IMAGE/VIDEO/PATTERN are
- * not writable here — use import_image for raster fills.
+ * (gradients round-trip serializePaint's gradientStops + gradientTransform). IMAGE/VIDEO/PATTERN
+ * are not writable here — use import_image for raster fills.
  */
 export const toFigmaPaint = (paint: SerializedPaint): Paint => {
   if (paint.type === 'SOLID') {

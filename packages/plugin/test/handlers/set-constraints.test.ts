@@ -23,7 +23,11 @@ describe('set_constraints handler', () => {
     const handler = createSetConstraintsHandler(
       fakeFigma({ '1:1': { id: '1:1', constraints: { horizontal: 'MIN', vertical: 'MIN' } } }),
     );
-    await expect(handler({ nodeId: '1:1', horizontal: 'WAT', vertical: 'MIN' })).rejects.toThrow(/horizontal/);
-    await expect(handler({ nodeId: '9:9', horizontal: 'MIN', vertical: 'MIN' })).rejects.toThrow(/not found/);
+    await expect(handler({ nodeId: '1:1', horizontal: 'WAT', vertical: 'MIN' })).rejects.toThrow(
+      /horizontal/,
+    );
+    await expect(handler({ nodeId: '9:9', horizontal: 'MIN', vertical: 'MIN' })).rejects.toThrow(
+      /not found/,
+    );
   });
 });

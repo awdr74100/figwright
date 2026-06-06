@@ -7,7 +7,8 @@ export const createBatchRenameNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { renames?: unknown };
-    if (!Array.isArray(p.renames)) throw new TypeError('batch_rename_nodes: renames must be an array');
+    if (!Array.isArray(p.renames))
+      throw new TypeError('batch_rename_nodes: renames must be an array');
     const valid = (p.renames as { nodeId?: unknown; name?: unknown }[]).filter(
       (r): r is { nodeId: string; name: string } =>
         typeof r?.nodeId === 'string' && typeof r.name === 'string',

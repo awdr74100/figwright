@@ -7,9 +7,9 @@ describe('delete_style handler', () => {
   it('removes the style and returns its captured id + name', async () => {
     const remove = vi.fn<() => void>();
     const style = { id: 'S:0', name: 'Brand/Primary', remove };
-    const handler = createDeleteStyleHandler(
-      { getStyleByIdAsync: async () => style } as unknown as typeof figma,
-    );
+    const handler = createDeleteStyleHandler({
+      getStyleByIdAsync: async () => style,
+    } as unknown as typeof figma);
     const result = (await handler({ styleId: 'S:0' })) as StyleResult;
 
     expect(remove).toHaveBeenCalledOnce();

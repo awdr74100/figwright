@@ -10,7 +10,12 @@ export const createResizeNodesHandler =
     if (!Array.isArray(p.nodeIds) || p.nodeIds.some(id => typeof id !== 'string')) {
       throw new TypeError('resize_nodes: nodeIds must be a string[]');
     }
-    if (typeof p.width !== 'number' || typeof p.height !== 'number' || p.width <= 0 || p.height <= 0) {
+    if (
+      typeof p.width !== 'number' ||
+      typeof p.height !== 'number' ||
+      p.width <= 0 ||
+      p.height <= 0
+    ) {
       throw new TypeError('resize_nodes: width and height must be positive numbers');
     }
     const { width, height } = p;

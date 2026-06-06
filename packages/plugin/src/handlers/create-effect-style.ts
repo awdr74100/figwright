@@ -8,8 +8,10 @@ export const createCreateEffectStyleHandler =
   // eslint-disable-next-line @typescript-eslint/require-await
   async params => {
     const p = (params ?? {}) as { name?: unknown; effects?: unknown; description?: unknown };
-    if (typeof p.name !== 'string') throw new TypeError('create_effect_style: name must be a string');
-    if (!Array.isArray(p.effects)) throw new TypeError('create_effect_style: effects must be an array');
+    if (typeof p.name !== 'string')
+      throw new TypeError('create_effect_style: name must be a string');
+    if (!Array.isArray(p.effects))
+      throw new TypeError('create_effect_style: effects must be an array');
 
     const style = figmaCtx.createEffectStyle();
     style.name = p.name;

@@ -41,7 +41,10 @@ describe('get_reactions handler', () => {
     const node = {
       id: '1:2',
       reactions: [
-        { trigger: { type: 'AFTER_TIMEOUT', timeout: 3 }, action: { type: 'URL', url: 'https://x.dev' } },
+        {
+          trigger: { type: 'AFTER_TIMEOUT', timeout: 3 },
+          action: { type: 'URL', url: 'https://x.dev' },
+        },
         { trigger: null, actions: [{ type: 'BACK' }] },
       ],
     } as unknown as BaseNode;

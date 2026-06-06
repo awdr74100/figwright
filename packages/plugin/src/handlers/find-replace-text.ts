@@ -26,7 +26,8 @@ export const createFindReplaceTextHandler =
     if (typeof p.find !== 'string' || p.find === '') {
       throw new TypeError('find_replace_text: find must be a non-empty string');
     }
-    if (typeof p.replace !== 'string') throw new TypeError('find_replace_text: replace must be a string');
+    if (typeof p.replace !== 'string')
+      throw new TypeError('find_replace_text: replace must be a string');
 
     let root: BaseNode;
     if (typeof p.rootId === 'string') {

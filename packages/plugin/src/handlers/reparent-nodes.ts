@@ -15,7 +15,9 @@ export const createReparentNodesHandler =
     }
     const parent = await figmaCtx.getNodeByIdAsync(p.newParentId);
     if (parent === null || !('appendChild' in parent)) {
-      throw new Error(`reparent_nodes: parent ${p.newParentId} not found or cannot contain children`);
+      throw new Error(
+        `reparent_nodes: parent ${p.newParentId} not found or cannot contain children`,
+      );
     }
     const pm = parent as ChildrenMixin;
     const ids = p.nodeIds as readonly string[];

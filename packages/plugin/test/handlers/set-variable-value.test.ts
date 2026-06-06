@@ -25,7 +25,11 @@ describe('set_variable_value handler', () => {
     const setValueForMode = vi.fn<() => void>();
     const variable = { id: 'V:0', name: 'x', setValueForMode };
     const handler = createSetVariableValueHandler(fakeFigma(variable));
-    await handler({ variableId: 'V:0', modeId: 'M:0', value: { type: 'VARIABLE_ALIAS', id: 'V:9' } });
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: { type: 'VARIABLE_ALIAS', id: 'V:9' },
+    });
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
   });
 
@@ -36,7 +40,11 @@ describe('set_variable_value handler', () => {
       { resolvedType: 'FLOAT', raw: '42', expected: 42 },
       { resolvedType: 'BOOLEAN', raw: 'true', expected: true },
       { resolvedType: 'BOOLEAN', raw: 'false', expected: false },
-      { resolvedType: 'COLOR', raw: '{"r":0.2,"g":0.5,"b":1,"a":1}', expected: { r: 0.2, g: 0.5, b: 1, a: 1 } },
+      {
+        resolvedType: 'COLOR',
+        raw: '{"r":0.2,"g":0.5,"b":1,"a":1}',
+        expected: { r: 0.2, g: 0.5, b: 1, a: 1 },
+      },
       { resolvedType: 'STRING', raw: 'hello', expected: 'hello' },
     ];
     for (const { resolvedType, raw, expected } of cases) {
@@ -57,20 +65,37 @@ describe('set_variable_value handler', () => {
     const handler = createSetVariableValueHandler(
       fakeFigma({ id: 'V:0', name: 'radius/md', resolvedType: 'FLOAT', setValueForMode }),
     );
-    await handler({ variableId: 'V:0', modeId: 'M:0', value: { type: 'VARIABLE_ALIAS', id: 'V:9' } });
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: { type: 'VARIABLE_ALIAS', id: 'V:9' },
+    });
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
   });
 
   it('rejects a stringified FLOAT that is not a number', async () => {
-    const variable = { id: 'V:0', name: 'x', resolvedType: 'FLOAT', setValueForMode: vi.fn<() => void>() };
+    const variable = {
+      id: 'V:0',
+      name: 'x',
+      resolvedType: 'FLOAT',
+      setValueForMode: vi.fn<() => void>(),
+    };
     await expect(
-      createSetVariableValueHandler(fakeFigma(variable))({ variableId: 'V:0', modeId: 'M:0', value: 'abc' }),
+      createSetVariableValueHandler(fakeFigma(variable))({
+        variableId: 'V:0',
+        modeId: 'M:0',
+        value: 'abc',
+      }),
     ).rejects.toThrow(/not a number/);
   });
 
   it('throws when variable missing or input bad', async () => {
     await expect(
-      createSetVariableValueHandler(fakeFigma(null))({ variableId: 'V:9', modeId: 'M:0', value: 1 }),
+      createSetVariableValueHandler(fakeFigma(null))({
+        variableId: 'V:9',
+        modeId: 'M:0',
+        value: 1,
+      }),
     ).rejects.toThrow(/not found/);
     await expect(
       createSetVariableValueHandler(fakeFigma(null))({ variableId: 'V:0', modeId: 'M:0' }),

@@ -39,7 +39,12 @@ describe('create_ellipse handler', () => {
     const handler = createCreateEllipseHandler(
       fakeFigma(node, { appendChild: vi.fn<(n: unknown) => void>() }, { '1:1': parent }),
     );
-    const result = (await handler({ parentId: '1:1', name: 'Dot', width: 20, height: 20 })) as CreateResult;
+    const result = (await handler({
+      parentId: '1:1',
+      name: 'Dot',
+      width: 20,
+      height: 20,
+    })) as CreateResult;
 
     expect(node.name).toBe('Dot');
     expect([node.width, node.height]).toEqual([20, 20]);

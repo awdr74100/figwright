@@ -46,8 +46,8 @@ export const createIdempotencyCache = (
 };
 
 /**
- * Wrap a write handler so repeated calls carrying the same `requestId` apply the effect once.
- * Calls without a requestId run normally (reads, or writes invoked without idempotency).
+ * Wrap a write handler so repeated calls carrying the same `requestId` apply the effect once. Calls
+ * without a requestId run normally (reads, or writes invoked without idempotency).
  */
 export const idempotent =
   (cache: IdempotencyCache, handler: SandboxToolHandler): SandboxToolHandler =>

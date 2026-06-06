@@ -30,11 +30,15 @@ describe('screenshotContent', () => {
   });
 
   it('notes missing / non-exportable nodes as text', () => {
-    const result: GetScreenshotResult = { images: [{ nodeId: '9:9', format: 'PNG', base64: null }] };
+    const result: GetScreenshotResult = {
+      images: [{ nodeId: '9:9', format: 'PNG', base64: null }],
+    };
     expect(screenshotContent(result)).toEqual([{ type: 'text', text: '9:9: not exportable' }]);
   });
 
   it('falls back to a note when there are no images', () => {
-    expect(screenshotContent({ images: [] })).toEqual([{ type: 'text', text: 'No nodes exported.' }]);
+    expect(screenshotContent({ images: [] })).toEqual([
+      { type: 'text', text: 'No nodes exported.' },
+    ]);
   });
 });

@@ -42,8 +42,8 @@ describe('create_instance handler', () => {
     await expect(createCreateInstanceHandler(fakeFigma())({})).rejects.toThrow(
       /componentId or componentKey/,
     );
-    await expect(
-      createCreateInstanceHandler(fakeFigma())({ componentId: 'X:9' }),
-    ).rejects.toThrow(/not found/);
+    await expect(createCreateInstanceHandler(fakeFigma())({ componentId: 'X:9' })).rejects.toThrow(
+      /not found/,
+    );
   });
 });

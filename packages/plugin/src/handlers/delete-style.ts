@@ -6,7 +6,8 @@ export const createDeleteStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { styleId?: unknown };
-    if (typeof p.styleId !== 'string') throw new TypeError('delete_style: styleId must be a string');
+    if (typeof p.styleId !== 'string')
+      throw new TypeError('delete_style: styleId must be a string');
 
     const style = await figmaCtx.getStyleByIdAsync(p.styleId);
     if (style === null) throw new Error(`delete_style: style ${p.styleId} not found`);

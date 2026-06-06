@@ -20,7 +20,8 @@ export const createSetAutoLayoutHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as Record<string, unknown>;
-    if (typeof p.nodeId !== 'string') throw new TypeError('set_auto_layout: nodeId must be a string');
+    if (typeof p.nodeId !== 'string')
+      throw new TypeError('set_auto_layout: nodeId must be a string');
     if (typeof p.layoutMode !== 'string' || !LAYOUT_MODES.has(p.layoutMode)) {
       throw new TypeError('set_auto_layout: layoutMode must be NONE / HORIZONTAL / VERTICAL');
     }
@@ -32,11 +33,19 @@ export const createSetAutoLayoutHandler =
     target.layoutMode = p.layoutMode;
 
     if (p.layoutMode !== 'NONE') {
-      for (const key of ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing'] as const) {
+      for (const key of [
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft',
+        'itemSpacing',
+      ] as const) {
         if (typeof p[key] === 'number') target[key] = p[key] as number;
       }
-      if (typeof p.primaryAxisAlignItems === 'string') target.primaryAxisAlignItems = p.primaryAxisAlignItems;
-      if (typeof p.counterAxisAlignItems === 'string') target.counterAxisAlignItems = p.counterAxisAlignItems;
+      if (typeof p.primaryAxisAlignItems === 'string')
+        target.primaryAxisAlignItems = p.primaryAxisAlignItems;
+      if (typeof p.counterAxisAlignItems === 'string')
+        target.counterAxisAlignItems = p.counterAxisAlignItems;
       if (typeof p.layoutWrap === 'string') target.layoutWrap = p.layoutWrap;
     }
 

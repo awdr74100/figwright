@@ -9,11 +9,13 @@ export interface PingResult {
   ts: number;
 }
 
-export const createPingHandler = (figmaCtx: typeof figma): SandboxToolHandler => () => ({
-  apiVersion: figmaCtx.apiVersion,
-  editorType: figmaCtx.editorType,
-  currentPageId: figmaCtx.currentPage.id,
-  currentPageName: figmaCtx.currentPage.name,
-  fileKey: figmaCtx.fileKey ?? null,
-  ts: Date.now(),
-});
+export const createPingHandler =
+  (figmaCtx: typeof figma): SandboxToolHandler =>
+  () => ({
+    apiVersion: figmaCtx.apiVersion,
+    editorType: figmaCtx.editorType,
+    currentPageId: figmaCtx.currentPage.id,
+    currentPageName: figmaCtx.currentPage.name,
+    fileKey: figmaCtx.fileKey ?? null,
+    ts: Date.now(),
+  });

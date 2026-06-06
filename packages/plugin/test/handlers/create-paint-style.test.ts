@@ -14,7 +14,12 @@ const fakeFigma = (): { figma: typeof figma; created: FakePaintStyle[] } => {
   const created: FakePaintStyle[] = [];
   const figmaCtx = {
     createPaintStyle: () => {
-      const style: FakePaintStyle = { id: `S:${created.length}`, name: '', paints: [], description: '' };
+      const style: FakePaintStyle = {
+        id: `S:${created.length}`,
+        name: '',
+        paints: [],
+        description: '',
+      };
       created.push(style);
       return style;
     },

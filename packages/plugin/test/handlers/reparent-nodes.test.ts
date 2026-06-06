@@ -31,10 +31,12 @@ describe('reparent_nodes handler', () => {
 
   it('throws on bad input or invalid parent', async () => {
     const f = makeFigma(null, {});
-    await expect(createReparentNodesHandler(f)({ nodeIds: 'x', newParentId: '2:0' })).rejects.toThrow(
-      /nodeIds/,
+    await expect(
+      createReparentNodesHandler(f)({ nodeIds: 'x', newParentId: '2:0' }),
+    ).rejects.toThrow(/nodeIds/);
+    await expect(createReparentNodesHandler(f)({ nodeIds: ['1:1'] })).rejects.toThrow(
+      /newParentId/,
     );
-    await expect(createReparentNodesHandler(f)({ nodeIds: ['1:1'] })).rejects.toThrow(/newParentId/);
     await expect(
       createReparentNodesHandler(f)({ nodeIds: ['1:1'], newParentId: '9:9' }),
     ).rejects.toThrow(/not found or cannot contain/);

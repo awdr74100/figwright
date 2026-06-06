@@ -4,10 +4,11 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaVariableValue } from './convert.js';
 
 /**
- * Some MCP clients serialize a schema-untyped property to a string in transit, so `value` can arrive
- * as e.g. "42" / "true" / '{"r":..}' even though the caller passed a number / boolean / object. We
- * know the variable's resolvedType, so realign the value to it — otherwise Figma's setValueForMode
- * rejects every non-STRING variable with a "Mismatched variable resolved type" error.
+ * Some MCP clients serialize a schema-untyped property to a string in transit, so `value` can
+ * arrive as e.g. "42" / "true" / '{"r":..}' even though the caller passed a number / boolean /
+ * object. We know the variable's resolvedType, so realign the value to it — otherwise Figma's
+ * setValueForMode rejects every non-STRING variable with a "Mismatched variable resolved type"
+ * error.
  */
 const coerceToResolvedType = (raw: unknown, resolvedType: VariableResolvedDataType): unknown => {
   if (typeof raw !== 'string') return raw; // native type survived transit — nothing to fix
@@ -34,7 +35,8 @@ export const createSetVariableValueHandler =
     if (typeof p.variableId !== 'string') {
       throw new TypeError('set_variable_value: variableId must be a string');
     }
-    if (typeof p.modeId !== 'string') throw new TypeError('set_variable_value: modeId must be a string');
+    if (typeof p.modeId !== 'string')
+      throw new TypeError('set_variable_value: modeId must be a string');
     if (p.value === undefined) throw new TypeError('set_variable_value: value is required');
 
     const variable = await figmaCtx.variables.getVariableByIdAsync(p.variableId);

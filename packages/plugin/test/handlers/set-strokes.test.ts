@@ -29,7 +29,9 @@ describe('set_strokes handler', () => {
     await expect(
       handler({ nodeId: '1:1', strokes: [{ type: 'IMAGE', visible: true, opacity: 1 }] }),
     ).rejects.toThrow(/SOLID/);
-    await expect(handler({ nodeId: '1:1', strokes: [], strokeWeight: -1 })).rejects.toThrow(/strokeWeight/);
+    await expect(handler({ nodeId: '1:1', strokes: [], strokeWeight: -1 })).rejects.toThrow(
+      /strokeWeight/,
+    );
     await expect(handler({ nodeId: '9:9', strokes: [] })).rejects.toThrow(/not found/);
   });
 });

@@ -32,7 +32,9 @@ describe('set_reactions handler', () => {
   });
 
   it('throws on bad input or unsupported node', async () => {
-    await expect(createSetReactionsHandler(withNode({}))({ reactions: [] })).rejects.toThrow(/nodeId/);
+    await expect(createSetReactionsHandler(withNode({}))({ reactions: [] })).rejects.toThrow(
+      /nodeId/,
+    );
     await expect(
       createSetReactionsHandler(withNode({}))({ nodeId: '1:1', reactions: 'x' }),
     ).rejects.toThrow(/reactions/);

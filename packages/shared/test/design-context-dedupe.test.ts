@@ -93,7 +93,9 @@ describe('dedupeStyles', () => {
       name: 'card',
       type: 'FRAME',
       fills: [solid(1, 1, 1)],
-      effects: [{ type: 'DROP_SHADOW', visible: true, radius: 4, color: { r: 0, g: 0, b: 0, a: 0.25 } }],
+      effects: [
+        { type: 'DROP_SHADOW', visible: true, radius: 4, color: { r: 0, g: 0, b: 0, a: 0.25 } },
+      ],
       children: [{ id: 'btn', name: 'btn', type: 'INSTANCE', fills: [solid(0.38, 0.4, 0.94)] }],
     };
     const { nodes } = dedupeStyles([card]);

@@ -410,9 +410,7 @@ describe('RelayClient', () => {
     const { client, live } = await connectWithLiveSocket(async () => {
       throw new Error('boom');
     });
-    live.fireReceive(
-      createRequest({ id: 't-2', sessionId: client.sessionId, method: 'get_node' }),
-    );
+    live.fireReceive(createRequest({ id: 't-2', sessionId: client.sessionId, method: 'get_node' }));
     await new Promise(resolve => setTimeout(resolve, 5));
 
     expect(client.getState().activity[0]).toMatchObject({

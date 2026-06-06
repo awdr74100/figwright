@@ -11,7 +11,10 @@ describe('rotate_nodes handler', () => {
     const a = { id: '1:1', rotation: 0 };
     const noRot = { id: '1:2' };
     const handler = createRotateNodesHandler(fakeFigma({ '1:1': a, '1:2': noRot }));
-    const result = (await handler({ nodeIds: ['1:1', '1:2', '9:9'], rotation: 45 })) as BatchNodeResult;
+    const result = (await handler({
+      nodeIds: ['1:1', '1:2', '9:9'],
+      rotation: 45,
+    })) as BatchNodeResult;
     expect(a.rotation).toBe(45);
     expect(result).toEqual({ ok: true, affected: ['1:1'] });
   });

@@ -6,7 +6,8 @@ export const createSetCornerRadiusHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { nodeId?: unknown; radius?: unknown };
-    if (typeof p.nodeId !== 'string') throw new TypeError('set_corner_radius: nodeId must be a string');
+    if (typeof p.nodeId !== 'string')
+      throw new TypeError('set_corner_radius: nodeId must be a string');
     if (typeof p.radius !== 'number' || p.radius < 0) {
       throw new TypeError('set_corner_radius: radius must be a non-negative number');
     }

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 
 import { handlePing } from '../../src/tools/ping.js';
-
 import {
   closeSocket,
   connectFakePlugin,

@@ -24,7 +24,11 @@ describe('lock/unlock nodes handler', () => {
   });
 
   it('throws on bad input (message reflects lock vs unlock)', async () => {
-    await expect(createSetLockedHandler(fakeFigma({}), true)({ nodeIds: 'x' })).rejects.toThrow(/lock_nodes/);
-    await expect(createSetLockedHandler(fakeFigma({}), false)({ nodeIds: 'x' })).rejects.toThrow(/unlock_nodes/);
+    await expect(createSetLockedHandler(fakeFigma({}), true)({ nodeIds: 'x' })).rejects.toThrow(
+      /lock_nodes/,
+    );
+    await expect(createSetLockedHandler(fakeFigma({}), false)({ nodeIds: 'x' })).rejects.toThrow(
+      /unlock_nodes/,
+    );
   });
 });

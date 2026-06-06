@@ -27,6 +27,8 @@ describe('group_nodes handler', () => {
   it('throws on empty input or no groupable parent', async () => {
     const f = { getNodeByIdAsync: async () => null } as unknown as typeof figma;
     await expect(createGroupNodesHandler(f)({ nodeIds: [] })).rejects.toThrow(/non-empty/);
-    await expect(createGroupNodesHandler(f)({ nodeIds: ['9:9'] })).rejects.toThrow(/no valid nodes/);
+    await expect(createGroupNodesHandler(f)({ nodeIds: ['9:9'] })).rejects.toThrow(
+      /no valid nodes/,
+    );
   });
 });

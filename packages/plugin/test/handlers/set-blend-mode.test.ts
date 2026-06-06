@@ -16,7 +16,9 @@ describe('set_blend_mode handler', () => {
   });
 
   it('throws on bad input or missing node', async () => {
-    const handler = createSetBlendModeHandler(fakeFigma({ '1:1': { id: '1:1', blendMode: 'NORMAL' } }));
+    const handler = createSetBlendModeHandler(
+      fakeFigma({ '1:1': { id: '1:1', blendMode: 'NORMAL' } }),
+    );
     await expect(handler({ nodeId: '1:1' })).rejects.toThrow(/blendMode/);
     await expect(handler({ nodeId: '9:9', blendMode: 'SCREEN' })).rejects.toThrow(/not found/);
   });

@@ -1,8 +1,4 @@
-import {
-  createToolCall,
-  ErrorCode,
-  isPluginBridgeMessage,
-} from '@figma-mcp-relay/shared';
+import { createToolCall, ErrorCode, isPluginBridgeMessage } from '@figma-mcp-relay/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { dispatchSandboxMessage, type SandboxHandlers } from '../src/dispatcher.js';

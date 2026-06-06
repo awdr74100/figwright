@@ -21,7 +21,10 @@ const makeComponent = () => {
   return node;
 };
 
-const fakeFigma = (node: ReturnType<typeof makeComponent>, page: { appendChild: (n: unknown) => void }): typeof figma =>
+const fakeFigma = (
+  node: ReturnType<typeof makeComponent>,
+  page: { appendChild: (n: unknown) => void },
+): typeof figma =>
   ({
     createComponent: () => node,
     currentPage: page,
@@ -33,7 +36,13 @@ describe('create_component handler', () => {
     const node = makeComponent();
     const appendChild = vi.fn<(n: unknown) => void>();
     const handler = createCreateComponentHandler(fakeFigma(node, { appendChild }));
-    const result = (await handler({ name: 'Button', width: 120, height: 40, x: 10, y: 5 })) as CreateResult;
+    const result = (await handler({
+      name: 'Button',
+      width: 120,
+      height: 40,
+      x: 10,
+      y: 5,
+    })) as CreateResult;
 
     expect(node.name).toBe('Button');
     expect([node.width, node.height, node.x, node.y]).toEqual([120, 40, 10, 5]);

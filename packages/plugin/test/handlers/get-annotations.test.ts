@@ -6,7 +6,10 @@ import { createGetAnnotationsHandler } from '../../src/handlers/get-annotations.
 const node = (id: string, annotations: unknown[], children?: SceneNode[]): SceneNode =>
   ({ id, name: id, type: 'FRAME', annotations, children }) as unknown as SceneNode;
 
-const fakeFigma = (pageChildren: SceneNode[], lookup: Record<string, BaseNode | null> = {}): typeof figma =>
+const fakeFigma = (
+  pageChildren: SceneNode[],
+  lookup: Record<string, BaseNode | null> = {},
+): typeof figma =>
   ({
     currentPage: { children: pageChildren },
     getNodeByIdAsync: async (id: string) => lookup[id] ?? null,
@@ -15,12 +18,16 @@ const fakeFigma = (pageChildren: SceneNode[], lookup: Record<string, BaseNode | 
 describe('get_annotations handler', () => {
   it('scans the current page for annotated nodes when no nodeId given', async () => {
     const page = [
-      node('1', [{ label: 'Use token', properties: [{ type: 'fills' }, { type: 'cornerRadius' }] }], [
-        node('2', []),
-      ]),
+      node(
+        '1',
+        [{ label: 'Use token', properties: [{ type: 'fills' }, { type: 'cornerRadius' }] }],
+        [node('2', [])],
+      ),
       node('3', [{ labelMarkdown: '**bold**', categoryId: 'cat-1' }]),
     ];
-    const result = (await createGetAnnotationsHandler(fakeFigma(page))(undefined)) as GetAnnotationsResult;
+    const result = (await createGetAnnotationsHandler(fakeFigma(page))(
+      undefined,
+    )) as GetAnnotationsResult;
     expect(result.annotations.map(a => a.nodeId)).toEqual(['1', '3']);
     expect(result.annotations[0]?.annotations[0]).toEqual({
       label: 'Use token',
@@ -43,11 +50,15 @@ describe('get_annotations handler', () => {
   });
 
   it('throws when nodeId is the wrong type', async () => {
-    await expect(createGetAnnotationsHandler(fakeFigma([]))({ nodeId: 5 })).rejects.toThrow(/nodeId/);
+    await expect(createGetAnnotationsHandler(fakeFigma([]))({ nodeId: 5 })).rejects.toThrow(
+      /nodeId/,
+    );
   });
 
   it('returns empty when the page has no annotated nodes', async () => {
-    const result = (await createGetAnnotationsHandler(fakeFigma([node('1', [])]))(undefined)) as GetAnnotationsResult;
+    const result = (await createGetAnnotationsHandler(fakeFigma([node('1', [])]))(
+      undefined,
+    )) as GetAnnotationsResult;
     expect(result.annotations).toEqual([]);
   });
 });

@@ -8,8 +8,10 @@ export const createCreatePaintStyleHandler =
   // eslint-disable-next-line @typescript-eslint/require-await
   async params => {
     const p = (params ?? {}) as { name?: unknown; paints?: unknown; description?: unknown };
-    if (typeof p.name !== 'string') throw new TypeError('create_paint_style: name must be a string');
-    if (!Array.isArray(p.paints)) throw new TypeError('create_paint_style: paints must be an array');
+    if (typeof p.name !== 'string')
+      throw new TypeError('create_paint_style: name must be a string');
+    if (!Array.isArray(p.paints))
+      throw new TypeError('create_paint_style: paints must be an array');
 
     const style = figmaCtx.createPaintStyle();
     style.name = p.name;

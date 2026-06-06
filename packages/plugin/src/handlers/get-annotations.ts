@@ -1,4 +1,8 @@
-import type { GetAnnotationsResult, NodeAnnotations, SerializedAnnotation } from '@figma-mcp-relay/shared';
+import type {
+  GetAnnotationsResult,
+  NodeAnnotations,
+  SerializedAnnotation,
+} from '@figma-mcp-relay/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { walk } from '../traverse.js';
@@ -12,7 +16,9 @@ const serializeAnnotation = (a: Annotation): SerializedAnnotation => {
   return out;
 };
 
-const hasAnnotations = (node: BaseNode): node is BaseNode & { annotations: readonly Annotation[] } =>
+const hasAnnotations = (
+  node: BaseNode,
+): node is BaseNode & { annotations: readonly Annotation[] } =>
   'annotations' in node && Array.isArray((node as { annotations?: unknown }).annotations);
 
 export const createGetAnnotationsHandler =

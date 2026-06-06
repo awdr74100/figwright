@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { decodeEnvelope, encodeEnvelope } from '../src/codec.js';
-import { createError, createRequest, createResponse, type ResponseEnvelope } from '../src/envelope.js';
+import {
+  createError,
+  createRequest,
+  createResponse,
+  type ResponseEnvelope,
+} from '../src/envelope.js';
 import { ErrorCode } from '../src/protocol.js';
 
 const baseInput = { id: 'r1', sessionId: 's1', ts: 42 };

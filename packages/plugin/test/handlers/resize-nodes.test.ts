@@ -23,7 +23,9 @@ describe('resize_nodes handler', () => {
 
   it('throws on non-positive dimensions and bad input', async () => {
     const handler = createResizeNodesHandler(fakeFigma({}));
-    await expect(handler({ nodeIds: ['1:1'], width: 0, height: 10 })).rejects.toThrow(/width and height/);
+    await expect(handler({ nodeIds: ['1:1'], width: 0, height: 10 })).rejects.toThrow(
+      /width and height/,
+    );
     await expect(handler({ nodeIds: 'x', width: 1, height: 1 })).rejects.toThrow(/nodeIds/);
   });
 });

@@ -44,7 +44,9 @@ describe('create_text handler', () => {
   });
 
   it('throws when characters is missing', async () => {
-    const handler = createCreateTextHandler(fakeFigma(makeText(), { appendChild: vi.fn<(n: unknown) => void>() }));
+    const handler = createCreateTextHandler(
+      fakeFigma(makeText(), { appendChild: vi.fn<(n: unknown) => void>() }),
+    );
     await expect(handler({})).rejects.toThrow(/characters/);
   });
 });

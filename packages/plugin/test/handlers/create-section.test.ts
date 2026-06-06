@@ -21,7 +21,10 @@ const makeSection = () => {
   return node;
 };
 
-const fakeFigma = (node: ReturnType<typeof makeSection>, page: { appendChild: (n: unknown) => void }): typeof figma =>
+const fakeFigma = (
+  node: ReturnType<typeof makeSection>,
+  page: { appendChild: (n: unknown) => void },
+): typeof figma =>
   ({
     createSection: () => node,
     currentPage: page,

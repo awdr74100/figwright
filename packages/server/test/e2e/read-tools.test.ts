@@ -40,11 +40,10 @@ import { GET_STYLES_TOOL_NAME } from '../../src/tools/get-styles.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from '../../src/tools/get-variable-defs.js';
 import { GET_VIEWPORT_TOOL_NAME } from '../../src/tools/get-viewport.js';
 import { LIST_FILES_TOOL_NAME } from '../../src/tools/list-files.js';
+import { handleSaveScreenshots } from '../../src/tools/save-screenshots.js';
 import { SCAN_NODES_BY_TYPES_TOOL_NAME } from '../../src/tools/scan-nodes-by-types.js';
 import { SCAN_TEXT_NODES_TOOL_NAME } from '../../src/tools/scan-text-nodes.js';
-import { handleSaveScreenshots } from '../../src/tools/save-screenshots.js';
 import { SEARCH_NODES_TOOL_NAME } from '../../src/tools/search-nodes.js';
-
 import {
   closeSocket,
   connectFakePlugin,
@@ -93,11 +92,9 @@ describe('e2e get_node', () => {
         },
       }),
     );
-    const result = (await dispatchTool(
-      { node: h.node, follower: h.follower },
-      GET_NODE_TOOL_NAME,
-      { nodeId: '1:2' },
-    )) as GetNodeResult;
+    const result = (await dispatchTool({ node: h.node, follower: h.follower }, GET_NODE_TOOL_NAME, {
+      nodeId: '1:2',
+    })) as GetNodeResult;
     expect(result.node?.id).toBe('1:2');
   });
 
@@ -110,11 +107,9 @@ describe('e2e get_node', () => {
         handlers: { [GET_NODE_TOOL_NAME]: () => ({ node: null }) satisfies GetNodeResult },
       }),
     );
-    const result = (await dispatchTool(
-      { node: h.node, follower: h.follower },
-      GET_NODE_TOOL_NAME,
-      { nodeId: '1:99' },
-    )) as GetNodeResult;
+    const result = (await dispatchTool({ node: h.node, follower: h.follower }, GET_NODE_TOOL_NAME, {
+      nodeId: '1:99',
+    })) as GetNodeResult;
     expect(result.node).toBeNull();
   });
 });
@@ -383,7 +378,10 @@ describe('e2e get_viewport', () => {
       bounds: { x: 0, y: 0, width: 1280, height: 720 },
     };
     sockets.push(
-      await connectFakePlugin({ port: h.port, handlers: { [GET_VIEWPORT_TOOL_NAME]: () => response } }),
+      await connectFakePlugin({
+        port: h.port,
+        handlers: { [GET_VIEWPORT_TOOL_NAME]: () => response },
+      }),
     );
     const result = (await dispatchTool(
       { node: h.node, follower: h.follower },
@@ -402,7 +400,10 @@ describe('e2e get_fonts', () => {
       fonts: [{ fontName: { family: 'Inter', style: 'Regular' }, count: 3 }],
     };
     sockets.push(
-      await connectFakePlugin({ port: h.port, handlers: { [GET_FONTS_TOOL_NAME]: () => response } }),
+      await connectFakePlugin({
+        port: h.port,
+        handlers: { [GET_FONTS_TOOL_NAME]: () => response },
+      }),
     );
     const result = (await dispatchTool(
       { node: h.node, follower: h.follower },
@@ -468,10 +469,15 @@ describe('e2e list_files', () => {
     const h = await startLeader();
     harnesses.push(h);
     const response: ListFilesResult = {
-      files: [{ fileKey: 'abc', fileName: 'Mockups.fig', currentPage: { id: 'p-1', name: 'Cover' } }],
+      files: [
+        { fileKey: 'abc', fileName: 'Mockups.fig', currentPage: { id: 'p-1', name: 'Cover' } },
+      ],
     };
     sockets.push(
-      await connectFakePlugin({ port: h.port, handlers: { [LIST_FILES_TOOL_NAME]: () => response } }),
+      await connectFakePlugin({
+        port: h.port,
+        handlers: { [LIST_FILES_TOOL_NAME]: () => response },
+      }),
     );
     const result = (await dispatchTool(
       { node: h.node, follower: h.follower },
@@ -487,7 +493,14 @@ describe('e2e get_design_context', () => {
     const h = await startLeader();
     harnesses.push(h);
     const response: GetDesignContextResult = {
-      nodes: [{ id: 'r', name: 'Root', type: 'FRAME', children: [{ id: 'c', name: 'Child', type: 'TEXT' }] }],
+      nodes: [
+        {
+          id: 'r',
+          name: 'Root',
+          type: 'FRAME',
+          children: [{ id: 'c', name: 'Child', type: 'TEXT' }],
+        },
+      ],
     };
     sockets.push(
       await connectFakePlugin({

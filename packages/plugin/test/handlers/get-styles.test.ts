@@ -62,14 +62,23 @@ describe('get_styles handler', () => {
             key: 'k4',
             description: '',
             layoutGrids: [
-              { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 20, alignment: 'STRETCH' },
+              {
+                pattern: 'COLUMNS',
+                visible: true,
+                count: 12,
+                gutterSize: 20,
+                alignment: 'STRETCH',
+              },
             ],
           },
         ],
       }),
     );
     const result = (await handler(undefined)) as GetStylesResult;
-    expect(result.paints[0]?.paints[0]).toMatchObject({ type: 'SOLID', color: { r: 1, g: 0, b: 0 } });
+    expect(result.paints[0]?.paints[0]).toMatchObject({
+      type: 'SOLID',
+      color: { r: 1, g: 0, b: 0 },
+    });
     expect(result.texts[0]).toMatchObject({
       fontName: { family: 'Inter', style: 'Regular' },
       fontSize: 16,

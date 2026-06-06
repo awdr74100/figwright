@@ -16,7 +16,9 @@ describe('set_corner_radius handler', () => {
   });
 
   it('rejects negative radius, bad input, and nodes without cornerRadius', async () => {
-    const handler = createSetCornerRadiusHandler(fakeFigma({ '1:1': { id: '1:1', cornerRadius: 0 } }));
+    const handler = createSetCornerRadiusHandler(
+      fakeFigma({ '1:1': { id: '1:1', cornerRadius: 0 } }),
+    );
     await expect(handler({ nodeId: '1:1', radius: -1 })).rejects.toThrow(/radius/);
     await expect(handler({ nodeId: '1:1' })).rejects.toThrow(/radius/);
     await expect(handler({ nodeId: '9:9', radius: 4 })).rejects.toThrow(/not found/);

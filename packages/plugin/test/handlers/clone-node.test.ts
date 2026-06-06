@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createCloneNodeHandler } from '../../src/handlers/clone-node.js';
 
-const fakeFigma = (lookup: Record<string, unknown>, currentPage = { appendChild: vi.fn<(n: unknown) => void>() }): typeof figma =>
+const fakeFigma = (
+  lookup: Record<string, unknown>,
+  currentPage = { appendChild: vi.fn<(n: unknown) => void>() },
+): typeof figma =>
   ({
     currentPage,
     getNodeByIdAsync: async (id: string) => lookup[id] ?? null,

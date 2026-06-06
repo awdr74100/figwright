@@ -49,7 +49,13 @@ describe('create_frame handler', () => {
     const frame = makeFrame();
     const currentPage = { appendChild: vi.fn<(n: unknown) => void>() };
     const handler = createCreateFrameHandler(fakeFigma(frame, currentPage));
-    const result = (await handler({ name: 'Card', width: 200, height: 120, x: 10, y: 20 })) as CreateResult;
+    const result = (await handler({
+      name: 'Card',
+      width: 200,
+      height: 120,
+      x: 10,
+      y: 20,
+    })) as CreateResult;
 
     expect(frame.name).toBe('Card');
     expect([frame.width, frame.height]).toEqual([200, 120]);
@@ -70,7 +76,9 @@ describe('create_frame handler', () => {
 
   it('removes the orphan frame and throws when the parent is invalid', async () => {
     const frame = makeFrame();
-    const handler = createCreateFrameHandler(fakeFigma(frame, { appendChild: vi.fn<(n: unknown) => void>() }, {}));
+    const handler = createCreateFrameHandler(
+      fakeFigma(frame, { appendChild: vi.fn<(n: unknown) => void>() }, {}),
+    );
     await expect(handler({ parentId: '9:9' })).rejects.toThrow(/parent/);
     expect(frame.remove).toHaveBeenCalled();
   });

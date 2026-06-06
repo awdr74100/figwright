@@ -20,9 +20,7 @@ export type DispatchOutcome =
   | { kind: 'reply'; reply: PluginToolResult | PluginToolError }
   | { kind: 'ignore' };
 
-export const dispatchSandboxMessage = async (
-  input: DispatchInput,
-): Promise<DispatchOutcome> => {
+export const dispatchSandboxMessage = async (input: DispatchInput): Promise<DispatchOutcome> => {
   if (!isPluginBridgeMessage(input.raw)) return { kind: 'ignore' };
   if (input.raw.kind !== 'tool-call') return { kind: 'ignore' };
 

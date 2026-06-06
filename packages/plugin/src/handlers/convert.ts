@@ -91,4 +91,7 @@ const toFigmaAction = (a: SerializedAction): Action => {
 
 /** Wire reaction → Figma Reaction (modern `actions` array form). */
 export const toFigmaReaction = (r: SerializedReaction): Reaction =>
-  ({ trigger: toFigmaTrigger(r.trigger), actions: r.actions.map(toFigmaAction) }) as unknown as Reaction;
+  ({
+    trigger: toFigmaTrigger(r.trigger),
+    actions: r.actions.map(toFigmaAction),
+  }) as unknown as Reaction;

@@ -54,7 +54,9 @@ describe('create_rectangle handler', () => {
 
   it('removes the orphan and throws on an invalid parent', async () => {
     const rect = makeRect();
-    const handler = createCreateRectangleHandler(fakeFigma(rect, { appendChild: vi.fn<(n: unknown) => void>() }, {}));
+    const handler = createCreateRectangleHandler(
+      fakeFigma(rect, { appendChild: vi.fn<(n: unknown) => void>() }, {}),
+    );
     await expect(handler({ parentId: '9:9' })).rejects.toThrow(/parent/);
     expect(rect.remove).toHaveBeenCalled();
   });

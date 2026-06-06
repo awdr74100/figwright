@@ -15,7 +15,11 @@ interface FakeRect {
   resize: (w: number, h: number) => void;
 }
 
-const makeFigma = (): { figma: typeof figma; rect: FakeRect; page: { appendChild: ReturnType<typeof vi.fn> } } => {
+const makeFigma = (): {
+  figma: typeof figma;
+  rect: FakeRect;
+  page: { appendChild: ReturnType<typeof vi.fn> };
+} => {
   const rect: FakeRect = {
     id: 'R:1',
     name: 'Rectangle',
@@ -33,7 +37,10 @@ const makeFigma = (): { figma: typeof figma; rect: FakeRect; page: { appendChild
   const page = { appendChild: vi.fn<(n: unknown) => void>() };
   const figmaCtx = {
     base64Decode: (s: string) => new Uint8Array([s.length]),
-    createImage: () => ({ hash: 'HASH123', getSizeAsync: async () => ({ width: 200, height: 100 }) }),
+    createImage: () => ({
+      hash: 'HASH123',
+      getSizeAsync: async () => ({ width: 200, height: 100 }),
+    }),
     createImageAsync: async () => ({
       hash: 'URLHASH',
       getSizeAsync: async () => ({ width: 50, height: 50 }),
@@ -47,7 +54,10 @@ const makeFigma = (): { figma: typeof figma; rect: FakeRect; page: { appendChild
 describe('import_image handler', () => {
   it('decodes base64 data, sizes the rect to the image, and applies an IMAGE fill', async () => {
     const { figma: f, rect, page } = makeFigma();
-    const result = (await createImportImageHandler(f)({ data: 'abc', name: 'Hero' })) as CreateResult;
+    const result = (await createImportImageHandler(f)({
+      data: 'abc',
+      name: 'Hero',
+    })) as CreateResult;
 
     expect(rect.width).toBe(200);
     expect(rect.height).toBe(100);
@@ -58,7 +68,12 @@ describe('import_image handler', () => {
 
   it('fetches from url and honors width/height/scaleMode overrides', async () => {
     const { figma: f, rect } = makeFigma();
-    await createImportImageHandler(f)({ url: 'https://x/y.png', width: 64, height: 64, scaleMode: 'FIT' });
+    await createImportImageHandler(f)({
+      url: 'https://x/y.png',
+      width: 64,
+      height: 64,
+      scaleMode: 'FIT',
+    });
     expect(rect.width).toBe(64);
     expect(rect.height).toBe(64);
     expect(rect.fills).toEqual([{ type: 'IMAGE', scaleMode: 'FIT', imageHash: 'URLHASH' }]);

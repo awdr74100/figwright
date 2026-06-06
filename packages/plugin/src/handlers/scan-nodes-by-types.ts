@@ -8,7 +8,11 @@ export const createScanNodesByTypesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { types?: unknown; root?: unknown };
-    if (!Array.isArray(p.types) || p.types.length === 0 || p.types.some(t => typeof t !== 'string')) {
+    if (
+      !Array.isArray(p.types) ||
+      p.types.length === 0 ||
+      p.types.some(t => typeof t !== 'string')
+    ) {
       throw new TypeError('scan_nodes_by_types: types must be a non-empty string[]');
     }
     const types = new Set(p.types as readonly string[]);

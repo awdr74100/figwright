@@ -1,10 +1,10 @@
 import type { SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
-import { createBatchHandler } from './batch.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
 import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
 import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
+import { createBatchHandler } from './batch.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
 import { createCloneNodeHandler } from './clone-node.js';
 import { createCreateComponentHandler } from './create-component.js';
@@ -12,23 +12,20 @@ import { createCreateEffectStyleHandler } from './create-effect-style.js';
 import { createCreateEllipseHandler } from './create-ellipse.js';
 import { createCreateFrameHandler } from './create-frame.js';
 import { createCreateGridStyleHandler } from './create-grid-style.js';
+import { createCreateInstanceHandler } from './create-instance.js';
 import { createCreatePaintStyleHandler } from './create-paint-style.js';
 import { createCreateRectangleHandler } from './create-rectangle.js';
 import { createCreateSectionHandler } from './create-section.js';
-import { createCreateInstanceHandler } from './create-instance.js';
-import { createCreateTextHandler } from './create-text.js';
 import { createCreateTextStyleHandler } from './create-text-style.js';
-import { createCreateVariableHandler } from './create-variable.js';
+import { createCreateTextHandler } from './create-text.js';
 import { createCreateVariableCollectionHandler } from './create-variable-collection.js';
+import { createCreateVariableHandler } from './create-variable.js';
 import { createDeleteNodesHandler } from './delete-nodes.js';
 import { createDeletePageHandler } from './delete-page.js';
 import { createDeleteStyleHandler } from './delete-style.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
-import { createGroupNodesHandler } from './group-nodes.js';
-import { createImportImageHandler } from './import-image.js';
-import { createNavigateToPageHandler } from './navigate-to-page.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
 import { createGetDocumentHandler } from './get-document.js';
@@ -44,13 +41,13 @@ import { createGetSelectionHandler } from './get-selection.js';
 import { createGetStylesHandler } from './get-styles.js';
 import { createGetVariableDefsHandler } from './get-variable-defs.js';
 import { createGetViewportHandler } from './get-viewport.js';
+import { createGroupNodesHandler } from './group-nodes.js';
+import { createImportImageHandler } from './import-image.js';
 import { createListFilesHandler } from './list-files.js';
-import { createPingHandler } from './ping.js';
-import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
-import { createScanTextNodesHandler } from './scan-text-nodes.js';
-import { createSearchNodesHandler } from './search-nodes.js';
 import { createSetLockedHandler } from './lock-nodes.js';
 import { createMoveNodesHandler } from './move-nodes.js';
+import { createNavigateToPageHandler } from './navigate-to-page.js';
+import { createPingHandler } from './ping.js';
 import { createRemoveReactionsHandler } from './remove-reactions.js';
 import { createRenameNodeHandler } from './rename-node.js';
 import { createRenamePageHandler } from './rename-page.js';
@@ -58,17 +55,20 @@ import { createReorderNodesHandler } from './reorder-nodes.js';
 import { createReparentNodesHandler } from './reparent-nodes.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
 import { createRotateNodesHandler } from './rotate-nodes.js';
+import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
+import { createScanTextNodesHandler } from './scan-text-nodes.js';
+import { createSearchNodesHandler } from './search-nodes.js';
 import { createSetAutoLayoutHandler } from './set-auto-layout.js';
 import { createSetBlendModeHandler } from './set-blend-mode.js';
 import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
-import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetFillsHandler } from './set-fills.js';
 import { createSetOpacityHandler } from './set-opacity.js';
+import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
-import { createSetTextHandler } from './set-text.js';
 import { createSetTextPropertiesHandler } from './set-text-properties.js';
+import { createSetTextHandler } from './set-text.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
@@ -80,8 +80,8 @@ import { createUpdatePaintStyleHandler } from './update-paint-style.js';
  * idempotency (same requestId applies once). `batch` calls the un-wrapped writes directly — it
  * carries one requestId and is itself idempotent, so per-op deduping would double-count.
  *
- * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they match
- * the server's advertised tools — a new tool can't be half-wired without a test failing.
+ * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
+ * match the server's advertised tools — a new tool can't be half-wired without a test failing.
  */
 export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers => {
   const cache = createIdempotencyCache();

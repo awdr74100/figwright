@@ -18,7 +18,9 @@ export const createCreateVariableHandler =
       throw new TypeError('create_variable: collectionId must be a string');
     }
     if (!RESOLVED_TYPES.includes(p.resolvedType as ResolvedType)) {
-      throw new TypeError(`create_variable: resolvedType must be one of ${RESOLVED_TYPES.join(' / ')}`);
+      throw new TypeError(
+        `create_variable: resolvedType must be one of ${RESOLVED_TYPES.join(' / ')}`,
+      );
     }
 
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(p.collectionId);

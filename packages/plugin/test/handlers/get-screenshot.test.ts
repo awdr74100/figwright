@@ -8,7 +8,10 @@ interface ExportCall {
   constraint?: { type: string; value: number };
 }
 
-const fakeFigma = (lookup: Record<string, BaseNode | null>, calls: ExportCall[] = []): typeof figma =>
+const fakeFigma = (
+  lookup: Record<string, BaseNode | null>,
+  calls: ExportCall[] = [],
+): typeof figma =>
   ({
     base64Encode: (bytes: Uint8Array) => `b64(${bytes.length})`,
     getNodeByIdAsync: async (id: string) => lookup[id] ?? null,
@@ -41,14 +44,18 @@ describe('get_screenshot handler', () => {
 
   it('passes scale through for raster formats', async () => {
     const calls: ExportCall[] = [];
-    const handler = createGetScreenshotHandler(fakeFigma({ '1:1': exportable('1:1', calls) }, calls));
+    const handler = createGetScreenshotHandler(
+      fakeFigma({ '1:1': exportable('1:1', calls) }, calls),
+    );
     await handler({ nodeIds: ['1:1'], format: 'JPG', scale: 2 });
     expect(calls[0]).toEqual({ format: 'JPG', constraint: { type: 'SCALE', value: 2 } });
   });
 
   it('uses constraint-free settings for SVG', async () => {
     const calls: ExportCall[] = [];
-    const handler = createGetScreenshotHandler(fakeFigma({ '1:1': exportable('1:1', calls) }, calls));
+    const handler = createGetScreenshotHandler(
+      fakeFigma({ '1:1': exportable('1:1', calls) }, calls),
+    );
     await handler({ nodeIds: ['1:1'], format: 'SVG' });
     expect(calls[0]).toEqual({ format: 'SVG' });
   });

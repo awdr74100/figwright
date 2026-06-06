@@ -53,9 +53,7 @@ describe('set_text handler', () => {
   });
 
   it('throws for non-TEXT nodes and bad input', async () => {
-    const handler = createSetTextHandler(
-      fakeFigma({ '1:1': { id: '1:1', type: 'RECTANGLE' } }),
-    );
+    const handler = createSetTextHandler(fakeFigma({ '1:1': { id: '1:1', type: 'RECTANGLE' } }));
     await expect(handler({ nodeId: '1:1', characters: 'x' })).rejects.toThrow(/TEXT/);
     await expect(handler({ nodeId: '1:1' })).rejects.toThrow(/characters/);
   });

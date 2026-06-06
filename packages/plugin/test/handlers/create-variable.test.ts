@@ -5,16 +5,21 @@ import { createCreateVariableHandler } from '../../src/handlers/create-variable.
 
 const withCollection = (collection: unknown): typeof figma =>
   ({
-    variables: { getVariableCollectionByIdAsync: async () => collection, createVariable: () => ({}) },
+    variables: {
+      getVariableCollectionByIdAsync: async () => collection,
+      createVariable: () => ({}),
+    },
   }) as unknown as typeof figma;
 
 describe('create_variable handler', () => {
   it('creates a variable in the resolved collection', async () => {
     const collection = { id: 'VC:0' };
-    const createVariable = vi.fn<(name: string) => { id: string; name: string }>((name: string) => ({
-      id: 'V:0',
-      name,
-    }));
+    const createVariable = vi.fn<(name: string) => { id: string; name: string }>(
+      (name: string) => ({
+        id: 'V:0',
+        name,
+      }),
+    );
     const f = {
       variables: {
         getVariableCollectionByIdAsync: async () => collection,

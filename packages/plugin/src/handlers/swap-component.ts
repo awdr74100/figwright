@@ -9,7 +9,11 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 export const createSwapComponentHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { instanceId?: unknown; componentId?: unknown; componentKey?: unknown };
+    const p = (params ?? {}) as {
+      instanceId?: unknown;
+      componentId?: unknown;
+      componentKey?: unknown;
+    };
     if (typeof p.instanceId !== 'string') {
       throw new TypeError('swap_component: instanceId must be a string');
     }

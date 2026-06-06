@@ -1,15 +1,15 @@
 import type { BatchResult } from '@figma-mcp-relay/shared';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBatchHandler } from '../../src/handlers/batch.js';
-import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 import type { SandboxHandlers } from '../../src/dispatcher.js';
-import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
-import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
-import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
-import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
+import { createBatchHandler } from '../../src/handlers/batch.js';
 import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
+import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
+import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
+import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
+import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
+import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
 const makeFigma = (initial: Record<string, Record<string, unknown>>) => {
@@ -195,8 +195,14 @@ describe('batch handler', () => {
 
   it('replays as a unit under idempotency: same requestId applies its ops once', async () => {
     const { figmaCtx, store } = makeFigma({ '1:2': { id: '1:2', x: 0, y: 0 } });
-    const batch = idempotent(createIdempotencyCache(), createBatchHandler(figmaCtx, realWrites(figmaCtx)));
-    const call = { requestId: 'r1', ops: [{ tool: 'move_nodes', params: { nodeIds: ['1:2'], dx: 10, dy: 0 } }] };
+    const batch = idempotent(
+      createIdempotencyCache(),
+      createBatchHandler(figmaCtx, realWrites(figmaCtx)),
+    );
+    const call = {
+      requestId: 'r1',
+      ops: [{ tool: 'move_nodes', params: { nodeIds: ['1:2'], dx: 10, dy: 0 } }],
+    };
 
     const first = (await batch(call)) as BatchResult;
     const replay = (await batch(call)) as BatchResult;

@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createCreateTextStyleHandler } from '../../src/handlers/create-text-style.js';
 
-const fakeFigma = (): { figma: typeof figma; loaded: FontName[]; style: Record<string, unknown> } => {
+const fakeFigma = (): {
+  figma: typeof figma;
+  loaded: FontName[];
+  style: Record<string, unknown>;
+} => {
   const loaded: FontName[] = [];
   const style: Record<string, unknown> = { id: 'S:0', name: '' };
   const figmaCtx = {

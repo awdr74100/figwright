@@ -7,7 +7,8 @@ export const createSetTextHandler =
   async params => {
     const p = (params ?? {}) as { nodeId?: unknown; characters?: unknown };
     if (typeof p.nodeId !== 'string') throw new TypeError('set_text: nodeId must be a string');
-    if (typeof p.characters !== 'string') throw new TypeError('set_text: characters must be a string');
+    if (typeof p.characters !== 'string')
+      throw new TypeError('set_text: characters must be a string');
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (node === null || node.type !== 'TEXT') {

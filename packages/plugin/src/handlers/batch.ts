@@ -4,11 +4,12 @@ import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Atomic batch: apply several invertible write ops as a unit. Two phases —
- *  1. capture (read-only): resolve every op's target and snapshot what undo needs. Any failure here
- *     aborts before a single mutation, so a bad op id never leaves the document half-changed.
- *  2. apply: run the real write handlers in order; if one throws, undo the already-applied ops in
- *     reverse and reject. Reuses the existing handlers for apply so there is no second copy of the
- *     mutation logic — this module only adds the inverse (undo) for each invertible op.
+ *
+ * 1. Capture (read-only): resolve every op's target and snapshot what undo needs. Any failure here
+ *    aborts before a single mutation, so a bad op id never leaves the document half-changed.
+ * 2. Apply: run the real write handlers in order; if one throws, undo the already-applied ops in
+ *    reverse and reject. Reuses the existing handlers for apply so there is no second copy of the
+ *    mutation logic — this module only adds the inverse (undo) for each invertible op.
  *
  * Only ops with a registered inverse are accepted; destructive ops (delete_*, ungroup, …) have no
  * faithful inverse and are rejected at validate time, keeping the all-or-nothing guarantee honest.
@@ -16,13 +17,19 @@ import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 
 /** Per-op inverse. `capture` runs before any mutation; `undo` restores the pre-op state on rollback. */
 interface BatchInverse {
-  /** Read-only: validate the target and snapshot whatever `undo` will need. Throw to abort the batch. */
+  /**
+   * Read-only: validate the target and snapshot whatever `undo` will need. Throw to abort the
+   * batch.
+   */
   capture(figmaCtx: typeof figma, params: unknown): Promise<unknown>;
   /** Restore the pre-op state. Receives the capture snapshot and the op's apply result. Best-effort. */
   undo(figmaCtx: typeof figma, params: unknown, captured: unknown, result: unknown): Promise<void>;
 }
 
-/** Restoring a `figma.mixed` (symbol) value would throw, so skip those — imperfect but never crashes. */
+/**
+ * Restoring a `figma.mixed` (symbol) value would throw, so skip those — imperfect but never
+ * crashes.
+ */
 const restorable = (value: unknown): boolean => typeof value !== 'symbol';
 
 /** Single-node op: snapshot the given properties and restore them on undo. props[0] is required. */
@@ -98,7 +105,7 @@ const createInverse = (tool: string, hasParent = true): BatchInverse => ({
   },
 });
 
-/** set_text needs every font loaded before `characters` can be restored. */
+/** Set_text needs every font loaded before `characters` can be restored. */
 const setTextInverse: BatchInverse = {
   async capture(figmaCtx, params) {
     const id = (params as { nodeId?: unknown } | null)?.nodeId;
@@ -160,7 +167,11 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
       typeof (node as { resize?: unknown }).resize === 'function'
         ? { width: node.width, height: node.height }
         : null,
-    (node, s) => (node as { resize(w: number, h: number): void }).resize(s.width as number, s.height as number),
+    (node, s) =>
+      (node as { resize(w: number, h: number): void }).resize(
+        s.width as number,
+        s.height as number,
+      ),
   ),
   rotate_nodes: nodesSnapshot(
     'rotate_nodes',
@@ -211,8 +222,9 @@ const parseOps = (params: unknown): ParsedOp[] => {
 };
 
 /**
- * Build the batch handler. `apply` is the map of raw write handlers (un-idempotent — the whole batch
- * carries one requestId and is wrapped once at the top level, so each op runs exactly once on replay).
+ * Build the batch handler. `apply` is the map of raw write handlers (un-idempotent — the whole
+ * batch carries one requestId and is wrapped once at the top level, so each op runs exactly once on
+ * replay).
  */
 export const createBatchHandler =
   (figmaCtx: typeof figma, apply: SandboxHandlers): SandboxToolHandler =>
@@ -223,7 +235,9 @@ export const createBatchHandler =
     }
 
     // Phase 1 — capture (read-only). Reads are independent, so resolve them together.
-    const captured = await Promise.all(ops.map(op => INVERSES[op.tool]!.capture(figmaCtx, op.params)));
+    const captured = await Promise.all(
+      ops.map(op => INVERSES[op.tool]!.capture(figmaCtx, op.params)),
+    );
 
     // Phase 2 — apply in order; roll back already-applied ops on the first failure.
     const results: unknown[] = [];
@@ -249,7 +263,9 @@ export const createBatchHandler =
           undoFailures.length === 0
             ? `rolled back ${i} applied op(s)`
             : `rolled back ${i - undoFailures.length}/${i} op(s); ${undoFailures.length} undo(s) FAILED [${undoFailures.join('; ')}] — document may be partially changed`;
-        throw new Error(`batch: op ${i} (${op.tool}) failed, ${rollback}: ${message}`, { cause: err });
+        throw new Error(`batch: op ${i} (${op.tool}) failed, ${rollback}: ${message}`, {
+          cause: err,
+        });
       }
     }
     /* eslint-enable no-await-in-loop */

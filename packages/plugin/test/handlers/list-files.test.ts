@@ -12,9 +12,13 @@ const fakeFigma = (over: { fileKey?: string }): typeof figma =>
 
 describe('list_files handler', () => {
   it('returns the current file with its key and page', async () => {
-    const result = (await createListFilesHandler(fakeFigma({ fileKey: 'abc123' }))(undefined)) as ListFilesResult;
+    const result = (await createListFilesHandler(fakeFigma({ fileKey: 'abc123' }))(
+      undefined,
+    )) as ListFilesResult;
     expect(result).toEqual({
-      files: [{ fileKey: 'abc123', fileName: 'Mockups.fig', currentPage: { id: 'p-1', name: 'Cover' } }],
+      files: [
+        { fileKey: 'abc123', fileName: 'Mockups.fig', currentPage: { id: 'p-1', name: 'Cover' } },
+      ],
     });
   });
 

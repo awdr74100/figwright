@@ -18,7 +18,10 @@ const fake = (id: string, type: string, name: string, children?: SceneNode[]): S
     children,
   }) as unknown as SceneNode;
 
-const fakeFigma = (pageChildren: SceneNode[], lookup: Record<string, BaseNode | null> = {}): typeof figma =>
+const fakeFigma = (
+  pageChildren: SceneNode[],
+  lookup: Record<string, BaseNode | null> = {},
+): typeof figma =>
   ({
     currentPage: { children: pageChildren },
     getNodeByIdAsync: async (id: string) => lookup[id] ?? null,

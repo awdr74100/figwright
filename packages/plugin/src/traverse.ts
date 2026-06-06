@@ -6,7 +6,8 @@ const hasChildren = (node: SceneNode): node is SceneNode & { children: readonly 
 
 /**
  * Depth-first pre-order walk over a forest of scene nodes (each node, then its descendants).
- * @yields each scene node in the forest
+ *
+ * @yields Each scene node in the forest
  */
 export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
   for (const node of nodes) {
@@ -17,10 +18,11 @@ export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
 
 /**
  * Resolve the `root` param of a traversal tool to the forest to walk.
- * - omitted → the current page's children
- * - a SceneNode id → that single node (its subtree is reached via {@link walk})
- * - a PAGE id → that page's children
- * - missing node / DOCUMENT → empty (no throw; mirrors get_node's null-on-miss contract)
+ *
+ * - Omitted → the current page's children
+ * - A SceneNode id → that single node (its subtree is reached via {@link walk})
+ * - A PAGE id → that page's children
+ * - Missing node / DOCUMENT → empty (no throw; mirrors get_node's null-on-miss contract)
  */
 export const resolveScope = async (
   figmaCtx: typeof figma,

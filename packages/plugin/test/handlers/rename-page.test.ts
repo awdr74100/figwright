@@ -21,7 +21,9 @@ describe('rename_page handler', () => {
     await expect(
       createRenamePageHandler(fakeFigma(null))({ pageId: 'P:9', name: 'x' }),
     ).rejects.toThrow(/not found/);
-    await expect(createRenamePageHandler(fakeFigma(null))({ pageId: 'P:1' })).rejects.toThrow(/name/);
+    await expect(createRenamePageHandler(fakeFigma(null))({ pageId: 'P:1' })).rejects.toThrow(
+      /name/,
+    );
     await expect(createRenamePageHandler(fakeFigma(null))({ name: 'x' })).rejects.toThrow(/pageId/);
   });
 });

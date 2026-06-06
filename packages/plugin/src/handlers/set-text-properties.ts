@@ -4,8 +4,8 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Set a TEXT node's layout/overflow props. These are node-level (not per-run) and don't require a
- * font load, unlike characters/fontSize. Applied in order autoResize → truncation → maxLines because
- * maxLines only takes effect once truncation is ENDING.
+ * font load, unlike characters/fontSize. Applied in order autoResize → truncation → maxLines
+ * because maxLines only takes effect once truncation is ENDING.
  */
 export const createSetTextPropertiesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -16,7 +16,8 @@ export const createSetTextPropertiesHandler =
       maxLines?: unknown;
       textAutoResize?: unknown;
     };
-    if (typeof p.nodeId !== 'string') throw new TypeError('set_text_properties: nodeId must be a string');
+    if (typeof p.nodeId !== 'string')
+      throw new TypeError('set_text_properties: nodeId must be a string');
     if (p.textAutoResize !== undefined && typeof p.textAutoResize !== 'string') {
       throw new TypeError('set_text_properties: textAutoResize must be a string');
     }
@@ -33,8 +34,10 @@ export const createSetTextPropertiesHandler =
     }
     const text = node as TextNode;
 
-    if (p.textAutoResize !== undefined) text.textAutoResize = p.textAutoResize as TextNode['textAutoResize'];
-    if (p.textTruncation !== undefined) text.textTruncation = p.textTruncation as TextNode['textTruncation'];
+    if (p.textAutoResize !== undefined)
+      text.textAutoResize = p.textAutoResize as TextNode['textAutoResize'];
+    if (p.textTruncation !== undefined)
+      text.textTruncation = p.textTruncation as TextNode['textTruncation'];
     if (p.maxLines !== undefined) text.maxLines = p.maxLines as number | null;
 
     const result: MutateResult = { ok: true, nodeId: text.id };

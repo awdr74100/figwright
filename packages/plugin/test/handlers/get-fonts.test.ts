@@ -47,7 +47,9 @@ describe('get_fonts handler', () => {
   });
 
   it('returns empty when the page has no text', async () => {
-    const result = (await createGetFontsHandler(fakeFigma([frame('F', [])]))(undefined)) as GetFontsResult;
+    const result = (await createGetFontsHandler(fakeFigma([frame('F', [])]))(
+      undefined,
+    )) as GetFontsResult;
     expect(result.fonts).toEqual([]);
   });
 });
