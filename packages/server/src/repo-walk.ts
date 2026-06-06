@@ -52,8 +52,10 @@ export interface WalkOptions {
 }
 
 /**
- * Yield repo-relative paths of files under rootDir, skipping baseline + gitignored dirs/files. Pure
- * traversal — callers decide what to do with each path (read + parse, early-stop, aggregate).
+ * Walk files under rootDir, skipping baseline + gitignored dirs/files. Pure traversal — callers
+ * decide what to do with each path (read + parse, early-stop, aggregate).
+ *
+ * @yields Repo-relative paths (posix-separated) of the matching files
  */
 export async function* walkRepoFiles(
   rootDir: string,
