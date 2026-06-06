@@ -32,13 +32,27 @@ const tokens: ProjectToken[] = [
 
 describe('joinTokens', () => {
   it('matches by name + value as high confidence, recommending the Tailwind utility', () => {
-    const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, { threshold: 0.7 });
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, {
+      threshold: 0.7,
+      tailwind: true,
+    });
     expect(m?.candidate?.token).toBe('color-primary-500');
     expect(m?.candidate?.ref).toBe('primary-500');
     expect(m?.candidate?.cssVar).toBe('var(--color-primary-500)');
     expect(m?.candidate?.matchedBy).toEqual(['name', 'value']);
     expect(m?.candidate?.confidence).toBe(1);
     expect(m?.status).toBe('high');
+  });
+
+  it('recommends the var() reference (not a bogus utility) on a non-Tailwind project', () => {
+    // token.utility is derived from the name prefix and so is set even off-Tailwind, where no
+    // `primary-500` class exists. With the flag off, ref must be the CSS var and utility not surfaced.
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-primary-500');
+    expect(m?.candidate?.ref).toBe('var(--color-primary-500)');
+    expect(m?.candidate?.cssVar).toBe('var(--color-primary-500)');
+    expect(m?.candidate?.utility).toBeUndefined();
+    expect(m?.status).toBe('high'); // matching still works (utility aids it); only the ref changes
   });
 
   it('uses an exact color value-match even when the name differs', () => {

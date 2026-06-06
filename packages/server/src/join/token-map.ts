@@ -169,17 +169,25 @@ const bestNameMatch = (
   return best;
 };
 
-const refOf = (token: ProjectToken): string => token.utility ?? token.cssVar;
+// The literal codegen should emit. A Tailwind utility base (primary-500) is only a real, usable
+// class on a Tailwind project — `token.utility` is derived purely from the name's prefix and so is
+// populated even on non-Tailwind projects (where it's just the name minus a category prefix, and no
+// `primary-500` class exists). So the utility is only surfaced as the ref when the project is
+// Tailwind; otherwise the var() reference is the correct literal. (utility still aids name-matching
+// regardless — that's matchNames, separate from this output.)
+const refOf = (token: ProjectToken, tailwind: boolean): string =>
+  tailwind ? (token.utility ?? token.cssVar) : token.cssVar;
 
 const candidateFrom = (
   token: ProjectToken,
   confidence: number,
   matchedBy: ('name' | 'value')[],
+  tailwind: boolean,
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
-  ref: refOf(token),
+  ref: refOf(token, tailwind),
   cssVar: token.cssVar,
-  ...(token.utility === undefined ? {} : { utility: token.utility }),
+  ...(tailwind && token.utility !== undefined ? { utility: token.utility } : {}),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
 });
@@ -299,7 +307,7 @@ const joinOne = (
     const matchedBy: ('name' | 'value')[] = nameAgrees ? ['name', 'value'] : ['value'];
     return {
       ...base,
-      candidate: candidateFrom(valueMatch, confidence, matchedBy),
+      candidate: candidateFrom(valueMatch, confidence, matchedBy, opts.tailwind === true),
       status: statusFor(confidence, opts.threshold),
     };
   }
@@ -313,7 +321,7 @@ const joinOne = (
     const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, confidence, ['name']),
+      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.tailwind === true),
       status: statusFor(confidence, opts.threshold),
     };
   }
