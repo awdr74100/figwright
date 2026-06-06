@@ -136,11 +136,17 @@ const statusFor = (confidence: number, threshold: number): MappingStatus => {
  * Split a usage's Figma axes into those the candidate already has as props (matchedProps) and those
  * it lacks (unmatchedProps — the component-extension TODOs). Same casefold predicate for both, so
  * matched ∪ unmatched == variantAxes.
+ *
+ * When the component's props couldn't be parsed (propsExtracted === false — a baseline scan that
+ * didn't read props), we can't tell matched from unmatched: return both empty rather than dumping
+ * every axis into unmatchedProps, which would otherwise report a true "extend this component" TODO
+ * for props that very likely already exist (the case for an unparsed Vue/Svelte SFC).
  */
 const partitionAxes = (
   variantAxes: readonly string[],
   component: ScannedComponent,
 ): { matchedProps: string[]; unmatchedProps: string[] } => {
+  if (!component.propsExtracted) return { matchedProps: [], unmatchedProps: [] };
   const codeProps = new Set(component.propNames.map(p => p.toLowerCase()));
   const matchedProps: string[] = [];
   const unmatchedProps: string[] = [];

@@ -3,6 +3,8 @@ import { basename, dirname, extname, join } from 'node:path';
 
 import { parseSync } from 'oxc-parser';
 
+import { isIgnoredPath } from '../ignored-dirs.js';
+
 // Component scanner — finds the project's existing components so component_map can join Figma names
 // against them. The guiding principle: never pattern-match the directory layout (feature-based, atomic,
 // flat all differ); identify a component by its *AST signature* (a PascalCase, exported, function-ish
@@ -17,21 +19,18 @@ export interface ScannedComponent {
   /** Repo-relative path. */
   filePath: string;
   exportKind: 'default' | 'named';
-  /** Best-effort destructured prop names from the component's first param; [] when not extractable. */
+  /** The component's prop names; [] when the component has none OR they couldn't be parsed. */
   propNames: string[];
+  /**
+   * Whether propNames is a real parse result (so [] means "genuinely no props") versus a baseline
+   * that couldn't read props (so [] means "unknown"). The component join uses this to avoid
+   * reporting every variant axis as an unmatched prop just because we never parsed the props — a
+   * false "extend this component" TODO. True once we've parsed the source; false only on a parse
+   * failure.
+   */
+  propsExtracted: boolean;
   framework: ComponentFramework;
 }
-
-/** Directories never worth walking. */
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  '.next',
-  '.nuxt',
-  '.git',
-  'coverage',
-]);
 
 /** React HOCs whose call wraps a component function — the binding is still a component. */
 const COMPONENT_WRAPPERS = new Set(['forwardRef', 'memo', 'observer']);
@@ -120,23 +119,188 @@ export const extractReactComponents = (filePath: string, code: string): ScannedC
       filePath,
       exportKind: cand.exportKind,
       propNames: propNamesOf(cand.fn),
+      propsExtracted: true,
       framework: 'react',
     });
   }
   return out;
 };
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- shared oxc AST walker below */
+
+/** Depth-first walk of an oxc/ESTree node, yielding every CallExpression encountered. */
+const collectCalls = (root: any): any[] => {
+  const out: any[] = [];
+  const visit = (node: any): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (node.type === 'CallExpression') out.push(node);
+    for (const key of Object.keys(node)) {
+      const v = (node as Record<string, unknown>)[key];
+      if (Array.isArray(v)) for (const c of v) visit(c);
+      else if (v !== null && typeof v === 'object') visit(v);
+    }
+  };
+  visit(root);
+  return out;
+};
+
+/** Prop names from a `defineProps` call: a type literal, an object, or an array of string keys. */
+const definePropsNames = (call: any): string[] => {
+  // Type form: defineProps<{ size?: string; variant: 'a' | 'b' }>(). oxc exposes the instantiation as
+  // typeArguments (older trees: typeParameters); its first param is a TSTypeLiteral whose members'
+  // keys are the prop names.
+  const typeArgs = call.typeArguments ?? call.typeParameters;
+  const typeLiteral = typeArgs?.params?.[0];
+  if (typeLiteral?.type === 'TSTypeLiteral') {
+    return (typeLiteral.members ?? [])
+      .map((m: any) => m?.key?.name)
+      .filter((n: unknown): n is string => typeof n === 'string');
+  }
+  const arg0 = call.arguments?.[0];
+  // Object form: defineProps({ size: String, variant: { type: String } }) → keys.
+  if (arg0?.type === 'ObjectExpression') {
+    return (arg0.properties ?? [])
+      .map((p: any) => p?.key?.name ?? p?.key?.value)
+      .filter((n: unknown): n is string => typeof n === 'string');
+  }
+  // Array form: defineProps(['size', 'variant']) → the string literals.
+  if (arg0?.type === 'ArrayExpression') {
+    return (arg0.elements ?? [])
+      .map((e: any) => (e?.type === 'Literal' ? e.value : undefined))
+      .filter((n: unknown): n is string => typeof n === 'string');
+  }
+  return [];
+};
+
+/** Names from a `props: { … } | [ … ]` member of an object (Vue Options API props declaration). */
+const propsMemberNames = (obj: any): string[] => {
+  const propsProp = (obj?.properties ?? []).find(
+    (p: any) => (p?.key?.name ?? p?.key?.value) === 'props',
+  );
+  const value = propsProp?.value;
+  if (value?.type === 'ObjectExpression') {
+    return (value.properties ?? [])
+      .map((p: any) => p?.key?.name ?? p?.key?.value)
+      .filter((n: unknown): n is string => typeof n === 'string');
+  }
+  if (value?.type === 'ArrayExpression') {
+    return (value.elements ?? [])
+      .map((e: any) => (e?.type === 'Literal' ? e.value : undefined))
+      .filter((n: unknown): n is string => typeof n === 'string');
+  }
+  return [];
+};
+
+/**
+ * Vue Options API prop names: `export default { props: { … } }` — or wrapped in defineComponent /
+ * defineNuxtComponent. The default export is either an object or a call whose first arg is the
+ * object.
+ */
+const vueOptionsPropsNames = (program: any): string[] => {
+  for (const node of program.body ?? []) {
+    if (node.type !== 'ExportDefaultDeclaration') continue;
+    const d = node.declaration;
+    const obj = d?.type === 'ObjectExpression' ? d : d?.arguments?.[0];
+    if (obj?.type === 'ObjectExpression') return propsMemberNames(obj);
+  }
+  return [];
+};
+
+/** Svelte prop names: `export let foo` (Svelte 4) and `let { a, b } = $props()` (Svelte 5 runes). */
+const sveltePropNames = (program: any): string[] => {
+  const names = new Set<string>();
+  for (const node of program.body ?? []) {
+    if (
+      node.type === 'ExportNamedDeclaration' &&
+      node.declaration?.type === 'VariableDeclaration' &&
+      node.declaration.kind === 'let'
+    ) {
+      for (const d of node.declaration.declarations ?? [])
+        if (d?.id?.type === 'Identifier' && typeof d.id.name === 'string') names.add(d.id.name);
+    }
+  }
+  // Svelte 5 runes: `let { a, b } = $props()` — a destructuring declarator initialized by $props().
+  for (const node of program.body ?? []) {
+    if (node.type !== 'VariableDeclaration') continue;
+    for (const d of node.declarations ?? []) {
+      if (d?.init?.type === 'CallExpression' && d.init.callee?.name === '$props') {
+        for (const p of d.id?.properties ?? [])
+          if (p?.key?.name && typeof p.key.name === 'string') names.add(p.key.name);
+      }
+    }
+  }
+  return [...names];
+};
+
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const REACT_EXTS = new Set(['.tsx', '.jsx']);
 
-/** Baseline extractor for SFC frameworks: the file is the component, name derived from the path. */
-const extractSfcComponent = (
+// Pull every <script> / <script setup> body out of an SFC. lang="ts" (or its absence) decides the
+// parser dialect; a .vue/.svelte file with no script block is a genuinely prop-less template.
+const SCRIPT_BLOCK = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+
+interface ScriptBlock {
+  body: string;
+  ts: boolean;
+}
+
+const extractScriptBlocks = (code: string): ScriptBlock[] => {
+  const out: ScriptBlock[] = [];
+  for (const m of code.matchAll(SCRIPT_BLOCK)) {
+    const attrs = m[1] ?? '';
+    out.push({ body: m[2] ?? '', ts: /\blang=["']ts["']/.test(attrs) });
+  }
+  return out;
+};
+
+/**
+ * Extract a single-file component (Vue / Svelte). The file is the component (its name is the file
+ * by convention); props come from the <script> block — Vue's defineProps (type / object / array
+ * forms) and Options-API `props`, Svelte's `export let` / `$props()`.
+ *
+ * PropsExtracted distinguishes "[] = genuinely no props" from "[] = unknown" so the join won't
+ * invent extension TODOs. It's true only when we either found props, or the file is a script-less
+ * (so genuinely prop-less) template. When a script is present but we read no props — a parse error,
+ * or a prop-declaration style we don't recognize — it stays false (conservative: the join then
+ * suppresses matched/unmatched rather than asserting prop gaps we can't actually see). oxc doesn't
+ * throw on bad input, so a parse failure surfaces here simply as "no props found".
+ */
+export const extractSfcComponent = (
   filePath: string,
+  code: string,
   framework: ComponentFramework,
-): ScannedComponent[] => [
-  { name: nameFromFile(filePath), filePath, exportKind: 'default', propNames: [], framework },
-];
+): ScannedComponent[] => {
+  const base = {
+    name: nameFromFile(filePath),
+    filePath,
+    exportKind: 'default' as const,
+    framework,
+  };
+  const scripts = extractScriptBlocks(code);
+  if (scripts.length === 0) return [{ ...base, propNames: [], propsExtracted: true }];
+
+  const names = new Set<string>();
+  for (const script of scripts) {
+    let program: ReturnType<typeof parseSync>['program'];
+    try {
+      // Name the virtual source so oxc picks the right dialect (TS enables defineProps<...>()).
+      program = parseSync(`sfc.${script.ts ? 'ts' : 'js'}`, script.body).program;
+    } catch {
+      continue;
+    }
+    if (framework === 'vue') {
+      for (const call of collectCalls(program))
+        if ((call as { callee?: { name?: string } }).callee?.name === 'defineProps')
+          for (const n of definePropsNames(call)) names.add(n);
+      for (const n of vueOptionsPropsNames(program)) names.add(n);
+    } else {
+      for (const n of sveltePropNames(program)) names.add(n);
+    }
+  }
+  // Found props → confidently extracted. None found despite a script → unknown (don't claim).
+  return [{ ...base, propNames: [...names], propsExtracted: names.size > 0 }];
+};
 
 const frameworkForExt = (ext: string): ComponentFramework | null => {
   if (REACT_EXTS.has(ext)) return 'react';
@@ -164,7 +328,7 @@ export const scanComponents = async (
 
   for await (const entry of glob(patterns, { cwd: rootDir })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
-    if (rel.split('/').some(seg => IGNORED_DIRS.has(seg))) continue;
+    if (isIgnoredPath(rel)) continue;
     const framework = frameworkForExt(extname(rel));
     if (framework === null) continue;
     let code: string;
@@ -175,7 +339,7 @@ export const scanComponents = async (
       continue;
     }
     if (framework === 'react') out.push(...extractReactComponents(rel, code));
-    else out.push(...extractSfcComponent(rel, framework));
+    else out.push(...extractSfcComponent(rel, code, framework));
   }
   return out;
 };

@@ -4,7 +4,12 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { extractReactComponents, nameFromFile, scanComponents } from '../../src/scan/scan.js';
+import {
+  extractReactComponents,
+  extractSfcComponent,
+  nameFromFile,
+  scanComponents,
+} from '../../src/scan/scan.js';
 
 describe('extractReactComponents (pure)', () => {
   it('finds named function + arrow components and their destructured props', () => {
@@ -53,6 +58,65 @@ describe('extractReactComponents (pure)', () => {
 
   it('does not crash on unparseable source', () => {
     expect(extractReactComponents('x.tsx', 'export const = = =')).toEqual([]);
+  });
+});
+
+describe('extractSfcComponent (Vue / Svelte props)', () => {
+  it('parses Vue defineProps type form, and marks props as extracted', () => {
+    const code =
+      '<script setup lang="ts">defineProps<{ size?: string; variant: "a" | "b" }>()</script><template><button/></template>';
+    const [c] = extractSfcComponent('ui/Button.vue', code, 'vue');
+    expect(c?.name).toBe('Button');
+    expect(c?.propNames).toEqual(['size', 'variant']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('parses Vue defineProps object and array forms', () => {
+    const obj = extractSfcComponent(
+      'C.vue',
+      '<script setup>defineProps({ size: String, label: { type: String } })</script>',
+      'vue',
+    );
+    expect(obj[0]?.propNames).toEqual(['size', 'label']);
+    const arr = extractSfcComponent(
+      'C.vue',
+      "<script setup>defineProps(['size', 'tone'])</script>",
+      'vue',
+    );
+    expect(arr[0]?.propNames).toEqual(['size', 'tone']);
+  });
+
+  it('handles withDefaults(defineProps<...>()) and a prop-less template', () => {
+    const wd = extractSfcComponent(
+      'C.vue',
+      '<script setup lang="ts">withDefaults(defineProps<{ open: boolean }>(), { open: false })</script>',
+      'vue',
+    );
+    expect(wd[0]?.propNames).toEqual(['open']);
+    const none = extractSfcComponent('C.vue', '<template><div/></template>', 'vue');
+    expect(none[0]?.propNames).toEqual([]);
+    expect(none[0]?.propsExtracted).toBe(true); // script-less = genuinely no props, not "unknown"
+  });
+
+  it('parses Svelte export let and $props() runes', () => {
+    const four = extractSfcComponent(
+      'C.svelte',
+      '<script>export let size; export let tone = "x";</script>',
+      'svelte',
+    );
+    expect(four[0]?.propNames.toSorted()).toEqual(['size', 'tone']);
+    const five = extractSfcComponent(
+      'C.svelte',
+      '<script lang="ts">let { size, tone } = $props();</script>',
+      'svelte',
+    );
+    expect(five[0]?.propNames.toSorted()).toEqual(['size', 'tone']);
+  });
+
+  it('marks props NOT extracted when the script fails to parse', () => {
+    const [c] = extractSfcComponent('C.vue', '<script setup>const = = =</script>', 'vue');
+    expect(c?.propsExtracted).toBe(false);
+    expect(c?.propNames).toEqual([]);
   });
 });
 
@@ -109,6 +173,9 @@ describe('scanComponents (real fs)', () => {
       const comps = await scanComponents(vueDir, ['.vue']);
       expect(comps.map(c => c.name)).toEqual(['Button']);
       expect(comps[0]?.framework).toBe('vue');
+      // The Vue SFC's defineProps<{ size?: string }>() is parsed, not just the filename baseline.
+      expect(comps[0]?.propNames).toEqual(['size']);
+      expect(comps[0]?.propsExtracted).toBe(true);
     } finally {
       await rm(vueDir, { recursive: true, force: true });
     }

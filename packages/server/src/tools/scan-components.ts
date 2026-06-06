@@ -20,7 +20,8 @@ export const scanComponentsTool: ToolSpec = {
     'Scan the local project for existing UI components so they can be reused instead of regenerated. ' +
     'Runs on the server filesystem, not in Figma. Identifies components by AST signature (exported, ' +
     'PascalCase, function-ish) rather than by folder layout, so any structure works. React (.tsx/.jsx) ' +
-    'is parsed for name + props; Vue/Svelte yield filename-derived names. extensions defaults to the ' +
+    'is parsed for name + props; Vue/Svelte derive the name from the file and parse props from the ' +
+    '<script> block (defineProps / export let / $props). extensions defaults to the ' +
     "detected profile's; rootDir defaults to the server cwd. Returns { components, profile }.",
   inputShape,
   kind: 'local',

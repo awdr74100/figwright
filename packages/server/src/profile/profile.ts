@@ -1,6 +1,8 @@
 import { glob, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 
+import { isIgnoredPath } from '../ignored-dirs.js';
+
 // Project Profile — the structured "how this project writes code" that the join tools (component_map,
 // token_map) switch their target side on. Detection is split in two: gatherProjectInput does the IO
 // (reads manifests / probes for config files / scans CSS entry points) and detectProfile is a pure
@@ -96,17 +98,6 @@ const TAILWIND_CONFIGS = [
 /** Config files worth probing for at the project root; presence feeds styling detection. */
 const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS];
 
-/** Directories never worth walking when scanning for CSS entry points. */
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  '.next',
-  '.nuxt',
-  '.git',
-  'coverage',
-]);
-
 // Tailwind v4 marks its CSS-first config inline: `@import "tailwindcss"` pulls the framework in and
 // `@theme { ... }` declares tokens. Either marker identifies the v4 token source.
 const CSS_TAILWIND_IMPORT = /@import\s+["']tailwindcss["']/;
@@ -138,7 +129,7 @@ const findTailwindCssEntry = async (root: string): Promise<string | undefined> =
   let scanned = 0;
   for await (const entry of glob('**/*.css', { cwd: root })) {
     const rel = typeof entry === 'string' ? entry : String(entry);
-    if (rel.split('/').some(seg => IGNORED_DIRS.has(seg))) continue;
+    if (isIgnoredPath(rel)) continue;
     if (scanned >= 200) break; // safety cap against pathological repos
     scanned += 1;
     let body: string;

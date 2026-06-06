@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { joinTokens, type TokenMapping } from '../join/token-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { resolveFigmaTokens } from '../tokens/figma-tokens.js';
+import { aggregateRepoCssTokens } from '../tokens/repo-css.js';
 import { parseCssCustomProperties } from '../tokens/tokens.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from './get-variable-defs.js';
 import type { ToolSpec } from './spec.js';
@@ -99,12 +100,22 @@ export const handleTokenMap = async (
   const { source, note } = resolveTokenSource(profile, args.tokenSource);
   let projectTokens: ReturnType<typeof parseCssCustomProperties> = [];
   let usedSource: string | null = null;
+  let aggregateNote: string | undefined;
   if (source !== null) {
     try {
       projectTokens = parseCssCustomProperties(await readFile(join(rootDir, source), 'utf8'));
       usedSource = source;
     } catch {
       // fall through with empty tokens + the note below
+    }
+  } else {
+    // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
+    // wasn't located). Aggregate custom properties across the repo's CSS and let the join filter
+    // them — incidental vars stay unmatched, so this can only add real matches, never regress.
+    const { tokens, files } = await aggregateRepoCssTokens(rootDir);
+    projectTokens = tokens;
+    if (files.length > 0) {
+      aggregateNote = `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${files.join(', ')}`;
     }
   }
 
@@ -116,7 +127,9 @@ export const handleTokenMap = async (
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.figmaName);
 
   const readNote =
-    source !== null && usedSource === null ? `token source ${source} could not be read` : note;
+    source !== null && usedSource === null
+      ? `token source ${source} could not be read`
+      : (aggregateNote ?? note);
 
   return {
     mappings,

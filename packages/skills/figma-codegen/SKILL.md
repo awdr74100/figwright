@@ -71,7 +71,7 @@ scale, step }`: for `spacing`, compose the step with the property `get_design_co
      use `font-{step}` (`font-bold`). Use the utility, **not** an arbitrary value like `p-[16px]`. This
      is **not** a gap — never report it as a missing token.
    - in `unmapped`: the design uses a token the project hasn't defined. Don't hardcode silently — use the
-     value but call out the gap (and offer to add it, or hand off to **figma-sync-tokens**).
+     value but call out the gap (and offer to add it to the project's token source).
 4. **`get_screenshot` — export the assets the structural tools can't carry.** Geometry + text grounding
    has **no pixels**: logos, photos, and icons otherwise come out as grey blocks, which is the single
    biggest fidelity gap on real-world files (often half the visible surface). For each visual-only leaf,

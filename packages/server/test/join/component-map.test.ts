@@ -15,6 +15,7 @@ const comp = (name: string, propNames: string[] = []): ScannedComponent => ({
   filePath: `src/components/${name}.tsx`,
   exportKind: 'named',
   propNames,
+  propsExtracted: true,
   framework: 'react',
 });
 
@@ -82,6 +83,28 @@ describe('joinComponents', () => {
     expect(m?.source).toBe('map-file');
     expect(m?.candidate?.matchedProps).toEqual(['Size']);
     expect(m?.candidate?.unmatchedProps).toEqual(['Show icon_L']);
+  });
+
+  it('suppresses unmatchedProps when the candidate props were not extracted (SFC baseline)', () => {
+    // A Vue/Svelte component whose props couldn't be parsed has propsExtracted=false. The join must
+    // not dump every variant axis into unmatchedProps (a false "extend this component" TODO) just
+    // because the prop list is unknown.
+    const vue: ScannedComponent = {
+      name: 'Button',
+      filePath: 'src/components/Button.vue',
+      exportKind: 'default',
+      propNames: [],
+      propsExtracted: false,
+      framework: 'vue',
+    };
+    const [m] = joinComponents(
+      [usage({ name: 'Button', variantAxes: ['Size', 'Variant'] })],
+      [vue],
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.name).toBe('Button');
+    expect(m?.candidate?.matchedProps).toEqual([]);
+    expect(m?.candidate?.unmatchedProps).toEqual([]);
   });
 
   it('flags unmapped when nothing is close', () => {

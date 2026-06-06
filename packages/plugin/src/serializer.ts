@@ -206,7 +206,15 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
         // table row dividers, underline inputs and top-accent rules are all per-side, and
         // collapsing to a single "mixed" loses which edges actually have a stroke.
         out.strokeWeight = MIXED;
-        const n = node as Record<string, unknown>;
+        // Per-property cast (matching this file's idiom) rather than `as Record<string, unknown>`:
+        // newer plugin-typings include nodes (e.g. SlotNode) without an index signature, so the
+        // record cast no longer type-checks.
+        const n = node as {
+          strokeTopWeight?: unknown;
+          strokeRightWeight?: unknown;
+          strokeBottomWeight?: unknown;
+          strokeLeftWeight?: unknown;
+        };
         const sides = {
           top: n.strokeTopWeight,
           right: n.strokeRightWeight,
