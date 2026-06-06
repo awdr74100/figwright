@@ -71,6 +71,31 @@ describe('get_screenshot handler', () => {
     ]);
   });
 
+  it('flags empty:true when the node rendered nothing (absoluteRenderBounds null)', async () => {
+    const calls: ExportCall[] = [];
+    const clipped = {
+      id: '1:5',
+      absoluteRenderBounds: null, // hidden / clipped / off-canvas → blank export
+      exportAsync: async () => new Uint8Array([0]),
+    } as unknown as BaseNode;
+    const visible = {
+      id: '1:6',
+      absoluteRenderBounds: { x: 0, y: 0, width: 10, height: 10 },
+      exportAsync: async () => new Uint8Array([1, 2, 3]),
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(
+      fakeFigma({ '1:5': clipped, '1:6': visible }, calls),
+    );
+    const result = (await handler({ nodeIds: ['1:5', '1:6'] })) as GetScreenshotResult;
+    expect(result.images[0]).toEqual({
+      nodeId: '1:5',
+      format: 'PNG',
+      base64: 'b64(1)',
+      empty: true,
+    });
+    expect(result.images[1]).toEqual({ nodeId: '1:6', format: 'PNG', base64: 'b64(3)' }); // no empty
+  });
+
   it('throws on empty/invalid nodeIds, bad format, or non-positive scale', async () => {
     const handler = createGetScreenshotHandler(fakeFigma({}));
     await expect(handler({ nodeIds: [] })).rejects.toThrow(/nodeIds/);

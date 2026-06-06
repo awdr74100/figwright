@@ -8,9 +8,11 @@ export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 export const getScreenshotTool: ToolSpec = {
   name: GET_SCREENSHOT_TOOL_NAME,
   description:
-    'Export nodes as base64 images: { images: [{ nodeId, format, base64 }] }. format is PNG (default) ' +
-    '/ JPG / SVG; scale applies to raster formats (default 1). base64 is null for missing or ' +
-    'non-exportable nodes.',
+    'Export nodes as base64 images: { images: [{ nodeId, format, base64, empty? }] }. format is PNG ' +
+    '(default) / JPG / SVG; scale applies to raster formats (default 1). base64 is null for missing or ' +
+    'non-exportable nodes. empty:true means the node rendered nothing (hidden / no visible content / ' +
+    'fully clipped or off-canvas) so the export is blank — if it is an instance that should have art, ' +
+    'export its main component instead.',
   inputShape: {
     nodeIds: z.array(z.string()).describe('Figma node ids to export'),
     format: z
@@ -40,12 +42,15 @@ export const screenshotContent = (result: GetScreenshotResult): ScreenshotConten
       blocks.push({ type: 'text', text: `${img.nodeId}: not exportable` });
       continue;
     }
+    const emptyNote = img.empty
+      ? ' — ⚠ empty (node rendered nothing: hidden/clipped/off-canvas; export its main component if it should have art)'
+      : '';
     const mimeType = RASTER_MIME[img.format];
     if (mimeType === undefined) {
       const markup = Buffer.from(img.base64, 'base64').toString('utf8');
-      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format}):\n${markup}` });
+      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format})${emptyNote}:\n${markup}` });
     } else {
-      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format})` });
+      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format})${emptyNote}` });
       blocks.push({ type: 'image', data: img.base64, mimeType });
     }
   }

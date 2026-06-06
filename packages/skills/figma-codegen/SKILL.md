@@ -80,6 +80,9 @@ scale, step }`: for `spacing`, compose the step with the property `get_design_co
    - a **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
      small square instance) → `get_screenshot` `SVG`;
    - **logos / brand marks are always exported**, never typed by hand.
+   - **An `empty: true` export rendered nothing** (node hidden / fully clipped / off-canvas — e.g. a
+     marquee's off-screen edge logos). Don't ship the blank file: if grounding shows the instance has
+     art, re-export its `mainComponent`; if it's genuinely empty, skip it.
    - **Import svg icons per `profile.svg`** (returned on `component_map` / `token_map`):
      - `mode: 'component'` — a loader (svgr / vite-svg-loader / …) is set up; `profile.svg.importHint`
        gives the **exact** import form, which differs by loader (`?react` vs `?component` vs

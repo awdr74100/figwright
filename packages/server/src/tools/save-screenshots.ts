@@ -28,9 +28,11 @@ const inputShape = {
 export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
   description:
-    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path }] }. ' +
+    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, empty? }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
-    'path is null for missing or non-exportable nodes. Files are named after a sanitized node id.',
+    'path is null for missing or non-exportable nodes. empty:true means the node rendered nothing ' +
+    '(hidden / no visible content / fully clipped or off-canvas) so the written file is blank — for an ' +
+    'instance that should have art, re-export its main component. Files are named after a sanitized node id.',
   inputShape,
   kind: 'local',
 };
@@ -52,11 +54,13 @@ export const writeScreenshots = async (
 
   const saved: SavedScreenshot[] = await Promise.all(
     images.map(async (img): Promise<SavedScreenshot> => {
-      if (img.base64 === null) return { nodeId: img.nodeId, format: img.format, path: null };
+      const empty = img.empty === true ? { empty: true } : {};
+      if (img.base64 === null)
+        return { nodeId: img.nodeId, format: img.format, path: null, ...empty };
       const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
       const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
       await writeFile(path, Buffer.from(img.base64, 'base64'));
-      return { nodeId: img.nodeId, format: img.format, path };
+      return { nodeId: img.nodeId, format: img.format, path, ...empty };
     }),
   );
 

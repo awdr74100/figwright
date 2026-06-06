@@ -21,11 +21,18 @@ export type ListFilesResult = z.infer<typeof ListFilesResultSchema>;
 export const SCREENSHOT_FORMATS = ['PNG', 'JPG', 'SVG'] as const;
 export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
-/** Per-node export; base64 is null when the node is missing or not exportable. */
+/**
+ * Per-node export; base64 is null when the node is missing or not exportable. `empty` is set when
+ * the node rendered nothing (absoluteRenderBounds === null) — e.g. it's hidden, has no visible
+ * content, or is fully clipped / off-canvas (a common marquee/edge case). The export then comes
+ * back blank (transparent PNG / empty SVG); for an instance that should have art, re-export its
+ * mainComponent.
+ */
 export const ScreenshotImageSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   base64: z.string().nullable(),
+  empty: z.boolean().optional(),
 });
 export type ScreenshotImage = z.infer<typeof ScreenshotImageSchema>;
 
@@ -33,11 +40,15 @@ export const GetScreenshotResultSchema = z.object({ images: z.array(ScreenshotIm
 export type GetScreenshotResult = z.infer<typeof GetScreenshotResultSchema>;
 
 // ── save_screenshots ───────────────────────────────────────────────────────
-/** Per-node write result; path is null when the node is missing or not exportable. */
+/**
+ * Per-node write result; path is null when the node is missing or not exportable. `empty` mirrors
+ * ScreenshotImage.empty — the file was written but the node rendered nothing (blank export).
+ */
 export const SavedScreenshotSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   path: z.string().nullable(),
+  empty: z.boolean().optional(),
 });
 export type SavedScreenshot = z.infer<typeof SavedScreenshotSchema>;
 

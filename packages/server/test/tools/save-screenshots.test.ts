@@ -74,6 +74,16 @@ describe('writeScreenshots', () => {
     expect(result.saved).toEqual([{ nodeId: '9:9', format: 'PNG', path: null }]);
     await expect(readFile(join(dir, '9-9.png'))).rejects.toThrow(/ENOENT/);
   });
+
+  it('passes the empty flag through (file still written, but flagged blank)', async () => {
+    const dir = await makeDir();
+    const result = await writeScreenshots(dir, [
+      { nodeId: '1:1', format: 'PNG', base64: 'AAAA', empty: true },
+    ]);
+    expect(result.saved).toEqual([
+      { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png'), empty: true },
+    ]);
+  });
 });
 
 describe('handleSaveScreenshots', () => {

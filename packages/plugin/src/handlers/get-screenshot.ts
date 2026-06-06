@@ -45,7 +45,14 @@ export const createGetScreenshotHandler =
         const node = await figmaCtx.getNodeByIdAsync(nodeId);
         if (node === null || !isExportable(node)) return { nodeId, format, base64: null };
         const bytes = await node.exportAsync(settings);
-        return { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
+        // absoluteRenderBounds is null when the node renders nothing — hidden, no visible content, or
+        // fully clipped / off-canvas (e.g. a marquee's off-screen edge items). The export is then blank
+        // (transparent PNG / empty SVG); flag it so callers don't ship a silent empty asset. The art
+        // may still exist on the main component — re-export that. (PAGE/DOCUMENT lack the property.)
+        const renderBounds = (node as { absoluteRenderBounds?: unknown }).absoluteRenderBounds;
+        const image: ScreenshotImage = { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
+        if (renderBounds === null) image.empty = true;
+        return image;
       }),
     );
 
