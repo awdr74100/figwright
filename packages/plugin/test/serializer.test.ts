@@ -106,11 +106,18 @@ describe('serializeFlat', () => {
     ]);
   });
 
-  it('serializes IMAGE/VIDEO/PATTERN paints as type-only (no gradient detail)', () => {
+  it('carries scaleMode on an IMAGE fill (object-fit equivalent)', () => {
     const out = serializeFlatSync(
-      fake({ fills: [{ type: 'IMAGE', visible: false, opacity: 0.8 }] }),
+      fake({ fills: [{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }] }),
     );
-    expect(out.fills).toEqual([{ type: 'IMAGE', visible: false, opacity: 0.8 }]);
+    expect(out.fills).toEqual([{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }]);
+  });
+
+  it('serializes a PATTERN paint as type-only (no scaleMode)', () => {
+    const out = serializeFlatSync(
+      fake({ fills: [{ type: 'PATTERN', visible: false, opacity: 0.8 }] }),
+    );
+    expect(out.fills).toEqual([{ type: 'PATTERN', visible: false, opacity: 0.8 }]);
   });
 
   it('falls back paint.visible/opacity to defaults when undefined', () => {

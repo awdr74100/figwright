@@ -44,6 +44,16 @@ the rendered image.
      `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
      **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row
      divider or an underline input into a full grid (a common, easy-to-miss fidelity bug).
+   - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
+     `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
+     (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour** (the same
+     class of miss as a dropped shadow). Map the stops directly (`linear-gradient(<angle>, #A 0%, #B
+100%)`, `radial-gradient(...)`); derive the direction from `gradientTransform` (a top→bottom linear
+     gradient is the common case) and confirm it in the render-verify step.
+   - **Image fit.** An `IMAGE` (or `VIDEO`) fill carries `scaleMode` — the object-fit equivalent:
+     `FILL` → `object-cover` (Tailwind) / `object-fit: cover`, `FIT` → `object-contain`, `CROP` →
+     `cover` + a position, `TILE` → `background-repeat: repeat`. Apply it to the exported image so it
+     isn't stretched or letterboxed.
 2. **`component_map`** on the same node → every Figma component grouped to a local code component with
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.
@@ -167,6 +177,10 @@ yourself, per project:
 - **Per-side borders.** A `strokeWeight: "mixed"` node carries `strokeWeights { top, right, bottom,
 left }` — emit only the non-zero sides (`border-t`/`border-b`), never a uniform `border` (that turns
   a row divider or underline input into a grid).
+- **Don't flatten gradients.** A `GRADIENT_*` fill carries `gradientStops` + `gradientTransform` — emit
+  a CSS `linear-gradient`/`radial-gradient` from the stops, not the first stop's solid colour. Apply an
+  `IMAGE`/`VIDEO` fill's `scaleMode` as `object-fit` (FILL→cover, FIT→contain, TILE→repeat) so the
+  exported image isn't stretched.
 - **Responsive by default.** Root is `w-full`, never the artboard's fixed width (it scrolls on smaller
   screens). When the file has other-breakpoint frames, find them (`search_nodes` + width/name/content
   matching) and ground the responsive behaviour from their diff — reflow with breakpoint utilities,

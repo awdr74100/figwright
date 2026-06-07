@@ -54,6 +54,10 @@ interface SimplifiedPaint {
   type: string;
   color?: string;
   gradientStops?: { position: number; color: string }[];
+  /** The gradient's 2×3 axis matrix — the direction/angle, needed to emit a correct CSS gradient. */
+  gradientTransform?: number[][];
+  /** IMAGE/VIDEO object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat. */
+  scaleMode?: string;
   visible?: false;
 }
 
@@ -67,6 +71,11 @@ const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
       position: s.position,
       color: toHex(s.color, s.color.a),
     }));
+    // Carry the axis matrix too — without it the gradient direction/angle is lost and the LLM can
+    // only guess (or flatten the gradient to a solid colour, the classic miss).
+    out.gradientTransform = paint.gradientTransform;
+  } else if ('scaleMode' in paint && paint.scaleMode !== undefined) {
+    out.scaleMode = paint.scaleMode;
   }
   if (paint.visible === false) out.visible = false;
   return out;

@@ -41,6 +41,55 @@ describe('dedupeStyles', () => {
     expect(globalVars.styles[nodes[0]!.fill!]).toEqual([{ type: 'SOLID', color: '#FFFFFF80' }]);
   });
 
+  it('carries a gradient fill with its stops AND the axis transform (direction not lost)', () => {
+    const n: DesignContextNode = {
+      id: 'a',
+      name: 'a',
+      type: 'RECTANGLE',
+      fills: [
+        {
+          type: 'GRADIENT_LINEAR',
+          visible: true,
+          opacity: 1,
+          gradientStops: [
+            { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+            { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+          ],
+          gradientTransform: [
+            [0, 1, 0],
+            [-1, 0, 1],
+          ],
+        },
+      ],
+    };
+    const { nodes, globalVars } = dedupeStyles([n]);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      {
+        type: 'GRADIENT_LINEAR',
+        gradientStops: [
+          { position: 0, color: '#FF0000' },
+          { position: 1, color: '#0000FF' },
+        ],
+        gradientTransform: [
+          [0, 1, 0],
+          [-1, 0, 1],
+        ],
+      },
+    ]);
+  });
+
+  it('carries scaleMode (object-fit) on an IMAGE fill', () => {
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
+  });
+
   it('hoists effects (drop-shadow) and strokes into refs, converting colors to hex', () => {
     const n: DesignContextNode = {
       id: 'card',

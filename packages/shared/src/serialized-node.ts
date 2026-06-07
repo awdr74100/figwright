@@ -46,11 +46,16 @@ const GradientPaintSchema = z.object({
   gradientTransform: z.array(z.array(z.number())),
 });
 
-/** IMAGE / VIDEO / PATTERN: type-only for now (raster/pattern detail is out of scope). */
+/**
+ * IMAGE / VIDEO / PATTERN. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain, CROP,
+ * TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster bytes
+ * themselves stay out of scope (exported separately via get_screenshot).
+ */
 const OtherPaintSchema = z.object({
   type: z.enum(['IMAGE', 'VIDEO', 'PATTERN']),
   visible: z.boolean(),
   opacity: z.number(),
+  scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
 });
 
 export const SerializedPaintSchema = z.discriminatedUnion('type', [

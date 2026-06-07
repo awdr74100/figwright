@@ -49,7 +49,17 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       gradientTransform: transform.map(row => row.slice()),
     };
   }
-  return { type: paint.type, visible, opacity };
+  // IMAGE / VIDEO paints carry a scaleMode (FILL/FIT/CROP/TILE) — the object-fit equivalent, needed
+  // so exported images get the right fit instead of being stretched. PATTERN has no scaleMode.
+  const scaleMode = 'scaleMode' in paint ? (paint as { scaleMode?: string }).scaleMode : undefined;
+  return scaleMode === undefined
+    ? { type: paint.type, visible, opacity }
+    : {
+        type: paint.type,
+        visible,
+        opacity,
+        scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE',
+      };
 };
 
 const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
