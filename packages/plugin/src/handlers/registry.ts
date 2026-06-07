@@ -51,6 +51,7 @@ import { createPingHandler } from './ping.js';
 import { createRemoveReactionsHandler } from './remove-reactions.js';
 import { createRenameNodeHandler } from './rename-node.js';
 import { createRenamePageHandler } from './rename-page.js';
+import { createRenameVariableHandler } from './rename-variable.js';
 import { createReorderNodesHandler } from './reorder-nodes.js';
 import { createReparentNodesHandler } from './reparent-nodes.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
@@ -64,6 +65,7 @@ import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
 import { createSetFillsHandler } from './set-fills.js';
+import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetOpacityHandler } from './set-opacity.js';
 import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
@@ -102,6 +104,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     move_nodes: createMoveNodesHandler(figmaCtx),
     resize_nodes: createResizeNodesHandler(figmaCtx),
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
+    set_layout_props: createSetLayoutPropsHandler(figmaCtx),
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
@@ -123,6 +126,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     create_variable: createCreateVariableHandler(figmaCtx),
     set_variable_value: createSetVariableValueHandler(figmaCtx),
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
+    rename_variable: createRenameVariableHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     // Structure + bulk text
     group_nodes: createGroupNodesHandler(figmaCtx),

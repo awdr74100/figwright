@@ -25,6 +25,25 @@ describe('bind_variable_to_node handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  it('unbinds the field when variableId is null (without looking up a variable)', async () => {
+    const setBoundVariable = vi.fn<() => void>();
+    const getVariableByIdAsync = vi.fn<() => Promise<{ id: string }>>(async () => ({ id: 'V:0' }));
+    const node = { id: '1:1', setBoundVariable };
+    const handler = createBindVariableToNodeHandler({
+      getNodeByIdAsync: async () => node,
+      variables: { getVariableByIdAsync },
+    } as unknown as typeof figma);
+    const result = (await handler({
+      nodeId: '1:1',
+      field: 'width',
+      variableId: null,
+    })) as MutateResult;
+
+    expect(setBoundVariable).toHaveBeenCalledWith('width', null);
+    expect(getVariableByIdAsync).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
   it('throws on missing node, missing variable, or non-bindable node', async () => {
     await expect(
       createBindVariableToNodeHandler(fakeFigma(null, { id: 'V:0' }))({

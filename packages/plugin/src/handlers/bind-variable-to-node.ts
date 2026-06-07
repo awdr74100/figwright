@@ -10,19 +10,22 @@ export const createBindVariableToNodeHandler =
       throw new TypeError('bind_variable_to_node: nodeId must be a string');
     if (typeof p.field !== 'string')
       throw new TypeError('bind_variable_to_node: field must be a string');
-    if (typeof p.variableId !== 'string') {
-      throw new TypeError('bind_variable_to_node: variableId must be a string');
+    if (p.variableId !== null && typeof p.variableId !== 'string') {
+      throw new TypeError('bind_variable_to_node: variableId must be a string or null');
     }
 
-    const [node, variable] = await Promise.all([
-      figmaCtx.getNodeByIdAsync(p.nodeId),
-      figmaCtx.variables.getVariableByIdAsync(p.variableId),
-    ]);
+    const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (node === null) throw new Error(`bind_variable_to_node: node ${p.nodeId} not found`);
-    if (variable === null)
-      throw new Error(`bind_variable_to_node: variable ${p.variableId} not found`);
     if (typeof (node as { setBoundVariable?: unknown }).setBoundVariable !== 'function') {
       throw new Error(`bind_variable_to_node: node ${p.nodeId} cannot bind variables`);
+    }
+
+    // variableId: null unbinds the field (setBoundVariable(field, null)); a string binds it.
+    let variable: Variable | null = null;
+    if (typeof p.variableId === 'string') {
+      variable = await figmaCtx.variables.getVariableByIdAsync(p.variableId);
+      if (variable === null)
+        throw new Error(`bind_variable_to_node: variable ${p.variableId} not found`);
     }
     (node as SceneNode).setBoundVariable(p.field as VariableBindableNodeField, variable);
 

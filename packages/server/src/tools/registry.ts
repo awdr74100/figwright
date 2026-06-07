@@ -56,6 +56,7 @@ import { pingTool } from './ping.js';
 import { removeReactionsTool } from './remove-reactions.js';
 import { renameNodeTool } from './rename-node.js';
 import { renamePageTool } from './rename-page.js';
+import { renameVariableTool } from './rename-variable.js';
 import { reorderNodesTool } from './reorder-nodes.js';
 import { reparentNodesTool } from './reparent-nodes.js';
 import { resizeNodesTool } from './resize-nodes.js';
@@ -71,6 +72,7 @@ import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
 import { setFillsTool } from './set-fills.js';
+import { setLayoutPropsTool } from './set-layout-props.js';
 import { setOpacityTool } from './set-opacity.js';
 import { setReactionsTool } from './set-reactions.js';
 import { setStrokesTool } from './set-strokes.js';
@@ -131,6 +133,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   moveNodesTool,
   resizeNodesTool,
   setAutoLayoutTool,
+  setLayoutPropsTool,
   setBlendModeTool,
   setConstraintsTool,
   rotateNodesTool,
@@ -150,6 +153,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   createVariableTool,
   setVariableValueTool,
   bindVariableToNodeTool,
+  renameVariableTool,
   deleteVariableTool,
   groupNodesTool,
   ungroupNodesTool,

@@ -1,10 +1,17 @@
 import type { MutateResult } from '@figma-mcp-relay/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
 
-const fakeFigma = (node: unknown): typeof figma =>
+const MIXED = Symbol('mixed');
+
+const fakeFigma = (
+  node: unknown,
+  loadFontAsync = vi.fn<() => Promise<void>>(async () => {}),
+): typeof figma =>
   ({
+    mixed: MIXED,
+    loadFontAsync,
     getNodeByIdAsync: async (id: string) => (id === '1:1' ? node : null),
   }) as unknown as typeof figma;
 
@@ -43,6 +50,54 @@ describe('set_text_properties handler', () => {
       maxLines: null,
       textAutoResize: 'HEIGHT',
     });
+  });
+
+  it('sets typography after loading the node font and the new fontName', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 12,
+      lineHeight: { unit: 'AUTO' },
+      letterSpacing: { unit: 'PERCENT', value: 0 },
+      textCase: 'ORIGINAL',
+      textDecoration: 'NONE',
+    };
+    const handler = createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync));
+    await handler({
+      nodeId: '1:1',
+      fontName: { family: 'Roboto', style: 'Bold' },
+      fontSize: 24,
+      lineHeight: { unit: 'PIXELS', value: 32 },
+      letterSpacing: { unit: 'PIXELS', value: 1 },
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+    });
+
+    // both the node's current font and the new target font get loaded before mutation
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Roboto', style: 'Bold' });
+    expect(node).toMatchObject({
+      fontName: { family: 'Roboto', style: 'Bold' },
+      fontSize: 24,
+      lineHeight: { unit: 'PIXELS', value: 32 },
+      letterSpacing: { unit: 'PIXELS', value: 1 },
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+    });
+  });
+
+  it('does not load fonts when only layout/overflow props change', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = { id: '1:1', type: 'TEXT', textAutoResize: 'NONE' };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      textAutoResize: 'HEIGHT',
+    });
+    expect(loadFontAsync).not.toHaveBeenCalled();
+    expect(node.textAutoResize).toBe('HEIGHT');
   });
 
   it('throws on non-TEXT node, missing node, or bad input', async () => {
