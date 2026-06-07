@@ -11,6 +11,7 @@ import { batchRenameNodesTool } from './batch-rename-nodes.js';
 import { batchTool } from './batch.js';
 import { bindVariableToNodeTool } from './bind-variable-to-node.js';
 import { cloneNodeTool } from './clone-node.js';
+import { combineAsVariantsTool } from './combine-as-variants.js';
 import { componentMapTool } from './component-map.js';
 import { createComponentTool } from './create-component.js';
 import { createEffectStyleTool } from './create-effect-style.js';
@@ -174,6 +175,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   createComponentTool,
   createSectionTool,
   createInstanceTool,
+  combineAsVariantsTool,
   batchTool,
 ];
 

@@ -7,6 +7,7 @@ import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
 import { createBatchHandler } from './batch.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
 import { createCloneNodeHandler } from './clone-node.js';
+import { createCombineAsVariantsHandler } from './combine-as-variants.js';
 import { createCreateComponentHandler } from './create-component.js';
 import { createCreateEffectStyleHandler } from './create-effect-style.js';
 import { createCreateEllipseHandler } from './create-ellipse.js';
@@ -150,6 +151,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     create_component: createCreateComponentHandler(figmaCtx),
     create_section: createCreateSectionHandler(figmaCtx),
     create_instance: createCreateInstanceHandler(figmaCtx),
+    combine_as_variants: createCombineAsVariantsHandler(figmaCtx),
   };
 
   const handlers: SandboxHandlers = {
