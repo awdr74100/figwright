@@ -108,6 +108,29 @@ Then emit code in the detected stack (the profile comes back on `component_map` 
 not call `analyze_project` yourself). Compose the reused components, wrap unmapped pieces, and apply
 token references for color/spacing/radius/typography.
 
+## Large designs: build section by section, and ground every section
+
+A full page can be too big to ground in one shot — a dense whole-page tree can exceed the context
+window (a single ~330-node frame can blow the tool's token cap). When that happens, **do not retry the
+same oversized call** (that's a dead loop, not progress), and **do not depth-cap the whole page** (a
+shallow tree throws away the structure inside each section → empty cards/rows). Scope **horizontally**
+instead:
+
+1. Get the page's **top-level section node ids** cheaply first — `get_design_context` at `detail: minimal`
+   (and/or a small `depth`) just to see the list of sections, or `get_design_context` on the page and
+   read the direct children.
+2. Then `get_design_context` **each section by its `nodeId` at full detail** (`dedupeComponents: true`),
+   build that section, and move to the next. One section in context at a time.
+
+**Ground every section the same way — never eyeball values off the screenshot for "the easy ones".**
+This is the cardinal failure: grounding the first sections properly, then guessing the rest from the
+screenshot to save effort. It produces a cascade of systematic errors — heading font-sizes all guessed
+too small, an accent bar the wrong colour, paddings off, a missing border — **even though
+`get_design_context` had every correct value the whole time**. The screenshot is for visual intent (the
+rough look), never for values. If you're about to type a px size, a colour, a font-size, a radius, or a
+spacing you did **not** read from grounding, stop and `get_design_context` that node. The plugin already
+gave you the exact number; use it.
+
 ## Responsive by default
 
 Real designs ship multiple breakpoints and modern output is expected to be responsive — so **never
@@ -164,6 +187,12 @@ yourself, per project:
 
 ## Rules
 
+- **Ground every section — never eyeball a value off the screenshot.** Every px size, colour, font-size,
+  radius, and spacing must come from `get_design_context`, for _every_ section, not just the first few.
+  The screenshot is visual intent only. Guessing "the easy sections" to save effort is the cardinal miss
+  (it caused a cascade of wrong font-sizes / colours / paddings on a real file while the exact values sat
+  in the grounding the whole time). On a page too big to ground at once, scope by section `nodeId` and
+  build one section at a time — never depth-cap the whole page, never retry an oversized call.
 - **Reuse beats regenerate.** A `high`/`medium` `component_map` candidate must be imported and used, not
   re-implemented. Never invent a component name `component_map` didn't report.
 - **Reference tokens, not literals.** If `token_map` maps a variable, emit its `ref`; reserve raw values
