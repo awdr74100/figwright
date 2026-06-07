@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figma-mcp-relay/shared';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { tryOnScopeDispose, useDocumentVisibility, useEventListener, useNow } from '@vueuse/core';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { createSandboxBridge } from './bridge/sandbox.js';
 import {
@@ -51,13 +52,14 @@ client.setToolHandler(bridge.handler);
 const tab = ref<Tab>('activity');
 const state = ref<RelayClientState>(client.getState());
 const context = ref<PluginContextEvent | null>(null);
-const now = ref(Date.now());
+const now = useNow({ interval: 1000 });
+const visibility = useDocumentVisibility();
 
 const shortId = `${client.sessionId.slice(0, 8)}…`;
 const errorEntries = computed(() => state.value.activity.filter(e => e.status === 'error'));
 
 const formatAgo = (ts: number): string => {
-  const s = Math.max(0, Math.round((now.value - ts) / 1000));
+  const s = Math.max(0, Math.round((now.value.getTime() - ts) / 1000));
   if (s < 1) return 'now';
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
@@ -71,9 +73,6 @@ const headerMeta = computed(() => {
   return `${port}${up}`;
 });
 
-let unsubscribe: (() => void) | null = null;
-let ticker: ReturnType<typeof setInterval> | null = null;
-
 // Re-assert this session's activity from the latest known context. The leader routes to the
 // most-recently-active session, so emitting bumps this plugin to the front. No-op until the sandbox
 // has pushed at least one context (file/page identity is required by ActivityParams).
@@ -85,11 +84,11 @@ const emitActivity = (): void => {
   // ever claims routing — so switching tabs auto-follows the foreground file, and a background tab can
   // never steal routing via a broadcast focus/visibility event. This is the core of selection/visibility
   // -driven routing. See [[project-routing-stability-backlog]].
-  if (document.visibilityState !== 'visible') return;
+  if (visibility.value !== 'visible') return;
   client.notifyActivity({ fileName: c.fileName, pageId: c.pageId, pageName: c.pageName });
 };
 
-const onWindowMessage = (event: MessageEvent): void => {
+useEventListener(globalThis, 'message', (event: MessageEvent) => {
   const msg = (event.data as { pluginMessage?: unknown } | null)?.pluginMessage;
   if (isPluginContextEvent(msg)) {
     context.value = msg;
@@ -98,35 +97,31 @@ const onWindowMessage = (event: MessageEvent): void => {
     // file is being routed instead of an opaque session id.
     emitActivity();
   }
-};
-
-// When this tab becomes the foreground (visibilitychange → visible), re-assert activity so routing
-// follows the file the user switched to — even with no canvas click. We deliberately do NOT listen on
-// window `focus`: that fires on EVERY tab when the user returns to the Figma app (it's not per-tab),
-// which is exactly the broadcast that made background files steal routing. `visibilitychange` only
-// fires on the tab whose visibility actually changed, and emitActivity's `visible` gate ensures the
-// background side (going → hidden) stays silent.
-const onVisibility = (): void => emitActivity();
-
-onMounted(() => {
-  unsubscribe = client.subscribe(s => {
-    state.value = s;
-  });
-  ticker = setInterval(() => {
-    now.value = Date.now();
-  }, 1000);
-  globalThis.addEventListener('message', onWindowMessage);
-  document.addEventListener('visibilitychange', onVisibility);
-  client.connect().catch(err => console.warn('[relay-client] initial connect failed:', err));
 });
 
-onBeforeUnmount(() => {
-  unsubscribe?.();
-  if (ticker !== null) clearInterval(ticker);
-  globalThis.removeEventListener('message', onWindowMessage);
-  document.removeEventListener('visibilitychange', onVisibility);
+// When this tab becomes the foreground (visibility → 'visible'), re-assert activity so routing follows
+// the file the user switched to — even with no canvas click. `useDocumentVisibility` is backed solely by
+// the `visibilitychange` event, which only fires on the tab whose visibility actually changed. We
+// deliberately do NOT react to window `focus`: that fires on EVERY tab when the user returns to the Figma
+// app (it's not per-tab), which is exactly the broadcast that made background files steal routing.
+// emitActivity's `visible` gate keeps the background side (going → hidden) silent.
+watch(visibility, v => {
+  if (v === 'visible') emitActivity();
+});
+
+// Mirror the relay client's state into a ref — subscribe synchronously so the panel reflects the
+// initial state, then tear everything down when the component's reactive scope is disposed.
+const stopSubscribe = client.subscribe(s => {
+  state.value = s;
+});
+tryOnScopeDispose(() => {
+  stopSubscribe();
   bridge.dispose();
   client.disconnect().catch(() => {});
+});
+
+onMounted(() => {
+  client.connect().catch(err => console.warn('[relay-client] initial connect failed:', err));
 });
 </script>
 
