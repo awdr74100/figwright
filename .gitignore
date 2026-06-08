@@ -18,3 +18,6 @@ coverage/
 figma-mcp-bridge.txt
 figma-mcp-go.txt
 figma-context-mcp.txt
+
+# Internal planning doc / single source of truth for development — not published to GitHub
+PLAN.md
