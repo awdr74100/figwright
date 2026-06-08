@@ -44,6 +44,11 @@ the rendered image.
      `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
      **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row
      divider or an underline input into a full grid (a common, easy-to-miss fidelity bug).
+   - **Stroke alignment.** A stroke carries `strokeAlign` (`INSIDE` / `OUTSIDE` / `CENTER`). `INSIDE`
+     is a plain inset `border`, but `OUTSIDE` draws _outside_ the box — emit it as an `outline` or a
+     `box-shadow 0 0 0 Npx <colour>`, **never a plain `border`**, so it doesn't grow the box or shift
+     its position (selection rings / focus outlines are `OUTSIDE`). `CENTER` straddles the edge (half
+     the weight each side).
    - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
      `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
      (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour** (the same
@@ -206,6 +211,9 @@ yourself, per project:
 - **Per-side borders.** A `strokeWeight: "mixed"` node carries `strokeWeights { top, right, bottom,
 left }` — emit only the non-zero sides (`border-t`/`border-b`), never a uniform `border` (that turns
   a row divider or underline input into a grid).
+- **Honour `strokeAlign`.** `INSIDE` → plain inset `border`; `OUTSIDE` → `outline` or `box-shadow 0 0 0
+Npx` (never a plain `border`, which grows/shifts the box — selection & focus rings are `OUTSIDE`);
+  `CENTER` straddles the edge.
 - **Don't flatten gradients.** A `GRADIENT_*` fill carries `gradientStops` + `gradientTransform` — emit
   a CSS `linear-gradient`/`radial-gradient` from the stops, not the first stop's solid colour. Apply an
   `IMAGE`/`VIDEO` fill's `scaleMode` as `object-fit` (FILL→cover, FIT→contain, TILE→repeat) so the
