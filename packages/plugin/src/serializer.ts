@@ -3,6 +3,8 @@ import {
   type SerializedAutoLayout,
   type SerializedComponentProperty,
   type SerializedEffect,
+  type SerializedGridChild,
+  type SerializedGridTrack,
   type SerializedLayoutGrid,
   type SerializedLetterSpacing,
   type SerializedLineHeight,
@@ -62,9 +64,20 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       };
 };
 
+/** GridTrackSize[] (gridRow/ColumnSizes) → `{ type, value }[]` (FLEX = fr fraction, FIXED = px). */
+const serializeGridTracks = (tracks: unknown): SerializedGridTrack[] | undefined => {
+  if (!Array.isArray(tracks)) return undefined;
+  return tracks
+    .filter(
+      (t): t is { type: unknown; value: unknown } =>
+        typeof t === 'object' && t !== null && 'type' in t && 'value' in t,
+    )
+    .map(t => ({ type: String(t.type), value: Number(t.value) }));
+};
+
 const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
   const n = node as SceneNode & {
-    layoutMode: 'HORIZONTAL' | 'VERTICAL';
+    layoutMode: 'HORIZONTAL' | 'VERTICAL' | 'GRID';
     paddingTop: number;
     paddingRight: number;
     paddingBottom: number;
@@ -73,19 +86,74 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     primaryAxisAlignItems: string;
     counterAxisAlignItems: string;
     layoutWrap?: string;
+    gridRowCount?: number;
+    gridColumnCount?: number;
+    gridRowGap?: number;
+    gridColumnGap?: number;
+    gridRowSizes?: unknown;
+    gridColumnSizes?: unknown;
   };
-  const out: SerializedAutoLayout = {
-    mode: n.layoutMode,
+  const padding = {
     paddingTop: n.paddingTop,
     paddingRight: n.paddingRight,
     paddingBottom: n.paddingBottom,
     paddingLeft: n.paddingLeft,
+  };
+  // GRID auto-layout: no itemSpacing / primary-counter align — it carries row/col counts + gaps +
+  // track sizes instead (→ CSS Grid). padding is common.
+  if (n.layoutMode === 'GRID') {
+    const out: SerializedAutoLayout = { mode: 'GRID', ...padding };
+    if (typeof n.gridRowCount === 'number') out.gridRowCount = n.gridRowCount;
+    if (typeof n.gridColumnCount === 'number') out.gridColumnCount = n.gridColumnCount;
+    if (typeof n.gridRowGap === 'number') out.gridRowGap = n.gridRowGap;
+    if (typeof n.gridColumnGap === 'number') out.gridColumnGap = n.gridColumnGap;
+    const rowSizes = serializeGridTracks(n.gridRowSizes);
+    if (rowSizes !== undefined) out.gridRowSizes = rowSizes;
+    const colSizes = serializeGridTracks(n.gridColumnSizes);
+    if (colSizes !== undefined) out.gridColumnSizes = colSizes;
+    return out;
+  }
+  const out: SerializedAutoLayout = {
+    mode: n.layoutMode,
+    ...padding,
     itemSpacing: n.itemSpacing,
     primaryAxisAlignItems: n.primaryAxisAlignItems,
     counterAxisAlignItems: n.counterAxisAlignItems,
   };
   if (typeof n.layoutWrap === 'string') out.layoutWrap = n.layoutWrap;
   return out;
+};
+
+/** A node's placement inside a GRID parent → `gridChild` (anchor / span / per-cell align). */
+const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined => {
+  const n = node as SceneNode & {
+    gridRowAnchorIndex?: number;
+    gridColumnAnchorIndex?: number;
+    gridRowSpan?: number;
+    gridColumnSpan?: number;
+    gridChildHorizontalAlign?: string;
+    gridChildVerticalAlign?: string;
+  };
+  const out: SerializedGridChild = {};
+  // anchor -1 = auto-flowed (no explicit cell) → omit; >= 0 = pinned to a specific row/column.
+  if (typeof n.gridRowAnchorIndex === 'number' && n.gridRowAnchorIndex >= 0) {
+    out.rowAnchorIndex = n.gridRowAnchorIndex;
+  }
+  if (typeof n.gridColumnAnchorIndex === 'number' && n.gridColumnAnchorIndex >= 0) {
+    out.columnAnchorIndex = n.gridColumnAnchorIndex;
+  }
+  if (typeof n.gridRowSpan === 'number' && n.gridRowSpan !== 1) out.rowSpan = n.gridRowSpan;
+  if (typeof n.gridColumnSpan === 'number' && n.gridColumnSpan !== 1) {
+    out.columnSpan = n.gridColumnSpan;
+  }
+  if (typeof n.gridChildHorizontalAlign === 'string' && n.gridChildHorizontalAlign !== 'AUTO') {
+    out.horizontalAlign = n.gridChildHorizontalAlign;
+  }
+  if (typeof n.gridChildVerticalAlign === 'string' && n.gridChildVerticalAlign !== 'AUTO') {
+    out.verticalAlign = n.gridChildVerticalAlign;
+  }
+  // A plain auto-flowed cell (anchor -1, span 1, align AUTO) carries no placement → omit entirely.
+  return Object.keys(out).length > 0 ? out : undefined;
 };
 
 const serializeLineHeight = (lh: unknown): SerializedLineHeight | typeof MIXED => {
@@ -262,6 +330,16 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     if (typeof align === 'string' && align !== 'INHERIT') out.layoutAlign = align;
     if ((node as { layoutPositioning?: unknown }).layoutPositioning === 'ABSOLUTE') {
       out.layoutPositioning = 'ABSOLUTE';
+    }
+    // Inside a GRID parent the child also carries grid placement (anchor / span / per-cell align).
+    const parent = node.parent;
+    if (
+      parent !== null &&
+      'layoutMode' in parent &&
+      (parent as { layoutMode: unknown }).layoutMode === 'GRID'
+    ) {
+      const gc = serializeGridChild(node);
+      if (gc !== undefined) out.gridChild = gc;
     }
   } else if ('constraints' in node) {
     const c = (node as { constraints?: unknown }).constraints;

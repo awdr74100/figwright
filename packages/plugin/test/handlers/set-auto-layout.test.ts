@@ -17,6 +17,10 @@ const makeFrame = () => ({
   primaryAxisAlignItems: 'MIN',
   counterAxisAlignItems: 'MIN',
   layoutWrap: 'NO_WRAP',
+  gridRowCount: 0,
+  gridColumnCount: 0,
+  gridRowGap: 0,
+  gridColumnGap: 0,
 });
 
 describe('set_auto_layout handler', () => {
@@ -45,6 +49,30 @@ describe('set_auto_layout handler', () => {
     await handler({ nodeId: '1:1', layoutMode: 'NONE', paddingTop: 99 });
     expect(node.layoutMode).toBe('NONE');
     expect(node.paddingTop).toBe(0);
+  });
+
+  it('enables GRID layout with counts / gaps, skips H/V-only flex props', async () => {
+    const node = makeFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    const result = (await handler({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      paddingTop: 16,
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowGap: 8,
+      gridColumnGap: 12,
+      itemSpacing: 99, // H/V-only — must be ignored in GRID mode
+    })) as MutateResult;
+
+    expect(node.layoutMode).toBe('GRID');
+    expect(node.paddingTop).toBe(16);
+    expect(node.gridRowCount).toBe(2);
+    expect(node.gridColumnCount).toBe(3);
+    expect(node.gridRowGap).toBe(8);
+    expect(node.gridColumnGap).toBe(12);
+    expect(node.itemSpacing).toBe(0); // unchanged — itemSpacing is flex-only
+    expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
   it('throws on bad layoutMode or a node without auto layout', async () => {

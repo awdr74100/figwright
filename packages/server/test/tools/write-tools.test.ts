@@ -146,7 +146,7 @@ describe('M2 write tool definitions', () => {
     expect(setAutoLayoutToolDefinition.name).toBe(SET_AUTO_LAYOUT_TOOL_NAME);
     expect(setAutoLayoutToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId', 'layoutMode'],
-      properties: { layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL'] } },
+      properties: { layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID'] } },
     });
     expect(setBlendModeToolDefinition.name).toBe(SET_BLEND_MODE_TOOL_NAME);
     expect(setBlendModeToolDefinition.inputSchema).toMatchObject({

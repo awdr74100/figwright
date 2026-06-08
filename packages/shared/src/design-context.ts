@@ -2,16 +2,22 @@ import { z } from 'zod';
 
 import {
   MIXED,
+  SerializedAutoLayoutSchema,
   SerializedComponentPropertySchema,
+  SerializedConstraintsSchema,
   SerializedEffectSchema,
   SerializedFontNameSchema,
+  SerializedGridChildSchema,
   SerializedMainComponentSchema,
   SerializedPaintSchema,
   SerializedStyleIdsSchema,
 } from './serialized-node.js';
 import type {
+  SerializedAutoLayout,
   SerializedComponentProperty,
+  SerializedConstraints,
   SerializedEffect,
+  SerializedGridChild,
   SerializedMainComponent,
   SerializedPaint,
   SerializedStyleIds,
@@ -60,6 +66,19 @@ export interface DesignContextNode {
   strokeWeights?: { top: number; right: number; bottom: number; left: number };
   strokeAlign?: string;
   effects?: readonly SerializedEffect[];
+  // auto-layout / positioning — surfaced to the main grounding tool (not just get_node) so codegen
+  // reads exact padding / gap / justify / align instead of inferring them from geometry. H/V carry
+  // itemSpacing + align on `layout`; GRID carries grid counts/gaps on `layout` + per-child placement
+  // on `gridChild`.
+  layout?: SerializedAutoLayout;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  layoutGrow?: number;
+  layoutAlign?: string;
+  layoutPositioning?: string;
+  gridChild?: SerializedGridChild;
+  constraints?: SerializedConstraints;
+  clipsContent?: boolean;
   characters?: string;
   fontSize?: number | typeof MIXED;
   fontName?: z.infer<typeof SerializedFontNameSchema> | typeof MIXED;
@@ -114,6 +133,15 @@ export const DesignContextNodeSchema = z.lazy(() =>
       .optional(),
     strokeAlign: z.string().optional(),
     effects: z.array(SerializedEffectSchema).optional(),
+    layout: SerializedAutoLayoutSchema.optional(),
+    layoutSizingHorizontal: z.string().optional(),
+    layoutSizingVertical: z.string().optional(),
+    layoutGrow: z.number().optional(),
+    layoutAlign: z.string().optional(),
+    layoutPositioning: z.string().optional(),
+    gridChild: SerializedGridChildSchema.optional(),
+    constraints: SerializedConstraintsSchema.optional(),
+    clipsContent: z.boolean().optional(),
     characters: z.string().optional(),
     fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
     fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),

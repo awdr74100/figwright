@@ -97,19 +97,56 @@ export const SerializedLayoutGridSchema = z.object({
 });
 export type SerializedLayoutGrid = z.infer<typeof SerializedLayoutGridSchema>;
 
-/** Auto Layout summary (only present when a node's layoutMode is HORIZONTAL / VERTICAL). */
+/** One grid track (a row or column) in a GRID auto-layout: FLEX (fr fraction) or FIXED (px). */
+export const SerializedGridTrackSchema = z.object({
+  type: z.string(), // FLEX | FIXED
+  value: z.number(),
+});
+export type SerializedGridTrack = z.infer<typeof SerializedGridTrackSchema>;
+
+/**
+ * Auto Layout summary (present when layoutMode is HORIZONTAL / VERTICAL / GRID). padding is common
+ * to all three. H/V carry itemSpacing + primary/counterAxisAlignItems (→ flex gap + justify/align);
+ * GRID carries gridRow/ColumnCount + gridRow/ColumnGap + track sizes instead (→ CSS Grid).
+ */
 export const SerializedAutoLayoutSchema = z.object({
-  mode: z.enum(['HORIZONTAL', 'VERTICAL']),
+  mode: z.enum(['HORIZONTAL', 'VERTICAL', 'GRID']),
   paddingTop: z.number(),
   paddingRight: z.number(),
   paddingBottom: z.number(),
   paddingLeft: z.number(),
-  itemSpacing: z.number(),
-  primaryAxisAlignItems: z.string(),
-  counterAxisAlignItems: z.string(),
+  // HORIZONTAL / VERTICAL only
+  itemSpacing: z.number().optional(),
+  primaryAxisAlignItems: z.string().optional(),
+  counterAxisAlignItems: z.string().optional(),
   layoutWrap: z.string().optional(),
+  // GRID only
+  gridRowCount: z.number().optional(),
+  gridColumnCount: z.number().optional(),
+  gridRowGap: z.number().optional(),
+  gridColumnGap: z.number().optional(),
+  gridRowSizes: z.array(SerializedGridTrackSchema).optional(),
+  gridColumnSizes: z.array(SerializedGridTrackSchema).optional(),
 });
 export type SerializedAutoLayout = z.infer<typeof SerializedAutoLayoutSchema>;
+
+/**
+ * A child's placement inside a GRID auto-layout parent (only emitted when the parent's layoutMode
+ * is GRID and the child carries non-default placement). anchor index is 0-based and present only
+ * when the child is pinned to a specific cell (auto-flowed children have anchor -1 → omitted); span
+ * is present only when > 1; align only when not AUTO. The whole object is omitted for a plain
+ * auto-flowed cell. Maps to CSS Grid `grid-row` / `grid-column` (anchor+1 / span) + `justify-self`
+ * / `align-self`.
+ */
+export const SerializedGridChildSchema = z.object({
+  rowAnchorIndex: z.number().optional(),
+  columnAnchorIndex: z.number().optional(),
+  rowSpan: z.number().optional(),
+  columnSpan: z.number().optional(),
+  horizontalAlign: z.string().optional(),
+  verticalAlign: z.string().optional(),
+});
+export type SerializedGridChild = z.infer<typeof SerializedGridChildSchema>;
 
 /**
  * Non-auto-layout positioning constraints (horizontal / vertical), e.g. MIN / CENTER / STRETCH /
@@ -208,6 +245,8 @@ export interface SerializedNode {
   layoutGrow?: number;
   layoutAlign?: string;
   layoutPositioning?: string;
+  /** Placement inside a GRID auto-layout parent (only when the parent's layoutMode is GRID). */
+  gridChild?: SerializedGridChild;
   // non-auto-layout positioning
   constraints?: SerializedConstraints;
   clipsContent?: boolean;
@@ -273,6 +312,7 @@ export const SerializedNodeSchema = z.lazy(() =>
     layoutGrow: z.number().optional(),
     layoutAlign: z.string().optional(),
     layoutPositioning: z.string().optional(),
+    gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),
     styleIds: SerializedStyleIdsSchema.optional(),

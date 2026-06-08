@@ -59,6 +59,21 @@ the rendered image.
      `FILL` → `object-cover` (Tailwind) / `object-fit: cover`, `FIT` → `object-contain`, `CROP` →
      `cover` + a position, `TILE` → `background-repeat: repeat`. Apply it to the exported image so it
      isn't stretched or letterboxed.
+   - **Auto-layout & Grid — read spacing off `layout`, never eyeball it.** Each auto-layout frame
+     carries a `layout` object with the _exact_ spacing; don't reverse-engineer padding/gap/justify
+     from child `x/y/w/h`. `mode` `HORIZONTAL`/`VERTICAL` → `flex-row`/`flex-col`; `padding*` → `p-*`;
+     for H/V `itemSpacing` → `gap`, `primaryAxisAlignItems`/`counterAxisAlignItems` → `justify-*`/
+     `items-*` (`SPACE_BETWEEN` → `justify-between`). `mode: 'GRID'` → `display:grid` with
+     `gridRowCount`/`gridColumnCount` → `grid-template-rows`/`grid-template-columns: repeat(N, 1fr)`,
+     `gridRowGap`/`gridColumnGap` → `gap`, and optional `gridRowSizes`/`gridColumnSizes` tracks
+     (`FIXED`→px, `FLEX`→fr) — **emit a real CSS grid, don't flatten it to stacked flex**. A grid child
+     carries `gridChild` only when it's pinned or spanning (`rowAnchorIndex`/`columnAnchorIndex` →
+     `grid-row`/`grid-column` anchor+1, `rowSpan`/`columnSpan` → span N, `horizontalAlign`/
+     `verticalAlign` → `justify-self`/`align-self`); a child with **no** `gridChild` is auto-flowed —
+     let the grid place it, don't emit an explicit `grid-row`/`grid-column`. A node's own
+     `layoutSizingHorizontal`/`Vertical` (`FILL`→`flex-1`/
+     stretch, `HUG`→fit-content, `FIXED`→explicit) + `layoutGrow` + `layoutAlign` decide how it fills
+     its parent.
 2. **`component_map`** on the same node → every Figma component grouped to a local code component with
    a `status` (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), do not regenerate.
@@ -218,6 +233,11 @@ Npx` (never a plain `border`, which grows/shifts the box — selection & focus r
   a CSS `linear-gradient`/`radial-gradient` from the stops, not the first stop's solid colour. Apply an
   `IMAGE`/`VIDEO` fill's `scaleMode` as `object-fit` (FILL→cover, FIT→contain, TILE→repeat) so the
   exported image isn't stretched.
+- **Ground spacing off `layout`, not geometry.** Auto-layout frames carry `layout` (`padding*` → `p-*`,
+  `itemSpacing` → `gap`, `primary`/`counterAxisAlignItems` → `justify-*`/`items-*`). `mode: 'GRID'` →
+  `display:grid` (`gridRow`/`ColumnCount` → `repeat(N, 1fr)`, `gridRow`/`ColumnGap` → `gap`, tracks
+  FIXED→px / FLEX→fr; each child's `gridChild` anchor/span → `grid-row`/`grid-column`) — emit a real
+  CSS grid, don't flatten it to flex. Never reverse-engineer padding/gap from child `x/y/w/h`.
 - **Responsive by default.** Root is `w-full`, never the artboard's fixed width (it scrolls on smaller
   screens). When the file has other-breakpoint frames, find them (`search_nodes` + width/name/content
   matching) and ground the responsive behaviour from their diff — reflow with breakpoint utilities,

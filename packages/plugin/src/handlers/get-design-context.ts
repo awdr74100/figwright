@@ -39,6 +39,19 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.strokeWeights !== undefined) out.strokeWeights = flat.strokeWeights;
   if (flat.strokeAlign !== undefined) out.strokeAlign = flat.strokeAlign;
   if (flat.effects !== undefined) out.effects = flat.effects;
+  // Auto-layout / positioning — surfaced here (not just get_node) so codegen reads exact padding /
+  // gap / justify / align / grid placement instead of inferring them from x/y/w/h geometry.
+  if (flat.layout !== undefined) out.layout = flat.layout;
+  if (flat.layoutSizingHorizontal !== undefined) {
+    out.layoutSizingHorizontal = flat.layoutSizingHorizontal;
+  }
+  if (flat.layoutSizingVertical !== undefined) out.layoutSizingVertical = flat.layoutSizingVertical;
+  if (flat.layoutGrow !== undefined) out.layoutGrow = flat.layoutGrow;
+  if (flat.layoutAlign !== undefined) out.layoutAlign = flat.layoutAlign;
+  if (flat.layoutPositioning !== undefined) out.layoutPositioning = flat.layoutPositioning;
+  if (flat.gridChild !== undefined) out.gridChild = flat.gridChild;
+  if (flat.constraints !== undefined) out.constraints = flat.constraints;
+  if (flat.clipsContent !== undefined) out.clipsContent = flat.clipsContent;
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
