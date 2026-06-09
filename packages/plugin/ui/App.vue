@@ -123,39 +123,44 @@ tryOnScopeDispose(() => {
 onMounted(() => {
   client.connect().catch(err => console.warn('[relay-client] initial connect failed:', err));
 });
+
+// Hide the panel into the background. The relay socket lives in this iframe, so we ask the sandbox to
+// figma.ui.hide() (keeps the connection alive) rather than closing the plugin.
+const runInBackground = (): void => {
+  (globalThis as { parent?: { postMessage: (m: unknown, t: string) => void } }).parent?.postMessage(
+    { pluginMessage: { type: 'ui:minimize' } },
+    '*',
+  );
+};
 </script>
 
 <template>
   <main class="flex h-full flex-col bg-relay-bg text-relay-fg text-xs">
-    <header class="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+    <header class="flex items-center gap-2 border-b border-white/10 px-2.5 py-1.5">
       <span :class="['inline-block size-2 shrink-0 rounded-full', dotClass[state.status]]" />
       <span class="font-medium">{{ statusLabel[state.status] }}</span>
-      <span class="ml-auto truncate font-mono text-relay-muted">{{ headerMeta }}</span>
+      <span class="ml-auto truncate font-mono text-[11px] text-relay-muted">{{ headerMeta }}</span>
     </header>
 
-    <nav class="flex border-b border-white/10">
+    <nav class="flex gap-1 border-b border-white/10 px-2 py-1">
       <button
         v-for="[id, label] in tabs"
         :key="id"
-        class="flex-1 px-2 py-1.5 text-center"
-        :class="
-          tab === id
-            ? 'border-b-2 border-relay-accent text-relay-fg'
-            : 'text-relay-muted hover:text-relay-fg'
-        "
+        class="rounded px-2 py-0.5 text-[11px] transition-colors"
+        :class="tab === id ? 'bg-white/10 text-relay-fg' : 'text-relay-muted hover:text-relay-fg'"
         @click="tab = id"
       >
         {{ label }}
       </button>
     </nav>
 
-    <section class="flex-1 overflow-y-auto p-3">
+    <section class="flex-1 overflow-y-auto overflow-x-hidden p-2.5">
       <!-- Activity -->
       <template v-if="tab === 'activity'">
         <ul v-if="state.activity.length > 0" class="space-y-0.5 font-mono">
           <li v-for="e in state.activity" :key="e.id" class="flex items-center gap-2">
             <span :class="statusColor[e.status]">{{ statusGlyph[e.status] }}</span>
-            <span class="truncate" :class="e.status === 'error' ? 'text-relay-danger' : ''">
+            <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-relay-danger' : ''">
               {{ e.method }}
             </span>
             <span class="ml-auto shrink-0 text-relay-muted">
@@ -166,7 +171,7 @@ onMounted(() => {
             }}</span>
           </li>
         </ul>
-        <p v-else class="text-relay-muted">No activity yet — waiting for Claude…</p>
+        <p v-else class="text-relay-muted">No activity yet — waiting for an MCP client…</p>
       </template>
 
       <!-- Context -->
@@ -175,11 +180,11 @@ onMounted(() => {
           <dl class="space-y-1.5">
             <div class="flex justify-between gap-2">
               <dt class="shrink-0 text-relay-muted">File</dt>
-              <dd class="truncate text-right">{{ context.fileName }}</dd>
+              <dd class="min-w-0 truncate text-right">{{ context.fileName }}</dd>
             </div>
             <div class="flex justify-between gap-2">
               <dt class="shrink-0 text-relay-muted">Page</dt>
-              <dd class="truncate text-right">{{ context.pageName }}</dd>
+              <dd class="min-w-0 truncate text-right">{{ context.pageName }}</dd>
             </div>
             <div class="flex justify-between gap-2">
               <dt class="shrink-0 text-relay-muted">Editor</dt>
@@ -192,9 +197,9 @@ onMounted(() => {
             <p class="mb-1 text-relay-muted">Selection ({{ context.selectionCount }})</p>
             <ul v-if="context.selection.length > 0" class="space-y-1 font-mono">
               <li v-for="n in context.selection" :key="n.id" class="flex items-center gap-2">
-                <span class="truncate">{{ n.name }}</span>
+                <span class="min-w-0 truncate">{{ n.name }}</span>
                 <span class="ml-auto shrink-0 text-relay-muted">{{ n.type }}</span>
-                <span class="w-14 shrink-0 text-right text-relay-muted"
+                <span class="shrink-0 text-right tabular-nums text-relay-muted"
                   >{{ n.width }}×{{ n.height }}</span
                 >
               </li>
@@ -226,7 +231,7 @@ onMounted(() => {
             <ul v-if="errorEntries.length > 0" class="space-y-1.5 font-mono">
               <li v-for="e in errorEntries" :key="e.id">
                 <div class="flex justify-between gap-2">
-                  <span class="truncate text-relay-danger">{{ e.method }}</span>
+                  <span class="min-w-0 truncate text-relay-danger">{{ e.method }}</span>
                   <span class="shrink-0 text-relay-muted">{{ formatAgo(e.startedAt) }}</span>
                 </div>
                 <div class="wrap-break-word text-relay-muted">{{ e.error }}</div>
@@ -238,8 +243,17 @@ onMounted(() => {
       </template>
     </section>
 
-    <footer class="border-t border-white/10 px-3 py-1.5 text-[10px] text-relay-muted">
-      figma-mcp-relay v0.0.0 · {{ state.totalCalls }} calls
+    <footer
+      class="flex items-center gap-2 border-t border-white/10 px-3 py-1.5 text-[10px] text-relay-muted"
+    >
+      <span class="truncate">figma-mcp-relay v0.0.0 · {{ state.totalCalls }} calls</span>
+      <button
+        class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-relay-muted hover:bg-white/10 hover:text-relay-fg"
+        title="Run in background — hides the panel; the relay stays connected. Reopen by running the plugin again."
+        @click="runInBackground"
+      >
+        Run in background
+      </button>
     </footer>
   </main>
 </template>
