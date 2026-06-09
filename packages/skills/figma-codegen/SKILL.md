@@ -108,7 +108,15 @@ scale, step }`: for `spacing`, compose the step with the property `get_design_co
    export the node instead of placeholdering or hand-typesetting it:
    - a node with an **`IMAGE` fill** (a photo/product-shot rectangle) → `get_screenshot` `PNG` (scale 2);
    - a **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
-     small square instance) → `get_screenshot` `SVG`;
+     small square instance) → **`icon_map` first, `get_screenshot` `SVG` only as the fallback.** Run
+     `icon_map` to reuse the project's curated `.svg` files instead of re-exporting duplicates: a
+     `high`/`medium` match gives the file `filePath` + a `colorContract` — wire that file in, composing
+     the import yourself from the path + `profile.svg.importHint` (loader form) and the project's own
+     alias/relative convention (mirror how existing files import from the asset dir; `icon_map` does not
+     hand you a ready specifier on purpose — the alias/relative path is project-specific). An `unmapped`
+     icon with a non-empty `iconLibraries` (lucide / heroicons / iconify) can be imported from that
+     library; only when there's neither a file match nor a library do you `get_screenshot` `SVG` and
+     save a fresh file.
    - **logos / brand marks are always exported**, never typed by hand.
    - **An `empty: true` export rendered nothing** (node hidden / fully clipped / off-canvas — e.g. a
      marquee's off-screen edge logos). Don't ship the blank file: if grounding shows the instance has
@@ -123,6 +131,18 @@ scale, step }`: for `spacing`, compose the step with the property `get_design_co
 
      Save under the project's asset dir (`src/assets`, `public/…`) and wire the real file in. This is the
      one place you go to the image — not to guess layout, but to fetch a pixel asset grounding can't encode.
+
+   - **Color a single-color icon at the usage site, don't bake it in** (the `icon_map` `colorContract` +
+     `recolor` say which path applies):
+     - `currentColor` — the icon's fill is `currentColor`, so it takes the element's CSS `color`:
+       recolor at the call site with Tailwind `text-{token}` (or `color:` in plain CSS), **never**
+       `fill-*`, and it inherits a parent's text color for free. Drive the token off the Figma icon's
+       fill via `token_map`; keep the `.svg` file as `currentColor`. **Only works inlined** (component
+       mode / library / inline svg) — `currentColor` can't reach an `<img>` (url mode), so inline the
+       svg there if it must be recolored.
+     - `fixed` — one color baked into the file; render as-is and don't recolor. If the Figma fill
+       differs from the file, convert its fills to `currentColor` or re-export.
+     - `multi-color` — a brand mark / illustration; render as-is, never recolor.
 
 Then emit code in the detected stack (the profile comes back on `component_map` / `token_map`; you do
 not call `analyze_project` yourself). Compose the reused components, wrap unmapped pieces, and apply

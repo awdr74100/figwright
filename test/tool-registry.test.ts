@@ -13,14 +13,16 @@ import { toToolDefinition } from '../packages/server/test/tool-schema.js';
 
 // Tools the server handles on its own and never dispatches to the plugin, so they have no sandbox
 // handler. save_screenshots is composed server-side from get_screenshot + filesystem writes;
-// analyze_project / scan_components / component_map / token_map read the local project filesystem
-// (component_map reuses get_design_context, token_map reuses get_variable_defs) and never touch the sandbox.
+// analyze_project / scan_components / component_map / token_map / icon_map read the local project
+// filesystem (component_map / icon_map reuse get_design_context, token_map reuses get_variable_defs) and
+// never touch the sandbox.
 const SERVER_ONLY_TOOLS = new Set([
   'save_screenshots',
   'analyze_project',
   'scan_components',
   'component_map',
   'token_map',
+  'icon_map',
 ]);
 
 const serverNames = ALL_TOOL_SPECS.map(s => s.name);

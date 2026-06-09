@@ -166,6 +166,10 @@ const allDeps = (pkg: PackageJson | null): Record<string, string> => ({
   ...pkg?.devDependencies,
 });
 
+/** All dependencies (prod + dev) declared in the project's package.json, or {} when absent. */
+export const readProjectDeps = async (rootDir: string): Promise<Record<string, string>> =>
+  allDeps(await readJson<PackageJson>(join(resolve(rootDir), 'package.json')));
+
 /** Parse the leading major version out of a semver range like "^4.0.0" or "~3.4.1". */
 const parseMajor = (range: string | undefined): number | undefined => {
   if (range === undefined) return undefined;

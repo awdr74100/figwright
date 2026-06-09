@@ -48,6 +48,7 @@ import { getStylesTool } from './get-styles.js';
 import { getVariableDefsTool } from './get-variable-defs.js';
 import { getViewportTool } from './get-viewport.js';
 import { groupNodesTool } from './group-nodes.js';
+import { iconMapTool } from './icon-map.js';
 import { importImageTool } from './import-image.js';
 import { listFilesTool } from './list-files.js';
 import { lockNodesTool } from './lock-nodes.js';
@@ -118,6 +119,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   scanComponentsTool,
   componentMapTool,
   tokenMapTool,
+  iconMapTool,
   // Writes
   setFillsTool,
   setTextTool,

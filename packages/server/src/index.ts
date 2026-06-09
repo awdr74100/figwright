@@ -17,6 +17,7 @@ import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
+import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS } from './tools/registry.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
@@ -101,6 +102,7 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [COMPONENT_MAP_TOOL_NAME]: async args =>
     textResult(await handleComponentMap(await routedDispatch(), args)),
   [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
+  [ICON_MAP_TOOL_NAME]: async args => textResult(await handleIconMap(await routedDispatch(), args)),
 };
 
 // Reversible writes that destroy data — surfaced via the destructiveHint annotation. Other writes
