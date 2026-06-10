@@ -9,14 +9,24 @@ export const SerializedVariableAliasSchema = z.object({
 export type SerializedVariableAlias = z.infer<typeof SerializedVariableAliasSchema>;
 
 /**
- * A resolved value for one mode: primitive, color (RGB normalised to RGBA), or an alias to another
- * variable.
+ * A COLOR variable value: RGBA plus a convenience `hex` (#RRGGBB / #RRGGBBAA, alpha only when < 1)
+ * mirroring the hex that get_design_context's globalVars already emits — so an agent reading a
+ * bound variable's color needn't convert normalised RGBA by hand or cross to a second tool. RGBA
+ * stays for back-compat (token_map and other consumers read the channels directly).
+ */
+export const SerializedVariableColorSchema = SerializedRGBASchema.extend({
+  hex: z.string().optional(),
+});
+
+/**
+ * A resolved value for one mode: primitive, color (RGB normalised to RGBA + hex), or an alias to
+ * another variable.
  */
 export const SerializedVariableValueSchema = z.union([
   z.boolean(),
   z.number(),
   z.string(),
-  SerializedRGBASchema,
+  SerializedVariableColorSchema,
   SerializedVariableAliasSchema,
 ]);
 export type SerializedVariableValue = z.infer<typeof SerializedVariableValueSchema>;

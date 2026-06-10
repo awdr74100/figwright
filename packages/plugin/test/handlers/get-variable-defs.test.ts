@@ -59,11 +59,60 @@ describe('get_variable_defs handler', () => {
       variableIds: ['V:1', 'V:2'],
     });
     expect(result.collections[0]?.modes).toHaveLength(2);
-    // RGB (no alpha) is normalised to a=1
-    expect(result.variables[0]?.valuesByMode.m2).toEqual({ r: 0, g: 0, b: 0, a: 1 });
-    expect(result.variables[0]?.valuesByMode.m1).toEqual({ r: 1, g: 1, b: 1, a: 1 });
+    // RGB (no alpha) is normalised to a=1, with a hex mirror
+    expect(result.variables[0]?.valuesByMode.m2).toEqual({
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 1,
+      hex: '#000000',
+    });
+    expect(result.variables[0]?.valuesByMode.m1).toEqual({
+      r: 1,
+      g: 1,
+      b: 1,
+      a: 1,
+      hex: '#FFFFFF',
+    });
     // alias passthrough
     expect(result.variables[1]?.valuesByMode.m1).toEqual({ type: 'VARIABLE_ALIAS', id: 'V:1' });
+  });
+
+  it('adds a hex mirror to COLOR values, 8-digit when alpha < 1', async () => {
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [],
+        [
+          {
+            id: 'V:4',
+            name: 'color/scrim',
+            key: 'vk4',
+            resolvedType: 'COLOR',
+            variableCollectionId: 'VC:1',
+            valuesByMode: {
+              opaque: { r: 1, g: 1, b: 1, a: 1 },
+              scrim: { r: 1, g: 1, b: 1, a: 0.6 },
+            },
+          },
+        ],
+      ),
+    );
+    const result = (await handler(undefined)) as GetVariableDefsResult;
+    expect(result.variables[0]?.valuesByMode.opaque).toEqual({
+      r: 1,
+      g: 1,
+      b: 1,
+      a: 1,
+      hex: '#FFFFFF',
+    });
+    // alpha < 1 → 8-digit hex (0.6 × 255 = 153 = 0x99), matching globalVars
+    expect(result.variables[0]?.valuesByMode.scrim).toEqual({
+      r: 1,
+      g: 1,
+      b: 1,
+      a: 0.6,
+      hex: '#FFFFFF99',
+    });
   });
 
   it('passes primitive values through unchanged', async () => {

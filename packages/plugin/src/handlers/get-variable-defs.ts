@@ -1,4 +1,8 @@
-import type { GetVariableDefsResult, SerializedVariableValue } from '@figma-mcp-relay/shared';
+import {
+  type GetVariableDefsResult,
+  type SerializedVariableValue,
+  toHex,
+} from '@figma-mcp-relay/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 
@@ -8,7 +12,10 @@ const serializeVariableValue = (value: VariableValue): SerializedVariableValue =
       return { type: 'VARIABLE_ALIAS', id: value.id };
     }
     const color = value as RGB | RGBA;
-    return { r: color.r, g: color.g, b: color.b, a: 'a' in color ? color.a : 1 };
+    const a = 'a' in color ? color.a : 1;
+    // hex mirrors get_design_context's globalVars (#RRGGBB / #RRGGBBAA) so a bound color resolves in
+    // one tool, without hand-converting normalised RGBA. RGBA channels stay for back-compat.
+    return { r: color.r, g: color.g, b: color.b, a, hex: toHex(color, a) };
   }
   return value;
 };
