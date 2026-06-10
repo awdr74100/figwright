@@ -164,7 +164,7 @@ describe('joinIcons', () => {
   });
 
   it('does NOT fuzzy-match a near-neighbor to the wrong icon (precision over recall)', () => {
-    // Design C A/B regression: arr-u must not reuse arr-d (opposite arrows), checkbox must not reuse
+    // A/B regression: arr-u must not reuse arr-d (opposite arrows), checkbox must not reuse
     // check, cash must not reuse trash. A wrong icon is a silent visual bug, so these fall through
     // to a fresh export instead of a confident mis-map.
     const files = [svg('arr-d'), svg('check'), svg('trash')];

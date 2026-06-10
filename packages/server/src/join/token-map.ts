@@ -93,7 +93,7 @@ const splitScale = (raw: string): Scaled => {
 // compared in splitScale's normalized form (lowercased, separators stripped), so entries carry no hyphens.
 //
 // Only *unambiguous* synonyms belong here. Notably NOT size↔text: Figma "size/*" is overloaded — it's
-// font sizes in a typography collection (Design A) but dimensions (width/height) elsewhere, so aliasing it
+// font sizes in a typography collection but dimensions (width/height) elsewhere, so aliasing it
 // to Tailwind's --text-* (always font-size) would mis-map dimensional tokens. Disambiguating that needs
 // the Figma variable's collection/category, which the join doesn't carry yet — left as a future step.
 const STEM_SYNONYMS: readonly ReadonlySet<string>[] = [
@@ -103,7 +103,7 @@ const STEM_SYNONYMS: readonly ReadonlySet<string>[] = [
 ];
 
 // size↔text is the one synonym that's only safe *in context*. Figma "size/*" is a font size when it
-// lives in a typography collection (Design A groups them under "font") but a width/height dimension
+// lives in a typography collection (e.g. font sizes grouped under "font") but a width/height dimension
 // elsewhere — so aliasing it to Tailwind's --text-* (always font-size) is gated on the variable's
 // collection rather than enabled globally. Carrying the collection through the join is exactly what
 // makes this safe to open without mis-mapping dimensional tokens.

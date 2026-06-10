@@ -117,7 +117,7 @@ describe('joinTokens', () => {
 
     it('does NOT alias size→text outside a typography collection (size/* is overloaded)', () => {
       const text = [proj('text-base', '1rem', 'base', 'font-size')];
-      // In Design A the "size" collection actually holds radius/spacing dimensions, not font sizes, so a
+      // In some files the "size" collection actually holds radius/spacing dimensions, not font sizes, so a
       // size/* there must not snap to --text-base (always font-size). No collection is treated the same.
       expect(
         joinTokens([fig('size/base', 16, 'FLOAT', 'size')], text, { threshold: 0.7 })[0]?.status,
@@ -128,7 +128,7 @@ describe('joinTokens', () => {
     });
 
     it('aliases size→text when the Figma variable is in a typography collection', () => {
-      // Design A groups font sizes under a "font" collection → size/base is a font size → --text-base.
+      // When font sizes are grouped under a "font" collection → size/base is a font size → --text-base.
       const text = [proj('text-base', '1rem', 'base', 'font-size')];
       const [m] = joinTokens([fig('size/base', 16, 'FLOAT', 'font')], text, { threshold: 0.7 });
       expect(m?.candidate?.token).toBe('text-base');
