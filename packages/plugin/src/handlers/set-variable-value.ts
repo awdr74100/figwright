@@ -12,6 +12,17 @@ import { toFigmaVariableValue } from './convert.js';
  */
 const coerceToResolvedType = (raw: unknown, resolvedType: VariableResolvedDataType): unknown => {
   if (typeof raw !== 'string') return raw; // native type survived transit — nothing to fix
+  // A stringified object is an alias ({ type: 'VARIABLE_ALIAS', id }) or RGBA color. Parse it back
+  // before any per-type scalar coercion so it survives for *every* resolvedType — notably a FLOAT
+  // variable aliased to another FLOAT, which the Number() branch below would otherwise NaN and strip
+  // (the asymmetry behind figma-mcp-go #22: COLOR aliases survived, float aliases didn't).
+  if (raw.trimStart().startsWith('{')) {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      throw new TypeError(`set_variable_value: "${raw}" is not valid JSON`);
+    }
+  }
   if (resolvedType === 'FLOAT') {
     const n = Number(raw);
     if (Number.isNaN(n)) throw new TypeError(`set_variable_value: "${raw}" is not a number`);
@@ -19,11 +30,8 @@ const coerceToResolvedType = (raw: unknown, resolvedType: VariableResolvedDataTy
   }
   if (resolvedType === 'BOOLEAN') return raw === 'true';
   if (resolvedType === 'COLOR') {
-    try {
-      return JSON.parse(raw) as unknown; // an alias / RGBA object that was stringified
-    } catch {
-      throw new TypeError(`set_variable_value: COLOR value "${raw}" is not valid JSON`);
-    }
+    // A COLOR value must arrive as a JSON object (RGBA or alias); a bare string is invalid.
+    throw new TypeError(`set_variable_value: COLOR value "${raw}" is not valid JSON`);
   }
   return raw; // STRING
 };

@@ -73,6 +73,21 @@ describe('set_variable_value handler', () => {
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
   });
 
+  // The same go#22 alias, but stringified in transit (the client that stringifies COLOR's RGBA does
+  // it to alias objects too). The FLOAT branch must JSON.parse it back rather than Number()→NaN it.
+  it('parses a stringified VARIABLE_ALIAS back for a FLOAT variable', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'radius/md', resolvedType: 'FLOAT', setValueForMode }),
+    );
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: '{"type":"VARIABLE_ALIAS","id":"V:9"}',
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
+  });
+
   it('rejects a stringified FLOAT that is not a number', async () => {
     const variable = {
       id: 'V:0',
