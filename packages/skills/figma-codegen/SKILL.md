@@ -49,6 +49,18 @@ the rendered image.
      `box-shadow 0 0 0 Npx <colour>`, **never a plain `border`**, so it doesn't grow the box or shift
      its position (selection rings / focus outlines are `OUTSIDE`). `CENTER` straddles the edge (half
      the weight each side).
+   - **Per-corner radius.** When `cornerRadius` is `mixed`, the node carries `cornerRadii`
+     `{ topLeft, topRight, bottomRight, bottomLeft }` — round only those corners (`rounded-t` /
+     `rounded-tl` / …), **never a uniform radius**. A card rounded on one edge, a tab, or a chat
+     bubble round only some corners; collapsing to one radius squares them off or rounds the wrong
+     side (same multi-dimension-collapsed miss as per-side borders).
+   - **Blend mode.** A node may carry `blendMode` (`MULTIPLY` / `SCREEN` / `OVERLAY` / …) — map it to
+     `mix-blend-mode` (on the element) or `background-blend-mode` (a fill over an image). An overlay
+     swatch blended onto a photo reads as the wrong flat colour if you drop it.
+   - **Masks.** A node with `isMask: true` clips its later siblings to its own shape (`maskType`
+     `ALPHA` / `LUMINANCE` / `GEOMETRY`). **Don't render the mask layer as ordinary content** —
+     realise it as the container's `overflow-hidden` + radius, a `clip-path`, or an SVG mask on the
+     masked siblings, and skip emitting the mask shape itself.
    - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
      `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
      (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour** (the same
@@ -249,6 +261,13 @@ left }` — emit only the non-zero sides (`border-t`/`border-b`), never a unifor
 - **Honour `strokeAlign`.** `INSIDE` → plain inset `border`; `OUTSIDE` → `outline` or `box-shadow 0 0 0
 Npx` (never a plain `border`, which grows/shifts the box — selection & focus rings are `OUTSIDE`);
   `CENTER` straddles the edge.
+- **Per-corner radius.** A `cornerRadius: "mixed"` node carries `cornerRadii { topLeft, topRight,
+bottomRight, bottomLeft }` — round only those corners (`rounded-t`/`rounded-tl`), never a uniform
+  radius (a top-rounded card / tab / bubble gets squared off otherwise).
+- **Blend mode.** A `blendMode` (`MULTIPLY`/`SCREEN`/`OVERLAY`) → `mix-blend-mode` /
+  `background-blend-mode`; dropping it flattens overlay colours.
+- **Masks.** `isMask: true` clips later siblings — realise as `overflow-hidden` + radius / `clip-path`
+  / SVG mask on the masked siblings; never render the mask layer as ordinary content.
 - **Don't flatten gradients.** A `GRADIENT_*` fill carries `gradientStops` + `gradientTransform` — emit
   a CSS `linear-gradient`/`radial-gradient` from the stops, not the first stop's solid colour. Apply an
   `IMAGE`/`VIDEO` fill's `scaleMode` as `object-fit` (FILL→cover, FIT→contain, TILE→repeat) so the

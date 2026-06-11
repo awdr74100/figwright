@@ -265,7 +265,47 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
   }
   if ('cornerRadius' in node) {
     const cr = (node as { cornerRadius: unknown }).cornerRadius;
-    out.cornerRadius = typeof cr === 'number' ? cr : MIXED;
+    if (typeof cr === 'number') {
+      out.cornerRadius = cr;
+    } else {
+      // cornerRadius is figma.mixed → the corners differ. Surface each per-corner radius so codegen
+      // can emit individual radii (rounded-t / rounded-tl / …) instead of a uniform radius — cards
+      // rounded on one edge, tabs and chat bubbles are all per-corner, and collapsing to a single
+      // "mixed" loses which corners actually round. (Same fidelity fix as per-side strokeWeights.)
+      out.cornerRadius = MIXED;
+      const n = node as {
+        topLeftRadius?: unknown;
+        topRightRadius?: unknown;
+        bottomRightRadius?: unknown;
+        bottomLeftRadius?: unknown;
+      };
+      const corners = {
+        topLeft: n.topLeftRadius,
+        topRight: n.topRightRadius,
+        bottomRight: n.bottomRightRadius,
+        bottomLeft: n.bottomLeftRadius,
+      };
+      if (Object.values(corners).every(v => typeof v === 'number')) {
+        out.cornerRadii = corners as {
+          topLeft: number;
+          topRight: number;
+          bottomRight: number;
+          bottomLeft: number;
+        };
+      }
+    }
+  }
+  // Blend mode (overlays / multiply / screen). Omit the no-op PASS_THROUGH (the common case) so the
+  // field only appears when it actually changes compositing.
+  if ('blendMode' in node) {
+    const bm = (node as { blendMode: unknown }).blendMode;
+    if (typeof bm === 'string' && bm !== 'PASS_THROUGH') out.blendMode = bm;
+  }
+  // Mask layers clip their later siblings; codegen must know not to render them as ordinary images.
+  if ('isMask' in node && (node as { isMask: unknown }).isMask === true) {
+    out.isMask = true;
+    const mt = (node as { maskType?: unknown }).maskType;
+    if (typeof mt === 'string') out.maskType = mt;
   }
   if ('fills' in node) {
     const fills = (node as { fills: unknown }).fills;

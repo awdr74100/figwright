@@ -64,6 +64,37 @@ describe('serializeFlat', () => {
     expect(out.cornerRadius).toBe(MIXED);
   });
 
+  it('surfaces per-corner cornerRadii when cornerRadius is mixed (e.g. top-only rounded card)', () => {
+    const out = serializeFlatSync(
+      fake({
+        cornerRadius: Symbol('figma.mixed'),
+        topLeftRadius: 8,
+        topRightRadius: 8,
+        bottomRightRadius: 0,
+        bottomLeftRadius: 0,
+      }),
+    );
+    expect(out.cornerRadius).toBe(MIXED);
+    expect(out.cornerRadii).toEqual({ topLeft: 8, topRight: 8, bottomRight: 0, bottomLeft: 0 });
+  });
+
+  it('omits cornerRadii when per-corner radii are unavailable (not all numeric)', () => {
+    const out = serializeFlatSync(fake({ cornerRadius: Symbol('figma.mixed') }));
+    expect(out.cornerRadii).toBeUndefined();
+  });
+
+  it('surfaces blendMode but omits the no-op PASS_THROUGH', () => {
+    expect(serializeFlatSync(fake({ blendMode: 'MULTIPLY' })).blendMode).toBe('MULTIPLY');
+    expect(serializeFlatSync(fake({ blendMode: 'PASS_THROUGH' })).blendMode).toBeUndefined();
+  });
+
+  it('surfaces isMask / maskType only for mask nodes', () => {
+    const out = serializeFlatSync(fake({ isMask: true, maskType: 'ALPHA' }));
+    expect(out.isMask).toBe(true);
+    expect(out.maskType).toBe('ALPHA');
+    expect(serializeFlatSync(fake({ isMask: false })).isMask).toBeUndefined();
+  });
+
   it('marks fills=mixed when value is not an array', () => {
     const out = serializeFlatSync(fake({ fills: Symbol('figma.mixed') }));
     expect(out.fills).toBe(MIXED);

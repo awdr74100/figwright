@@ -228,6 +228,18 @@ export interface SerializedNode {
   rotation?: number;
   opacity?: number;
   cornerRadius?: number | Mixed;
+  /**
+   * Per-corner radii, only when cornerRadius is `mixed` (the corners differ). Maps to
+   * border-top-left-radius / …; cards rounded on one side, tabs, chat bubbles and segmented
+   * controls all use uneven corners, and collapsing to a single `mixed` loses which corners round.
+   */
+  cornerRadii?: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number };
+  /** Layer blend mode (e.g. MULTIPLY / SCREEN / OVERLAY); omitted/`PASS_THROUGH` when normal. */
+  blendMode?: string;
+  /** True when this node clips its later siblings (a mask) — its fill defines the visible shape. */
+  isMask?: boolean;
+  /** How the mask clips: ALPHA / LUMINANCE / GEOMETRY (only meaningful when isMask). */
+  maskType?: string;
   fills?: readonly SerializedPaint[] | Mixed;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | Mixed;
@@ -293,6 +305,17 @@ export const SerializedNodeSchema = z.lazy(() =>
     rotation: z.number().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    cornerRadii: z
+      .object({
+        topLeft: z.number(),
+        topRight: z.number(),
+        bottomRight: z.number(),
+        bottomLeft: z.number(),
+      })
+      .optional(),
+    blendMode: z.string().optional(),
+    isMask: z.boolean().optional(),
+    maskType: z.string().optional(),
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),

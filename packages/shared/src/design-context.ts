@@ -56,6 +56,17 @@ export interface DesignContextNode {
   rotation?: number;
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
+  /**
+   * Per-corner radii when cornerRadius is `mixed` → border-top-left-radius / …
+   * (cards/tabs/bubbles).
+   */
+  cornerRadii?: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number };
+  /** Layer blend mode (MULTIPLY / SCREEN / OVERLAY …); omitted when normal (PASS_THROUGH). */
+  blendMode?: string;
+  /** True when this node masks (clips) its later siblings. */
+  isMask?: boolean;
+  /** Mask clipping mode: ALPHA / LUMINANCE / GEOMETRY (only when isMask). */
+  maskType?: string;
   fills?: readonly z.infer<typeof SerializedPaintSchema>[] | typeof MIXED;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | typeof MIXED;
@@ -125,6 +136,17 @@ export const DesignContextNodeSchema = z.lazy(() =>
     rotation: z.number().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    cornerRadii: z
+      .object({
+        topLeft: z.number(),
+        topRight: z.number(),
+        bottomRight: z.number(),
+        bottomLeft: z.number(),
+      })
+      .optional(),
+    blendMode: z.string().optional(),
+    isMask: z.boolean().optional(),
+    maskType: z.string().optional(),
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
