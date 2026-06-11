@@ -23,6 +23,7 @@ import {
   setCornerRadiusTool,
 } from '../../src/tools/set-corner-radius.js';
 import { SET_FILLS_TOOL_NAME, setFillsTool } from '../../src/tools/set-fills.js';
+import { SET_MASK_TOOL_NAME, setMaskTool } from '../../src/tools/set-mask.js';
 import { SET_OPACITY_TOOL_NAME, setOpacityTool } from '../../src/tools/set-opacity.js';
 import { SET_STROKES_TOOL_NAME, setStrokesTool } from '../../src/tools/set-strokes.js';
 import {
@@ -51,6 +52,7 @@ const setBlendModeToolDefinition = toToolDefinition(setBlendModeTool);
 const setConstraintsToolDefinition = toToolDefinition(setConstraintsTool);
 const setCornerRadiusToolDefinition = toToolDefinition(setCornerRadiusTool);
 const setFillsToolDefinition = toToolDefinition(setFillsTool);
+const setMaskToolDefinition = toToolDefinition(setMaskTool);
 const setOpacityToolDefinition = toToolDefinition(setOpacityTool);
 const setStrokesToolDefinition = toToolDefinition(setStrokesTool);
 const setTextPropertiesToolDefinition = toToolDefinition(setTextPropertiesTool);
@@ -130,7 +132,12 @@ describe('M2 write tool definitions', () => {
   it('set_corner_radius / set_strokes / move_nodes / resize_nodes declare their inputs', () => {
     expect(setCornerRadiusToolDefinition.name).toBe(SET_CORNER_RADIUS_TOOL_NAME);
     expect(setCornerRadiusToolDefinition.inputSchema).toMatchObject({
-      required: ['nodeId', 'radius'],
+      required: ['nodeId'],
+      properties: {
+        radius: { type: 'number' },
+        topLeftRadius: { type: 'number' },
+        bottomRightRadius: { type: 'number' },
+      },
     });
     expect(setStrokesToolDefinition.name).toBe(SET_STROKES_TOOL_NAME);
     expect(setStrokesToolDefinition.inputSchema).toMatchObject({ required: ['nodeId', 'strokes'] });
@@ -155,6 +162,11 @@ describe('M2 write tool definitions', () => {
     expect(setConstraintsToolDefinition.name).toBe(SET_CONSTRAINTS_TOOL_NAME);
     expect(setConstraintsToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId', 'horizontal', 'vertical'],
+    });
+    expect(setMaskToolDefinition.name).toBe(SET_MASK_TOOL_NAME);
+    expect(setMaskToolDefinition.inputSchema).toMatchObject({
+      required: ['nodeId', 'isMask'],
+      properties: { maskType: { enum: ['ALPHA', 'LUMINANCE', 'GEOMETRY'] } },
     });
     expect(rotateNodesToolDefinition.name).toBe(ROTATE_NODES_TOOL_NAME);
     expect(rotateNodesToolDefinition.inputSchema).toMatchObject({
@@ -228,6 +240,7 @@ describe('M2 write tool definitions', () => {
       resizeNodesToolDefinition,
       setAutoLayoutToolDefinition,
       setBlendModeToolDefinition,
+      setMaskToolDefinition,
       setConstraintsToolDefinition,
       rotateNodesToolDefinition,
       lockNodesToolDefinition,

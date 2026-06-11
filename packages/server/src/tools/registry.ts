@@ -75,6 +75,7 @@ import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
 import { setFillsTool } from './set-fills.js';
 import { setLayoutPropsTool } from './set-layout-props.js';
+import { setMaskTool } from './set-mask.js';
 import { setOpacityTool } from './set-opacity.js';
 import { setReactionsTool } from './set-reactions.js';
 import { setStrokesTool } from './set-strokes.js';
@@ -138,6 +139,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setAutoLayoutTool,
   setLayoutPropsTool,
   setBlendModeTool,
+  setMaskTool,
   setConstraintsTool,
   rotateNodesTool,
   lockNodesTool,

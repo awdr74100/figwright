@@ -67,6 +67,7 @@ import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
 import { createSetFillsHandler } from './set-fills.js';
 import { createSetLayoutPropsHandler } from './set-layout-props.js';
+import { createSetMaskHandler } from './set-mask.js';
 import { createSetOpacityHandler } from './set-opacity.js';
 import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
@@ -107,6 +108,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
     set_layout_props: createSetLayoutPropsHandler(figmaCtx),
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
+    set_mask: createSetMaskHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
     lock_nodes: createSetLockedHandler(figmaCtx, true),
