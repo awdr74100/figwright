@@ -3,22 +3,17 @@
   "ignoreExportsUsedInFile": true,
   "workspaces": {
     ".": {
-      "entry": ["vitest.config.ts"],
       "project": ["*.{ts,js}"]
     },
     "packages/shared": {
-      "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/mcp": {
-      "entry": ["src/index.ts", "tsdown.config.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/plugin": {
-      "entry": ["src/code.ts", "ui/main.ts", "vite.config.ts", "vite.config.main.ts"],
       "project": ["src/**/*.ts", "ui/**/*.{ts,vue}"],
       "ignoreDependencies": ["tailwindcss"]
     }
-  },
-  "ignoreDependencies": ["@types/node"]
+  }
 }
