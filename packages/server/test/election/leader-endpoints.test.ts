@@ -14,7 +14,7 @@ import {
   type RpcResponse,
   RpcResponseSchema,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';

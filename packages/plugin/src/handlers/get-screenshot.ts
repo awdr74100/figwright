@@ -3,7 +3,7 @@ import {
   SCREENSHOT_FORMATS,
   type ScreenshotFormat,
   type ScreenshotImage,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 

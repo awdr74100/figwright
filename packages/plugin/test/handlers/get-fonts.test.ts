@@ -1,4 +1,4 @@
-import type { GetFontsResult } from '@figma-mcp-relay/shared';
+import type { GetFontsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetFontsHandler } from '../../src/handlers/get-fonts.js';

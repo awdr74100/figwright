@@ -13,7 +13,7 @@ import {
   type SerializedStyleIds,
   type SerializedTextSegment,
   serializeNode as serializeBase,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||

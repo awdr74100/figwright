@@ -1,7 +1,7 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { DEFAULT_PORT } from '@figma-mcp-relay/shared';
+import { DEFAULT_PORT } from '@figwright/shared';
 
 import { Relay } from '../relay/relay.js';
 

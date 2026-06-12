@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { GetVariableDefsResult } from '@figma-mcp-relay/shared';
+import type { GetVariableDefsResult } from '@figwright/shared';
 import { z } from 'zod';
 
 import { joinTokens, type TokenMapping } from '../join/token-map.js';

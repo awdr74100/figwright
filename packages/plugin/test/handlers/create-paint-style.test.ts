@@ -1,4 +1,4 @@
-import type { StyleResult } from '@figma-mcp-relay/shared';
+import type { StyleResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createCreatePaintStyleHandler } from '../../src/handlers/create-paint-style.js';

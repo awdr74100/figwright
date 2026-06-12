@@ -1,4 +1,4 @@
-import type { GetSelectionResult } from '@figma-mcp-relay/shared';
+import type { GetSelectionResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeSceneNode } from '../serializer.js';

@@ -3,7 +3,7 @@ import {
   createToolResult,
   isPluginBridgeMessage,
   type PluginBridgeMessage,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {

@@ -1,4 +1,4 @@
-import type { MutateResult, SerializedPaint } from '@figma-mcp-relay/shared';
+import type { MutateResult, SerializedPaint } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaint } from './set-fills.js';

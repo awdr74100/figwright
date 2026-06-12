@@ -1,4 +1,4 @@
-import type { GetNodesInfoResult, SerializedNode } from '@figma-mcp-relay/shared';
+import type { GetNodesInfoResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeTree } from '../serializer.js';

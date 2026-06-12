@@ -1,4 +1,4 @@
-import type { ModeResult } from '@figma-mcp-relay/shared';
+import type { ModeResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createAddVariableModeHandler } from '../../src/handlers/add-variable-mode.js';

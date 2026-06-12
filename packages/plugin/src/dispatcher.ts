@@ -5,7 +5,7 @@ import {
   isPluginBridgeMessage,
   type PluginToolError,
   type PluginToolResult,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
 export type SandboxHandlers = Record<string, SandboxToolHandler>;

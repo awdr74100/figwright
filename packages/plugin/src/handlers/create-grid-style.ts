@@ -1,4 +1,4 @@
-import type { SerializedLayoutGrid, StyleResult } from '@figma-mcp-relay/shared';
+import type { SerializedLayoutGrid, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaLayoutGrid } from './convert.js';

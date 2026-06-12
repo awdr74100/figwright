@@ -4,7 +4,7 @@ import {
   type RpcRequest,
   type RpcResponse,
   RpcResponseSchema,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
 import { PING_PATH, RPC_PATH } from './leader-endpoints.js';

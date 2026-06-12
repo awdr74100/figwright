@@ -1,4 +1,4 @@
-import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figma-mcp-relay/shared';
+import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figwright/shared';
 
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';

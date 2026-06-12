@@ -3,7 +3,7 @@ import type {
   SerializedLetterSpacing,
   SerializedLineHeight,
   StyleResult,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaLineHeight } from './convert.js';

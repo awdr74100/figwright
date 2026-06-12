@@ -1,4 +1,4 @@
-import type { GetStylesResult } from '@figma-mcp-relay/shared';
+import type { GetStylesResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetStylesHandler } from '../../src/handlers/get-styles.js';

@@ -1,4 +1,4 @@
-import type { GetNodesInfoResult } from '@figma-mcp-relay/shared';
+import type { GetNodesInfoResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetNodesInfoHandler } from '../../src/handlers/get-nodes-info.js';

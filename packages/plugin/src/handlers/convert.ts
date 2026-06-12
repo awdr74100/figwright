@@ -6,7 +6,7 @@ import type {
   SerializedReaction,
   SerializedTrigger,
   SerializedVariableValue,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 // Inverse of serializer.ts — turn the wire-format back into Figma API objects for write tools.
 // (serializer.ts owns the Figma → wire direction; these are the matching wire → Figma helpers.)

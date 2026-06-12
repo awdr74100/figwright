@@ -1,4 +1,4 @@
-import type { GetDesignContextResult } from '@figma-mcp-relay/shared';
+import type { GetDesignContextResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetDesignContextHandler } from '../../src/handlers/get-design-context.js';

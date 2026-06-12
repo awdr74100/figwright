@@ -1,10 +1,10 @@
 {
-  "name": "@figma-mcp-relay/server",
+  "name": "@figwright/mcp",
   "version": "0.0.0",
-  "description": "MCP server for figma-mcp-relay — bridges MCP clients to a Figma plugin over local WebSocket.",
+  "description": "MCP server for Figwright — bridges MCP clients to a Figma plugin over local WebSocket.",
   "license": "MIT",
   "bin": {
-    "figma-mcp-relay": "./dist/index.mjs"
+    "figwright-mcp": "./dist/index.mjs"
   },
   "files": [
     "dist",
@@ -25,7 +25,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@figma-mcp-relay/shared": "workspace:*",
+    "@figwright/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@msgpack/msgpack": "^3.1.3",
     "ignore": "^7.0.5",

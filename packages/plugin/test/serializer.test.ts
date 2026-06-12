@@ -1,4 +1,4 @@
-import { MIXED } from '@figma-mcp-relay/shared';
+import { MIXED } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import {

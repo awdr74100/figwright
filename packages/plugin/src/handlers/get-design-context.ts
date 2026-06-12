@@ -6,7 +6,7 @@ import {
   type DetailLevel,
   type GetDesignContextResult,
   type ResolvedToken,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeFlatSync } from '../serializer.js';

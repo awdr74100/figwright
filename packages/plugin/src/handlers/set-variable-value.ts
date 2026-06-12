@@ -1,4 +1,4 @@
-import type { SerializedVariableValue, VariableResult } from '@figma-mcp-relay/shared';
+import type { SerializedVariableValue, VariableResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaVariableValue } from './convert.js';

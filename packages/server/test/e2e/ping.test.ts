@@ -1,4 +1,4 @@
-import { newId } from '@figma-mcp-relay/shared';
+import { newId } from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 

@@ -1,4 +1,4 @@
-import { createToolCall, ErrorCode, isPluginBridgeMessage } from '@figma-mcp-relay/shared';
+import { createToolCall, ErrorCode, isPluginBridgeMessage } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { dispatchSandboxMessage, type SandboxHandlers } from '../src/dispatcher.js';
@@ -69,7 +69,7 @@ describe('dispatchSandboxMessage', () => {
   });
 
   it('ignores result/error messages (only acts on tool-call)', async () => {
-    const result = { tag: '@figma-mcp-relay/bridge', kind: 'tool-result', id: 'x', result: {} };
+    const result = { tag: '@figwright/bridge', kind: 'tool-result', id: 'x', result: {} };
     expect(isPluginBridgeMessage(result)).toBe(true);
     const outcome = await dispatchSandboxMessage({
       raw: result,

@@ -1,4 +1,4 @@
-import type { GetScreenshotResult } from '@figma-mcp-relay/shared';
+import type { GetScreenshotResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetScreenshotHandler } from '../../src/handlers/get-screenshot.js';

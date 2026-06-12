@@ -1,4 +1,4 @@
-import type { GetSelectionResult } from '@figma-mcp-relay/shared';
+import type { GetSelectionResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetSelectionHandler } from '../../src/handlers/get-selection.js';

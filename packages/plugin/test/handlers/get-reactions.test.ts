@@ -1,4 +1,4 @@
-import type { GetReactionsResult } from '@figma-mcp-relay/shared';
+import type { GetReactionsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetReactionsHandler } from '../../src/handlers/get-reactions.js';

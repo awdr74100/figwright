@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figma-mcp-relay/shared';
+import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figwright/shared';
 import { tryOnScopeDispose, useDocumentVisibility, useEventListener, useNow } from '@vueuse/core';
 import { computed, onMounted, ref, watch } from 'vue';
 
@@ -246,7 +246,7 @@ const runInBackground = (): void => {
     <footer
       class="flex items-center gap-2 border-t border-white/10 px-3 py-1.5 text-[10px] text-relay-muted"
     >
-      <span class="truncate">figma-mcp-relay v0.0.0 · {{ state.totalCalls }} calls</span>
+      <span class="truncate">Figwright v0.0.0 · {{ state.totalCalls }} calls</span>
       <button
         class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-relay-muted hover:bg-white/10 hover:text-relay-fg"
         title="Run in background — hides the panel; the relay stays connected. Reopen by running the plugin again."

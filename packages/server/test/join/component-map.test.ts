@@ -1,4 +1,4 @@
-import type { DesignContextNode } from '@figma-mcp-relay/shared';
+import type { DesignContextNode } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import {

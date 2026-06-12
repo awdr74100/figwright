@@ -1,4 +1,4 @@
-import type { GetDesignContextResult } from '@figma-mcp-relay/shared';
+import type { GetDesignContextResult } from '@figwright/shared';
 import { z } from 'zod';
 
 import { detectIconLibraries, scanRepoSvgs } from '../icons/repo-icons.js';

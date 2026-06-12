@@ -16,7 +16,7 @@ import {
   newId,
   PROTOCOL_VERSION,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 export type RelayStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 

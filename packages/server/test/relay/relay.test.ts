@@ -14,7 +14,7 @@ import {
   PROTOCOL_VERSION,
   type ResponseEnvelope,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 

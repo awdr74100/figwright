@@ -1,4 +1,4 @@
-import { ErrorCode } from '@figma-mcp-relay/shared';
+import { ErrorCode } from '@figwright/shared';
 
 import type { Follower } from './election/follower.js';
 import type { Node } from './election/node.js';

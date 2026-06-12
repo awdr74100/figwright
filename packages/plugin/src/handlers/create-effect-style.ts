@@ -1,4 +1,4 @@
-import type { SerializedEffect, StyleResult } from '@figma-mcp-relay/shared';
+import type { SerializedEffect, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaEffect } from './convert.js';

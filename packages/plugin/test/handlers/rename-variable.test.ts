@@ -1,4 +1,4 @@
-import type { VariableResult } from '@figma-mcp-relay/shared';
+import type { VariableResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createRenameVariableHandler } from '../../src/handlers/rename-variable.js';

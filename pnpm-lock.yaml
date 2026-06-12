@@ -42,12 +42,12 @@ importers:
         specifier: ^3.5.35
         version: 3.5.35(typescript@6.0.3)
     devDependencies:
-      '@figma-mcp-relay/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@figma/plugin-typings':
         specifier: ^1.128.0
         version: 1.128.0
+      '@figwright/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@tailwindcss/vite':
         specifier: ^4.3.0
         version: 4.3.0(vite@8.0.16(@types/node@25.9.2)(jiti@2.7.0)(yaml@2.9.0))
@@ -72,7 +72,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@figma-mcp-relay/shared':
+      '@figwright/shared':
         specifier: workspace:*
         version: link:../shared
       '@modelcontextprotocol/sdk':

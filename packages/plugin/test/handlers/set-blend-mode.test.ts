@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figma-mcp-relay/shared';
+import type { MutateResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createSetBlendModeHandler } from '../../src/handlers/set-blend-mode.js';

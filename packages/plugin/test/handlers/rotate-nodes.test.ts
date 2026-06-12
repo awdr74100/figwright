@@ -1,4 +1,4 @@
-import type { BatchNodeResult } from '@figma-mcp-relay/shared';
+import type { BatchNodeResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createRotateNodesHandler } from '../../src/handlers/rotate-nodes.js';

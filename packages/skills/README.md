@@ -1,6 +1,6 @@
-# figma-mcp-relay skills
+# Figwright skills
 
-Claude Code skills that orchestrate figma-mcp-relay tools.
+Claude Code skills that orchestrate Figwright tools.
 
 ## Install
 

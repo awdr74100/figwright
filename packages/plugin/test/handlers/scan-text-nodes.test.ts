@@ -1,4 +1,4 @@
-import type { ScanTextNodesResult } from '@figma-mcp-relay/shared';
+import type { ScanTextNodesResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createScanTextNodesHandler } from '../../src/handlers/scan-text-nodes.js';

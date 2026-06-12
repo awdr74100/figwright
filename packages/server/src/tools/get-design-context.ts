@@ -1,4 +1,4 @@
-import { DETAIL_LEVELS } from '@figma-mcp-relay/shared';
+import { DETAIL_LEVELS } from '@figwright/shared';
 import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';

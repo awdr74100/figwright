@@ -1,4 +1,4 @@
-import type { VariableResult } from '@figma-mcp-relay/shared';
+import type { VariableResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDeleteVariableHandler } from '../../src/handlers/delete-variable.js';

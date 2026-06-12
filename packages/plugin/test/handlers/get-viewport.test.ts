@@ -1,4 +1,4 @@
-import type { GetViewportResult } from '@figma-mcp-relay/shared';
+import type { GetViewportResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetViewportHandler } from '../../src/handlers/get-viewport.js';

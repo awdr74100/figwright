@@ -1,4 +1,4 @@
-# figma-mcp-relay
+# Figwright
 
 Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MCP clients) with a Figma plugin over a local WebSocket relay.
 
@@ -40,10 +40,10 @@ packages/
 ### Running the server locally
 
 ```bash
-pnpm --filter @figma-mcp-relay/server build
-pnpm --filter @figma-mcp-relay/server link --global
+pnpm --filter @figwright/mcp build
+pnpm --filter @figwright/mcp link --global
 # Then in your MCP client config:
-#   command: "npx", args: ["@figma-mcp-relay/server"]
+#   command: "npx", args: ["@figwright/mcp@latest"]
 ```
 
 ## License

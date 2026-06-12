@@ -3,7 +3,7 @@ import {
   isPluginBridgeMessage,
   newId,
   type PluginBridgeMessage,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 import type { ToolHandler } from '../relay/client.js';
 

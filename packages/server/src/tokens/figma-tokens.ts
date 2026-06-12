@@ -3,7 +3,7 @@ import {
   type SerializedVariable,
   type SerializedVariableValue,
   toHex,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 
 // Figma token extraction — the left-hand (neutral provenance) side of the token join. Flattens
 // get_variable_defs into { name, value, type } pairs by reading each variable at its collection's

@@ -1,8 +1,8 @@
 {
-  "name": "@figma-mcp-relay/plugin",
+  "name": "@figwright/plugin",
   "version": "0.0.0",
   "private": true,
-  "description": "Figma plugin for figma-mcp-relay — UI + sandbox code.",
+  "description": "Figma plugin for Figwright — UI + sandbox code.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -17,8 +17,8 @@
     "vue": "^3.5.35"
   },
   "devDependencies": {
-    "@figma-mcp-relay/shared": "workspace:*",
     "@figma/plugin-typings": "^1.128.0",
+    "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.4.11",

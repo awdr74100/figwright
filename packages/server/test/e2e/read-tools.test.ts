@@ -21,7 +21,7 @@ import {
   type ScanTextNodesResult,
   type SearchNodesResult,
   serializeNode,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 

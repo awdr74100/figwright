@@ -1,4 +1,4 @@
-import type { ModeResult } from '@figma-mcp-relay/shared';
+import type { ModeResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 

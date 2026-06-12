@@ -1,4 +1,4 @@
-import type { BatchResult } from '@figma-mcp-relay/shared';
+import type { BatchResult } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 

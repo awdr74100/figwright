@@ -7,7 +7,7 @@ import {
   type SaveScreenshotsResult,
   SCREENSHOT_FORMATS,
   type ScreenshotImage,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { z } from 'zod';
 
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';

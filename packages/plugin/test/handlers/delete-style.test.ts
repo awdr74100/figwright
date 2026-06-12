@@ -1,4 +1,4 @@
-import type { StyleResult } from '@figma-mcp-relay/shared';
+import type { StyleResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDeleteStyleHandler } from '../../src/handlers/delete-style.js';

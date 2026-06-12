@@ -1,4 +1,4 @@
-import type { GetDocumentResult } from '@figma-mcp-relay/shared';
+import type { GetDocumentResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeTree } from '../serializer.js';

@@ -1,4 +1,4 @@
-import type { StyleResult } from '@figma-mcp-relay/shared';
+import type { StyleResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createCreateEffectStyleHandler } from '../../src/handlers/create-effect-style.js';

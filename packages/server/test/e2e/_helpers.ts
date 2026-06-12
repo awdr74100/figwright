@@ -10,7 +10,7 @@ import {
   newId,
   PROTOCOL_VERSION,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { WebSocket } from 'ws';
 
 import { Follower } from '../../src/election/follower.js';

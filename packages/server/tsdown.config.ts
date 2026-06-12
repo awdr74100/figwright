@@ -11,7 +11,7 @@ export default defineConfig({
   clean: true,
   shims: false,
   fixedExtension: true,
-  deps: { alwaysBundle: ['@figma-mcp-relay/shared'] },
+  deps: { alwaysBundle: ['@figwright/shared'] },
   outputOptions: {
     banner: '#!/usr/bin/env node',
   },

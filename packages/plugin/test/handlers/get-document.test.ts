@@ -1,4 +1,4 @@
-import type { GetDocumentResult } from '@figma-mcp-relay/shared';
+import type { GetDocumentResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetDocumentHandler } from '../../src/handlers/get-document.js';

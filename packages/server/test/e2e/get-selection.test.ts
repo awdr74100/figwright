@@ -2,7 +2,7 @@ import {
   type GetSelectionResult,
   GetSelectionResultSchema,
   serializeNode,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 

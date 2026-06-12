@@ -1,4 +1,4 @@
-import type { CollectionResult } from '@figma-mcp-relay/shared';
+import type { CollectionResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createCreateVariableCollectionHandler } from '../../src/handlers/create-variable-collection.js';

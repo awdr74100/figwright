@@ -1,4 +1,4 @@
-import type { SearchNodesResult } from '@figma-mcp-relay/shared';
+import type { SearchNodesResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createSearchNodesHandler } from '../../src/handlers/search-nodes.js';

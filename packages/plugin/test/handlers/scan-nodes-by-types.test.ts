@@ -1,4 +1,4 @@
-import type { ScanNodesByTypesResult } from '@figma-mcp-relay/shared';
+import type { ScanNodesByTypesResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createScanNodesByTypesHandler } from '../../src/handlers/scan-nodes-by-types.js';

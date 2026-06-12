@@ -6,7 +6,7 @@ import type {
   GetScreenshotResult,
   SaveScreenshotsResult,
   ScreenshotImage,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

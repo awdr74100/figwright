@@ -1,4 +1,4 @@
-import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figma-mcp-relay/shared';
+import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figwright/shared';
 import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';

@@ -1,4 +1,4 @@
-import type { ListFilesResult } from '@figma-mcp-relay/shared';
+import type { ListFilesResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createListFilesHandler } from '../../src/handlers/list-files.js';

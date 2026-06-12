@@ -1,4 +1,4 @@
-import type { GetMetadataResult } from '@figma-mcp-relay/shared';
+import type { GetMetadataResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetMetadataHandler } from '../../src/handlers/get-metadata.js';

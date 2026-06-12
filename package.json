@@ -1,17 +1,17 @@
 {
-  "name": "figma-mcp-relay",
+  "name": "figwright",
   "version": "0.0.0",
   "private": true,
   "description": "Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MCP clients) with a Figma plugin over a local WebSocket relay.",
-  "homepage": "https://github.com/TBD/figma-mcp-relay",
+  "homepage": "https://github.com/TBD/figwright",
   "bugs": {
-    "url": "https://github.com/TBD/figma-mcp-relay/issues"
+    "url": "https://github.com/TBD/figwright/issues"
   },
   "license": "MIT",
   "author": "TBD",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TBD/figma-mcp-relay.git"
+    "url": "https://github.com/TBD/figwright.git"
   },
   "type": "module",
   "scripts": {

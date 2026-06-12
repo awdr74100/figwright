@@ -3,7 +3,7 @@ import {
   GetDocumentResultSchema,
   MIXED,
   type SerializedNode,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebSocket } from 'ws';
 

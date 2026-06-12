@@ -1,4 +1,4 @@
-import type { DesignContextNode, SerializedPaint } from '@figma-mcp-relay/shared';
+import type { DesignContextNode, SerializedPaint } from '@figwright/shared';
 
 import type { RepoSvg, SvgColorContract } from '../icons/repo-icons.js';
 import type { ProjectProfile } from '../profile/profile.js';

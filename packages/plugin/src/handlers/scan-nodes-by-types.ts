@@ -1,4 +1,4 @@
-import type { ScanNodesByTypesResult, SerializedNode } from '@figma-mcp-relay/shared';
+import type { ScanNodesByTypesResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeFlat } from '../serializer.js';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PLUGIN_BRIDGE_TAG = '@figma-mcp-relay/bridge';
+export const PLUGIN_BRIDGE_TAG = '@figwright/bridge';
 
 const baseFields = {
   tag: z.literal(PLUGIN_BRIDGE_TAG),

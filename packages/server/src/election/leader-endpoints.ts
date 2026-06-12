@@ -1,6 +1,6 @@
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import { ErrorCode, RpcRequestSchema, type RpcResponse } from '@figma-mcp-relay/shared';
+import { ErrorCode, RpcRequestSchema, type RpcResponse } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
 import type { Relay } from '../relay/relay.js';

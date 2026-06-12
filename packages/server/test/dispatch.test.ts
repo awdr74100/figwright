@@ -1,4 +1,4 @@
-import { ErrorCode, type RpcResponse } from '@figma-mcp-relay/shared';
+import { ErrorCode, type RpcResponse } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';

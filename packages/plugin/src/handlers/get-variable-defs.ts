@@ -1,8 +1,4 @@
-import {
-  type GetVariableDefsResult,
-  type SerializedVariableValue,
-  toHex,
-} from '@figma-mcp-relay/shared';
+import { type GetVariableDefsResult, type SerializedVariableValue, toHex } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 

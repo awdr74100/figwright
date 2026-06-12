@@ -1,4 +1,4 @@
-import type { BatchNodeResult } from '@figma-mcp-relay/shared';
+import type { BatchNodeResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createReorderNodesHandler } from '../../src/handlers/reorder-nodes.js';

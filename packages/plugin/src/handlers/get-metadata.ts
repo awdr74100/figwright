@@ -1,4 +1,4 @@
-import type { GetMetadataResult } from '@figma-mcp-relay/shared';
+import type { GetMetadataResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 

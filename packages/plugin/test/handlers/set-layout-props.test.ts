@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figma-mcp-relay/shared';
+import type { MutateResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createSetLayoutPropsHandler } from '../../src/handlers/set-layout-props.js';

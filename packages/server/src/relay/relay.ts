@@ -17,7 +17,7 @@ import {
   newId,
   PROTOCOL_VERSION,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';

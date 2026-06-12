@@ -13,7 +13,7 @@ import {
   type RequestEnvelope,
   type ResponseEnvelope,
   SystemMethod,
-} from '@figma-mcp-relay/shared';
+} from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ACTIVITY_LIMIT, RelayClient, type WebSocketCtor } from '../../ui/relay/client.js';

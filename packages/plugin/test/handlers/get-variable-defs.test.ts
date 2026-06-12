@@ -1,4 +1,4 @@
-import type { GetVariableDefsResult } from '@figma-mcp-relay/shared';
+import type { GetVariableDefsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetVariableDefsHandler } from '../../src/handlers/get-variable-defs.js';

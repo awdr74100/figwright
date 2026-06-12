@@ -1,4 +1,4 @@
-import type { CreateResult } from '@figma-mcp-relay/shared';
+import type { CreateResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createCreateComponentHandler } from '../../src/handlers/create-component.js';

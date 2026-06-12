@@ -1,4 +1,4 @@
-import type { VariableResult } from '@figma-mcp-relay/shared';
+import type { VariableResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';

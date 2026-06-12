@@ -1,4 +1,4 @@
-import type { GetAnnotationsResult } from '@figma-mcp-relay/shared';
+import type { GetAnnotationsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetAnnotationsHandler } from '../../src/handlers/get-annotations.js';

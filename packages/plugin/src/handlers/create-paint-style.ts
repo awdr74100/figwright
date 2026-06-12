@@ -1,4 +1,4 @@
-import type { SerializedPaint, StyleResult } from '@figma-mcp-relay/shared';
+import type { SerializedPaint, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaint } from './set-fills.js';

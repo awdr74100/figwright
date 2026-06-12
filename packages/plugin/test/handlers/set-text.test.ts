@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figma-mcp-relay/shared';
+import type { MutateResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSetTextHandler } from '../../src/handlers/set-text.js';

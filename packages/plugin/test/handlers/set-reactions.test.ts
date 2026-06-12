@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figma-mcp-relay/shared';
+import type { MutateResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSetReactionsHandler } from '../../src/handlers/set-reactions.js';

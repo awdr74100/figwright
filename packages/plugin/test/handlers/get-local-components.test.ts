@@ -1,4 +1,4 @@
-import type { GetLocalComponentsResult } from '@figma-mcp-relay/shared';
+import type { GetLocalComponentsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetLocalComponentsHandler } from '../../src/handlers/get-local-components.js';

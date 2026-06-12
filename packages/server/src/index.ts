@@ -1,9 +1,4 @@
-import {
-  DEFAULT_PORT,
-  type GetScreenshotResult,
-  newId,
-  PROTOCOL_VERSION,
-} from '@figma-mcp-relay/shared';
+import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
@@ -25,7 +20,7 @@ import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-co
 import type { ToolSpec } from './tools/spec.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
-const SERVER_NAME = '@figma-mcp-relay/server';
+const SERVER_NAME = 'figwright';
 const SERVER_VERSION = '0.0.0';
 
 const log = (msg: string): void => {
@@ -152,7 +147,7 @@ const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
 log(
-  `[figma-mcp-relay] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ` +
+  `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ` +
     (node.isLeader()
       ? `relay on :${node.getLeader()?.port ?? DEFAULT_PORT}`
       : `follower → ${node.leaderUrl}`),

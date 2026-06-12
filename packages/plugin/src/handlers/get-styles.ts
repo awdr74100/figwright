@@ -1,4 +1,4 @@
-import type { GetStylesResult, SerializedLineHeight } from '@figma-mcp-relay/shared';
+import type { GetStylesResult, SerializedLineHeight } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeEffect, serializeLayoutGrid, serializePaint } from '../serializer.js';
