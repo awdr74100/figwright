@@ -2,7 +2,7 @@
   "mcpServers": {
     "figwright": {
       "command": "node",
-      "args": ["/Users/roya/Desktop/figma-mcp-relay/packages/server/dist/index.mjs"]
+      "args": ["/Users/roya/Desktop/figwright/packages/server/dist/index.mjs"]
     }
   }
 }
