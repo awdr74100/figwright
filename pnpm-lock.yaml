@@ -35,9 +35,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@figwright/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -57,6 +54,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@figwright/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1

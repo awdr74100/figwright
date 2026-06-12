@@ -25,7 +25,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@figwright/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@msgpack/msgpack": "^3.1.3",
     "ignore": "^7.0.5",
@@ -34,6 +33,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@figwright/shared": "workspace:*",
     "@types/ws": "^8.18.1",
     "tsdown": "^0.22.2"
   }
