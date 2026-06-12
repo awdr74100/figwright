@@ -27,18 +27,18 @@ const statusLabel = {
 } satisfies Record<RelayStatus, string>;
 
 const dotClass = {
-  idle: 'bg-relay-muted',
+  idle: 'bg-fig-muted',
   connecting: 'bg-yellow-400',
-  connected: 'bg-relay-accent',
+  connected: 'bg-fig-accent',
   reconnecting: 'bg-yellow-400',
-  disconnected: 'bg-relay-danger',
+  disconnected: 'bg-fig-danger',
 } satisfies Record<RelayStatus, string>;
 
 const statusGlyph = { pending: '·', ok: '✓', error: '✕' } satisfies Record<ActivityStatus, string>;
 const statusColor = {
   pending: 'text-yellow-400',
-  ok: 'text-relay-accent',
-  error: 'text-relay-danger',
+  ok: 'text-fig-accent',
+  error: 'text-fig-danger',
 } satisfies Record<ActivityStatus, string>;
 
 const client = new RelayClient({
@@ -135,11 +135,11 @@ const runInBackground = (): void => {
 </script>
 
 <template>
-  <main class="flex h-full flex-col bg-relay-bg text-relay-fg text-xs">
+  <main class="flex h-full flex-col bg-fig-bg text-fig-fg text-xs">
     <header class="flex items-center gap-2 border-b border-white/10 px-2.5 py-1.5">
       <span :class="['inline-block size-2 shrink-0 rounded-full', dotClass[state.status]]" />
       <span class="font-medium">{{ statusLabel[state.status] }}</span>
-      <span class="ml-auto truncate font-mono text-[11px] text-relay-muted">{{ headerMeta }}</span>
+      <span class="ml-auto truncate font-mono text-[11px] text-fig-muted">{{ headerMeta }}</span>
     </header>
 
     <nav class="flex gap-1 border-b border-white/10 px-2 py-1">
@@ -147,7 +147,7 @@ const runInBackground = (): void => {
         v-for="[id, label] in tabs"
         :key="id"
         class="rounded px-2 py-0.5 text-[11px] transition-colors"
-        :class="tab === id ? 'bg-white/10 text-relay-fg' : 'text-relay-muted hover:text-relay-fg'"
+        :class="tab === id ? 'bg-white/10 text-fig-fg' : 'text-fig-muted hover:text-fig-fg'"
         @click="tab = id"
       >
         {{ label }}
@@ -160,18 +160,16 @@ const runInBackground = (): void => {
         <ul v-if="state.activity.length > 0" class="space-y-0.5 font-mono">
           <li v-for="e in state.activity" :key="e.id" class="flex items-center gap-2">
             <span :class="statusColor[e.status]">{{ statusGlyph[e.status] }}</span>
-            <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-relay-danger' : ''">
+            <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-fig-danger' : ''">
               {{ e.method }}
             </span>
-            <span class="ml-auto shrink-0 text-relay-muted">
+            <span class="ml-auto shrink-0 text-fig-muted">
               {{ e.durationMs === undefined ? '' : `${e.durationMs}ms` }}
             </span>
-            <span class="w-9 shrink-0 text-right text-relay-muted">{{
-              formatAgo(e.startedAt)
-            }}</span>
+            <span class="w-9 shrink-0 text-right text-fig-muted">{{ formatAgo(e.startedAt) }}</span>
           </li>
         </ul>
-        <p v-else class="text-relay-muted">No activity yet — waiting for an MCP client…</p>
+        <p v-else class="text-fig-muted">No activity yet — waiting for an MCP client…</p>
       </template>
 
       <!-- Context -->
@@ -179,76 +177,76 @@ const runInBackground = (): void => {
         <div v-if="context !== null" class="space-y-3">
           <dl class="space-y-1.5">
             <div class="flex justify-between gap-2">
-              <dt class="shrink-0 text-relay-muted">File</dt>
+              <dt class="shrink-0 text-fig-muted">File</dt>
               <dd class="min-w-0 truncate text-right">{{ context.fileName }}</dd>
             </div>
             <div class="flex justify-between gap-2">
-              <dt class="shrink-0 text-relay-muted">Page</dt>
+              <dt class="shrink-0 text-fig-muted">Page</dt>
               <dd class="min-w-0 truncate text-right">{{ context.pageName }}</dd>
             </div>
             <div class="flex justify-between gap-2">
-              <dt class="shrink-0 text-relay-muted">Editor</dt>
+              <dt class="shrink-0 text-fig-muted">Editor</dt>
               <dd class="text-right font-mono">
                 {{ context.editorType }} · API {{ context.apiVersion }}
               </dd>
             </div>
           </dl>
           <div>
-            <p class="mb-1 text-relay-muted">Selection ({{ context.selectionCount }})</p>
+            <p class="mb-1 text-fig-muted">Selection ({{ context.selectionCount }})</p>
             <ul v-if="context.selection.length > 0" class="space-y-1 font-mono">
               <li v-for="n in context.selection" :key="n.id" class="flex items-center gap-2">
                 <span class="min-w-0 truncate">{{ n.name }}</span>
-                <span class="ml-auto shrink-0 text-relay-muted">{{ n.type }}</span>
-                <span class="shrink-0 text-right tabular-nums text-relay-muted"
+                <span class="ml-auto shrink-0 text-fig-muted">{{ n.type }}</span>
+                <span class="shrink-0 text-right tabular-nums text-fig-muted"
                   >{{ n.width }}×{{ n.height }}</span
                 >
               </li>
-              <li v-if="context.selectionCount > context.selection.length" class="text-relay-muted">
+              <li v-if="context.selectionCount > context.selection.length" class="text-fig-muted">
                 …and {{ context.selectionCount - context.selection.length }} more
               </li>
             </ul>
-            <p v-else class="text-relay-muted">Nothing selected</p>
+            <p v-else class="text-fig-muted">Nothing selected</p>
           </div>
         </div>
-        <p v-else class="text-relay-muted">Waiting for plugin context…</p>
+        <p v-else class="text-fig-muted">Waiting for plugin context…</p>
       </template>
 
       <!-- Debug -->
       <template v-else>
         <div class="space-y-3">
           <div>
-            <p class="mb-1 text-relay-muted">Connection</p>
+            <p class="mb-1 text-fig-muted">Connection</p>
             <div class="space-y-0.5 font-mono">
               <div>session · {{ shortId }}{{ state.sessionResumed ? ' (resumed)' : '' }}</div>
               <div>reconnects · {{ state.reconnectCount }}</div>
-              <div v-if="state.lastError !== null" class="wrap-break-word text-relay-danger">
+              <div v-if="state.lastError !== null" class="wrap-break-word text-fig-danger">
                 last error · {{ state.lastError }}
               </div>
             </div>
           </div>
           <div>
-            <p class="mb-1 text-relay-muted">Recent errors</p>
+            <p class="mb-1 text-fig-muted">Recent errors</p>
             <ul v-if="errorEntries.length > 0" class="space-y-1.5 font-mono">
               <li v-for="e in errorEntries" :key="e.id">
                 <div class="flex justify-between gap-2">
-                  <span class="min-w-0 truncate text-relay-danger">{{ e.method }}</span>
-                  <span class="shrink-0 text-relay-muted">{{ formatAgo(e.startedAt) }}</span>
+                  <span class="min-w-0 truncate text-fig-danger">{{ e.method }}</span>
+                  <span class="shrink-0 text-fig-muted">{{ formatAgo(e.startedAt) }}</span>
                 </div>
-                <div class="wrap-break-word text-relay-muted">{{ e.error }}</div>
+                <div class="wrap-break-word text-fig-muted">{{ e.error }}</div>
               </li>
             </ul>
-            <p v-else class="text-relay-muted">No errors.</p>
+            <p v-else class="text-fig-muted">No errors.</p>
           </div>
         </div>
       </template>
     </section>
 
     <footer
-      class="flex items-center gap-2 border-t border-white/10 px-3 py-1.5 text-[10px] text-relay-muted"
+      class="flex items-center gap-2 border-t border-white/10 px-3 py-1.5 text-[10px] text-fig-muted"
     >
       <span class="truncate">Figwright v0.0.0 · {{ state.totalCalls }} calls</span>
       <button
-        class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-relay-muted hover:bg-white/10 hover:text-relay-fg"
+        class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-fig-muted hover:bg-white/10 hover:text-fig-fg"
         title="Run in background — hides the panel; the relay stays connected. Reopen by running the plugin again."
         @click="runInBackground"
       >

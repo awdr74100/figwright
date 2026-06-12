@@ -1,11 +1,11 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-relay-bg: #2c2c2c;
-  --color-relay-fg: #ffffff;
-  --color-relay-muted: #a0a0a0;
-  --color-relay-accent: #18a0fb;
-  --color-relay-danger: #f24822;
+  --color-fig-bg: #2c2c2c;
+  --color-fig-fg: #ffffff;
+  --color-fig-muted: #a0a0a0;
+  --color-fig-accent: #18a0fb;
+  --color-fig-danger: #f24822;
 }
 
 html,
