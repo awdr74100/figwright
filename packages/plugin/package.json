@@ -21,7 +21,6 @@
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.0",
     "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/test-utils": "^2.4.11",
     "tailwindcss": "^4.3.0",
     "vite": "^8.0.16",
     "vite-plugin-singlefile": "^2.3.3",

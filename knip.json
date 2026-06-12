@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/knip/schema.json",
+  "ignoreExportsUsedInFile": true,
   "workspaces": {
     ".": {
       "entry": ["vitest.config.ts"],
@@ -15,7 +16,8 @@
     },
     "packages/plugin": {
       "entry": ["src/code.ts", "ui/main.ts", "vite.config.ts", "vite.config.main.ts"],
-      "project": ["src/**/*.ts", "ui/**/*.{ts,vue}"]
+      "project": ["src/**/*.ts", "ui/**/*.{ts,vue}"],
+      "ignoreDependencies": ["tailwindcss"]
     }
   },
   "ignoreDependencies": ["@types/node"]

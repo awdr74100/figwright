@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { walkRepoFiles } from '../repo-walk.js';
 
@@ -365,7 +365,3 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
 /** Convenience: gather + detect in one call against a real directory. */
 export const analyzeProject = async (rootDir: string): Promise<ProjectProfile> =>
   detectProfile(await gatherProjectInput(rootDir));
-
-/** Repo-relative form of an absolute path, for stable display in tool output. */
-export const toRepoRelative = (rootDir: string, absPath: string): string =>
-  relative(rootDir, absPath) || '.';

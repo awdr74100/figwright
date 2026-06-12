@@ -499,8 +499,6 @@ export const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
-export const serializeSceneNode = serializeFlat;
-
 export const serializeEffect = (effect: Effect): SerializedEffect => {
   if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
     return {
