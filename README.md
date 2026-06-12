@@ -32,7 +32,7 @@ pnpm build
 ```
 packages/
   shared/   # types / schemas / msgpack codec / protocol
-  server/   # MCP server (Node, pure ESM)
+  mcp/      # MCP server (Node, pure ESM)
   plugin/   # Figma plugin (Vue 3 + Vite + Tailwind v4)
   skills/   # Claude Code skills (markdown)
 ```

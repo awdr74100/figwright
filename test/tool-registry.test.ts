@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
+import { toToolDefinition } from '../packages/mcp/test/tool-schema.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
-import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/server/src/tools/registry.js';
-import { toToolDefinition } from '../packages/server/test/tool-schema.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests

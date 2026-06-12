@@ -2,7 +2,7 @@
   "mcpServers": {
     "figwright": {
       "command": "node",
-      "args": ["packages/server/dist/index.mjs"]
+      "args": ["packages/mcp/dist/index.mjs"]
     }
   }
 }

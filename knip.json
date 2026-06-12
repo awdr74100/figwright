@@ -9,7 +9,7 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
-    "packages/server": {
+    "packages/mcp": {
       "entry": ["src/index.ts", "tsdown.config.ts"],
       "project": ["src/**/*.ts"]
     },
