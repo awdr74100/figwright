@@ -11,6 +11,7 @@ export default defineConfig({
   clean: true,
   shims: false,
   fixedExtension: true,
+  publint: true,
   deps: { alwaysBundle: ['@figwright/shared'] },
   outputOptions: {
     banner: '#!/usr/bin/env node',

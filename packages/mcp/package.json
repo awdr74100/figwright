@@ -43,6 +43,7 @@
   "devDependencies": {
     "@figwright/shared": "workspace:*",
     "@types/ws": "^8.18.1",
+    "publint": "^0.3.21",
     "tsdown": "^0.22.2"
   }
 }
