@@ -32,7 +32,7 @@ packages/
   shared/   # types / schemas / msgpack codec / protocol
   mcp/      # MCP server (Node, pure ESM)
   plugin/   # Figma plugin (Vue 3 + Vite + Tailwind v4)
-  skills/   # Claude Code skills (markdown)
+skills/     # agent skills (markdown) — install with `npx skills add`
 ```
 
 ### Running the server locally

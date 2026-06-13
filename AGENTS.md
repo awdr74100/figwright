@@ -21,7 +21,7 @@ packages/
   shared/   # types, Zod schemas, msgpack codec, plugin↔server protocol (bundled into mcp)
   mcp/      # the MCP server — @figwright/mcp (Node, ESM): relay, election, tools, joins
   plugin/   # Figma plugin — Vue 3 + Vite + Tailwind v4 (UI) + sandbox (Figma API)
-  skills/   # Claude Code skills that orchestrate the tools (figma-codegen)
+skills/     # agent skills that orchestrate the tools (figma-codegen) — installable via `npx skills add`
 test/       # cross-package integration tests (e.g. server tool registry ↔ plugin handlers)
 ```
 

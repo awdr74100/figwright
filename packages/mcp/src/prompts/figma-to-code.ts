@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 // The cross-client twin of the figma-codegen Claude Code skill: a distilled, guided workflow any MCP
 // client (Cursor / Windsurf / Claude Desktop) can surface as a slash command. The deep version lives
-// in packages/skills/figma-codegen/SKILL.md; this is intentionally the short form — it names the
+// in skills/figma-codegen/SKILL.md; this is intentionally the short form — it names the
 // three grounded tools, their order, and the reuse/token rules, which is what a client without the
 // skill needs. Kept short so it tracks the skill's intent without re-deriving its detail.
 
