@@ -1,0 +1,49 @@
+name: Release
+
+# Triggered by the tag that `pnpm release` (changelogen --release) creates and
+# you push. Builds, gates, publishes @figwright/mcp to npm with provenance via
+# OIDC trusted publishing, then creates the GitHub Release from the changelog.
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # changelogen creates the GitHub Release
+      id-token: write # OIDC: npm trusted publishing + provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so changelogen can diff from the last tag
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      # Gate before the irreversible publish.
+      - run: pnpm build
+      - run: pnpm test
+
+      # Publish to npm. `pnpm pack` resolves workspace:* into a clean tarball;
+      # `npm publish` performs OIDC trusted publishing (no token) + provenance.
+      - run: pnpm -C packages/mcp pack
+      - run: npm publish packages/mcp/figwright-mcp-*.tgz --provenance --access public
+
+      # Create the GitHub Release from the changelog (after npm succeeds).
+      - run: pnpm -C packages/mcp exec changelogen gh release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

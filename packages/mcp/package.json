@@ -2,12 +2,20 @@
   "name": "@figwright/mcp",
   "version": "0.0.0",
   "description": "MCP server for Figwright — bridges MCP clients to a Figma plugin over local WebSocket.",
+  "homepage": "https://github.com/awdr74100/figwright#readme",
+  "bugs": "https://github.com/awdr74100/figwright/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/awdr74100/figwright.git",
+    "directory": "packages/mcp"
+  },
   "bin": {
     "figwright-mcp": "./dist/index.mjs"
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],

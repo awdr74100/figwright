@@ -3,15 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "description": "Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MCP clients) with a Figma plugin over a local WebSocket relay.",
-  "homepage": "https://github.com/TBD/figwright",
+  "homepage": "https://github.com/awdr74100/figwright",
   "bugs": {
-    "url": "https://github.com/TBD/figwright/issues"
+    "url": "https://github.com/awdr74100/figwright/issues"
   },
   "license": "MIT",
   "author": "TBD",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TBD/figwright.git"
+    "url": "https://github.com/awdr74100/figwright.git"
   },
   "type": "module",
   "scripts": {
@@ -24,6 +24,7 @@
     "knip:fix": "knip --fix",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
+    "release": "pnpm -C packages/mcp exec changelogen --release",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^24.13.1",
     "@vitest/coverage-v8": "^4.1.8",
+    "changelogen": "^0.6.2",
     "knip": "^6.16.0",
     "lefthook": "^2.1.9",
     "oxfmt": "^0.53.0",
