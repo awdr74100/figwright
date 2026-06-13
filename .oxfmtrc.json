@@ -6,7 +6,8 @@
     "**/build/**",
     "**/coverage/**",
     "**/*.tsbuildinfo",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    ".claude/skills/**"
   ],
   "arrowParens": "avoid",
   "singleQuote": true,
