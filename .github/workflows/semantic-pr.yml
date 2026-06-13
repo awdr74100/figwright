@@ -1,0 +1,40 @@
+name: Semantic PR
+
+# Validates that the PR title follows Conventional Commits. With squash merges
+# the PR title becomes the commit subject on main, so this is the gate that
+# keeps history consistent with the commit convention (CI lints commits at the
+# PR-title level, not per-commit).
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+# Only reads the PR title via the API — no checkout of PR code, so
+# pull_request_target is safe here.
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: semantic-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Match the commit-type vocabulary used across the repo.
+          types: |
+            feat
+            fix
+            chore
+            refactor
+            docs
+            test
+            ci
+            build
+            perf
+            style
+            revert
