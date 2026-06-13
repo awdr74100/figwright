@@ -19,6 +19,7 @@
     "oxfmt",
     "singlefile",
     "currentpagechange",
-    "selectionchange"
+    "selectionchange",
+    "vueuse"
   ]
 }

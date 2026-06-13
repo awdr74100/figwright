@@ -41,9 +41,11 @@ const statusColor = {
   error: 'text-fig-danger',
 } satisfies Record<ActivityStatus, string>;
 
+const appVersion = __APP_VERSION__;
+
 const client = new RelayClient({
   ports: portRange(),
-  clientVersion: '0.0.0',
+  clientVersion: appVersion,
   log: msg => console.log(msg),
 });
 const bridge = createSandboxBridge({ log: msg => console.log(msg) });
@@ -244,7 +246,7 @@ const runInBackground = (): void => {
     <footer
       class="flex items-center gap-2 border-t border-white/10 px-3 py-1.5 text-[10px] text-fig-muted"
     >
-      <span class="truncate">Figwright v0.0.0 · {{ state.totalCalls }} calls</span>
+      <span class="truncate">Figwright v{{ appVersion }} · {{ state.totalCalls }} calls</span>
       <button
         class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 text-fig-muted hover:bg-white/10 hover:text-fig-fg"
         title="Run in background — hides the panel; the relay stays connected. Reopen by running the plugin again."

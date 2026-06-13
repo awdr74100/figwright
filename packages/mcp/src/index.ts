@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
+import pkg from '../package.json' with { type: 'json' };
 import { dispatchTool, resolveRoutingSession } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
@@ -21,7 +22,7 @@ import type { ToolSpec } from './tools/spec.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = 'figwright';
-const SERVER_VERSION = '0.0.0';
+const SERVER_VERSION = pkg.version;
 
 const log = (msg: string): void => {
   process.stderr.write(`${msg}\n`);
