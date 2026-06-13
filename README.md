@@ -10,8 +10,6 @@ Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MC
 - **Cross-stack** — Vue / React / .NET / Laravel / Django profile-aware codegen.
 - **Open** — extend with your own skills.
 
-See [`PLAN.md`](./PLAN.md) for the full design.
-
 ## Requirements
 
 - Node 24 LTS+

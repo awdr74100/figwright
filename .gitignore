@@ -14,10 +14,5 @@ coverage/
 # Local Claude Code settings (personal; shared config goes in .claude/settings.json)
 .claude/settings.local.json
 
-# Local reference dumps (competitor sources used while building; not part of the repo)
-figma-mcp-bridge.txt
-figma-mcp-go.txt
-figma-context-mcp.txt
-
-# Internal planning doc / single source of truth for development — not published to GitHub
-PLAN.md
+# Local-only working files (planning doc + competitor reference dumps) — not part of the repo
+.local/
