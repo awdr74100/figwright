@@ -2,7 +2,8 @@ name: Release
 
 # Triggered by the tag that `pnpm release` (changelogen --release) creates and
 # you push. Builds, gates, publishes @figwright/mcp to npm with provenance via
-# OIDC trusted publishing, then creates the GitHub Release from the changelog.
+# OIDC trusted publishing, creates the GitHub Release from the changelog, and
+# attaches the Figma plugin as a downloadable asset.
 on:
   push:
     tags: ['v*']
@@ -17,7 +18,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # changelogen creates the GitHub Release
+      contents: write # GitHub Release + plugin asset upload
       id-token: write # OIDC: npm trusted publishing + provenance
     steps:
       - uses: actions/checkout@v4
@@ -34,12 +35,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Gate before the irreversible publish.
+      # Gate before the irreversible publish. `pnpm build` also builds the
+      # plugin (dist/code.js + dist/index.html) packaged as an asset below.
       - run: pnpm build
       - run: pnpm test
 
-      # Publish to npm. `pnpm pack` resolves workspace:* into a clean tarball;
-      # `npm publish` performs OIDC trusted publishing (no token) + provenance.
+      # Publish @figwright/mcp. `pnpm pack` resolves workspace:* into a clean
+      # tarball; `npm publish` does OIDC trusted publishing (no token) + provenance.
       - run: pnpm -C packages/mcp pack
       - run: npm publish packages/mcp/figwright-mcp-*.tgz --provenance --access public
 
@@ -47,3 +49,13 @@ jobs:
       - run: pnpm -C packages/mcp exec changelogen gh release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Attach the Figma plugin (manifest + built UI/sandbox) so users can
+      # "Import plugin from manifest" in Figma dev mode until it's on Community.
+      - name: Package & upload the Figma plugin
+        working-directory: packages/plugin
+        run: |
+          zip -r "$RUNNER_TEMP/figwright-plugin-${GITHUB_REF_NAME}.zip" manifest.json dist
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/figwright-plugin-${GITHUB_REF_NAME}.zip" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

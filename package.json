@@ -24,7 +24,7 @@
     "knip:fix": "knip --fix",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
-    "release": "pnpm -C packages/mcp exec changelogen --release",
+    "release": "pnpm -C packages/mcp exec changelogen --release --output ../../CHANGELOG.md",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
