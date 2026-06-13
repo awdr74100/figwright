@@ -29,5 +29,14 @@
     "unicorn/prefer-add-event-listener": "off",
     "import/no-unassigned-import": "off"
   },
+  "overrides": [
+    {
+      "files": ["**/test/**", "**/*.test.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "no-await-in-loop": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/coverage/**", "**/*.tsbuildinfo"]
 }

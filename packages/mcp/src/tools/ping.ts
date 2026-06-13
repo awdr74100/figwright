@@ -88,8 +88,8 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       };
     }
     const routed = relay.pickActiveSession();
-    const all: PingSessionInfo[] = [...connected]
-      .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+    const all: PingSessionInfo[] = connected
+      .toSorted((a, b) => b.lastActivityAt - a.lastActivityAt)
       .map(s => ({
         id: s.id,
         fileName: s.fileName,
