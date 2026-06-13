@@ -5,5 +5,5 @@ Read **[AGENTS.md](./AGENTS.md)** first — it's the single source of guidance f
 Claude Code specifics:
 
 - This repo **is** a Figma MCP server. The project-scoped `.mcp.json` launches the local build (`packages/mcp/dist/index.mjs`), so after changing `packages/mcp` or `packages/shared` you must `pnpm build` and restart the MCP connection before the `figwright` tools reflect your change.
-- A pre-commit hook formats and lints staged files automatically — don't hand-format.
+- There are no git hooks; CI is the gate. When you edit through Claude Code, the PostToolUse hook (`.claude/hooks/format-on-edit.mjs`) auto-formats and lints the file — don't hand-format.
 - The canonical checks before pushing are `pnpm typecheck && pnpm lint && pnpm format:check && pnpm knip && pnpm build && pnpm test` (the same gates CI runs).

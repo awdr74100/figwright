@@ -35,7 +35,6 @@
     "@vitest/coverage-v8": "^4.1.8",
     "changelogen": "^0.6.2",
     "knip": "^6.16.0",
-    "lefthook": "^2.1.9",
     "oxfmt": "^0.53.0",
     "oxlint": "^1.68.0",
     "typescript": "^6.0.3",

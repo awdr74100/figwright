@@ -56,7 +56,7 @@ CI (`.github/workflows/ci.yml`) gates every push and PR on: **typecheck, lint, f
 
 - **Commits / PRs**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `refactor:`, `ci:`, …). PR titles are validated by `semantic-pr.yml`; with squash merges the PR title becomes the commit on `main`.
 - **Tests**: each package has a `test/` mirroring `src/` (no co-located tests). Tests that span packages live in the root `test/`.
-- **Formatting & lint** run automatically on staged files via a lefthook pre-commit hook; typecheck + test run on pre-push. Don't hand-format.
+- **Formatting & lint** are enforced by CI (`format:check`, `lint`) — there are no git hooks. Run `pnpm format` before committing, or let your editor format on save.
 - **Scope**: internal packages are `@figwright/*`; only `@figwright/mcp` is published to npm.
 
 ## Gotchas — read before changing `mcp` or `shared`
