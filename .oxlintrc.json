@@ -20,6 +20,7 @@
   "rules": {
     "no-console": "off",
     "no-debugger": "error",
+    "no-underscore-dangle": ["warn", { "allow": ["__APP_VERSION__"] }],
     "no-unused-vars": "off",
     "@typescript-eslint/no-unused-vars": [
       "warn",
