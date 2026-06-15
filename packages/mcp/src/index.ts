@@ -9,6 +9,7 @@ import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
+import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
@@ -117,13 +118,16 @@ const annotationsFor = (spec: ToolSpec): ToolAnnotations =>
     : { readOnlyHint: true };
 
 for (const spec of ALL_TOOL_SPECS) {
-  const handler: ToolHandler =
+  const run: ToolHandler =
     SPECIAL_HANDLERS[spec.name] ??
     (async args => {
       // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
       const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
       return textResult(await dispatch(spec.name, dispatchArgs));
     });
+  // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
+  // every tool — generic or special-cased — accepts them without per-handler conversion.
+  const handler: ToolHandler = async args => run(normalizeIdArgs(args) as Record<string, unknown>);
   // Cast: registerTool is generic per inputShape; this loop registers heterogeneous specs uniformly.
   mcp.registerTool(
     spec.name,
