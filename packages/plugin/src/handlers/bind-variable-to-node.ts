@@ -13,6 +13,13 @@ export const createBindVariableToNodeHandler =
     if (p.variableId !== null && typeof p.variableId !== 'string') {
       throw new TypeError('bind_variable_to_node: variableId must be a string or null');
     }
+    // Fill/stroke colour bindings live on the paint, not the node — setBoundVariable rejects them.
+    // Point the caller at the right tool instead of surfacing Figma's opaque error.
+    if (p.field === 'fills' || p.field === 'strokes') {
+      throw new Error(
+        `bind_variable_to_node: "${p.field}" is a paint-level colour binding — use bind_variable_to_paint instead`,
+      );
+    }
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (node === null) throw new Error(`bind_variable_to_node: node ${p.nodeId} not found`);

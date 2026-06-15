@@ -10,6 +10,7 @@ import { applyStyleToNodeTool } from './apply-style-to-node.js';
 import { batchRenameNodesTool } from './batch-rename-nodes.js';
 import { batchTool } from './batch.js';
 import { bindVariableToNodeTool } from './bind-variable-to-node.js';
+import { bindVariableToPaintTool } from './bind-variable-to-paint.js';
 import { cloneNodeTool } from './clone-node.js';
 import { combineAsVariantsTool } from './combine-as-variants.js';
 import { componentMapTool } from './component-map.js';
@@ -158,6 +159,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   createVariableTool,
   setVariableValueTool,
   bindVariableToNodeTool,
+  bindVariableToPaintTool,
   renameVariableTool,
   deleteVariableTool,
   groupNodesTool,

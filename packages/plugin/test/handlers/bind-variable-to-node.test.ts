@@ -44,6 +44,16 @@ describe('bind_variable_to_node handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  it('redirects fills/strokes to bind_variable_to_paint (paint-level colour binding)', async () => {
+    for (const field of ['fills', 'strokes']) {
+      await expect(
+        createBindVariableToNodeHandler(
+          fakeFigma({ id: '1:1', setBoundVariable() {} }, { id: 'V:0' }),
+        )({ nodeId: '1:1', field, variableId: 'V:0' }),
+      ).rejects.toThrow(/use bind_variable_to_paint instead/);
+    }
+  });
+
   it('throws on missing node, missing variable, or non-bindable node', async () => {
     await expect(
       createBindVariableToNodeHandler(fakeFigma(null, { id: 'V:0' }))({

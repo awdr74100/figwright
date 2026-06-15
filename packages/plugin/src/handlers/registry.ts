@@ -6,6 +6,7 @@ import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
 import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
 import { createBatchHandler } from './batch.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
+import { createBindVariableToPaintHandler } from './bind-variable-to-paint.js';
 import { createCloneNodeHandler } from './clone-node.js';
 import { createCombineAsVariantsHandler } from './combine-as-variants.js';
 import { createCreateComponentHandler } from './create-component.js';
@@ -129,6 +130,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     create_variable: createCreateVariableHandler(figmaCtx),
     set_variable_value: createSetVariableValueHandler(figmaCtx),
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
+    bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     // Structure + bulk text
