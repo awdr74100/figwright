@@ -1,6 +1,6 @@
 ---
 name: figma-codegen
-description: Generate framework-aware code from a Figma selection. Reads the user's project profile and emits code that matches the existing stack (React/Vue/Svelte + Tailwind/CSS), reusing existing components and design tokens instead of regenerating them. Triggers when the user asks to "code this design", "build this component", or references a Figma URL/selection.
+description: Generate framework-aware code from a Figma design. Reads the project's stack profile and emits code matching the existing framework (React/Vue/Svelte/Next/etc.) and styling (Tailwind/CSS/CSS-in-JS), reusing existing components and design tokens instead of regenerating from scratch. Triggers whenever the user wants a Figma design turned into code — e.g. 'code this design', 'implement this frame', 'build this screen/component', 'turn this Figma into React/Vue', 'convert this design to code' — or whenever a Figma URL or the current Figma selection appears alongside a coding request. Works for full screens, single sections, or one component.
 min-server-version: 0.1.0
 ---
 
