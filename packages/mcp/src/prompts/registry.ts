@@ -1,6 +1,7 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
 import type { ZodRawShape } from 'zod';
 
+import { codeToFigmaPrompt } from './code-to-figma.js';
 import { figmaToCodePrompt } from './figma-to-code.js';
 
 // Single source of truth for the MCP prompts the server advertises. Prompts are the cross-client
@@ -16,7 +17,7 @@ interface PromptEntry {
   build: (args: Record<string, string> | undefined) => GetPromptResult;
 }
 
-export const PROMPTS: readonly PromptEntry[] = [figmaToCodePrompt];
+export const PROMPTS: readonly PromptEntry[] = [figmaToCodePrompt, codeToFigmaPrompt];
 
 /** Prompt definitions in prompts/list order. */
 export const PROMPT_DEFINITIONS: readonly Prompt[] = PROMPTS.map(p => p.definition);

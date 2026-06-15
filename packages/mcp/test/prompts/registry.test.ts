@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { CODE_TO_FIGMA_PROMPT_NAME } from '../../src/prompts/code-to-figma.js';
 import { FIGMA_TO_CODE_PROMPT_NAME } from '../../src/prompts/figma-to-code.js';
 import { buildPrompt, PROMPT_DEFINITIONS } from '../../src/prompts/registry.js';
 
@@ -33,6 +34,20 @@ describe('prompts registry', () => {
     const text = textOf(FIGMA_TO_CODE_PROMPT_NAME, { nodeId: '15131:1478' });
     expect(text).toContain('15131:1478');
     expect(text).not.toContain('the current Figma selection');
+  });
+
+  it('advertises code_to_figma (no args) with the build workflow', () => {
+    const def = PROMPT_DEFINITIONS.find(p => p.name === CODE_TO_FIGMA_PROMPT_NAME);
+    expect(def).toBeDefined();
+    expect(def?.description).toBeTruthy();
+    expect(def?.arguments).toEqual([]);
+
+    const text = textOf(CODE_TO_FIGMA_PROMPT_NAME);
+    // names the discovery + write tools and the colour-binding gotcha (paint, not node)
+    expect(text).toContain('get_variable_defs');
+    expect(text).toContain('create_instance');
+    expect(text).toContain('bind_variable_to_paint');
+    expect(text).toContain('reuse beats regenerate');
   });
 
   it('returns null for an unknown prompt name', () => {

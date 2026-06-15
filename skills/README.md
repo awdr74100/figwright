@@ -6,6 +6,7 @@ automatically when the task matches the skill's `description`.
 | Skill                                       | What it does                                                                                                      |
 | :------------------------------------------ | :---------------------------------------------------------------------------------------------------------------- |
 | [`figma-codegen`](./figma-codegen/SKILL.md) | Turn a Figma selection into framework-aware code, grounded on the project's stack and existing components/tokens. |
+| [`figma-build`](./figma-build/SKILL.md)     | Build a Figma design from code or a description, reusing the file's existing components/variables/styles.         |
 
 ## Install
 
