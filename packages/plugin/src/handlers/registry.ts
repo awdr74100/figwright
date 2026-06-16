@@ -25,6 +25,7 @@ import { createCreateVariableHandler } from './create-variable.js';
 import { createDeleteNodesHandler } from './delete-nodes.js';
 import { createDeletePageHandler } from './delete-page.js';
 import { createDeleteStyleHandler } from './delete-style.js';
+import { createDeleteVariableCollectionHandler } from './delete-variable-collection.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
@@ -133,6 +134,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
+    delete_variable_collection: createDeleteVariableCollectionHandler(figmaCtx),
     // Structure + bulk text
     group_nodes: createGroupNodesHandler(figmaCtx),
     ungroup_nodes: createUngroupNodesHandler(figmaCtx),

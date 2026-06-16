@@ -43,6 +43,14 @@ export const CollectionResultSchema = z.object({
 });
 export type CollectionResult = z.infer<typeof CollectionResultSchema>;
 
+/** Result of delete_variable_collection: the removed collection's id + name. */
+export const DeleteCollectionResultSchema = z.object({
+  ok: z.literal(true),
+  collectionId: z.string(),
+  name: z.string(),
+});
+export type DeleteCollectionResult = z.infer<typeof DeleteCollectionResultSchema>;
+
 /** Result of add_variable_mode: the new mode's id + name. */
 export const ModeResultSchema = z.object({
   ok: z.literal(true),

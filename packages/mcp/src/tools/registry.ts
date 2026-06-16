@@ -30,6 +30,7 @@ import { createVariableTool } from './create-variable.js';
 import { deleteNodesTool } from './delete-nodes.js';
 import { deletePageTool } from './delete-page.js';
 import { deleteStyleTool } from './delete-style.js';
+import { deleteVariableCollectionTool } from './delete-variable-collection.js';
 import { deleteVariableTool } from './delete-variable.js';
 import { detachInstanceTool } from './detach-instance.js';
 import { findReplaceTextTool } from './find-replace-text.js';
@@ -162,6 +163,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   bindVariableToPaintTool,
   renameVariableTool,
   deleteVariableTool,
+  deleteVariableCollectionTool,
   groupNodesTool,
   ungroupNodesTool,
   reparentNodesTool,
