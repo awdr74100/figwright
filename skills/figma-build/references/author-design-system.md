@@ -31,8 +31,10 @@ Then **bind** the new variable the same way you'd bind an existing one — colou
 - **Modes are plan-gated.** `add_variable_mode` (e.g. a `Dark` mode) fails with
   `Limited to 1 modes only` on free/Starter files — the tool is faithfully surfacing Figma's plan
   limit. Multi-mode theming needs a paid plan.
-- **A collection can't be deleted** via the tools (only `delete_variable` exists). Emptying a
-  collection leaves the empty collection behind — create collections deliberately.
+
+**Cleanup:** delete a single variable with `delete_variable`, or a whole collection (and every
+variable in it) with `delete_variable_collection` — remove an authoring mistake rather than leaving
+an orphan collection behind.
 
 ## Styles (shared paint / text / effect / grid)
 
