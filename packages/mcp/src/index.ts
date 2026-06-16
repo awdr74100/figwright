@@ -13,6 +13,7 @@ import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
+import { EXPORT_PDF_TOOL_NAME, handleExportPdf } from './tools/export-pdf.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
@@ -89,6 +90,7 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   }),
   [SAVE_SCREENSHOTS_TOOL_NAME]: async args =>
     textResult(await handleSaveScreenshots(dispatch, args)),
+  [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(dispatch, args)),
   [GET_SCREENSHOT_TOOL_NAME]: async args => ({
     content: screenshotContent(
       (await dispatch(GET_SCREENSHOT_TOOL_NAME, args)) as GetScreenshotResult,

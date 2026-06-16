@@ -28,6 +28,7 @@ import { createDeleteStyleHandler } from './delete-style.js';
 import { createDeleteVariableCollectionHandler } from './delete-variable-collection.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
+import { createExportPdfHandler } from './export-pdf.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
@@ -181,6 +182,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     list_files: createListFilesHandler(figmaCtx),
     get_design_context: createGetDesignContextHandler(figmaCtx),
     get_screenshot: createGetScreenshotHandler(figmaCtx),
+    export_pdf: createExportPdfHandler(figmaCtx),
   };
 
   for (const name of Object.keys(rawWrites)) {

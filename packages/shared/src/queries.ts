@@ -55,6 +55,29 @@ export type SavedScreenshot = z.infer<typeof SavedScreenshotSchema>;
 export const SaveScreenshotsResultSchema = z.object({ saved: z.array(SavedScreenshotSchema) });
 export type SaveScreenshotsResult = z.infer<typeof SaveScreenshotsResultSchema>;
 
+// ── export_pdf ───────────────────────────────────────────────────────────────
+/**
+ * Plugin-side PDF export — one PDF page per node. The plugin `exportAsync` API renders a node (or a
+ * whole page) as a single page; it can't paginate a page into one-frame-per-page (a Figma UI-only
+ * feature) or combine nodes. base64 is null when the target is missing or not exportable; `empty`
+ * is set when the node rendered nothing (absoluteRenderBounds === null); a PAGE has no such
+ * property so it's never flagged empty.
+ */
+export const PdfExportSchema = z.object({
+  nodeId: z.string(),
+  base64: z.string().nullable(),
+  empty: z.boolean().optional(),
+});
+export type PdfExport = z.infer<typeof PdfExportSchema>;
+
+/** Result of export_pdf: the written file path (null when nothing was exported). */
+export const ExportPdfResultSchema = z.object({
+  nodeId: z.string(),
+  path: z.string().nullable(),
+  empty: z.boolean().optional(),
+});
+export type ExportPdfResult = z.infer<typeof ExportPdfResultSchema>;
+
 // ── get_viewport ───────────────────────────────────────────────────────────
 export const GetViewportResultSchema = z.object({
   center: z.object({ x: z.number(), y: z.number() }),
