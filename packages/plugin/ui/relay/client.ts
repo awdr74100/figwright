@@ -18,6 +18,8 @@ import {
   SystemMethod,
 } from '@figwright/shared';
 
+import { type ActivityPayload, summarizePayload } from './payload.js';
+
 export type RelayStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
 export type ToolHandler = (method: string, params: unknown) => Promise<unknown>;
@@ -35,6 +37,8 @@ export interface ActivityEntry {
   status: ActivityStatus;
   durationMs?: number;
   error?: string;
+  /** For a successful call, a snapshot of the result sent back to the LLM (see payload.ts). */
+  payload?: ActivityPayload;
 }
 
 export interface RelayClientState {
@@ -324,7 +328,7 @@ export class RelayClient {
     }
     try {
       const result = await handler(method, params);
-      this.recordActivityEnd(id, 'ok');
+      this.recordActivityEnd(id, 'ok', undefined, summarizePayload(result));
       ws.send(encodeEnvelope(createResponse({ id, sessionId, result })));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -342,7 +346,12 @@ export class RelayClient {
     });
   }
 
-  private recordActivityEnd(id: string, status: ActivityStatus, error?: string): void {
+  private recordActivityEnd(
+    id: string,
+    status: ActivityStatus,
+    error?: string,
+    payload?: ActivityPayload,
+  ): void {
     this.update({
       activity: this.state.activity.map(e =>
         e.id === id
@@ -351,6 +360,7 @@ export class RelayClient {
               status,
               durationMs: Date.now() - e.startedAt,
               ...(error === undefined ? {} : { error }),
+              ...(payload === undefined ? {} : { payload }),
             }
           : e,
       ),

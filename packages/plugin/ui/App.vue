@@ -60,6 +60,45 @@ const visibility = useDocumentVisibility();
 const shortId = `${client.sessionId.slice(0, 8)}…`;
 const errorEntries = computed(() => state.value.activity.filter(e => e.status === 'error'));
 
+// Which Activity rows are expanded to show the payload fed to the LLM, and which just got copied.
+const expanded = ref<Set<string>>(new Set());
+const copiedId = ref<string | null>(null);
+
+const toggle = (id: string): void => {
+  const next = new Set(expanded.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expanded.value = next;
+};
+
+const formatSize = (bytes: number): string =>
+  bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+
+// Copy the shown payload. navigator.clipboard is often blocked inside the Figma plugin iframe, so
+// fall back to a transient textarea + execCommand. Either way, flash a "copied" label.
+const copy = (text: string, id: string): void => {
+  const flash = (): void => {
+    copiedId.value = id;
+    setTimeout(() => {
+      if (copiedId.value === id) copiedId.value = null;
+    }, 1500);
+  };
+  void Promise.resolve(navigator.clipboard?.writeText(text))
+    .catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        /* nothing else to try */
+      }
+      ta.remove();
+    })
+    .finally(flash);
+};
+
 const formatAgo = (ts: number): string => {
   const s = Math.max(0, Math.round((now.value.getTime() - ts) / 1000));
   if (s < 1) return 'now';
@@ -160,15 +199,52 @@ const runInBackground = (): void => {
       <!-- Activity -->
       <template v-if="tab === 'activity'">
         <ul v-if="state.activity.length > 0" class="space-y-0.5 font-mono">
-          <li v-for="e in state.activity" :key="e.id" class="flex items-center gap-2">
-            <span :class="statusColor[e.status]">{{ statusGlyph[e.status] }}</span>
-            <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-fig-danger' : ''">
-              {{ e.method }}
-            </span>
-            <span class="ml-auto shrink-0 text-fig-muted">
-              {{ e.durationMs === undefined ? '' : `${e.durationMs}ms` }}
-            </span>
-            <span class="w-9 shrink-0 text-right text-fig-muted">{{ formatAgo(e.startedAt) }}</span>
+          <li v-for="e in state.activity" :key="e.id">
+            <component
+              :is="e.payload ? 'button' : 'div'"
+              class="flex w-full items-center gap-2 text-left"
+              :class="e.payload ? 'hover:text-fig-fg' : ''"
+              @click="e.payload && toggle(e.id)"
+            >
+              <span v-if="e.payload" class="w-2 shrink-0 text-fig-muted">
+                {{ expanded.has(e.id) ? '▾' : '▸' }}
+              </span>
+              <span v-else class="w-2 shrink-0" />
+              <span :class="statusColor[e.status]">{{ statusGlyph[e.status] }}</span>
+              <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-fig-danger' : ''">
+                {{ e.method }}
+              </span>
+              <span v-if="e.payload" class="ml-auto shrink-0 text-fig-muted">
+                {{ formatSize(e.payload.bytes) }}
+              </span>
+              <span :class="['shrink-0 text-fig-muted', e.payload ? '' : 'ml-auto']">
+                {{ e.durationMs === undefined ? '' : `${e.durationMs}ms` }}
+              </span>
+              <span class="w-9 shrink-0 text-right text-fig-muted">{{
+                formatAgo(e.startedAt)
+              }}</span>
+            </component>
+
+            <div v-if="e.payload && expanded.has(e.id)" class="mt-1 mb-2 ml-2">
+              <div class="mb-1 flex items-center gap-2 text-fig-muted">
+                <span class="min-w-0 truncate"
+                  >payload → LLM · {{ formatSize(e.payload.bytes) }}</span
+                >
+                <button
+                  class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 hover:bg-white/10 hover:text-fig-fg"
+                  @click="copy(e.payload.preview, e.id)"
+                >
+                  {{ copiedId === e.id ? 'copied' : 'copy' }}
+                </button>
+              </div>
+              <pre
+                class="max-h-64 overflow-auto rounded bg-black/30 p-2 text-[11px] leading-snug"
+                >{{ e.payload.preview }}</pre
+              >
+              <p v-if="e.payload.truncated" class="mt-1 text-fig-muted">
+                Showing the first part only — the full result was larger.
+              </p>
+            </div>
           </li>
         </ul>
         <p v-else class="text-fig-muted">No activity yet — waiting for an MCP client…</p>

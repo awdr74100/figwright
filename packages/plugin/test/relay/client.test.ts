@@ -406,6 +406,34 @@ describe('RelayClient', () => {
     expect(s.activity[0]?.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('captures the result payload (what the LLM receives) on a successful call', async () => {
+    const result = { pages: [{ id: '0:1', name: 'Page 1' }] };
+    const { client, live } = await connectWithLiveSocket(async () => result);
+    live.fireReceive(
+      createRequest({ id: 't-p', sessionId: client.sessionId, method: 'get_pages' }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    const payload = client.getState().activity[0]?.payload;
+    expect(payload).toBeDefined();
+    expect(payload?.preview).toContain('"name": "Page 1"');
+    expect(payload?.bytes).toBe(JSON.stringify(result).length);
+    expect(payload?.truncated).toBe(false);
+  });
+
+  it('attaches no payload to a failed call', async () => {
+    const { client, live } = await connectWithLiveSocket(async () => {
+      throw new Error('nope');
+    });
+    live.fireReceive(
+      createRequest({ id: 't-e', sessionId: client.sessionId, method: 'get_pages' }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    expect(client.getState().activity[0]?.status).toBe('error');
+    expect(client.getState().activity[0]?.payload).toBeUndefined();
+  });
+
   it('records a throwing tool call as an error with its message', async () => {
     const { client, live } = await connectWithLiveSocket(async () => {
       throw new Error('boom');
