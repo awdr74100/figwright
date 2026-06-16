@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figwright/shared';
-import { tryOnScopeDispose, useDocumentVisibility, useEventListener, useNow } from '@vueuse/core';
+import {
+  tryOnScopeDispose,
+  useClipboard,
+  useDocumentVisibility,
+  useEventListener,
+  useNow,
+} from '@vueuse/core';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import { createSandboxBridge } from './bridge/sandbox.js';
@@ -62,7 +68,6 @@ const errorEntries = computed(() => state.value.activity.filter(e => e.status ==
 
 // Which Activity rows are expanded to show the payload fed to the LLM, and which just got copied.
 const expanded = ref<Set<string>>(new Set());
-const copiedId = ref<string | null>(null);
 
 const toggle = (id: string): void => {
   const next = new Set(expanded.value);
@@ -74,29 +79,14 @@ const toggle = (id: string): void => {
 const formatSize = (bytes: number): string =>
   bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 
-// Copy the shown payload. navigator.clipboard is often blocked inside the Figma plugin iframe, so
-// fall back to a transient textarea + execCommand. Either way, flash a "copied" label.
+// Copy the shown payload. `legacy: true` makes useClipboard fall back to execCommand when the async
+// Clipboard API isn't available — which is the case inside the Figma plugin iframe. `copied` flips
+// true for ~1.5s after a copy; we pair it with the last-copied id so only that row's button flashes.
+const { copy: clipboardCopy, copied } = useClipboard({ legacy: true });
+const copiedId = ref<string | null>(null);
 const copy = (text: string, id: string): void => {
-  const flash = (): void => {
-    copiedId.value = id;
-    setTimeout(() => {
-      if (copiedId.value === id) copiedId.value = null;
-    }, 1500);
-  };
-  void Promise.resolve(navigator.clipboard?.writeText(text))
-    .catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try {
-        document.execCommand('copy');
-      } catch {
-        /* nothing else to try */
-      }
-      ta.remove();
-    })
-    .finally(flash);
+  copiedId.value = id;
+  void clipboardCopy(text);
 };
 
 const formatAgo = (ts: number): string => {
@@ -214,10 +204,7 @@ const runInBackground = (): void => {
               <span class="min-w-0 truncate" :class="e.status === 'error' ? 'text-fig-danger' : ''">
                 {{ e.method }}
               </span>
-              <span v-if="e.payload" class="ml-auto shrink-0 text-fig-muted">
-                {{ formatSize(e.payload.bytes) }}
-              </span>
-              <span :class="['shrink-0 text-fig-muted', e.payload ? '' : 'ml-auto']">
+              <span class="ml-auto shrink-0 text-fig-muted">
                 {{ e.durationMs === undefined ? '' : `${e.durationMs}ms` }}
               </span>
               <span class="w-9 shrink-0 text-right text-fig-muted">{{
@@ -234,7 +221,7 @@ const runInBackground = (): void => {
                   class="ml-auto shrink-0 rounded border border-white/15 px-1.5 py-0.5 hover:bg-white/10 hover:text-fig-fg"
                   @click="copy(e.payload.preview, e.id)"
                 >
-                  {{ copiedId === e.id ? 'copied' : 'copy' }}
+                  {{ copied && copiedId === e.id ? 'copied' : 'copy' }}
                 </button>
               </div>
               <pre
