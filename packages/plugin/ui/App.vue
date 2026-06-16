@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { isPluginContextEvent, type PluginContextEvent, portRange } from '@figwright/shared';
+import {
+  isPluginContextEvent,
+  type PluginContextEvent,
+  portRange,
+  PROTOCOL_VERSION,
+} from '@figwright/shared';
 import {
   tryOnScopeDispose,
   useClipboard,
@@ -16,6 +21,7 @@ import {
   type RelayClientState,
   type RelayStatus,
 } from './relay/client.js';
+import { buildDiagnosticBundle } from './relay/diagnostics.js';
 
 type Tab = 'activity' | 'context' | 'debug';
 const tabs = [
@@ -87,6 +93,19 @@ const copiedId = ref<string | null>(null);
 const copy = (text: string, id: string): void => {
   copiedId.value = id;
   void clipboardCopy(text);
+};
+
+// Copy a full diagnostic bundle (versions + context + the ordered calls with their params/results)
+// for pasting into a bug report. `$diagnostics` is a sentinel id so its button flashes independently.
+const DIAGNOSTICS_ID = '$diagnostics';
+const copyDiagnostics = (): void => {
+  const bundle = buildDiagnosticBundle(state.value, context.value, {
+    pluginVersion: appVersion,
+    protocolVersion: PROTOCOL_VERSION,
+    sessionId: client.sessionId,
+    userAgent: navigator.userAgent,
+  });
+  copy(bundle, DIAGNOSTICS_ID);
 };
 
 const formatAgo = (ts: number): string => {
@@ -213,6 +232,13 @@ const runInBackground = (): void => {
             </component>
 
             <div v-if="e.payload && expanded.has(e.id)" class="mt-1 mb-2 ml-2">
+              <template v-if="e.request">
+                <p class="mb-1 text-fig-muted">request</p>
+                <pre
+                  class="mb-2 max-h-40 overflow-auto rounded bg-black/30 p-2 text-[11px] leading-snug"
+                  >{{ e.request.preview }}</pre
+                >
+              </template>
               <div class="mb-1 flex items-center gap-2 text-fig-muted">
                 <span class="min-w-0 truncate"
                   >payload → LLM · {{ formatSize(e.payload.bytes) }}</span
@@ -284,6 +310,7 @@ const runInBackground = (): void => {
             <div class="space-y-0.5 font-mono">
               <div>session · {{ shortId }}{{ state.sessionResumed ? ' (resumed)' : '' }}</div>
               <div>reconnects · {{ state.reconnectCount }}</div>
+              <div v-if="state.serverVersion !== null">server · v{{ state.serverVersion }}</div>
               <div v-if="state.lastError !== null" class="wrap-break-word text-fig-danger">
                 last error · {{ state.lastError }}
               </div>
@@ -301,6 +328,17 @@ const runInBackground = (): void => {
               </li>
             </ul>
             <p v-else class="text-fig-muted">No errors.</p>
+          </div>
+          <div>
+            <p class="mb-1 text-fig-muted">Diagnostics</p>
+            <button
+              class="rounded border border-white/15 px-2 py-0.5 hover:bg-white/10 hover:text-fig-fg disabled:opacity-40"
+              :disabled="state.activity.length === 0"
+              @click="copyDiagnostics"
+            >
+              {{ copied && copiedId === DIAGNOSTICS_ID ? 'Copied' : 'Copy diagnostic bundle' }}
+            </button>
+            <p class="mt-1 text-fig-muted">For bug reports · includes your design content.</p>
           </div>
         </div>
       </template>

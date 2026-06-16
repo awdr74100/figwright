@@ -37,6 +37,8 @@ export interface ActivityEntry {
   status: ActivityStatus;
   durationMs?: number;
   error?: string;
+  /** Snapshot of the call's request params (see payload.ts) — what we were asked to do. */
+  request?: ActivityPayload;
   /** For a successful call, a snapshot of the result sent back to the LLM (see payload.ts). */
   payload?: ActivityPayload;
 }
@@ -45,6 +47,8 @@ export interface RelayClientState {
   status: RelayStatus;
   port: number | null;
   sessionResumed: boolean;
+  /** Server version from the hello handshake, or null until connected (for diagnostics). */
+  serverVersion: string | null;
   lastError: string | null;
   /** Epoch ms of the current connection, or null while not connected (for uptime). */
   connectedAt: number | null;
@@ -83,6 +87,7 @@ export class RelayClient {
     status: 'idle',
     port: null,
     sessionResumed: false,
+    serverVersion: null,
     lastError: null,
     connectedAt: null,
     reconnectCount: 0,
@@ -259,6 +264,7 @@ export class RelayClient {
           status: 'connected',
           port,
           sessionResumed: result.sessionResumed,
+          serverVersion: result.serverVersion,
           lastError: null,
           connectedAt: Date.now(),
         });
@@ -315,7 +321,7 @@ export class RelayClient {
     method: string,
     params: unknown,
   ): Promise<void> {
-    this.recordActivityStart(id, method);
+    this.recordActivityStart(id, method, summarizePayload(params));
     const handler = this.toolHandler;
     if (handler === null) {
       const message = `no tool handler registered (method=${method})`;
@@ -338,8 +344,14 @@ export class RelayClient {
     }
   }
 
-  private recordActivityStart(id: string, method: string): void {
-    const entry: ActivityEntry = { id, method, startedAt: Date.now(), status: 'pending' };
+  private recordActivityStart(id: string, method: string, request?: ActivityPayload): void {
+    const entry: ActivityEntry = {
+      id,
+      method,
+      startedAt: Date.now(),
+      status: 'pending',
+      ...(request === undefined ? {} : { request }),
+    };
     this.update({
       totalCalls: this.state.totalCalls + 1,
       activity: [entry, ...this.state.activity].slice(0, ACTIVITY_LIMIT),

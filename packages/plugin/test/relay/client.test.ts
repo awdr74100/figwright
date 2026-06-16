@@ -421,6 +421,29 @@ describe('RelayClient', () => {
     expect(payload?.truncated).toBe(false);
   });
 
+  it('captures the request params at call start', async () => {
+    const { client, live } = await connectWithLiveSocket(async () => ({ ok: true }));
+    live.fireReceive(
+      createRequest({
+        id: 't-r',
+        sessionId: client.sessionId,
+        method: 'get_design_context',
+        params: { nodeId: '3:21', detail: 'full' },
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    const request = client.getState().activity[0]?.request;
+    expect(request).toBeDefined();
+    expect(request?.preview).toContain('"nodeId": "3:21"');
+    expect(request?.preview).toContain('"detail": "full"');
+  });
+
+  it('records the server version from the hello handshake', async () => {
+    const { client } = await connectWithLiveSocket();
+    expect(client.getState().serverVersion).toBe('1.0.0');
+  });
+
   it('attaches no payload to a failed call', async () => {
     const { client, live } = await connectWithLiveSocket(async () => {
       throw new Error('nope');
