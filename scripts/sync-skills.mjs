@@ -8,13 +8,13 @@
 // them in sync. We copy (not symlink) on purpose: symlinks don't survive a
 // Windows clone without `core.symlinks` + privilege, and this is open source.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const srcRoot = join(repoRoot, "skills");
-const destRoot = join(repoRoot, ".claude", "skills");
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const srcRoot = join(repoRoot, 'skills');
+const destRoot = join(repoRoot, '.claude', 'skills');
 
 if (!existsSync(srcRoot)) {
   console.warn(`[sync-skills] skipped: ${srcRoot} not found`);
@@ -22,9 +22,9 @@ if (!existsSync(srcRoot)) {
 }
 
 // A skill is any directory under skills/ that holds a SKILL.md.
-const skills = readdirSync(srcRoot).filter((name) => {
+const skills = readdirSync(srcRoot).filter(name => {
   const dir = join(srcRoot, name);
-  return statSync(dir).isDirectory() && existsSync(join(dir, "SKILL.md"));
+  return statSync(dir).isDirectory() && existsSync(join(dir, 'SKILL.md'));
 });
 
 mkdirSync(destRoot, { recursive: true });
@@ -36,4 +36,4 @@ for (const name of skills) {
   cpSync(join(srcRoot, name), dest, { recursive: true });
 }
 
-console.log(`[sync-skills] synced ${skills.length} skill(s): ${skills.join(", ")}`);
+console.log(`[sync-skills] synced ${skills.length} skill(s): ${skills.join(', ')}`);
