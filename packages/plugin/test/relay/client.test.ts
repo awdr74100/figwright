@@ -145,16 +145,59 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(2);
   });
 
-  it('throws after exhausting all ports', async () => {
+  it('enters the retry loop (not a terminal throw) when no server is up yet', async () => {
     const { WS } = buildFakeFactory(sock => sock.fireServerClose(1006, 'refused'));
     const client = new RelayClient({
       ports: [3055, 3056],
       clientVersion: '0.0.0',
       WS,
+      reconnectInitialDelayMs: 5,
       log: vi.fn<(msg: string) => void>(),
     });
-    await expect(client.connect()).rejects.toThrow(/no relay server found/);
-    expect(client.getState().status).toBe('disconnected');
+    // The initial probe failing is not fatal: connect() resolves and keeps retrying in the
+    // background (status flips to 'reconnecting') rather than rejecting.
+    await expect(client.connect()).resolves.toBeUndefined();
+    expect(client.getState().status).toBe('reconnecting');
+    expect(client.getState().lastError).toMatch(/no relay server found/);
+    await client.disconnect();
+  });
+
+  it('auto-connects when a plugin opened before the server, once the server appears', async () => {
+    let attempt = 0;
+    const { WS, sockets } = buildFakeFactory(sock => {
+      attempt += 1;
+      if (attempt === 1) {
+        // First sweep: server not up yet (plugin opened before the MCP client launched it).
+        sock.fireServerClose(1006, 'refused');
+        return;
+      }
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+
+    const client = new RelayClient({
+      ports: [3055],
+      clientVersion: '0.0.0',
+      WS,
+      reconnectInitialDelayMs: 5,
+    });
+    const seen: string[] = [];
+    client.subscribe(s => seen.push(s.status));
+
+    await client.connect();
+    expect(client.getState().status).toBe('reconnecting');
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(client.getState().status).toBe('connected');
+    // A cold-start retry is a first connection, not a reconnect — the diagnostic count stays at 0.
+    expect(client.getState().reconnectCount).toBe(0);
+    expect(seen).toContain('reconnecting');
+    expect(sockets.length).toBeGreaterThanOrEqual(2);
+    await client.disconnect();
   });
 
   it('treats err envelope to hello as port failure and tries next', async () => {

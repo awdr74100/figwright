@@ -99,6 +99,11 @@ export class RelayClient {
   private listeners = new Set<(s: RelayClientState) => void>();
   private stopped = false;
   private reconnecting = false;
+  /**
+   * True once we've established at least one live socket — distinguishes a cold-start retry from a
+   * true reconnect.
+   */
+  private hasConnected = false;
   private toolHandler: ToolHandler | null = null;
 
   constructor(opts: RelayClientOptions) {
@@ -155,27 +160,44 @@ export class RelayClient {
   }
 
   async connect(): Promise<void> {
-    if (this.state.status === 'connecting' || this.state.status === 'connected') return;
+    if (
+      this.state.status === 'connecting' ||
+      this.state.status === 'connected' ||
+      this.state.status === 'reconnecting'
+    ) {
+      return;
+    }
     this.stopped = false;
     this.update({ status: 'connecting', lastError: null });
 
-    for (const port of this.opts.ports) {
-      if (this.stopped) return;
-      try {
-        // eslint-disable-next-line no-await-in-loop -- intentional sequential port probe
-        await this.attemptPort(port);
-        return;
-      } catch (err) {
-        this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
-      }
-    }
+    if (await this.probeAllPorts()) return;
 
+    // No server is listening yet — most commonly the plugin was opened before the MCP server (i.e.
+    // before the user's MCP client launched it). Don't treat this as terminal: keep retrying in the
+    // background with the same back-off loop used after a live socket drops, so the plugin connects
+    // on its own once the server appears. Failing the initial probe is not a reconnect, so the loop
+    // must not bump `reconnectCount`.
     this.update({
       status: 'disconnected',
       port: null,
       lastError: `no relay server found on ports [${this.opts.ports.join(', ')}]`,
     });
-    throw new Error(this.state.lastError ?? 'connect failed');
+    if (!this.stopped) void this.runReconnectLoop();
+  }
+
+  /** Probe each candidate port once; resolves true on the first successful hello, false if all fail. */
+  private async probeAllPorts(): Promise<boolean> {
+    for (const port of this.opts.ports) {
+      if (this.stopped) return false;
+      try {
+        // eslint-disable-next-line no-await-in-loop -- intentional sequential port probe
+        await this.attemptPort(port);
+        return true;
+      } catch (err) {
+        this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
+      }
+    }
+    return false;
   }
 
   async disconnect(): Promise<void> {
@@ -257,6 +279,7 @@ export class RelayClient {
 
         const result = envelope.result as HelloResult;
         cleanup();
+        this.hasConnected = true;
         this.socket = ws;
         this.startHeartbeat(ws);
         this.bindLiveHandlers(ws);
@@ -382,6 +405,10 @@ export class RelayClient {
   private async runReconnectLoop(): Promise<void> {
     if (this.reconnecting || this.stopped) return;
     this.reconnecting = true;
+    // A live socket that dropped is a true reconnect; retrying a never-established cold-start connect
+    // is not. Capture the distinction now so a successful retry only bumps `reconnectCount` in the
+    // former case (keeps the diagnostic count honest).
+    const countSuccessAsReconnect = this.hasConnected;
     try {
       let attempt = 0;
       while (!this.stopped) {
@@ -393,18 +420,12 @@ export class RelayClient {
         // eslint-disable-next-line no-await-in-loop -- back-off pacing requires sequential awaits
         await new Promise<void>(resolve => setTimeout(resolve, delay));
         if (this.stopped) return;
-        for (const port of this.opts.ports) {
-          if (this.stopped) return;
-          try {
-            // eslint-disable-next-line no-await-in-loop -- intentional sequential port probe
-            await this.attemptPort(port);
+        // eslint-disable-next-line no-await-in-loop -- back-off pacing requires sequential awaits
+        if (await this.probeAllPorts()) {
+          if (countSuccessAsReconnect) {
             this.update({ reconnectCount: this.state.reconnectCount + 1 });
-            return;
-          } catch (err) {
-            this.opts.log(
-              `[relay-client] reconnect port ${port} failed: ${(err as Error).message}`,
-            );
           }
+          return;
         }
         attempt += 1;
       }
