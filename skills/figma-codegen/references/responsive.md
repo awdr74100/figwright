@@ -23,6 +23,25 @@ breakpoints instead of guessing them:
 No other-breakpoint frame? Still output best-effort RWD (fluid container + sensible reflow) and note
 the responsive behaviour is inferred, not grounded.
 
+## Same-size siblings can be a state, not another breakpoint
+
+Before treating a sibling frame as a breakpoint, check it isn't a **UI state** of a screen you already
+have. A sibling that's the **same size** as a screen (same width bucket — two 375 frames are not two
+mobile breakpoints), named for a state (`側選單` / `menu` / `open` / `modal` / `drawer` / `expanded`),
+and carrying a **dismiss affordance** (an `icon/close` / X, a back arrow) is the open state of that
+screen — not another page, and not another breakpoint to diff. Render it as an **overlay on the base
+screen**, sized to what the design shows:
+
+- Panel **fills** the artboard → full-screen overlay: `fixed inset-0` + `w-full` (a mobile menu that
+  occupies the whole viewport). **Never a fixed-width sidebar** — that's the classic miss: a 375-wide
+  menu artboard is the viewport, not a `w-[375px]` drawer.
+- Panel **narrower** than the artboard → a drawer/sheet at its **actual** width (`w-[Xpx]` or a
+  fraction) over a translucent scrim, anchored to the edge it sits on.
+
+Wire it to its trigger (the hamburger that opens it, the X that closes it) as a toggle; if interaction
+state is out of scope, surface a TODO per SKILL — but still emit it as an overlay, never as a
+standalone page.
+
 ## Full-bleed pages need a body reset — but check first
 
 An edge-to-edge page must zero the body margin (a missing reset shows as a full-page white gutter +
