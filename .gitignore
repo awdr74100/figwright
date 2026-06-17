@@ -14,5 +14,9 @@ coverage/
 # Local Claude Code settings (personal; shared config goes in .claude/settings.json)
 .claude/settings.local.json
 
+# Skills mirrored from skills/ by scripts/sync-skills.mjs (generated; edit skills/ instead)
+.claude/skills/figma-build/
+.claude/skills/figma-codegen/
+
 # Local-only working files (planning doc + competitor reference dumps) — not part of the repo
 .local/
