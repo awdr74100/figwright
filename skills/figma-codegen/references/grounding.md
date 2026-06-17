@@ -69,6 +69,13 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `verticalAlign` → `justify-self`/`align-self`); a child with **no** `gridChild` is auto-flowed — let
   the grid place it. A node's own `layoutSizingHorizontal`/`Vertical` (`FILL`→`flex-1`/stretch,
   `HUG`→fit-content, `FIXED`→explicit) + `layoutGrow` + `layoutAlign` decide how it fills its parent.
+  A `FIXED` size is real intent, not the measured content size — emit it, don't let the element
+  collapse to its content (e.g. a shadcn `Button` defaults to content width; a `FIXED` 220px button
+  needs the width pinned or it comes out too narrow). **But on a control that would otherwise hug its
+  content — a button/badge/chip/tag (auto-layout + a `FILL`/`layoutGrow` text child) whose `FIXED`
+  width exceeds its content — prefer `min-w-*` over a hard `w-*`**: Figma has no native min-width, so a
+  designer expresses "at least this wide, but let longer/i18n text grow" as `FIXED`. Reserve a hard
+  `w-*` for things that are genuinely a fixed size (sidebars, fixed cards, avatars).
 
 ## Large designs: build section by section, and ground every section
 
