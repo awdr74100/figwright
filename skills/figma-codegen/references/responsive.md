@@ -5,18 +5,28 @@ be responsive — so **never hardcode the artboard width** (a root `w-[1920px]` 
 screen). The root is `w-full`; sections stay fluid with content centered in a `max-w`. Ground the
 breakpoints instead of guessing them:
 
-1. **Find the other breakpoints.** `search_nodes` (type `FRAME`, scoped to the file/page) lists
-   sibling frames with widths. Match the desktop frame to its narrower counterparts by **width
-   buckets** (~1920/1440 desktop · ~768 tablet · ~375 mobile), **name normalization** (strip device
-   prefixes — `W_`/`Ｍ_`, `Desktop`/`Mobile`, `PC`/`SP`), and **content similarity** (same section
-   order + matching `textOverrides` text — works even with no naming convention). `get_design_context`
-   each matched frame.
-2. **Diff into one mobile-first base + `lg:`/`xl:` variants.** Most differences are **reflow** — a
-   single markup with utilities (`flex-col lg:flex-row`, `grid-cols-1 xl:grid-cols-3`,
-   `hidden xl:block`, alignment swaps). Only a **structure swap** needs twin `xl:hidden` /
-   `hidden xl:block` markup: when the content _semantics_ differ (a CTA `登入` on mobile vs `聯絡我們`
-   on desktop) or the layout systems are incompatible (hamburger vs full nav, an absolute hero vs a
-   flow stack).
+1. **Get every breakpoint's frame — then read each one's own exact values.** When several roots are
+   already selected, _those are the breakpoints_: different width buckets = different breakpoints, so
+   never pick one as canonical and scale the rest by eye. Otherwise find the counterparts —
+   `search_nodes` (type `FRAME`, scoped to the file/page) lists sibling frames with widths; match the
+   desktop frame to its narrower ones by **width buckets** (~1920/1440 desktop · ~768 tablet · ~375
+   mobile), **name normalization** (strip device prefixes — `W_`/`Ｍ_`, `Desktop`/`Mobile`, `PC`/`SP`),
+   and **content similarity** (same section order + matching `textOverrides` text — works even with no
+   naming convention). `get_design_context` **each** frame and take its sizes from _its own_ data:
+   font size, line-height, padding, and gap for mobile come from the mobile frame, for desktop from the
+   desktop frame — never carried over or shrunk from the other, and **never eyeballed off a screenshot**
+   (the raster confirms layout; it is not a ruler). Mis-sized mobile text/spacing is almost always one
+   breakpoint's values guessed from another's instead of read from its frame.
+2. **Diff into one mobile-first base + `lg:`/`xl:` variants — both layout and values.** Differences
+   split two ways. **Reflow** changes layout direction/flow — utilities on one markup
+   (`flex-col lg:flex-row`, `grid-cols-1 xl:grid-cols-3`, `hidden xl:block`, alignment swaps).
+   **Value scale** changes the numbers — mobile rarely just reflows desktop at the same sizes; type,
+   spacing, and radii usually shrink (h1 28→48, padding 16→80, gap 12→32). Emit those as responsive
+   value variants too (`text-3xl lg:text-6xl`, `px-4 lg:px-20`, `gap-3 lg:gap-8`), each side grounded
+   from its own breakpoint's data — not the base value reused at every width. Only a **structure swap**
+   needs twin `xl:hidden` / `hidden xl:block` markup: when the content _semantics_ differ (a CTA `登入`
+   on mobile vs `聯絡我們` on desktop) or the layout systems are incompatible (hamburger vs full nav, an
+   absolute hero vs a flow stack).
 3. **A fixed-width desktop layout's breakpoint must be ≥ its content width** — gate a 1180px row at
    `xl:`/1280, not `lg:`/1024, or it overflows at in-between sizes; below it, fall back to the stack.
 
