@@ -28,11 +28,12 @@ const inputShape = {
 export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
   description:
-    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, empty? }] }. ' +
+    'Export nodes and write them to disk under outDir: { saved: [{ nodeId, format, path, recovered?, empty? }] }. ' +
     'format is PNG (default) / JPG / SVG; scale applies to raster formats (default 1). ' +
-    'path is null for missing or non-exportable nodes. empty:true means the node rendered nothing ' +
-    '(hidden / no visible content / fully clipped or off-canvas) so the written file is blank — for an ' +
-    'instance that should have art, re-export its main component. Files are named after a sanitized node id.',
+    'path is null for missing or non-exportable nodes. Nodes that are fully clipped or off-canvas ' +
+    "(e.g. a carousel's edge items) are auto-recovered at their intrinsic bounds and flagged recovered:true. " +
+    'empty:true means the node genuinely renders nothing even unclipped (hidden / no content) so the file is blank. ' +
+    'Files are named after a sanitized node id.',
   inputShape,
   kind: 'local',
 };
@@ -54,13 +55,16 @@ export const writeScreenshots = async (
 
   const saved: SavedScreenshot[] = await Promise.all(
     images.map(async (img): Promise<SavedScreenshot> => {
-      const empty = img.empty === true ? { empty: true } : {};
+      const flags = {
+        ...(img.empty === true ? { empty: true as const } : {}),
+        ...(img.recovered === true ? { recovered: true as const } : {}),
+      };
       if (img.base64 === null)
-        return { nodeId: img.nodeId, format: img.format, path: null, ...empty };
+        return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
       const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
       const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
       await writeFile(path, Buffer.from(img.base64, 'base64'));
-      return { nodeId: img.nodeId, format: img.format, path, ...empty };
+      return { nodeId: img.nodeId, format: img.format, path, ...flags };
     }),
   );
 

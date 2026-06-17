@@ -22,17 +22,21 @@ export const SCREENSHOT_FORMATS = ['PNG', 'JPG', 'SVG'] as const;
 export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
 /**
- * Per-node export; base64 is null when the node is missing or not exportable. `empty` is set when
- * the node rendered nothing (absoluteRenderBounds === null) — e.g. it's hidden, has no visible
- * content, or is fully clipped / off-canvas (a common marquee/edge case). The export then comes
- * back blank (transparent PNG / empty SVG); for an instance that should have art, re-export its
- * mainComponent.
+ * Per-node export; base64 is null when the node is missing or not exportable.
+ *
+ * A node that renders nothing in place (absoluteRenderBounds === null — fully clipped / off-canvas,
+ * as in a carousel, mask, or off-screen state) is automatically re-exported at its own bounding box
+ * (useAbsoluteBounds) so its intrinsic art is recovered instead of shipping a blank;
+ * `recovered:true` marks those. `empty:true` now means the node genuinely has nothing to render
+ * even unclipped (hidden or no content) — the file is blank. At most one of `recovered` / `empty`
+ * is set.
  */
 export const ScreenshotImageSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   base64: z.string().nullable(),
   empty: z.boolean().optional(),
+  recovered: z.boolean().optional(),
 });
 export type ScreenshotImage = z.infer<typeof ScreenshotImageSchema>;
 
@@ -41,14 +45,16 @@ export type GetScreenshotResult = z.infer<typeof GetScreenshotResultSchema>;
 
 // ── save_screenshots ───────────────────────────────────────────────────────
 /**
- * Per-node write result; path is null when the node is missing or not exportable. `empty` mirrors
- * ScreenshotImage.empty — the file was written but the node rendered nothing (blank export).
+ * Per-node write result; path is null when the node is missing or not exportable. `recovered` and
+ * `empty` mirror ScreenshotImage — `recovered:true` means a clipped/off-canvas node was rescued via
+ * its intrinsic bounds, `empty:true` means the written file is genuinely blank.
  */
 export const SavedScreenshotSchema = z.object({
   nodeId: z.string(),
   format: z.string(),
   path: z.string().nullable(),
   empty: z.boolean().optional(),
+  recovered: z.boolean().optional(),
 });
 export type SavedScreenshot = z.infer<typeof SavedScreenshotSchema>;
 

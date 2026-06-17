@@ -8,11 +8,11 @@ export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 export const getScreenshotTool: ToolSpec = {
   name: GET_SCREENSHOT_TOOL_NAME,
   description:
-    'Export nodes as base64 images: { images: [{ nodeId, format, base64, empty? }] }. format is PNG ' +
+    'Export nodes as base64 images: { images: [{ nodeId, format, base64, recovered?, empty? }] }. format is PNG ' +
     '(default) / JPG / SVG; scale applies to raster formats (default 1). base64 is null for missing or ' +
-    'non-exportable nodes. empty:true means the node rendered nothing (hidden / no visible content / ' +
-    'fully clipped or off-canvas) so the export is blank — if it is an instance that should have art, ' +
-    'export its main component instead.',
+    'non-exportable nodes. Nodes that are fully clipped or off-canvas (carousels, masks, off-screen states) ' +
+    'are auto-recovered at their intrinsic bounds and flagged recovered:true. empty:true means the node ' +
+    'genuinely renders nothing even unclipped (hidden / no content) so the export is blank.',
   inputShape: {
     nodeIds: z.array(z.string()).describe('Figma node ids to export'),
     format: z
@@ -43,8 +43,10 @@ export const screenshotContent = (result: GetScreenshotResult): ScreenshotConten
       continue;
     }
     const emptyNote = img.empty
-      ? ' — ⚠ empty (node rendered nothing: hidden/clipped/off-canvas; export its main component if it should have art)'
-      : '';
+      ? ' — ⚠ empty (node renders nothing even unclipped: hidden / no content)'
+      : img.recovered
+        ? ' — ↺ recovered (clipped/off-canvas; rendered at intrinsic bounds)'
+        : '';
     const mimeType = RASTER_MIME[img.format];
     if (mimeType === undefined) {
       const markup = Buffer.from(img.base64, 'base64').toString('utf8');

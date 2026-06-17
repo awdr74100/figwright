@@ -6,6 +6,7 @@ import { createGetScreenshotHandler } from '../../src/handlers/get-screenshot.js
 interface ExportCall {
   format: string;
   constraint?: { type: string; value: number };
+  useAbsoluteBounds?: boolean;
 }
 
 const fakeFigma = (
@@ -94,6 +95,58 @@ describe('get_screenshot handler', () => {
       empty: true,
     });
     expect(result.images[1]).toEqual({ nodeId: '1:6', format: 'PNG', base64: 'b64(3)' }); // no empty
+  });
+
+  it('recovers a fully-clipped node via useAbsoluteBounds instead of shipping blank', async () => {
+    const calls: ExportCall[] = [];
+    const clippedWithBox = {
+      id: '1:7',
+      visible: true,
+      absoluteRenderBounds: null, // clipped away on canvas → in-place export would be blank
+      absoluteBoundingBox: { x: 0, y: 0, width: 150, height: 100 }, // but the art exists at its own box
+      exportAsync: async (settings: ExportCall) => {
+        calls.push(settings);
+        return new Uint8Array([9, 9, 9, 9]);
+      },
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(fakeFigma({ '1:7': clippedWithBox }, calls));
+    const result = (await handler({ nodeIds: ['1:7'] })) as GetScreenshotResult;
+    expect(result.images[0]).toEqual({
+      nodeId: '1:7',
+      format: 'PNG',
+      base64: 'b64(4)',
+      recovered: true,
+    });
+    // Exported once, with useAbsoluteBounds so Figma renders the node's own box, not the clipped region.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual({
+      format: 'PNG',
+      constraint: { type: 'SCALE', value: 1 },
+      useAbsoluteBounds: true,
+    });
+  });
+
+  it('does not recover an intentionally hidden node (visible:false) — stays empty', async () => {
+    const calls: ExportCall[] = [];
+    const hidden = {
+      id: '1:8',
+      visible: false,
+      absoluteRenderBounds: null,
+      absoluteBoundingBox: { x: 0, y: 0, width: 50, height: 50 },
+      exportAsync: async (settings: ExportCall) => {
+        calls.push(settings);
+        return new Uint8Array([0]);
+      },
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(fakeFigma({ '1:8': hidden }, calls));
+    const result = (await handler({ nodeIds: ['1:8'] })) as GetScreenshotResult;
+    expect(result.images[0]).toEqual({
+      nodeId: '1:8',
+      format: 'PNG',
+      base64: 'b64(1)',
+      empty: true,
+    });
+    expect(calls[0]?.useAbsoluteBounds).toBeUndefined();
   });
 
   it('throws on empty/invalid nodeIds, bad format, or non-positive scale', async () => {
