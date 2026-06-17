@@ -17,18 +17,39 @@ const isSceneNode = (node: BaseNode): node is SceneNode =>
 const isDetailLevel = (value: unknown): value is DetailLevel =>
   typeof value === 'string' && (DETAIL_LEVELS as readonly string[]).includes(value);
 
-/** Project a fully-serialized node down to the fields a given detail level exposes. */
+/**
+ * Project a node down to the fields a given detail level exposes. Detail-gated on purpose:
+ * get_design_context is the hot read path and defaults to `compact`, so minimal/compact read their
+ * few values straight off the node and skip the full serializeFlatSync — which maps every
+ * paint/effect and calls getStyledTextSegments on mixed TEXT, work that compact/minimal then
+ * discard. serializeNode is a pure passthrough for id/name/type/visible/x/y/w/h and
+ * enrichWithMixins never touches those, so the direct reads are byte-identical to projecting the
+ * serialized form. The full branch is left exactly as before (one serializeFlatSync, every field
+ * from flat), so no detail level does more work than it used to.
+ */
 const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
+  if (detail === 'minimal') return { id: node.id, name: node.name, type: node.type };
+  if (detail === 'compact') {
+    return {
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      visible: node.visible,
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+    };
+  }
+
+  // full — unchanged from the original projection: serializeFlatSync once, every field from flat.
   const flat = serializeFlatSync(node);
   const out: DesignContextNode = { id: flat.id, name: flat.name, type: flat.type };
-  if (detail === 'minimal') return out;
-
   out.visible = flat.visible;
   out.x = flat.x;
   out.y = flat.y;
   out.width = flat.width;
   out.height = flat.height;
-  if (detail === 'compact') return out;
 
   if (flat.rotation !== undefined) out.rotation = flat.rotation;
   if (flat.opacity !== undefined) out.opacity = flat.opacity;
