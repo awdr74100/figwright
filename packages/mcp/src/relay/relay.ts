@@ -41,6 +41,9 @@ interface Pending {
   // When set, this request is pinned to one session: it only dispatches/flushes to that session,
   // never to whoever happens to be most-active. Used to keep a multi-call tool's sub-calls together.
   pinnedSessionId: string | undefined;
+  // The session this request was actually dispatched to (set in dispatchPending). Scanned by
+  // sessionHasInflight so a busy plugin's heartbeat timeout is deferred rather than closing the socket.
+  dispatchedToSessionId: string | undefined;
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -50,6 +53,7 @@ export class Relay {
   private readonly wss: WebSocketServer;
   private readonly opts: Required<Omit<RelayOptions, 'server'>>;
   private readonly pending = new Map<string, Pending>();
+  private heartbeatDeferrals = 0;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -96,6 +100,7 @@ export class Relay {
         params,
         dispatched: false,
         pinnedSessionId: sessionId,
+        dispatchedToSessionId: undefined,
       };
       this.pending.set(id, entry);
 
@@ -140,6 +145,25 @@ export class Relay {
     return n;
   }
 
+  /** How many heartbeat timeouts were deferred because the session was mid-request (busy ≠ dead). */
+  heartbeatDeferralCount(): number {
+    return this.heartbeatDeferrals;
+  }
+
+  /**
+   * Does this session have a request that was dispatched to it and hasn't resolved yet? Scanned
+   * (not counted) so it can't desync across resolve/reject/timeout/stop. A plugin busy encoding a
+   * huge reply can't answer pings but isn't dead; its in-flight request bounds the deferral — the
+   * request's own timer is the backstop, so a plugin that truly died mid-request is still reaped
+   * once that fires.
+   */
+  private sessionHasInflight(sessionId: string): boolean {
+    for (const [, p] of this.pending) {
+      if (p.dispatched && p.dispatchedToSessionId === sessionId) return true;
+    }
+    return false;
+  }
+
   /**
    * Pick the connected session with the highest `lastActivityAt`. When the user opens the plugin in
    * a newly-focused Figma file, that fresh session wins routing over an older idle one — the effect
@@ -167,6 +191,7 @@ export class Relay {
   private dispatchPending(id: string, entry: Pending, session: Session): void {
     if (session.socket === null) return;
     entry.dispatched = true;
+    entry.dispatchedToSessionId = session.id;
     session.socket.send(
       encodeEnvelope(
         createRequest({ id, sessionId: session.id, method: entry.method, params: entry.params }),
@@ -259,6 +284,18 @@ export class Relay {
       maxMisses: this.opts.heartbeatMaxMisses,
       sendPing: () => this.sendPing(session),
       onTimeout: () => {
+        // Busy ≠ dead. A plugin mid-request can be stuck synchronously encoding a huge reply on the
+        // same thread that answers pings — it isn't gone. Re-arm a fresh window instead of closing;
+        // the request's own timer reaps it if it really died (and a dropped socket fires 'close'
+        // regardless). tick() already stopped the timer before calling us, so start() can't double-arm.
+        if (this.sessionHasInflight(session.id)) {
+          this.heartbeatDeferrals += 1;
+          this.opts.log(
+            `[relay] heartbeat timeout deferred — session ${session.id} busy (in-flight)`,
+          );
+          session.heartbeat?.start();
+          return;
+        }
         this.opts.log(`[relay] session ${session.id} heartbeat timeout`);
         socket.close(1001, 'heartbeat timeout');
       },

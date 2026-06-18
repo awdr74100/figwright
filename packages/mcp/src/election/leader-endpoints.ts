@@ -1,13 +1,12 @@
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import { ErrorCode, RpcRequestSchema, type RpcResponse } from '@figwright/shared';
+import { ErrorCode, getRelayBudget, RpcRequestSchema, type RpcResponse } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
 import type { Relay } from '../relay/relay.js';
 
 export const PING_PATH = '/ping';
 export const RPC_PATH = '/rpc';
-export const DEFAULT_RPC_TIMEOUT_MS = 30_000;
 
 export interface LeaderEndpointDeps {
   relay: Relay;
@@ -46,7 +45,6 @@ const writeJson = (res: ServerResponse, status: number, body: unknown): void => 
 export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps): (() => void) => {
   const { relay, serverVersion } = deps;
   const log = deps.log ?? ((): void => {});
-  const rpcTimeoutMs = deps.rpcTimeoutMs ?? DEFAULT_RPC_TIMEOUT_MS;
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
     if (req.method === 'GET' && req.url === PING_PATH) {
@@ -99,7 +97,14 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
 
         const { requestId, toolName, args, sessionId } = rpc.data;
         try {
-          const result = await relay.sendRequest(toolName, args, rpcTimeoutMs, sessionId);
+          // Per-tool relay budget (B + margin) by default so a heavy follower-originated call gets the
+          // same headroom as a direct one; deps.rpcTimeoutMs overrides (tests).
+          const result = await relay.sendRequest(
+            toolName,
+            args,
+            deps.rpcTimeoutMs ?? getRelayBudget(toolName),
+            sessionId,
+          );
           writeMsgpack(res, 200, { kind: 'ok', requestId, result });
         } catch (err) {
           const message = (err as Error).message;

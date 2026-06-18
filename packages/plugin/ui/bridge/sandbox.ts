@@ -1,13 +1,12 @@
 import {
   createToolCall,
+  getToolBudget,
   isPluginBridgeMessage,
   newId,
   type PluginBridgeMessage,
 } from '@figwright/shared';
 
 import type { ToolHandler } from '../relay/client.js';
-
-export const DEFAULT_SANDBOX_TIMEOUT_MS = 30_000;
 
 export type PostMessageFn = (msg: PluginBridgeMessage) => void;
 export type SubscribeFn = (cb: (raw: unknown) => void) => () => void;
@@ -54,7 +53,6 @@ interface Pending {
 }
 
 export const createSandboxBridge = (opts: SandboxBridgeOptions = {}): SandboxBridge => {
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_SANDBOX_TIMEOUT_MS;
   const log = opts.log ?? ((): void => {});
   const post = opts.postMessage ?? defaultPostMessage;
   const subscribe = opts.subscribe ?? defaultSubscribe;
@@ -81,6 +79,9 @@ export const createSandboxBridge = (opts: SandboxBridgeOptions = {}): SandboxBri
   const handler: ToolHandler = (method, params) =>
     new Promise<unknown>((resolve, reject) => {
       const id = newId();
+      // Per-tool budget (innermost layer B) so a heavy tool isn't capped at the default window while
+      // the relay still waits. An explicit opts.timeoutMs overrides for tests. See getToolBudget.
+      const timeoutMs = opts.timeoutMs ?? getToolBudget(method);
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`sandbox tool timeout (method=${method})`));

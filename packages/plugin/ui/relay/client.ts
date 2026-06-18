@@ -359,11 +359,17 @@ export class RelayClient {
       const result = await handler(method, params);
       this.recordActivityEnd(id, 'ok', undefined, summarizePayload(result));
       ws.send(encodeEnvelope(createResponse({ id, sessionId, result })));
+      // Sending the reply proves we're alive. Encoding a huge result blocks this single thread, so the
+      // heartbeat's setInterval couldn't fire meanwhile; that coalesced tick runs right after this
+      // synchronous block. Reset the clock now (before it runs) so it doesn't read the stall as death
+      // and self-close the socket. Single-threaded ordering guarantees this lands first.
+      this.heartbeat?.notifyReceived();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.opts.log(`[relay-client] tool handler threw for ${method}: ${message}`);
       this.recordActivityEnd(id, 'error', message);
       ws.send(encodeEnvelope(createError({ id, sessionId, code: ErrorCode.Internal, message })));
+      this.heartbeat?.notifyReceived();
     }
   }
 

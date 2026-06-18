@@ -1,4 +1,4 @@
-import { ErrorCode } from '@figwright/shared';
+import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared';
 
 import type { Follower } from './election/follower.js';
 import type { Node } from './election/node.js';
@@ -55,10 +55,12 @@ export const dispatchTool = async (
         break;
       }
       try {
+        // Relay→plugin budget = B + one margin (see getRelayBudget) so the inner sandbox-bridge timer
+        // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
         return await leader.relay.sendRequest(
           toolName,
           args,
-          opts.perCallTimeoutMs,
+          opts.perCallTimeoutMs ?? getRelayBudget(toolName),
           opts.sessionId,
         );
       } catch (err) {
@@ -67,7 +69,15 @@ export const dispatchTool = async (
       }
     }
 
-    const resp = await ctx.follower.sendRpc(toolName, args, undefined, opts.sessionId);
+    // Follower→leader budget = B + two margins (outermost layer), so it outlives the leader's own
+    // relay timer for the same tool.
+    const resp = await ctx.follower.sendRpc(
+      toolName,
+      args,
+      undefined,
+      opts.sessionId,
+      opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
+    );
     if (resp.kind === 'ok') return resp.result;
 
     const isTransient =

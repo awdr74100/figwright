@@ -78,6 +78,7 @@ export class Follower {
     args?: unknown,
     requestId?: string,
     sessionId?: string,
+    timeoutMs?: number,
   ): Promise<RpcResponse> {
     const rpc: RpcRequest = {
       requestId: requestId ?? newId(),
@@ -94,7 +95,8 @@ export class Follower {
         method: 'POST',
         headers: { 'content-type': 'application/msgpack' },
         body,
-        signal: AbortSignal.timeout(this.opts.rpcTimeoutMs),
+        // Per-tool follower budget when given (outermost layer); else the constructor default.
+        signal: AbortSignal.timeout(timeoutMs ?? this.opts.rpcTimeoutMs),
       });
     } catch (err) {
       this.opts.log(`[follower] rpc transport error: ${(err as Error).message}`);

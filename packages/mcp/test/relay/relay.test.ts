@@ -202,6 +202,59 @@ describe('Relay hello loop', () => {
     ws.close();
   });
 
+  it('defers the heartbeat timeout while a request is in-flight (busy ≠ dead)', async () => {
+    const { relay, port } = await startRelay({ heartbeatIntervalMs: 30, heartbeatMaxMisses: 2 });
+    const ws = await connect(port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({ id: 'h', sessionId, method: SystemMethod.Hello, params: helloParams() }),
+      ),
+    );
+    await nextMessage(ws);
+
+    // Dispatch a request pinned to this session and never reply — it stays in-flight. The plugin also
+    // never answers pings, simulating a thread stuck encoding a huge reply. The socket must stay open.
+    const inflight = relay.sendRequest('get_screenshot', { nodeIds: ['1:2'] }, 60_000, sessionId);
+    inflight.catch(() => {}); // relay.stop() in afterEach rejects pending; swallow
+
+    let closed = false;
+    ws.once('close', () => {
+      closed = true;
+    });
+
+    await new Promise(r => setTimeout(r, 300)); // several heartbeat windows
+    expect(closed).toBe(false);
+    expect(relay.heartbeatDeferralCount()).toBeGreaterThan(0);
+    ws.close();
+  });
+
+  it('resumes closing the socket once the in-flight request resolves', async () => {
+    const { relay, port } = await startRelay({ heartbeatIntervalMs: 30, heartbeatMaxMisses: 2 });
+    const ws = await connect(port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({ id: 'h', sessionId, method: SystemMethod.Hello, params: helloParams() }),
+      ),
+    );
+    await nextMessage(ws);
+
+    // Reply to the dispatched tool request (clears in-flight) but never answer pings afterward.
+    ws.on('message', d => {
+      const env = decodeEnvelope(d as ArrayBuffer);
+      if (env.kind === 'req' && env.method !== SystemMethod.Ping) {
+        ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })));
+      }
+    });
+
+    await relay.sendRequest('get_screenshot', { nodeIds: ['1:2'] }, 60_000, sessionId);
+
+    // In-flight is now empty, so the next missed-heartbeat window must close the socket as before.
+    const closeCode = await new Promise<number>(resolve => ws.once('close', code => resolve(code)));
+    expect(closeCode).toBe(1001);
+  });
+
   it('resumes session when same sessionId reconnects within grace window', async () => {
     const { port, relay } = await startRelay({ disconnectGraceMs: 1_000 });
     const sessionId = newId();
