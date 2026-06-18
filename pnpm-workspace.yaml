@@ -8,3 +8,5 @@ onlyBuiltDependencies:
   - lefthook
   - oxlint
   - oxfmt
+
+minimumReleaseAge: 0
