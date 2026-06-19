@@ -86,6 +86,82 @@ describe('get_design_context handler', () => {
     });
   });
 
+  it('surfaces non-default typography — style attrs fold into the textStyle bundle, align/truncation inline', async () => {
+    const text = node({
+      id: 't',
+      type: 'TEXT',
+      characters: 'BUY NOW',
+      fontSize: 14,
+      fontName: { family: 'Inter', style: 'Bold' },
+      lineHeight: { unit: 'PIXELS', value: 20 },
+      letterSpacing: { unit: 'PERCENT', value: 5 },
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'TOP', // default → omitted
+      textTruncation: 'ENDING',
+      maxLines: 2,
+    });
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    const n = full.nodes[0];
+
+    // the shared text-style attributes are deduped into the bundle, not left inline
+    expect(n?.lineHeight).toBeUndefined();
+    expect(n?.textCase).toBeUndefined();
+    expect(full.globalVars?.styles[n!.textStyle!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Bold',
+      fontSize: 14,
+      lineHeight: { unit: 'PIXELS', value: 20 },
+      letterSpacing: { unit: 'PERCENT', value: 5 },
+      textCase: 'UPPER',
+      textDecoration: 'UNDERLINE',
+    });
+    // per-node behaviour stays inline; the TOP vertical default is dropped as noise
+    expect(n?.textAlignHorizontal).toBe('CENTER');
+    expect(n?.textAlignVertical).toBeUndefined();
+    expect(n?.textTruncation).toBe('ENDING');
+    expect(n?.maxLines).toBe(2);
+  });
+
+  it('omits no-op default typography (plain left-aligned body text stays clean)', async () => {
+    const text = node({
+      id: 't',
+      type: 'TEXT',
+      characters: 'hello',
+      fontSize: 16,
+      fontName: { family: 'Inter', style: 'Regular' },
+      lineHeight: { unit: 'AUTO' },
+      letterSpacing: { unit: 'PERCENT', value: 0 },
+      textCase: 'ORIGINAL',
+      textDecoration: 'NONE',
+      textAlignHorizontal: 'LEFT',
+      textAlignVertical: 'TOP',
+      textTruncation: 'DISABLED',
+      maxLines: null,
+    });
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    const n = full.nodes[0];
+
+    expect(n?.lineHeight).toBeUndefined();
+    expect(n?.letterSpacing).toBeUndefined();
+    expect(n?.textCase).toBeUndefined();
+    expect(n?.textDecoration).toBeUndefined();
+    expect(n?.textAlignHorizontal).toBeUndefined();
+    expect(n?.textTruncation).toBeUndefined();
+    expect(n?.maxLines).toBeUndefined();
+    // bundle is just the font — no default typography baked in
+    expect(full.globalVars?.styles[n!.textStyle!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Regular',
+      fontSize: 16,
+    });
+  });
+
   it('uses the selection, and throws when nothing is selected', async () => {
     const sel = node({ id: 'sel' });
     const pageNode = node({ id: 'page' });

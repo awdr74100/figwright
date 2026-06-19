@@ -8,6 +8,8 @@ import {
   SerializedEffectSchema,
   SerializedFontNameSchema,
   SerializedGridChildSchema,
+  SerializedLetterSpacingSchema,
+  SerializedLineHeightSchema,
   SerializedMainComponentSchema,
   SerializedPaintSchema,
   SerializedStyleIdsSchema,
@@ -18,6 +20,8 @@ import type {
   SerializedConstraints,
   SerializedEffect,
   SerializedGridChild,
+  SerializedLetterSpacing,
+  SerializedLineHeight,
   SerializedMainComponent,
   SerializedPaint,
   SerializedStyleIds,
@@ -93,6 +97,20 @@ export interface DesignContextNode {
   characters?: string;
   fontSize?: number | typeof MIXED;
   fontName?: z.infer<typeof SerializedFontNameSchema> | typeof MIXED;
+  // Typography that a Figma *text style* captures — folded into the `textStyle` bundle by dedup
+  // (like fontSize/fontName) so a style shared by N nodes costs one entry. Surfaced because codegen
+  // otherwise eyeballs casing/leading/tracking/underlines off the raster (wrong-case buttons, missing
+  // link underlines, off vertical rhythm are the classic misses). `mixed` = per-segment styling.
+  lineHeight?: SerializedLineHeight | typeof MIXED;
+  letterSpacing?: SerializedLetterSpacing | typeof MIXED;
+  textCase?: string | typeof MIXED;
+  textDecoration?: string | typeof MIXED;
+  // Per-node text behaviour (not part of the shared style) — stays inline: the same heading style is
+  // centered here, left there; truncation/maxLines vary per instance. → text-align / line-clamp.
+  textAlignHorizontal?: string;
+  textAlignVertical?: string;
+  textTruncation?: string;
+  maxLines?: number | null;
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
@@ -167,6 +185,14 @@ export const DesignContextNodeSchema = z.lazy(() =>
     characters: z.string().optional(),
     fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
     fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),
+    lineHeight: z.union([SerializedLineHeightSchema, z.literal(MIXED)]).optional(),
+    letterSpacing: z.union([SerializedLetterSpacingSchema, z.literal(MIXED)]).optional(),
+    textCase: z.union([z.string(), z.literal(MIXED)]).optional(),
+    textDecoration: z.union([z.string(), z.literal(MIXED)]).optional(),
+    textAlignHorizontal: z.string().optional(),
+    textAlignVertical: z.string().optional(),
+    textTruncation: z.string().optional(),
+    maxLines: z.number().nullable().optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),

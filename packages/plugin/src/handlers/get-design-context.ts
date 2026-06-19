@@ -5,6 +5,7 @@ import {
   DETAIL_LEVELS,
   type DetailLevel,
   type GetDesignContextResult,
+  MIXED,
   type ResolvedToken,
 } from '@figwright/shared';
 
@@ -80,6 +81,31 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
+  // Typography the serializer already computes but get_design_context used to drop — without these
+  // codegen eyeballs casing / leading / tracking / underlines / alignment / clamping off the raster.
+  // Surfaced only when it differs from the no-op default, so a plain left-aligned body paragraph
+  // stays clean and only the meaningful values show (a centered UPPERCASE tracked heading, an
+  // underlined link, a 2-line clamp). `mixed` (per-segment styling) is always meaningful → kept.
+  // Style-level ones (lineHeight/letterSpacing/textCase/textDecoration) fold into the textStyle
+  // bundle in dedupeStyles; align/truncation stay inline (they vary per instance, not per style).
+  const lh = flat.lineHeight;
+  if (lh !== undefined && (lh === MIXED || lh.unit !== 'AUTO')) out.lineHeight = lh;
+  const ls = flat.letterSpacing;
+  if (ls !== undefined && (ls === MIXED || ls.value !== 0)) out.letterSpacing = ls;
+  if (flat.textCase !== undefined && flat.textCase !== 'ORIGINAL') out.textCase = flat.textCase;
+  if (flat.textDecoration !== undefined && flat.textDecoration !== 'NONE') {
+    out.textDecoration = flat.textDecoration;
+  }
+  if (flat.textAlignHorizontal !== undefined && flat.textAlignHorizontal !== 'LEFT') {
+    out.textAlignHorizontal = flat.textAlignHorizontal;
+  }
+  if (flat.textAlignVertical !== undefined && flat.textAlignVertical !== 'TOP') {
+    out.textAlignVertical = flat.textAlignVertical;
+  }
+  if (flat.textTruncation !== undefined && flat.textTruncation !== 'DISABLED') {
+    out.textTruncation = flat.textTruncation;
+  }
+  if (typeof flat.maxLines === 'number') out.maxLines = flat.maxLines;
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
   // globalVars dedup in P3.

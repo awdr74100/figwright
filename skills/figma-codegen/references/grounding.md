@@ -28,6 +28,17 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   lose**: they come from a _shared effect style_, so they read as one field and quietly vanish. A card
   with a shadow in Figma but flat output is the classic miss (e.g. `DROP_SHADOW 0/4/8 #0000000D` →
   `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`).
+- **Text / typography.** A TEXT node carries more than `characters` + font — and the rest reads as
+  one quiet field each, so it vanishes and the model re-guesses it off the raster. The shared style
+  attributes fold into the `textStyle` bundle in `globalVars`: `textCase` (`UPPER`/`LOWER`/`TITLE` →
+  `uppercase`/`lowercase`/`capitalize` — **the characters in the tree are the original casing, so a
+  dropped `UPPER` ships a lowercase button**), `textDecoration` (`UNDERLINE`/`STRIKETHROUGH` →
+  `underline`/`line-through` — a link with no underline is the classic miss), `lineHeight`
+  (`{unit,value}` → `leading-*`; absent = font default), and `letterSpacing` (`{unit,value}` →
+  `tracking-*`; absent = 0). Per-node (inline, not in the bundle): `textAlignHorizontal`/`Vertical`
+  (`CENTER`/`RIGHT`/`JUSTIFIED` → `text-center`/`text-right`/`text-justify`; absent = left/top) and
+  `textTruncation: 'ENDING'` + `maxLines` (→ `line-clamp-N` / `truncate`). Each is omitted when it's
+  the no-op default, so anything present is real intent — translate it, don't drop it.
 - **Per-side borders.** When `strokeWeight` is `mixed`, the node carries `strokeWeights`
   `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
   **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row

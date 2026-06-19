@@ -4,10 +4,13 @@ import type {
   GetDesignContextResult,
   GlobalVars,
 } from './design-context.js';
+import { MIXED } from './serialized-node.js';
 import type {
   SerializedColor,
   SerializedColorStop,
   SerializedEffect,
+  SerializedLetterSpacing,
+  SerializedLineHeight,
   SerializedPaint,
 } from './serialized-node.js';
 
@@ -105,6 +108,10 @@ interface TextStyleBundle {
   fontFamily: string;
   fontStyle: string;
   fontSize: number;
+  lineHeight?: SerializedLineHeight;
+  letterSpacing?: SerializedLetterSpacing;
+  textCase?: string;
+  textDecoration?: string;
 }
 
 /**
@@ -165,6 +172,25 @@ export const dedupeStyles = (
         fontStyle: n.fontName.style,
         fontSize: n.fontSize,
       };
+      // Fold the rest of the typography (the fields a Figma text style carries) into the same bundle,
+      // and drop the now-redundant inline copy. A `mixed` value (per-segment styling) isn't a single
+      // style value, so leave it inline as the honest signal instead of forcing it into the bundle.
+      if (n.lineHeight !== undefined && n.lineHeight !== MIXED) {
+        bundle.lineHeight = n.lineHeight;
+        delete out.lineHeight;
+      }
+      if (n.letterSpacing !== undefined && n.letterSpacing !== MIXED) {
+        bundle.letterSpacing = n.letterSpacing;
+        delete out.letterSpacing;
+      }
+      if (typeof n.textCase === 'string' && n.textCase !== MIXED) {
+        bundle.textCase = n.textCase;
+        delete out.textCase;
+      }
+      if (typeof n.textDecoration === 'string' && n.textDecoration !== MIXED) {
+        bundle.textDecoration = n.textDecoration;
+        delete out.textDecoration;
+      }
       out.textStyle = register(bundle, 'text');
       delete out.fontSize;
       delete out.fontName;
