@@ -313,6 +313,68 @@ describe('get_design_context handler', () => {
     expect(((await handler({ nodeId: 'nope' })) as GetDesignContextResult).nodes).toEqual([]);
   });
 
+  it('attaches a breakpoint hint when the selection spans width buckets — even at compact', async () => {
+    const desktop = node({ id: 'd', name: 'W_Home', width: 1440 });
+    const mobile = node({ id: 'm', name: 'M_Home', width: 375 });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [desktop, mobile] }),
+    )({ detail: 'compact' })) as GetDesignContextResult;
+
+    // Fires on the grounding-free compact default — exactly where it's most needed.
+    expect(result.hint).toMatch(/these are breakpoints/);
+    expect(result.hint).toContain('1440 / 375');
+    expect(result.hint).toMatch(/each frame/i);
+    // Single screen → no pairing copy, and the "or screens" qualifier is absent.
+    expect(result.hint).not.toMatch(/pair each screen/);
+    expect(result.hint).not.toMatch(/across breakpoints or screens/);
+    // RWD guard: grounding the frame's values must not become a hardcoded frame width.
+    expect(result.hint).toMatch(/never hardcode a frame's own width/);
+    expect(result.hint).toContain('no w-[375px] root');
+  });
+
+  it('leads with the pairing rule when multiple screens (more frames than buckets) are selected', async () => {
+    // Two screens, each with its own desktop+mobile breakpoint → A-desktop/A-mobile + B-desktop/B-mobile.
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({
+        selection: [
+          node({ id: 'ad', name: 'W_A', width: 1440 }),
+          node({ id: 'am', name: 'M_A', width: 375 }),
+          node({ id: 'bd', name: 'W_B', width: 1440 }),
+          node({ id: 'bm', name: 'M_B', width: 375 }),
+        ],
+      }),
+    )({})) as GetDesignContextResult;
+
+    expect(result.hint).toContain('4 top-level frames');
+    // distinct widths, widest first — not the duplicated "1440 / 375 / 1440 / 375"
+    expect(result.hint).toContain('widths 1440 / 375px');
+    expect(result.hint).toMatch(/pair each screen to its own breakpoint frames/);
+    expect(result.hint).toMatch(/across breakpoints or screens/);
+    expect(result.hint).toMatch(/never hardcode a frame's own width/);
+  });
+
+  it('does not attach the hint for same-bucket siblings, a single frame, or non-frame roots', async () => {
+    // two 375 frames = a screen + its menu state, not two mobile breakpoints
+    const sameBucket = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [node({ id: 'a', width: 375 }), node({ id: 'b', width: 390 })] }),
+    )({})) as GetDesignContextResult;
+    expect(sameBucket.hint).toBeUndefined();
+
+    // single frame
+    const single = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [node({ id: 's', width: 1440 })] }),
+    )({})) as GetDesignContextResult;
+    expect(single.hint).toBeUndefined();
+
+    // one frame + one non-frame → fewer than 2 FRAMEs, no hint
+    const mixedTypes = (await createGetDesignContextHandler(
+      fakeFigma({
+        selection: [node({ id: 'f', width: 1440 }), node({ id: 'r', type: 'RECTANGLE' })],
+      }),
+    )({})) as GetDesignContextResult;
+    expect(mixedTypes.hint).toBeUndefined();
+  });
+
   it('throws on invalid depth / detail / nodeId / dedupeComponents', async () => {
     const handler = createGetDesignContextHandler(fakeFigma({}));
     await expect(handler({ depth: -1 })).rejects.toThrow(/depth/);

@@ -16,7 +16,9 @@ breakpoints instead of guessing them:
    font size, line-height, padding, and gap for mobile come from the mobile frame, for desktop from the
    desktop frame — never carried over or shrunk from the other, and **never eyeballed off a screenshot**
    (the raster confirms layout; it is not a ruler). Mis-sized mobile text/spacing is almost always one
-   breakpoint's values guessed from another's instead of read from its frame.
+   breakpoint's values guessed from another's instead of read from its frame. (When several
+   width-bucket-distinct frames are selected at once, `get_design_context` also returns a top-level
+   `hint` saying exactly this — honour it: re-fetch each frame on its own and ground from its data.)
 2. **Diff into one mobile-first base + `lg:`/`xl:` variants — both layout and values.** Differences
    split two ways. **Reflow** changes layout direction/flow — utilities on one markup
    (`flex-col lg:flex-row`, `grid-cols-1 xl:grid-cols-3`, `hidden xl:block`, alignment swaps).

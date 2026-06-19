@@ -164,6 +164,51 @@ const resolveTokens = async (
   return out;
 };
 
+/** Width buckets mirror responsive.md: ~≥1280 desktop · 600–1280 tablet · <600 mobile. */
+const widthBucket = (w: number): string => (w >= 1280 ? 'desktop' : w >= 600 ? 'tablet' : 'mobile');
+
+/**
+ * When the selection holds several top-level FRAMEs whose widths fall in _different_ buckets it's a
+ * breakpoint set — the exact shape that tempts a caller to size one breakpoint by eye off another
+ * (the failure mode behind "mixed desktop+mobile codegen is inaccurate"). Return the don't-merge
+ * rule so even a caller that skipped the figma-codegen skill (or used the grounding-free `compact`
+ * default) still gets it. Same-bucket siblings get nothing — two 375 frames are a screen + its menu
+ * state, two desktop frames are two screens; neither is a breakpoint diff to ground separately.
+ *
+ * Screen-count aware: more frames than buckets means at least one bucket holds >1 frame, i.e.
+ * several screens each with their own breakpoints are selected (A-desktop/A-mobile + B-desktop/
+ * B-mobile). Then the extra risk is mis-pairing across screens, so the hint leads with the pairing
+ * rule before the per-frame grounding rule.
+ */
+const breakpointHint = (roots: readonly SceneNode[]): string | undefined => {
+  const frames = roots.filter((r): r is FrameNode => r.type === 'FRAME');
+  if (frames.length < 2) return undefined;
+  const buckets = new Set(frames.map(f => widthBucket(f.width)));
+  if (buckets.size < 2) return undefined;
+
+  // Distinct widths, widest first — avoids "1440 / 375 / 1440 / 375" when several screens share buckets.
+  const widths = [...new Set(frames.map(f => Math.round(f.width)))]
+    .toSorted((a, b) => b - a)
+    .join(' / ');
+  const multipleScreens = frames.length > buckets.size;
+  const acrossScreens = multipleScreens ? ' or screens' : '';
+  const action =
+    `get_design_context on EACH frame by its own nodeId and take every size (font, line-height, ` +
+    `padding, gap) from that frame's own data — never carry sizes across breakpoints${acrossScreens}, ` +
+    `never pick one as canonical and scale the others by eye, and never read sizes off the screenshot ` +
+    `raster. The output stays responsive: emit these as mobile-first breakpoint variants (e.g. ` +
+    `px-4 lg:px-20), keep the container fluid (w-full / max-w), and never hardcode a frame's own ` +
+    `width — no w-[375px] root and no fixed-width mobile menu (a full-bleed menu is fixed inset-0 w-full).`;
+  const lead =
+    `Selection holds ${frames.length} top-level frames spanning widths ${widths}px — these are ` +
+    `breakpoints, not one combined screen. `;
+  return multipleScreens
+    ? lead +
+        `More than one screen is present: first pair each screen to its own breakpoint frames (by ` +
+        `normalized name / matching content), then run ${action}`
+    : lead + `Run ${action}`;
+};
+
 interface BuildCtx {
   detail: DetailLevel;
   dedupe: boolean;
@@ -305,6 +350,11 @@ export const createGetDesignContextHandler =
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
     const result: GetDesignContextResult = { nodes };
+
+    // Multi-breakpoint selection → attach the ground-each-frame rule (any detail level; the
+    // grounding-free `compact` default is exactly where this is most needed).
+    const hint = breakpointHint(roots);
+    if (hint !== undefined) result.hint = hint;
 
     // Full detail only: resolve token ids → names (P2), then dedupe styles into globalVars and
     // measure the simplification (P3). Below full, styleIds/boundVariables/fills aren't surfaced.

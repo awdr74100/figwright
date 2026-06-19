@@ -220,6 +220,14 @@ export type DesignContextMetrics = z.infer<typeof DesignContextMetricsSchema>;
 
 export const GetDesignContextResultSchema = z.object({
   nodes: z.array(DesignContextNodeSchema),
+  /**
+   * Server-side guidance attached only when the call shape risks a known failure mode — currently a
+   * selection of several top-level frames spanning different width buckets (a breakpoint set),
+   * which is what tempts a caller to size one breakpoint by eye off another. Surfaced on the result
+   * so even a caller that bypassed the figma-codegen skill gets the don't-merge-breakpoints rule.
+   * Omitted when there's nothing to warn about.
+   */
+  hint: z.string().optional(),
   /** Deduplicated style table; nodes carry `fill` / `textStyle` refs into it. Full detail only. */
   globalVars: GlobalVarsSchema.optional(),
   /** Id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */
