@@ -87,6 +87,21 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   width exceeds its content — prefer `min-w-*` over a hard `w-*`**: Figma has no native min-width, so a
   designer expresses "at least this wide, but let longer/i18n text grow" as `FIXED`. Reserve a hard
   `w-*` for things that are genuinely a fixed size (sidebars, fixed cards, avatars).
+- **Absolute positioning & constraints — a node placed by coordinates, not flow.** Two
+  mutually-exclusive signals say "this isn't in an auto-layout flow"; read the anchor so it survives a
+  resize instead of being hardcoded to a corner.
+  - **`layoutPositioning: 'ABSOLUTE'`** — an auto-layout child that opted _out_ of the flow (a badge
+    pinned to a card corner, a close `×` on a modal, a floating action button). It overlaps siblings
+    and takes no space: make the parent `relative` and the child `absolute`, placed from its `x`/`y`
+    (offsets inside the parent) at its `width`/`height`. **Leaving it in the flex/grid flow pushes the
+    siblings** — the classic miss (a corner badge that shoves the card title sideways).
+  - **`constraints` `{horizontal, vertical}`** — a child of a frame that is **not** auto-layout at
+    all; it's positioned by `x`/`y` and the constraint is its **resize anchor**. Map each axis to the
+    edge you pin, not always top-left: horizontal `MIN`→`left`, `MAX`→`right`, `CENTER`→centered
+    (`left-1/2 -translate-x-1/2`), `STRETCH`→pin both (`left-N right-M`), `SCALE`→proportional
+    (`%`-based left + width); vertical `MIN`→`top`, `MAX`→`bottom`, `CENTER`→centered-y,
+    `STRETCH`→`top-N bottom-M`, `SCALE`→`%`. A `MAX`/right-anchored element emitted as `left-[Xpx]`
+    drifts at every width but the design's — read the constraint, don't assume the top-left corner.
 
 ## Large designs: build section by section, and ground every section
 
