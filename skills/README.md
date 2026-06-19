@@ -14,8 +14,8 @@ Install across any supported agent (Claude Code, Cursor, Codex, Copilot, Windsur
 [`skills`](https://www.skills.sh) CLI — it pulls straight from this repo, no upload or registration:
 
 ```bash
-# all skills in this repo
-npx skills add awdr74100/figwright
+# both Figwright skills
+npx skills add awdr74100/figwright/skills
 
 # or a single skill
 npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-codegen
