@@ -29,7 +29,7 @@ test/       # cross-package integration tests (e.g. server tool registry ↔ plu
 
 ## Tech stack
 
-- **Node 24** (see `.node-version`), **pnpm 10** workspace, ESM throughout.
+- **Node 24** (see `.node-version`), **pnpm 11** workspace (pinned via `packageManager`), ESM throughout.
 - **TypeScript** (strict). Build: **tsdown** (the server bundles `shared`); the plugin builds with **Vite** (single-file UI).
 - **Vitest** (tests), **oxlint** (lint), **oxfmt** (format), **knip** (unused deps/exports/files).
 - **Zod** for server tool I/O + shared schemas; **msgpack** on the wire.

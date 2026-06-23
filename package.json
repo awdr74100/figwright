@@ -2,7 +2,7 @@
   "name": "figwright",
   "version": "0.0.0",
   "private": true,
-  "description": "Open-source Figma Dev Mode MCP alternative — bridges Claude Code (and other MCP clients) with a Figma plugin over a local WebSocket relay.",
+  "description": "Free, bidirectional Figma MCP server — turn designs into framework-aware code and write back to the canvas, for Claude Code, Cursor, and any MCP client.",
   "homepage": "https://github.com/awdr74100/figwright",
   "bugs": {
     "url": "https://github.com/awdr74100/figwright/issues"
@@ -43,7 +43,7 @@
   },
   "engines": {
     "node": ">=24.0.0",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=11.0.0"
   },
   "packageManager": "pnpm@11.8.0"
 }
