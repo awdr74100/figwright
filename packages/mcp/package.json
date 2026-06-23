@@ -1,7 +1,21 @@
 {
   "name": "@figwright/mcp",
   "version": "0.1.0",
-  "description": "MCP server for Figwright — bridges MCP clients to a Figma plugin over local WebSocket.",
+  "description": "Free, bidirectional Figma MCP server — turn designs into framework-aware code and write back to the canvas, for Claude Code, Cursor, and any MCP client.",
+  "keywords": [
+    "claude-code",
+    "codegen",
+    "cursor",
+    "design-to-code",
+    "design-tokens",
+    "dev-mode",
+    "figma",
+    "figma-mcp",
+    "figma-plugin",
+    "figma-to-code",
+    "mcp",
+    "model-context-protocol"
+  ],
   "homepage": "https://github.com/awdr74100/figwright#readme",
   "bugs": "https://github.com/awdr74100/figwright/issues",
   "license": "MIT",
