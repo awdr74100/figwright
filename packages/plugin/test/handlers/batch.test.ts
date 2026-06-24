@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxHandlers } from '../../src/dispatcher.js';
 import { createBatchHandler } from '../../src/handlers/batch.js';
+import { createCreateComponentHandler } from '../../src/handlers/create-component.js';
 import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
 import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
@@ -46,6 +47,7 @@ const realWrites = (figmaCtx: typeof figma): SandboxHandlers => ({
   set_fills: createSetFillsHandler(figmaCtx),
   move_nodes: createMoveNodesHandler(figmaCtx),
   create_frame: createCreateFrameHandler(figmaCtx),
+  create_component: createCreateComponentHandler(figmaCtx),
   delete_nodes: createDeleteNodesHandler(figmaCtx),
 });
 
@@ -86,6 +88,21 @@ describe('batch handler', () => {
       }),
     ).rejects.toThrow(/not batchable/);
     expect(store.get('1:1')).toMatchObject({ name: 'A' }); // untouched
+  });
+
+  it('rejects create_component with fromNodeId (no faithful inverse) at validate time', async () => {
+    const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', type: 'FRAME', name: 'A' } });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'renamed' } },
+          { tool: 'create_component', params: { fromNodeId: '1:1' } },
+        ],
+      }),
+    ).rejects.toThrow(/fromNodeId is not batchable/);
+    expect(store.get('1:1')).toMatchObject({ name: 'A' }); // first op never applied
   });
 
   it('aborts in the capture phase (bad node id) before any op is applied', async () => {
