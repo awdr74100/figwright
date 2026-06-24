@@ -273,6 +273,18 @@ export class Relay {
       return null;
     }
 
+    // Gate protocol compatibility here (the envelope schema no longer enforces it per-message, so the
+    // mismatched peer can decode this rejection). A skew is realistic: the plugin ships as a manually
+    // imported release while the server updates via `npx @latest`.
+    if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
+      const message =
+        `protocol mismatch: server speaks ${PROTOCOL_VERSION}, plugin speaks ${parsed.data.protocolVersion} — ` +
+        'update the older Figwright component so both match (server: @figwright/mcp, plugin: re-import the latest release)';
+      this.opts.log(`[relay] rejecting plugin — ${message}`);
+      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
+      return null;
+    }
+
     const { session, resumed } = this.sessions.register({
       id: env.sessionId,
       socket,

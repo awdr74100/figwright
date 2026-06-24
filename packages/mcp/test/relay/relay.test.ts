@@ -8,6 +8,8 @@ import {
   decodeEnvelope,
   encodeEnvelope,
   type Envelope,
+  ErrorCode,
+  type ErrorEnvelope,
   type HelloParams,
   type HelloResult,
   newId,
@@ -127,6 +129,26 @@ describe('Relay hello loop', () => {
     );
     const res = decodeEnvelope(await nextMessage(ws));
     expect(res.kind).toBe('err');
+  });
+
+  it('rejects a $hello with a mismatched protocolVersion and a clear ProtocolMismatch error', async () => {
+    const { port } = await startRelay();
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ protocolVersion: '9.9.9' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ErrorEnvelope;
+    expect(res.kind).toBe('err');
+    expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
+    expect(res.error.message).toMatch(/protocol mismatch/i);
+    await new Promise(r => ws.once('close', r));
   });
 
   it('responds to client-initiated $ping with ok result', async () => {

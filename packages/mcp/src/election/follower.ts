@@ -44,7 +44,17 @@ export class Follower {
       const res = await this.opts.fetch(`${this.opts.leaderUrl}${PING_PATH}`, {
         signal: AbortSignal.timeout(this.opts.pingTimeoutMs),
       });
-      return res.ok;
+      if (!res.ok) return false;
+      // Confirm the responder is actually a figwright leader, not some unrelated process that happens
+      // to hold the port and answer 200 — otherwise this node would attach as a follower and every
+      // RPC it forwards would fail. The leader's /ping returns { ok: true, serverVersion, … }.
+      const body: unknown = await res.json();
+      return (
+        typeof body === 'object' &&
+        body !== null &&
+        (body as { ok?: unknown }).ok === true &&
+        typeof (body as { serverVersion?: unknown }).serverVersion === 'string'
+      );
     } catch {
       return false;
     }
