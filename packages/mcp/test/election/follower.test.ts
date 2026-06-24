@@ -129,6 +129,21 @@ describe('Follower HTTP client', () => {
     expect(await f.ping()).toBe(false);
   });
 
+  it('ping returns false when the port is held by a non-figwright server', async () => {
+    const http = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('not a figwright leader');
+    });
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${port}` });
+    try {
+      expect(await f.ping()).toBe(false);
+    } finally {
+      await new Promise<void>(resolve => http.close(() => resolve()));
+    }
+  });
+
   it('sendRpc round-trips through leader to plugin', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async (method, params) => {

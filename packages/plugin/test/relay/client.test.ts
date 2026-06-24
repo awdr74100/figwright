@@ -226,6 +226,30 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(2);
   });
 
+  it('surfaces a hello rejection reason (e.g. protocol mismatch) in lastError', async () => {
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createError({
+          id: req.id,
+          sessionId: req.sessionId,
+          code: ErrorCode.ProtocolMismatch,
+          message: 'protocol mismatch: server speaks 0.1.0, plugin speaks 9.9.9 — update …',
+        }),
+      );
+    });
+    const client = new RelayClient({
+      ports: [3055],
+      clientVersion: '0.0.0',
+      WS,
+      reconnectInitialDelayMs: 5,
+    });
+    await client.connect();
+    expect(client.getState().lastError).toMatch(/protocol mismatch/i);
+    await client.disconnect();
+  });
+
   it('responds to server-initiated $ping with ok result', async () => {
     let liveSock: FakeSocketControl | undefined;
     const { WS } = buildFakeFactory(sock => {

@@ -15,6 +15,7 @@ export const ErrorCode = {
   PluginDisconnected: 'PLUGIN_DISCONNECTED',
   NotLeader: 'NOT_LEADER',
   SessionUnknown: 'SESSION_UNKNOWN',
+  ProtocolMismatch: 'PROTOCOL_MISMATCH',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 

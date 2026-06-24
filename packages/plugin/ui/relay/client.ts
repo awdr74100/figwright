@@ -177,10 +177,14 @@ export class RelayClient {
     // background with the same back-off loop used after a live socket drops, so the plugin connects
     // on its own once the server appears. Failing the initial probe is not a reconnect, so the loop
     // must not bump `reconnectCount`.
+    // Preserve a specific rejection reason captured during the probe (e.g. a protocol mismatch
+    // recorded by attemptPort) — masking it with the generic "no server" message would be wrong when a
+    // server was found but turned us away.
     this.update({
       status: 'disconnected',
       port: null,
-      lastError: `no relay server found on ports [${this.opts.ports.join(', ')}]`,
+      lastError:
+        this.state.lastError ?? `no relay server found on ports [${this.opts.ports.join(', ')}]`,
     });
     if (!this.stopped) void this.runReconnectLoop();
   }
@@ -269,6 +273,10 @@ export class RelayClient {
         }
 
         if (envelope.kind === 'err') {
+          // A hello rejection (e.g. a protocol-version mismatch) is a concrete, actionable reason.
+          // Record it so the UI surfaces "update your plugin" rather than the generic "no server
+          // found", and so the reconnect path can preserve it (see connect()).
+          this.update({ lastError: envelope.error.message });
           fail(`hello rejected: ${envelope.error.message}`);
           return;
         }

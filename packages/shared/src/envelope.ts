@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { ErrorCode, PROTOCOL_VERSION } from './protocol.js';
 
 const baseFields = {
-  v: z.literal(PROTOCOL_VERSION),
+  // Accept any version here rather than a strict literal: a peer on a different protocol must still be
+  // able to *decode* our messages (and we theirs) so a mismatch surfaces as a clear error at the
+  // $hello handshake instead of a cryptic envelope-decode failure. Compatibility is gated once, in the
+  // relay's hello handler — not per-envelope. We still stamp our own PROTOCOL_VERSION via create*.
+  v: z.string(),
   id: z.string(),
   ts: z.number(),
   sessionId: z.string(),
@@ -55,13 +59,15 @@ export type Envelope = z.infer<typeof EnvelopeSchema>;
 export const HelloParamsSchema = z.object({
   clientType: z.enum(['plugin']),
   clientVersion: z.string(),
-  protocolVersion: z.literal(PROTOCOL_VERSION),
+  // String, not a literal: a version-mismatched plugin must still parse so the relay can reject it
+  // with a clear ProtocolMismatch message (see relay.handleHello), not a generic schema-parse failure.
+  protocolVersion: z.string(),
 });
 export type HelloParams = z.infer<typeof HelloParamsSchema>;
 
 export const HelloResultSchema = z.object({
   serverVersion: z.string(),
-  protocolVersion: z.literal(PROTOCOL_VERSION),
+  protocolVersion: z.string(),
   sessionResumed: z.boolean(),
 });
 export type HelloResult = z.infer<typeof HelloResultSchema>;

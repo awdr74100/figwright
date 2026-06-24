@@ -44,9 +44,11 @@ describe('envelope factories', () => {
     expect(EnvelopeSchema.parse(evt).kind).toBe('evt');
   });
 
-  it('rejects envelope with wrong protocol version', () => {
+  it('accepts an envelope with a differing protocol version (gated at the $hello handshake, not per-envelope)', () => {
+    // A version-mismatched peer must still decode our messages so the mismatch surfaces as a clear
+    // error at the handshake; per-envelope version rejection is intentionally gone (see envelope.ts).
     const env = { ...createRequest({ ...baseInput, method: 'foo' }), v: '9.9.9' };
-    expect(() => EnvelopeSchema.parse(env)).toThrow(Error);
+    expect(EnvelopeSchema.parse(env).v).toBe('9.9.9');
   });
 
   it('rejects envelope with unknown kind', () => {
