@@ -39,6 +39,10 @@ Run the grounded tools against the selection, then generate — **trust them ove
      (`instanceCount > 1`), build from its **first instance's** subtree; if that came back
      `deduped`/`truncated`, drill `get_design_context` on `instances[0].nodeId` once — don't rebuild a
      repeated component by eye.
+   - When you're emitting a component's **own definition** (its prop types, not just rendering it),
+     `get_component_api` on the component/instance returns the full property API — every VARIANT option
+     and each BOOLEAN/TEXT/INSTANCE_SWAP prop with its default — so the prop space is grounded, not
+     inferred from the instances you happened to see.
 
 3. **`token_map`** → every Figma variable joined to a project token with `status` + `ref` + `matchedBy`.
    - mapped: reference `candidate.ref` (`bg-primary-500`, `var(--color-primary-500)`) — never the raw

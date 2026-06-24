@@ -15,7 +15,7 @@ const promptText = (): string =>
 
 2. Container + auto-layout. create_frame, then set_auto_layout (HORIZONTAL / VERTICAL / GRID) with padding / itemSpacing / alignment. Use auto-layout whenever children relate structurally (stacked / side-by-side / gapped) — never absolute x/y for inner layout; absolute coordinates are only for where a top-level container sits on the canvas. Child sizing: append the child into its auto-layout parent FIRST, then set_layout_props — layoutGrow 1 = fill the primary axis, layoutAlign STRETCH = fill the counter axis, layoutGrow 0 = hug. There is no FILL/HUG enum on the write side; express it through layoutGrow + layoutAlign.
 
-3. Reuse components. create_instance (componentId for a local component, componentKey for a published / library one), then set its variant / props. Prefer instancing a real component over rebuilding its internals from primitives.
+3. Reuse components. create_instance (componentId for a local component, componentKey for a published / library one), then drive its props: get_component_api gives the component's full property contract (each property's type + the verbatim key — VARIANT by bare name, BOOLEAN/TEXT/INSTANCE_SWAP suffixed #id), and set_instance_properties sets them with those exact keys (e.g. { "Size": "Large", "Disabled#1:2": true, "Label#2:0": "Sign in" }). Prefer instancing a real component and configuring it via its props over rebuilding its internals from primitives.
 
 4. Text. create_text / set_text. A new TEXT node defaults to a fallback font (Inter), NOT the design system's font — set the real family/style with set_text_properties (the font must be available; the plugin loads the node's fonts on edit).
 

@@ -36,6 +36,7 @@ import { detachInstanceTool } from './detach-instance.js';
 import { exportPdfTool } from './export-pdf.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { getAnnotationsTool } from './get-annotations.js';
+import { getComponentApiTool } from './get-component-api.js';
 import { getDesignContextTool } from './get-design-context.js';
 import { getDocumentTool } from './get-document.js';
 import { getFontsTool } from './get-fonts.js';
@@ -77,6 +78,7 @@ import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
 import { setFillsTool } from './set-fills.js';
+import { setInstancePropertiesTool } from './set-instance-properties.js';
 import { setLayoutPropsTool } from './set-layout-props.js';
 import { setMaskTool } from './set-mask.js';
 import { setOpacityTool } from './set-opacity.js';
@@ -109,6 +111,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   getStylesTool,
   getVariableDefsTool,
   getLocalComponentsTool,
+  getComponentApiTool,
   getViewportTool,
   getFontsTool,
   getAnnotationsTool,
@@ -179,6 +182,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setReactionsTool,
   removeReactionsTool,
   swapComponentTool,
+  setInstancePropertiesTool,
   detachInstanceTool,
   importImageTool,
   createEllipseTool,

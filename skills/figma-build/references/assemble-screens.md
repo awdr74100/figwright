@@ -17,7 +17,12 @@ Match the source pattern (a card, a list row, a nav, a button) to an existing co
 `scan_components` / `get_local_components`, and **`create_instance`** it:
 
 - `componentId` for a local component, `componentKey` for a published / library one.
-- Set its variant / properties on the instance rather than rebuilding the component's internals.
+- Set its variant / properties on the instance rather than rebuilding the component's internals:
+  `get_component_api` (on the component or the instance) returns the full property contract — each
+  property's type and its **verbatim key** (VARIANT by bare name, BOOLEAN/TEXT/INSTANCE_SWAP suffixed
+  `#id`) — then `set_instance_properties` (`instanceId`, `properties`) sets them with those exact keys,
+  e.g. `{ "Size": "Large", "Disabled#1:2": true, "Label#2:0": "Sign in" }`. Unspecified props keep
+  their value; an INSTANCE_SWAP value is the target component node id.
 - One instance per occurrence, each with its own props — the write-side mirror of codegen wiring
   `instances[].props`.
 
