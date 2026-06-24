@@ -5,6 +5,8 @@
 **Open-source, bidirectional Figma agent for MCP clients.**
 A free alternative to Figma's Dev Mode MCP — your AI agent reads designs with high-fidelity grounding _and_ writes back to the canvas. No paid Figma seat required.
 
+_Where Playwright drives the browser, Figwright drives Figma._
+
 [![npm](https://img.shields.io/npm/v/@figwright/mcp?logo=npm&color=cb3837)](https://www.npmjs.com/package/@figwright/mcp)
 [![CI](https://github.com/awdr74100/figwright/actions/workflows/ci.yml/badge.svg)](https://github.com/awdr74100/figwright/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -35,22 +37,44 @@ Everything runs on your machine and talks to Figma through a plugin, so it needs
 
 ## How it works
 
-```mermaid
-flowchart LR
-    subgraph machine["Your machine"]
-        A["MCP client<br/>(Claude Code, Cursor, …)"]
-        B["@figwright/mcp<br/>server · relay · election"]
-    end
-    subgraph figma["Figma app"]
-        C["Figwright plugin<br/>Vue 3 UI + sandbox"]
-        D[("Canvas")]
-    end
-    A -->|"MCP (stdio)"| B
-    B <-->|"local WebSocket · msgpack"| C
-    C -->|"Figma Plugin API"| D
-```
+Your MCP client talks to the `@figwright/mcp` server over stdio; the server relays to the Figma plugin over a local WebSocket. Several clients can share one plugin — they elect a leader that owns the connection — and the transport is built to ride out dropped sockets:
 
-The **server** (`@figwright/mcp`) is the process your MCP client launches. It owns the WebSocket **relay**, leader/follower **election** (several MCP servers can share one plugin), and request **idempotency**. The **plugin** runs inside Figma — a Vue 3 UI plus a sandbox that performs the actual Figma API calls — and connects out to the local server.
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ MCP CLIENTS  —  one per agent                                       │
+│ Claude Code · Cursor · Claude · any MCP-capable client              │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │  MCP protocol over stdio
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ @figwright/mcp  —  your client launches one; they elect a leader    │
+│                                                                     │
+│ LEADER   (owns the single plugin connection)                        │
+│    • WebSocket relay · request idempotency                          │
+│    • routes to the most-recently-active file                        │
+│    • session resume · "busy ≠ dead" heartbeat                       │
+│    • endpoints:  /ws (plugin) · /ping (health) · /rpc (followers)   │
+│                                                                     │
+│ FOLLOWERS                                                           │
+│    • forward tool calls to the leader over HTTP /rpc                │
+│    • take over automatically if the leader exits                    │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │  local WebSocket · msgpack (binary)
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ FIGMA  (desktop or browser)                                         │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ Figwright plugin                                                │ │
+│ │   • UI (Vue 3 iframe): WebSocket client + heartbeat             │ │
+│ │   • sandbox: executes Figma Plugin API calls                    │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│              │ Figma Plugin API                                     │
+│              ▼                                                      │
+│            Canvas                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 By design Figwright is **provider-first**: rather than a fixed compiler pipeline, the tools surface honest design context and let the model generate code that matches _your_ codebase. The [`figma-codegen`](#skills) skill encodes this approach.
 
@@ -118,6 +142,7 @@ npx skills add awdr74100/figwright/skills      # both
 npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-codegen  # one
 ```
 
+> [!NOTE]
 > Skills need the `@figwright/mcp` server connected — on their own they have no tools to drive.
 
 ## Tools
@@ -128,7 +153,8 @@ Figwright exposes **88 MCP tools** in three groups:
 - **Write** — create and edit frames, text, shapes, auto-layout, effects, styles, variables, components, pages, and reactions; plus a `batch` tool to apply many edits at once.
 - **Grounding** — `get_design_context` for faithful, de-duplicated design context, and `component_map` / `token_map` / `icon_map`, which join Figma data to your codebase so codegen reuses what you already have.
 
-Your MCP client lists every tool at connect time — that's always the authoritative, up-to-date catalog.
+> [!TIP]
+> Your MCP client lists every tool at connect time — that's always the authoritative, up-to-date catalog.
 
 ## Requirements
 
