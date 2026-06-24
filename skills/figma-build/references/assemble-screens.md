@@ -29,6 +29,13 @@ Match the source pattern (a card, a list row, a nav, a button) to an existing co
 Only build a piece from primitives when no component matches (then consider whether it should _become_
 a component — see `author-design-system.md`).
 
+**Icons, logos & images** follow the same reuse-first order, mirroring codegen's asset path: an icon
+that already has a component → `create_instance` it; a **logo / brand mark / one-off or not-yet-in-DS
+vector** → `import_svg` with the asset's raw SVG markup (a real editable vector, never a grey box or a
+blurry raster); a **raster photo** → `import_image`. Never `import_svg` an icon that exists as a
+component — that breaks reuse. Recolour a single-colour vector at the usage site with `set_fills` /
+`bind_variable_to_paint`, the same way codegen colours an icon on use.
+
 ## 3. Append, then size and fill
 
 Append each child into its auto-layout parent **first**, then `set_layout_props` to fill or hug

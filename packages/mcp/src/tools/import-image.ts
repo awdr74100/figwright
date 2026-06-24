@@ -7,9 +7,10 @@ export const IMPORT_IMAGE_TOOL_NAME = 'import_image';
 export const importImageTool: ToolSpec = {
   name: IMPORT_IMAGE_TOOL_NAME,
   description:
-    'Import an image and place it as a rectangle with an IMAGE fill. Provide data (base64-encoded ' +
-    'image bytes) or url. The rectangle defaults to the image size unless width/height are given. ' +
-    'scaleMode is FILL / FIT / CROP / TILE (default FILL). Returns { ok, nodeId, name, type }.',
+    'Import a raster image (PNG / JPG / GIF) and place it as a rectangle with an IMAGE fill. Provide ' +
+    'data (base64-encoded image bytes) or url. The rectangle defaults to the image size unless ' +
+    'width/height are given. scaleMode is FILL / FIT / CROP / TILE (default FILL). For vector SVG ' +
+    '(logos / icons) use import_svg instead. Returns { ok, nodeId, name, type }.',
   inputShape: {
     data: z.string().optional().describe('Base64-encoded image bytes (PNG / JPG / GIF)'),
     url: z.string().optional().describe('Image URL to fetch instead of data'),
