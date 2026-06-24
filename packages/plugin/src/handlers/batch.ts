@@ -105,6 +105,25 @@ const createInverse = (tool: string, hasParent = true): BatchInverse => ({
   },
 });
 
+/**
+ * Create_component is invertible as an empty create (undo removes the new node), but `fromNodeId`
+ * componentizes — and consumes — an existing node, which has no faithful inverse (removing the
+ * component would destroy the original). Reject that variant up front, like other non-invertible
+ * ops.
+ */
+const componentCreateInverse = createInverse('create_component');
+const createComponentInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    if (typeof (params as { fromNodeId?: unknown } | null)?.fromNodeId === 'string') {
+      throw new Error(
+        'batch/create_component: fromNodeId is not batchable — componentizing a node consumes it and has no faithful inverse',
+      );
+    }
+    return componentCreateInverse.capture(figmaCtx, params);
+  },
+  undo: componentCreateInverse.undo,
+};
+
 /** Set_text needs every font loaded before `characters` can be restored. */
 const setTextInverse: BatchInverse = {
   async capture(figmaCtx, params) {
@@ -193,7 +212,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   create_rectangle: createInverse('create_rectangle'),
   create_text: createInverse('create_text'),
   create_ellipse: createInverse('create_ellipse'),
-  create_component: createInverse('create_component'),
+  create_component: createComponentInverse,
   create_section: createInverse('create_section'),
   import_image: createInverse('import_image'),
   import_svg: createInverse('import_svg'),

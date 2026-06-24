@@ -52,7 +52,11 @@ look (a shadow, a type ramp step).
 ## Components & variant sets
 
 1. **`create_component`** — a reusable main component (size/name/position). Build its internals like
-   any frame (auto-layout, children, bound tokens — see `assemble-screens.md`).
+   any frame (auto-layout, children, bound tokens — see `assemble-screens.md`). To promote something
+   you already built or imported — a laid-out frame, or the vectors from an `import_svg` logo/icon —
+   pass **`fromNodeId`** to convert that node into a component in place (keeps its parent/position
+   unless `parentId` is given), then `create_instance` it to reuse it. That's the SVG-to-reusable-icon
+   path: `import_svg` → `create_component fromNodeId` → `create_instance`.
 2. **Name each variant member with `Prop=Value` syntax _before_ combining** — `Size=Small`,
    `Size=Large`. The set derives its variant properties from these names.
 3. **`combine_as_variants`** (`nodeIds`: ≥2 COMPONENTs, optional `name`) → a `COMPONENT_SET`. Read it
