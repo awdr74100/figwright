@@ -31,6 +31,7 @@ import { createDetachInstanceHandler } from './detach-instance.js';
 import { createExportPdfHandler } from './export-pdf.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
+import { createGetComponentApiHandler } from './get-component-api.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
 import { createGetDocumentHandler } from './get-document.js';
 import { createGetFontsHandler } from './get-fonts.js';
@@ -69,6 +70,7 @@ import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
 import { createSetFillsHandler } from './set-fills.js';
+import { createSetInstancePropertiesHandler } from './set-instance-properties.js';
 import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetMaskHandler } from './set-mask.js';
 import { createSetOpacityHandler } from './set-opacity.js';
@@ -152,6 +154,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     set_reactions: createSetReactionsHandler(figmaCtx),
     remove_reactions: createRemoveReactionsHandler(figmaCtx),
     swap_component: createSwapComponentHandler(figmaCtx),
+    set_instance_properties: createSetInstancePropertiesHandler(figmaCtx),
     detach_instance: createDetachInstanceHandler(figmaCtx),
     import_image: createImportImageHandler(figmaCtx),
     create_ellipse: createCreateEllipseHandler(figmaCtx),
@@ -175,6 +178,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     get_styles: createGetStylesHandler(figmaCtx),
     get_variable_defs: createGetVariableDefsHandler(figmaCtx),
     get_local_components: createGetLocalComponentsHandler(figmaCtx),
+    get_component_api: createGetComponentApiHandler(figmaCtx),
     get_viewport: createGetViewportHandler(figmaCtx),
     get_fonts: createGetFontsHandler(figmaCtx),
     get_annotations: createGetAnnotationsHandler(figmaCtx),
