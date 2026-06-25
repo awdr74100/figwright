@@ -59,6 +59,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `ALPHA` / `LUMINANCE` / `GEOMETRY`). **Don't render the mask layer as ordinary content** — realise
   it as the container's `overflow-hidden` + radius, a `clip-path`, or an SVG mask on the masked
   siblings, and skip emitting the mask shape itself.
+- **Ellipse arc / ring.** An `ELLIPSE` carrying `arcData` is **not a plain circle** — a partial
+  sweep (`startingAngle`→`endingAngle`, radians) is a pie slice / gauge, and `innerRadius > 0`
+  (0–1 of the radius) cuts a hole for a ring / donut (a progress ring, a donut chart). Render it as
+  an SVG `<path>` arc (or `<circle>` with `stroke-dasharray` for a progress ring) / a `conic-gradient`
+  — **not** a filled `rounded-full` div, which loses the wedge and the hole. A full disc omits
+  `arcData`, so its presence always means a real arc.
 - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
   `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
   (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour.** Map the

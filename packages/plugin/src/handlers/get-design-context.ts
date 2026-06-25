@@ -59,6 +59,7 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.blendMode !== undefined) out.blendMode = flat.blendMode;
   if (flat.isMask !== undefined) out.isMask = flat.isMask;
   if (flat.maskType !== undefined) out.maskType = flat.maskType;
+  if (flat.arcData !== undefined) out.arcData = flat.arcData;
   if (flat.fills !== undefined) out.fills = flat.fills;
   if (flat.strokes !== undefined) out.strokes = flat.strokes;
   if (flat.strokeWeight !== undefined) out.strokeWeight = flat.strokeWeight;

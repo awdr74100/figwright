@@ -240,6 +240,12 @@ export interface SerializedNode {
   isMask?: boolean;
   /** How the mask clips: ALPHA / LUMINANCE / GEOMETRY (only meaningful when isMask). */
   maskType?: string;
+  /**
+   * Ellipse arc geometry (EllipseNode only) → a pie slice / gauge (partial sweep) or a ring / donut
+   * (non-zero innerRadius). Omitted for a plain full disc, so a solid circle stays clean. Angles
+   * are in radians; innerRadius is 0–1 of the outer radius. Round-trips with set_arc.
+   */
+  arcData?: { startingAngle: number; endingAngle: number; innerRadius: number };
   fills?: readonly SerializedPaint[] | Mixed;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | Mixed;
@@ -316,6 +322,13 @@ export const SerializedNodeSchema = z.lazy(() =>
     blendMode: z.string().optional(),
     isMask: z.boolean().optional(),
     maskType: z.string().optional(),
+    arcData: z
+      .object({
+        startingAngle: z.number(),
+        endingAngle: z.number(),
+        innerRadius: z.number(),
+      })
+      .optional(),
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),
