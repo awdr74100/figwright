@@ -47,12 +47,14 @@ const GradientPaintSchema = z.object({
 });
 
 /**
- * IMAGE / VIDEO / PATTERN. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain, CROP,
- * TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster bytes
- * themselves stay out of scope (exported separately via get_screenshot).
+ * IMAGE / VIDEO / PATTERN / SHADER. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain,
+ * CROP, TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster
+ * bytes themselves stay out of scope (exported separately via get_screenshot). PATTERN and SHADER
+ * (a procedural fill) carry no scaleMode — we emit only the type marker so the fill isn't silently
+ * dropped from codegen, since neither has a meaningful CSS translation.
  */
 const OtherPaintSchema = z.object({
-  type: z.enum(['IMAGE', 'VIDEO', 'PATTERN']),
+  type: z.enum(['IMAGE', 'VIDEO', 'PATTERN', 'SHADER']),
   visible: z.boolean(),
   opacity: z.number(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),

@@ -14,15 +14,15 @@
   },
   "dependencies": {
     "@vueuse/core": "^14.3.0",
-    "vue": "^3.5.38"
+    "vue": "^3.5.39"
   },
   "devDependencies": {
-    "@figma/plugin-typings": "^1.129.0",
+    "@figma/plugin-typings": "^1.130.0",
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.1",
     "@vitejs/plugin-vue": "^6.0.7",
     "tailwindcss": "^4.3.1",
-    "vite": "^8.0.16",
+    "vite": "^8.1.0",
     "vite-plugin-singlefile": "^2.3.3",
     "vue-tsc": "^3.3.5"
   }
