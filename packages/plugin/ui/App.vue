@@ -182,10 +182,45 @@ const runInBackground = (): void => {
     '*',
   );
 };
+
+// Drag-to-resize. The grip sits in the bottom-right corner, so the pointer's viewport coords during a
+// drag are (≈) the desired window width/height (the iframe origin is the window's top-left). The
+// sandbox does the authoritative clamp + figma.ui.resize; we clamp here too so the grip stops tracking
+// at the floor instead of running away. `persist` on release tells the sandbox to remember the size.
+const MIN_UI_WIDTH = 280;
+const MIN_UI_HEIGHT = 300;
+let resizing = false;
+
+const postResize = (clientX: number, clientY: number, persist: boolean): void => {
+  (globalThis as { parent?: { postMessage: (m: unknown, t: string) => void } }).parent?.postMessage(
+    {
+      pluginMessage: {
+        type: 'ui:resize',
+        width: Math.max(MIN_UI_WIDTH, Math.floor(clientX + 4)),
+        height: Math.max(MIN_UI_HEIGHT, Math.floor(clientY + 4)),
+        persist,
+      },
+    },
+    '*',
+  );
+};
+
+const onResizeStart = (e: PointerEvent): void => {
+  resizing = true;
+  (e.target as Element).setPointerCapture(e.pointerId);
+};
+const onResizeMove = (e: PointerEvent): void => {
+  if (resizing) postResize(e.clientX, e.clientY, false);
+};
+const onResizeEnd = (e: PointerEvent): void => {
+  if (!resizing) return;
+  resizing = false;
+  postResize(e.clientX, e.clientY, true);
+};
 </script>
 
 <template>
-  <main class="flex h-full flex-col bg-fig-bg text-fig-fg text-xs">
+  <main class="relative flex h-full flex-col bg-fig-bg text-fig-fg text-xs">
     <header class="flex items-center gap-2 border-b border-white/10 px-2.5 py-1.5">
       <span :class="['inline-block size-2 shrink-0 rounded-full', dotClass[state.status]]" />
       <span class="font-medium">{{ statusLabel[state.status] }}</span>
@@ -356,5 +391,26 @@ const runInBackground = (): void => {
         Run in background
       </button>
     </footer>
+
+    <!-- Drag handle — Figma has no built-in resize grip, so we render one in the bottom-right corner. -->
+    <div
+      class="absolute right-0 bottom-0 flex size-3.5 cursor-nwse-resize touch-none items-end justify-end p-0.5 text-fig-muted hover:text-fig-fg"
+      title="Drag to resize"
+      @pointerdown="onResizeStart"
+      @pointermove="onResizeMove"
+      @pointerup="onResizeEnd"
+      @pointercancel="onResizeEnd"
+    >
+      <svg
+        viewBox="0 0 10 10"
+        class="size-2.5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.2"
+        stroke-linecap="round"
+      >
+        <path d="M10 4 4 10M10 7.5 7.5 10" />
+      </svg>
+    </div>
   </main>
 </template>
