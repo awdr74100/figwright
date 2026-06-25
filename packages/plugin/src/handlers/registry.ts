@@ -65,6 +65,7 @@ import { createRotateNodesHandler } from './rotate-nodes.js';
 import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './scan-text-nodes.js';
 import { createSearchNodesHandler } from './search-nodes.js';
+import { createSetArcHandler } from './set-arc.js';
 import { createSetAutoLayoutHandler } from './set-auto-layout.js';
 import { createSetBlendModeHandler } from './set-blend-mode.js';
 import { createSetConstraintsHandler } from './set-constraints.js';
@@ -115,6 +116,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     set_layout_props: createSetLayoutPropsHandler(figmaCtx),
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
     set_mask: createSetMaskHandler(figmaCtx),
+    set_arc: createSetArcHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
     lock_nodes: createSetLockedHandler(figmaCtx, true),

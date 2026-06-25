@@ -307,6 +307,24 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     const mt = (node as { maskType?: unknown }).maskType;
     if (typeof mt === 'string') out.maskType = mt;
   }
+  // Ellipse arc data (pie slices, gauges, rings / donuts). Only an EllipseNode exposes arcData; emit
+  // it only when the ellipse isn't a plain full disc — a partial sweep or a non-zero innerRadius — so
+  // a solid circle stays clean. Otherwise codegen would render a progress ring or pie as a flat
+  // circle. startingAngle / endingAngle are radians; innerRadius is 0–1 of the outer radius.
+  if ('arcData' in node) {
+    const arc = (
+      node as { arcData: { startingAngle: number; endingAngle: number; innerRadius: number } }
+    ).arcData;
+    const sweep = arc.endingAngle - arc.startingAngle;
+    const isFullDisc = arc.innerRadius === 0 && sweep >= Math.PI * 2 - 1e-4;
+    if (!isFullDisc) {
+      out.arcData = {
+        startingAngle: arc.startingAngle,
+        endingAngle: arc.endingAngle,
+        innerRadius: arc.innerRadius,
+      };
+    }
+  }
   if ('fills' in node) {
     const fills = (node as { fills: unknown }).fills;
     out.fills = Array.isArray(fills) ? fills.map(p => serializePaint(p as Paint)) : MIXED;

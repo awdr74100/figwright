@@ -161,6 +161,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_opacity: nodeProps('set_opacity', ['opacity']),
   set_visible: nodeProps('set_visible', ['visible']),
   set_corner_radius: nodeProps('set_corner_radius', ['cornerRadius']),
+  set_arc: nodeProps('set_arc', ['arcData']),
   set_blend_mode: nodeProps('set_blend_mode', ['blendMode']),
   set_effects: nodeProps('set_effects', ['effects']),
   set_constraints: nodeProps('set_constraints', ['constraints']),

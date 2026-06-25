@@ -71,6 +71,12 @@ export interface DesignContextNode {
   isMask?: boolean;
   /** Mask clipping mode: ALPHA / LUMINANCE / GEOMETRY (only when isMask). */
   maskType?: string;
+  /**
+   * Ellipse arc geometry (EllipseNode only): a partial sweep → pie slice / gauge, or a non-zero
+   * innerRadius → ring / donut. Omitted for a plain full disc. Angles in radians; innerRadius 0–1.
+   * Codegen renders these as an SVG arc / conic-gradient, not a solid circle.
+   */
+  arcData?: { startingAngle: number; endingAngle: number; innerRadius: number };
   fills?: readonly z.infer<typeof SerializedPaintSchema>[] | typeof MIXED;
   strokes?: readonly SerializedPaint[];
   strokeWeight?: number | typeof MIXED;
@@ -165,6 +171,13 @@ export const DesignContextNodeSchema = z.lazy(() =>
     blendMode: z.string().optional(),
     isMask: z.boolean().optional(),
     maskType: z.string().optional(),
+    arcData: z
+      .object({
+        startingAngle: z.number(),
+        endingAngle: z.number(),
+        innerRadius: z.number(),
+      })
+      .optional(),
     fills: z.union([z.array(SerializedPaintSchema), z.literal(MIXED)]).optional(),
     strokes: z.array(SerializedPaintSchema).optional(),
     strokeWeight: z.union([z.number(), z.literal(MIXED)]).optional(),

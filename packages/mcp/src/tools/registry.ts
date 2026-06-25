@@ -73,6 +73,7 @@ import { scanComponentsTool } from './scan-components.js';
 import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
 import { scanTextNodesTool } from './scan-text-nodes.js';
 import { searchNodesTool } from './search-nodes.js';
+import { setArcTool } from './set-arc.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setBlendModeTool } from './set-blend-mode.js';
 import { setConstraintsTool } from './set-constraints.js';
@@ -148,6 +149,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setLayoutPropsTool,
   setBlendModeTool,
   setMaskTool,
+  setArcTool,
   setConstraintsTool,
   rotateNodesTool,
   lockNodesTool,

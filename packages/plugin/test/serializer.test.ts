@@ -95,6 +95,27 @@ describe('serializeFlat', () => {
     expect(serializeFlatSync(fake({ isMask: false })).isMask).toBeUndefined();
   });
 
+  it('surfaces ellipse arcData for a partial sweep (pie) or non-zero innerRadius (donut)', () => {
+    // Partial sweep → a pie slice / gauge.
+    const pie = serializeFlatSync(
+      fake({ arcData: { startingAngle: 0, endingAngle: Math.PI, innerRadius: 0 } }),
+    );
+    expect(pie.arcData).toEqual({ startingAngle: 0, endingAngle: Math.PI, innerRadius: 0 });
+    // Full sweep but a hole → a ring / donut.
+    const donut = serializeFlatSync(
+      fake({ arcData: { startingAngle: 0, endingAngle: Math.PI * 2, innerRadius: 0.6 } }),
+    );
+    expect(donut.arcData).toEqual({ startingAngle: 0, endingAngle: Math.PI * 2, innerRadius: 0.6 });
+  });
+
+  it('omits arcData for a plain full disc and for non-ellipse nodes', () => {
+    const disc = serializeFlatSync(
+      fake({ arcData: { startingAngle: 0, endingAngle: Math.PI * 2, innerRadius: 0 } }),
+    );
+    expect(disc.arcData).toBeUndefined();
+    expect(serializeFlatSync(fake()).arcData).toBeUndefined();
+  });
+
   it('marks fills=mixed when value is not an array', () => {
     const out = serializeFlatSync(fake({ fills: Symbol('figma.mixed') }));
     expect(out.fills).toBe(MIXED);
