@@ -90,6 +90,38 @@ describe('dedupeStyles', () => {
     expect(globalVars.styles[nodes[0]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
   });
 
+  it('carries the tiling geometry on a PATTERN fill (source node + repeat)', () => {
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [
+          {
+            type: 'PATTERN',
+            visible: true,
+            opacity: 1,
+            sourceNodeId: '12:34',
+            tileType: 'RECTANGULAR',
+            scalingFactor: 0.5,
+            spacing: { x: 4, y: 8 },
+            horizontalAlignment: 'CENTER',
+          },
+        ],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      {
+        type: 'PATTERN',
+        sourceNodeId: '12:34',
+        tileType: 'RECTANGULAR',
+        scalingFactor: 0.5,
+        spacing: { x: 4, y: 8 },
+        horizontalAlignment: 'CENTER',
+      },
+    ]);
+  });
+
   it('hoists effects (drop-shadow) and strokes into refs, converting colors to hex', () => {
     const n: DesignContextNode = {
       id: 'card',

@@ -109,9 +109,35 @@ describe('SerializedPaint variant', () => {
     expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
   });
 
-  it('accepts an IMAGE/VIDEO/PATTERN paint (type only, no gradient detail)', () => {
+  it('accepts an IMAGE/VIDEO paint (type only, no gradient detail)', () => {
     const paint = { type: 'IMAGE' as const, visible: false, opacity: 1 };
     expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
+  });
+
+  it('accepts a PATTERN paint with its tiling geometry', () => {
+    const paint = {
+      type: 'PATTERN' as const,
+      visible: true,
+      opacity: 1,
+      sourceNodeId: '12:34',
+      tileType: 'RECTANGULAR' as const,
+      scalingFactor: 0.5,
+      spacing: { x: 4, y: 8 },
+      horizontalAlignment: 'CENTER' as const,
+    };
+    expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
+  });
+
+  it('rejects a PATTERN paint missing its source node', () => {
+    expect(() =>
+      SerializedPaintSchema.parse({
+        type: 'PATTERN',
+        visible: true,
+        opacity: 1,
+        tileType: 'RECTANGULAR',
+        scalingFactor: 1,
+      }),
+    ).toThrow(/sourceNodeId/);
   });
 
   it('rejects a gradient paint missing stops', () => {

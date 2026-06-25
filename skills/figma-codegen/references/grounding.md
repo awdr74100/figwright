@@ -73,6 +73,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Image fit.** An `IMAGE` (or `VIDEO`) fill carries `scaleMode` — the object-fit equivalent:
   `FILL` → `object-cover`, `FIT` → `object-contain`, `CROP` → `cover` + a position, `TILE` →
   `background-repeat: repeat`. Apply it to the exported image so it isn't stretched or letterboxed.
+- **Pattern fills.** A `PATTERN` fill tiles a source node (`sourceNodeId`) across the element — it is
+  **not** a flat colour. Export that tile with `get_screenshot` on `sourceNodeId`, then: for
+  `tileType: RECTANGULAR`, use `background-image` + `background-repeat: repeat` with a
+  `background-size` derived from `scalingFactor` (and gaps from `spacing`); for the hexagonal tile
+  types (`HORIZONTAL_HEXAGONAL` / `VERTICAL_HEXAGONAL`), use an SVG `<pattern>` with offset rows.
+  Don't flatten it to a solid colour.
 - **Auto-layout & Grid — read spacing off `layout`, never eyeball it.** Each auto-layout frame carries
   a `layout` object with the _exact_ spacing; don't reverse-engineer padding/gap/justify from child
   `x/y/w/h`. `mode` `HORIZONTAL`/`VERTICAL` → `flex-row`/`flex-col`; `padding*` → `p-*`; for H/V

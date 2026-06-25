@@ -61,6 +61,12 @@ interface SimplifiedPaint {
   gradientTransform?: number[][];
   /** IMAGE/VIDEO object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat. */
   scaleMode?: string;
+  /** PATTERN tiling: the source tile node + how it repeats. See grounding.md "Pattern fills". */
+  sourceNodeId?: string;
+  tileType?: string;
+  scalingFactor?: number;
+  spacing?: { x: number; y: number };
+  horizontalAlignment?: string;
   visible?: false;
 }
 
@@ -79,6 +85,15 @@ const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     out.gradientTransform = paint.gradientTransform;
   } else if ('scaleMode' in paint && paint.scaleMode !== undefined) {
     out.scaleMode = paint.scaleMode;
+  } else if (paint.type === 'PATTERN') {
+    // The source tile + its repeat geometry — without it a pattern fill is just `{ type: 'PATTERN' }`
+    // and the LLM can only flatten it to a colour. The serializer already omits no-op defaults.
+    out.sourceNodeId = paint.sourceNodeId;
+    out.tileType = paint.tileType;
+    out.scalingFactor = paint.scalingFactor;
+    if (paint.spacing !== undefined) out.spacing = paint.spacing;
+    if (paint.horizontalAlignment !== undefined)
+      out.horizontalAlignment = paint.horizontalAlignment;
   }
   if (paint.visible === false) out.visible = false;
   return out;

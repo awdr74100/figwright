@@ -51,8 +51,31 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       gradientTransform: transform.map(row => row.slice()),
     };
   }
+  if (paint.type === 'PATTERN') {
+    // A source node tiled across the fill. Carry the geometry to reconstruct the tiling; the tile
+    // artwork itself is exported separately (like a raster) via get_screenshot on sourceNodeId.
+    // Omit the no-op defaults (spacing 0,0 / alignment START) to keep the payload lean.
+    const spacing =
+      paint.spacing.x !== 0 || paint.spacing.y !== 0
+        ? { spacing: { x: paint.spacing.x, y: paint.spacing.y } }
+        : undefined;
+    const alignment =
+      paint.horizontalAlignment !== 'START'
+        ? { horizontalAlignment: paint.horizontalAlignment }
+        : undefined;
+    return {
+      type: 'PATTERN',
+      visible,
+      opacity,
+      sourceNodeId: paint.sourceNodeId,
+      tileType: paint.tileType,
+      scalingFactor: paint.scalingFactor,
+      ...spacing,
+      ...alignment,
+    };
+  }
   // IMAGE / VIDEO paints carry a scaleMode (FILL/FIT/CROP/TILE) — the object-fit equivalent, needed
-  // so exported images get the right fit instead of being stretched. PATTERN has no scaleMode.
+  // so exported images get the right fit instead of being stretched. SHADER has none.
   const scaleMode = 'scaleMode' in paint ? (paint as { scaleMode?: string }).scaleMode : undefined;
   return scaleMode === undefined
     ? { type: paint.type, visible, opacity }
