@@ -165,11 +165,64 @@ describe('serializeFlat', () => {
     expect(out.fills).toEqual([{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }]);
   });
 
-  it('serializes a PATTERN paint as type-only (no scaleMode)', () => {
+  it('serializes a PATTERN paint with its tiling geometry (source node + repeat)', () => {
     const out = serializeFlatSync(
-      fake({ fills: [{ type: 'PATTERN', visible: false, opacity: 0.8 }] }),
+      fake({
+        fills: [
+          {
+            type: 'PATTERN',
+            visible: false,
+            opacity: 0.8,
+            sourceNodeId: '12:34',
+            tileType: 'RECTANGULAR',
+            scalingFactor: 0.5,
+            spacing: { x: 4, y: 8 },
+            horizontalAlignment: 'CENTER',
+          },
+        ],
+      }),
     );
-    expect(out.fills).toEqual([{ type: 'PATTERN', visible: false, opacity: 0.8 }]);
+    expect(out.fills).toEqual([
+      {
+        type: 'PATTERN',
+        visible: false,
+        opacity: 0.8,
+        sourceNodeId: '12:34',
+        tileType: 'RECTANGULAR',
+        scalingFactor: 0.5,
+        spacing: { x: 4, y: 8 },
+        horizontalAlignment: 'CENTER',
+      },
+    ]);
+  });
+
+  it('omits the no-op pattern defaults (spacing 0,0 / alignment START)', () => {
+    const out = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'PATTERN',
+            visible: true,
+            opacity: 1,
+            sourceNodeId: '12:34',
+            tileType: 'RECTANGULAR',
+            scalingFactor: 1,
+            spacing: { x: 0, y: 0 },
+            horizontalAlignment: 'START',
+          },
+        ],
+      }),
+    );
+    expect(out.fills).toEqual([
+      {
+        type: 'PATTERN',
+        visible: true,
+        opacity: 1,
+        sourceNodeId: '12:34',
+        tileType: 'RECTANGULAR',
+        scalingFactor: 1,
+      },
+    ]);
   });
 
   it('falls back paint.visible/opacity to defaults when undefined', () => {

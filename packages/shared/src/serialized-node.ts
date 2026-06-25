@@ -47,23 +47,41 @@ const GradientPaintSchema = z.object({
 });
 
 /**
- * IMAGE / VIDEO / PATTERN / SHADER. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain,
- * CROP, TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster
- * bytes themselves stay out of scope (exported separately via get_screenshot). PATTERN and SHADER
- * (a procedural fill) carry no scaleMode — we emit only the type marker so the fill isn't silently
- * dropped from codegen, since neither has a meaningful CSS translation.
+ * IMAGE / VIDEO / SHADER. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain, CROP,
+ * TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster bytes
+ * themselves stay out of scope (exported separately via get_screenshot). SHADER is a procedural
+ * fill with no scaleMode and no meaningful CSS translation — we emit only the type marker so it
+ * isn't silently dropped. (PATTERN has its own schema below; it carries the tiling geometry.)
  */
 const OtherPaintSchema = z.object({
-  type: z.enum(['IMAGE', 'VIDEO', 'PATTERN', 'SHADER']),
+  type: z.enum(['IMAGE', 'VIDEO', 'SHADER']),
   visible: z.boolean(),
   opacity: z.number(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
+});
+
+/**
+ * PATTERN — a source node tiled across the fill (a newer Figma feature). The tile artwork itself
+ * lives at `sourceNodeId` and is exported separately (like a raster) via get_screenshot; we carry
+ * the geometry needed to reconstruct the tiling in code. `spacing` (0,0) and `horizontalAlignment`
+ * 'START' are the no-op defaults, omitted by the serializer to keep the payload lean.
+ */
+const PatternPaintSchema = z.object({
+  type: z.literal('PATTERN'),
+  visible: z.boolean(),
+  opacity: z.number(),
+  sourceNodeId: z.string(),
+  tileType: z.enum(['RECTANGULAR', 'HORIZONTAL_HEXAGONAL', 'VERTICAL_HEXAGONAL']),
+  scalingFactor: z.number(),
+  spacing: z.object({ x: z.number(), y: z.number() }).optional(),
+  horizontalAlignment: z.enum(['START', 'CENTER', 'END']).optional(),
 });
 
 export const SerializedPaintSchema = z.discriminatedUnion('type', [
   SolidPaintSchema,
   GradientPaintSchema,
   OtherPaintSchema,
+  PatternPaintSchema,
 ]);
 export type SerializedPaint = z.infer<typeof SerializedPaintSchema>;
 
