@@ -1,0 +1,7 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["awdr74100"],
+  "name": "figwright",
+  "description": "Open-source, bidirectional Figma agent for MCP clients — a free alternative to Figma's Dev Mode MCP. Reads designs with high-fidelity grounding and writes back to the canvas: frames, text, auto-layout, styles, variables, and components. 92 tools, no API token, no paid Figma seat.",
+  "license": "MIT"
+}
