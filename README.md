@@ -1,11 +1,12 @@
 <div align="center">
 
-# Figwright
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-light.svg">
+  <img alt="Figwright" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-light.svg" width="480" height="240">
+</picture>
 
-**Open-source, bidirectional Figma agent for MCP clients.**
-A free alternative to Figma's Dev Mode MCP — your AI agent reads designs with high-fidelity grounding _and_ writes back to the canvas. No paid Figma seat required.
-
-_Where Playwright drives the browser, Figwright drives Figma._
+Where Playwright drives the browser, Figwright drives Figma.
 
 [![npm](https://img.shields.io/npm/v/@figwright/mcp?logo=npm&color=cb3837)](https://www.npmjs.com/package/@figwright/mcp)
 [![CI](https://github.com/awdr74100/figwright/actions/workflows/ci.yml/badge.svg)](https://github.com/awdr74100/figwright/actions/workflows/ci.yml)
@@ -132,8 +133,8 @@ Agent skills orchestrate Figwright's tools. They're model-invoked — your agent
 
 | Skill                                              | What it does                                                                                        |
 | :------------------------------------------------- | :-------------------------------------------------------------------------------------------------- |
-| [`figma-codegen`](./skills/figma-codegen/SKILL.md) | Turn a Figma selection into framework-aware code, grounded on your stack and existing components.   |
-| [`figma-build`](./skills/figma-build/SKILL.md)     | Build a Figma design from code or a description, reusing the file's existing components and styles. |
+| [`figma‑codegen`](./skills/figma-codegen/SKILL.md) | Turn a Figma selection into framework-aware code, grounded on your stack and existing components.   |
+| [`figma‑build`](./skills/figma-build/SKILL.md)     | Build a Figma design from code or a description, reusing the file's existing components and styles. |
 
 Install across any supported agent with the [`skills`](https://www.skills.sh) CLI:
 
