@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { SimplifiedPaint } from './design-context-dedupe.js';
 import {
   MIXED,
   SerializedAutoLayoutSchema,
@@ -31,10 +32,32 @@ export const DETAIL_LEVELS = ['minimal', 'compact', 'full'] as const;
 export type DetailLevel = (typeof DETAIL_LEVELS)[number];
 
 /**
+ * One run of uniform styling inside a mixed-style TEXT node (full detail only). Without this a node
+ * with inline variation reads as `fontSize: "mixed"` / `textDecoration: "mixed"` with no way to
+ * tell _which_ characters are the bold word, the underlined link, the coloured span — so codegen
+ * flattens the whole string to one style (the classic "Terms and Privacy Policy" link with no
+ * underline). `fills` are simplified to hex like every other paint in this view; `start`/`end` are
+ * char offsets into the node's `characters`.
+ */
+export interface DesignContextTextSegment {
+  characters: string;
+  start: number;
+  end: number;
+  fontName: z.infer<typeof SerializedFontNameSchema>;
+  fontSize: number;
+  fills: readonly SimplifiedPaint[];
+  textDecoration: string;
+  textCase: string;
+}
+
+/**
  * Token-efficient, depth-limited tree node for LLM exploration. Fields populate by detail level:
  *
+ * No-op defaults are omitted at every level (absent visible = true, rotation = 0, opacity = 1,
+ * cornerRadius = 0).
+ *
  * - Minimal: id / name / type
- * - Compact: + visible / x / y / width / height
+ * - Compact: + x / y / width / height (+ visible only when hidden)
  * - Full: + rotation / opacity / cornerRadius / fills / text mixin `truncated` marks children dropped
  *   at the depth limit; `deduped` marks an instance whose main component was already expanded (its
  *   children are omitted), with `mainComponentId` for cross-ref. A deduped instance keeps its own
@@ -117,6 +140,10 @@ export interface DesignContextNode {
   textAlignVertical?: string;
   textTruncation?: string;
   maxLines?: number | null;
+  // Per-run styling of a *mixed* TEXT node — the only way to recover which characters carry the
+  // inline bold / link / coloured span that the node-level `mixed` markers flag but can't locate.
+  // Present only when the node is actually mixed (so uniform text stays clean).
+  segments?: readonly DesignContextTextSegment[];
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
@@ -206,6 +233,21 @@ export const DesignContextNodeSchema = z.lazy(() =>
     textAlignVertical: z.string().optional(),
     textTruncation: z.string().optional(),
     maxLines: z.number().nullable().optional(),
+    // Simplified paints are opaque here (hex lives in `color`), mirroring globalVars' z.unknown().
+    segments: z
+      .array(
+        z.object({
+          characters: z.string(),
+          start: z.number(),
+          end: z.number(),
+          fontName: SerializedFontNameSchema,
+          fontSize: z.number(),
+          fills: z.array(z.unknown()),
+          textDecoration: z.string(),
+          textCase: z.string(),
+        }),
+      )
+      .optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),

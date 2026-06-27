@@ -39,6 +39,13 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   (`CENTER`/`RIGHT`/`JUSTIFIED` → `text-center`/`text-right`/`text-justify`; absent = left/top) and
   `textTruncation: 'ENDING'` + `maxLines` (→ `line-clamp-N` / `truncate`). Each is omitted when it's
   the no-op default, so anything present is real intent — translate it, don't drop it.
+  - **Mixed (inline) styling → read `segments`.** When a value reads `"mixed"` (e.g. `fontSize` or
+    `textDecoration`), the node carries `segments` — each a run of uniform styling with its own
+    `characters`, `fontName`, `fontSize`, `fills` (hex), `textDecoration`, `textCase` over offsets
+    `start`/`end`. These describe runs **within** the node's `characters` (not extra text) — emit each
+    as its own span: the underlined/coloured `Privacy Policy` inside a sentence, the bold word in a
+    label, the smaller `/mo` after a price. Dropping them flattens the whole string to one style (a
+    link with no underline, a price with no emphasis) — the classic mixed-text miss.
 - **Per-side borders.** When `strokeWeight` is `mixed`, the node carries `strokeWeights`
   `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
   **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row
@@ -83,7 +90,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   a `layout` object with the _exact_ spacing; don't reverse-engineer padding/gap/justify from child
   `x/y/w/h`. `mode` `HORIZONTAL`/`VERTICAL` → `flex-row`/`flex-col`; `padding*` → `p-*`; for H/V
   `itemSpacing` → `gap`, `primaryAxisAlignItems`/`counterAxisAlignItems` → `justify-*`/`items-*`
-  (`SPACE_BETWEEN` → `justify-between`). `mode: 'GRID'` → `display:grid` with
+  (`SPACE_BETWEEN` → `justify-between`). When `layoutWrap: 'WRAP'` (a tag cloud / chip group /
+  gallery) the frame also carries the cross-axis row spacing: `counterAxisSpacing` is the gap
+  **between wrapped rows** (→ `flex-wrap` + the row part of `gap-x/gap-y`; with a single `gap` only
+  when it equals `itemSpacing`), and `counterAxisAlignContent: 'SPACE_BETWEEN'` distributes the rows
+  (`align-content: space-between`, and `counterAxisSpacing` is then absent). Don't collapse a wrapping
+  flex to a single-axis `gap` — the row gap is its own value. `mode: 'GRID'` → `display:grid` with
   `gridRowCount`/`gridColumnCount` → `grid-template-rows`/`grid-template-columns: repeat(N, 1fr)`,
   `gridRowGap`/`gridColumnGap` → `gap`, and optional `gridRowSizes`/`gridColumnSizes` tracks
   (`FIXED`→px, `FLEX`→fr) — **emit a real CSS grid, don't flatten it to stacked flex**. A grid child

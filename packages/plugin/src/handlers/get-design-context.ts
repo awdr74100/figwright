@@ -7,6 +7,7 @@ import {
   type GetDesignContextResult,
   MIXED,
   type ResolvedToken,
+  simplifyPaint,
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
@@ -24,37 +25,46 @@ const isDetailLevel = (value: unknown): value is DetailLevel =>
  * few values straight off the node and skip the full serializeFlatSync — which maps every
  * paint/effect and calls getStyledTextSegments on mixed TEXT, work that compact/minimal then
  * discard. serializeNode is a pure passthrough for id/name/type/visible/x/y/w/h and
- * enrichWithMixins never touches those, so the direct reads are byte-identical to projecting the
- * serialized form. The full branch is left exactly as before (one serializeFlatSync, every field
- * from flat), so no detail level does more work than it used to.
+ * enrichWithMixins never touches those, so the direct reads match projecting the serialized form.
+ * The full branch is one serializeFlatSync, every field from flat — so no detail level does more
+ * work than it used to. Across all branches, no-op defaults (visible=true / rotation=0 / opacity=1)
+ * are omitted.
  */
 const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (detail === 'minimal') return { id: node.id, name: node.name, type: node.type };
   if (detail === 'compact') {
-    return {
+    const out: DesignContextNode = {
       id: node.id,
       name: node.name,
       type: node.type,
-      visible: node.visible,
       x: node.x,
       y: node.y,
       width: node.width,
       height: node.height,
     };
+    // Omit the no-op default (visible defaults to true); only a hidden node is worth a field.
+    if (node.visible === false) out.visible = false;
+    return out;
   }
 
   // full — unchanged from the original projection: serializeFlatSync once, every field from flat.
   const flat = serializeFlatSync(node);
   const out: DesignContextNode = { id: flat.id, name: flat.name, type: flat.type };
-  out.visible = flat.visible;
+  // No-op defaults are omitted (consistent with every other field here): absent visible = true,
+  // absent rotation = 0, absent opacity = 1, absent cornerRadius = 0 (unrounded). Strict equality so
+  // a 0.0001-rad rotation or a 0.99 opacity still surfaces; `mixed` corners (the MIXED symbol) are
+  // never 0 so they stay. The generated code is identical; the payload is just smaller. cornerRadius=0
+  // is the highest-volume of these — it sits on every frame/shape — so omitting it matters most.
+  if (flat.visible === false) out.visible = false;
   out.x = flat.x;
   out.y = flat.y;
   out.width = flat.width;
   out.height = flat.height;
 
-  if (flat.rotation !== undefined) out.rotation = flat.rotation;
-  if (flat.opacity !== undefined) out.opacity = flat.opacity;
-  if (flat.cornerRadius !== undefined) out.cornerRadius = flat.cornerRadius;
+  if (flat.rotation !== undefined && flat.rotation !== 0) out.rotation = flat.rotation;
+  if (flat.opacity !== undefined && flat.opacity !== 1) out.opacity = flat.opacity;
+  if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
+    out.cornerRadius = flat.cornerRadius;
   if (flat.cornerRadii !== undefined) out.cornerRadii = flat.cornerRadii;
   if (flat.blendMode !== undefined) out.blendMode = flat.blendMode;
   if (flat.isMask !== undefined) out.isMask = flat.isMask;
@@ -107,6 +117,22 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
     out.textTruncation = flat.textTruncation;
   }
   if (typeof flat.maxLines === 'number') out.maxLines = flat.maxLines;
+  // Per-run styling of a mixed TEXT node — serializeFlatSync already computed this (only set when the
+  // node is genuinely mixed), get_design_context just used to drop it. Carry it so inline bold / links
+  // / coloured spans survive instead of collapsing to a single `mixed` marker. fills are simplified to
+  // hex like every other paint in this view.
+  if (flat.segments !== undefined) {
+    out.segments = flat.segments.map(s => ({
+      characters: s.characters,
+      start: s.start,
+      end: s.end,
+      fontName: s.fontName,
+      fontSize: s.fontSize,
+      fills: s.fills.map(simplifyPaint),
+      textDecoration: s.textDecoration,
+      textCase: s.textCase,
+    }));
+  }
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
   // globalVars dedup in P3.

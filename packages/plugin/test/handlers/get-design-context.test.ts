@@ -67,7 +67,9 @@ describe('get_design_context handler', () => {
     const compact = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'compact',
     })) as GetDesignContextResult;
-    expect(compact.nodes[0]).toMatchObject({ id: 't', visible: true, width: 10 });
+    expect(compact.nodes[0]).toMatchObject({ id: 't', x: 0, y: 0, width: 10, height: 10 });
+    // visible defaults to true → omitted as a no-op (only a hidden node carries the field)
+    expect(compact.nodes[0]?.visible).toBeUndefined();
     expect(compact.nodes[0]?.characters).toBeUndefined();
 
     const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
@@ -160,6 +162,94 @@ describe('get_design_context handler', () => {
       fontStyle: 'Regular',
       fontSize: 16,
     });
+  });
+
+  it('omits no-op layout defaults (visible=true / rotation=0 / opacity=1 / cornerRadius=0) but keeps real values', async () => {
+    const clean = node({ id: 'clean', rotation: 0, opacity: 1, cornerRadius: 0 }); // visible true by default
+    const cleanFull = (await createGetDesignContextHandler(fakeFigma({ selection: [clean] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(cleanFull.nodes[0]?.visible).toBeUndefined();
+    expect(cleanFull.nodes[0]?.rotation).toBeUndefined();
+    expect(cleanFull.nodes[0]?.opacity).toBeUndefined();
+    expect(cleanFull.nodes[0]?.cornerRadius).toBeUndefined();
+
+    const real = node({ id: 'real', visible: false, rotation: 90, opacity: 0.5, cornerRadius: 8 });
+    const realFull = (await createGetDesignContextHandler(fakeFigma({ selection: [real] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(realFull.nodes[0]).toMatchObject({
+      visible: false,
+      rotation: 90,
+      opacity: 0.5,
+      cornerRadius: 8,
+    });
+  });
+
+  it('surfaces per-run segments for a mixed-style TEXT node (fills simplified to hex), full detail only', async () => {
+    const mixed = node({
+      id: 'mt',
+      type: 'TEXT',
+      characters: 'Terms and Privacy Policy',
+      fontSize: Symbol('mixed'), // non-number → the serializer marks the node mixed
+      fontName: { family: 'Inter', style: 'Regular' },
+      getStyledTextSegments: () => [
+        {
+          characters: 'Terms and ',
+          start: 0,
+          end: 10,
+          fontName: { family: 'Inter', style: 'Regular' },
+          fontSize: 14,
+          fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, visible: true, opacity: 1 }],
+          textDecoration: 'NONE',
+          textCase: 'ORIGINAL',
+        },
+        {
+          characters: 'Privacy Policy',
+          start: 10,
+          end: 24,
+          fontName: { family: 'Inter', style: 'Bold' },
+          fontSize: 14,
+          fills: [{ type: 'SOLID', color: { r: 0, g: 0.4, b: 1 }, visible: true, opacity: 1 }],
+          textDecoration: 'UNDERLINE',
+          textCase: 'ORIGINAL',
+        },
+      ],
+    });
+
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [mixed] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    // The link span survives: its own characters, Bold style, underline, and blue colour as hex —
+    // instead of the whole string collapsing to one `mixed` marker with no way to locate the link.
+    expect(full.nodes[0]?.segments).toEqual([
+      {
+        characters: 'Terms and ',
+        start: 0,
+        end: 10,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', color: '#000000' }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+      {
+        characters: 'Privacy Policy',
+        start: 10,
+        end: 24,
+        fontName: { family: 'Inter', style: 'Bold' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', color: '#0066FF' }],
+        textDecoration: 'UNDERLINE',
+        textCase: 'ORIGINAL',
+      },
+    ]);
+
+    // not surfaced below full (the hot exploration default stays lean)
+    const compact = (await createGetDesignContextHandler(fakeFigma({ selection: [mixed] }))({
+      detail: 'compact',
+    })) as GetDesignContextResult;
+    expect(compact.nodes[0]?.segments).toBeUndefined();
   });
 
   it('uses the selection, and throws when nothing is selected', async () => {

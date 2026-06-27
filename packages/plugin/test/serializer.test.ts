@@ -386,6 +386,56 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
     });
   });
 
+  it('serializes WRAP cross-axis spacing + alignment (non-default only), skips them when not wrapping', () => {
+    const base = {
+      type: 'FRAME',
+      layoutMode: 'HORIZONTAL',
+      paddingTop: 0,
+      paddingRight: 0,
+      paddingBottom: 0,
+      paddingLeft: 0,
+      itemSpacing: 8,
+      primaryAxisAlignItems: 'MIN',
+      counterAxisAlignItems: 'MIN',
+    } as const;
+
+    // WRAP with a real row gap → counterAxisSpacing surfaces; AUTO alignment is the default → omitted.
+    const wrapped = serializeFlatSync(
+      fake({
+        ...base,
+        layoutWrap: 'WRAP',
+        counterAxisSpacing: 16,
+        counterAxisAlignContent: 'AUTO',
+      }),
+    );
+    expect(wrapped.layout?.counterAxisSpacing).toBe(16);
+    expect(wrapped.layout?.counterAxisAlignContent).toBeUndefined();
+
+    // SPACE_BETWEEN distributes the rows → Figma reports counterAxisSpacing null; alignment surfaces.
+    const distributed = serializeFlatSync(
+      fake({
+        ...base,
+        layoutWrap: 'WRAP',
+        counterAxisSpacing: null,
+        counterAxisAlignContent: 'SPACE_BETWEEN',
+      }),
+    );
+    expect(distributed.layout?.counterAxisSpacing).toBeUndefined();
+    expect(distributed.layout?.counterAxisAlignContent).toBe('SPACE_BETWEEN');
+
+    // A non-wrapping flex never carries them, even if the underlying props are set.
+    const noWrap = serializeFlatSync(
+      fake({
+        ...base,
+        layoutWrap: 'NO_WRAP',
+        counterAxisSpacing: 16,
+        counterAxisAlignContent: 'SPACE_BETWEEN',
+      }),
+    );
+    expect(noWrap.layout?.counterAxisSpacing).toBeUndefined();
+    expect(noWrap.layout?.counterAxisAlignContent).toBeUndefined();
+  });
+
   it('serializes GRID layoutMode with counts / gaps / track sizes, no H/V-only fields', () => {
     const out = serializeFlatSync(
       fake({
