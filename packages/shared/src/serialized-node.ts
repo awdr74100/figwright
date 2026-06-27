@@ -140,6 +140,12 @@ export const SerializedAutoLayoutSchema = z.object({
   primaryAxisAlignItems: z.string().optional(),
   counterAxisAlignItems: z.string().optional(),
   layoutWrap: z.string().optional(),
+  // WRAP only: gap between wrapped lines (cross-axis) + how those lines distribute. Without these a
+  // wrapping flex (tag cloud / chip group / gallery) keeps its primary `itemSpacing` but loses the
+  // row gap entirely → codegen guesses the vertical spacing. Omitted unless layoutWrap is WRAP and
+  // the value is non-default.
+  counterAxisSpacing: z.number().optional(),
+  counterAxisAlignContent: z.string().optional(),
   // GRID only
   gridRowCount: z.number().optional(),
   gridColumnCount: z.number().optional(),

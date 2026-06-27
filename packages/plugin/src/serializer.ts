@@ -109,6 +109,8 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     primaryAxisAlignItems: string;
     counterAxisAlignItems: string;
     layoutWrap?: string;
+    counterAxisSpacing?: number | null;
+    counterAxisAlignContent?: string;
     gridRowCount?: number;
     gridColumnCount?: number;
     gridRowGap?: number;
@@ -144,6 +146,17 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     counterAxisAlignItems: n.counterAxisAlignItems,
   };
   if (typeof n.layoutWrap === 'string') out.layoutWrap = n.layoutWrap;
+  // WRAP cross-axis: the row gap (counterAxisSpacing, null when content-distributed) and the line
+  // distribution (counterAxisAlignContent). Only meaningful when wrapping; emit non-default values so
+  // a non-wrapping flex stays clean. Figma sets counterAxisSpacing to null under SPACE_BETWEEN.
+  if (n.layoutWrap === 'WRAP') {
+    if (typeof n.counterAxisSpacing === 'number' && n.counterAxisSpacing !== 0) {
+      out.counterAxisSpacing = n.counterAxisSpacing;
+    }
+    if (typeof n.counterAxisAlignContent === 'string' && n.counterAxisAlignContent !== 'AUTO') {
+      out.counterAxisAlignContent = n.counterAxisAlignContent;
+    }
+  }
   return out;
 };
 

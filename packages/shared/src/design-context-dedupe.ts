@@ -53,7 +53,7 @@ export const toHex = (c: SerializedColor, alpha?: number): string => {
   return withAlpha.toUpperCase();
 };
 
-interface SimplifiedPaint {
+export interface SimplifiedPaint {
   type: string;
   color?: string;
   gradientStops?: { position: number; color: string }[];
@@ -71,7 +71,7 @@ interface SimplifiedPaint {
 }
 
 /** Convert a serialized paint to a structured, codegen-friendly form (SOLID → hex). */
-const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
+export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
   const out: SimplifiedPaint = { type: paint.type };
   if (paint.type === 'SOLID') {
     out.color = toHex(paint.color, paint.opacity);
