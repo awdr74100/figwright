@@ -25,7 +25,7 @@
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "postinstall": "node scripts/sync-skills.mjs",
-    "release": "pnpm -C packages/mcp exec changelogen --release --output ../../CHANGELOG.md",
+    "release": "pnpm -C packages/mcp exec changelogen --release --no-github --output ../../CHANGELOG.md",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
