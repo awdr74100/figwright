@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.2.0
+
+[compare changes](https://github.com/awdr74100/figwright/compare/v0.1.0...v0.2.0)
+
+### 🚀 Enhancements
+
+- Add get_component_api and set_instance_properties ([#3](https://github.com/awdr74100/figwright/pull/3))
+- Add import_svg to place vector logos and icons from SVG markup ([#4](https://github.com/awdr74100/figwright/pull/4))
+- Let create_component componentize an existing node (fromNodeId) ([#5](https://github.com/awdr74100/figwright/pull/5))
+- Add set_arc and read ellipse arcData (pie / gauge / ring) ([#6](https://github.com/awdr74100/figwright/pull/6))
+- Carry pattern fill tiling geometry for faithful codegen ([#8](https://github.com/awdr74100/figwright/pull/8))
+- Make the plugin window resizable with a drag handle ([#9](https://github.com/awdr74100/figwright/pull/9))
+
+### 🩹 Fixes
+
+- **skills:** Drop non-standard min-server-version frontmatter ([10ec3c4](https://github.com/awdr74100/figwright/commit/10ec3c4))
+- Report version mismatches clearly and validate the leader ping ([#2](https://github.com/awdr74100/figwright/pull/2))
+
+### 📖 Documentation
+
+- **skills:** Scope install command to the skills/ subpath ([5277f56](https://github.com/awdr74100/figwright/commit/5277f56))
+- Rewrite README, add CONTRIBUTING, and polish project metadata ([#1](https://github.com/awdr74100/figwright/pull/1))
+- Swap Node badge for Glama MCP server score badge ([#11](https://github.com/awdr74100/figwright/pull/11))
+- Add light/dark logo and simplify README header ([#12](https://github.com/awdr74100/figwright/pull/12))
+
+### 🏡 Chore
+
+- Add glama.json for Glama MCP registry listing ([#10](https://github.com/awdr74100/figwright/pull/10))
+
+### ❤️ Contributors
+
+- Roya ([@awdr74100](https://github.com/awdr74100))
+
 ## v0.1.0
 
 ### 🚀 Enhancements
