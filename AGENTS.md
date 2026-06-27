@@ -52,6 +52,15 @@ pnpm test        # vitest run — the canonical test command
 
 CI (`.github/workflows/ci.yml`) gates every push and PR on: **typecheck, lint, format:check, knip, build, test**. All must pass.
 
+## Engineering standard
+
+Figwright's moat is **grounding fidelity and generality** — how accurately and how broadly real designs turn into correct code (reliability is the floor, not the differentiator). Hold that bar by default; it is the point of the project, not a mode to switch on when asked.
+
+- **Equal-or-better, never a regression.** Any change to existing behaviour must leave every real design's output the same or better. Before claiming a change is good, find the case where it could be _worse_ — adversarially stress-test your own proposal against diverse real designs (mixed-style text, wrapping layouts, absolute / constraint positioning, deep component trees), and drop or fix anything that can't clear the bar. Verify, then assert.
+- **Fix root causes, not symptoms.** Read the implementation, the schemas, and the serializer; hunt the systemic class of bug — the recurring one here is _a multi-dimensional Figma property collapsed to a single field, or dropped on the way out_. Don't infer from the rendered screenshot.
+- **Don't gold-plate.** Spend effort where it moves fidelity / generality; resist over-engineering for a "killer feature" narrative. The smallest change that faithfully closes the gap wins.
+- **Prove it on real designs.** Pair unit tests with a live round-trip against an actual Figma file (plugin connected) — especially for read-path / serializer changes, where the running server uses the built `dist` (see Gotchas).
+
 ## Conventions
 
 - **Commits / PRs**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `refactor:`, `ci:`, …). PR titles are validated by `semantic-pr.yml`; with squash merges the PR title becomes the commit on `main`.
