@@ -216,24 +216,9 @@ Yes. Several MCP servers can share a single plugin via leader/follower **electio
 
 </details>
 
-## Contributing & development
+## Contributing
 
-Contributions are welcome — see **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the workflow, and **[AGENTS.md](./AGENTS.md)** for architecture, layout, and conventions.
-
-```
-packages/
-  shared/   # types, Zod schemas, msgpack codec, plugin↔server protocol (bundled into mcp)
-  mcp/      # the MCP server — @figwright/mcp (Node, ESM): relay, election, tools, joins
-  plugin/   # Figma plugin — Vue 3 + Vite + Tailwind v4 (UI) + sandbox (Figma API)
-skills/     # agent skills that orchestrate the tools — installable via `npx skills add`
-```
-
-Run the canonical checks from the repo root (the same gates CI enforces):
-
-```bash
-pnpm install
-pnpm typecheck && pnpm lint && pnpm format:check && pnpm knip && pnpm build && pnpm test
-```
+Contributions are welcome. See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for how to get set up and open a pull request, and **[AGENTS.md](./AGENTS.md)** for the architecture, repo layout, tech stack, and conventions.
 
 ## What's in the name
 
