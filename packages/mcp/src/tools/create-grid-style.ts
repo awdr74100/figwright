@@ -7,8 +7,9 @@ export const CREATE_GRID_STYLE_TOOL_NAME = 'create_grid_style';
 export const createGridStyleTool: ToolSpec = {
   name: CREATE_GRID_STYLE_TOOL_NAME,
   description:
-    'Create a local layout-grid style. GRID is uniform (sectionSize); ROWS / COLUMNS carry ' +
-    'count + gutterSize + alignment. Returns { ok, styleId, name }.',
+    'Create a reusable local layout-grid style for aligning content. Each grid pattern is GRID ' +
+    '(uniform squares via sectionSize) or ROWS / COLUMNS (count + gutterSize + alignment). Apply it ' +
+    'to frames with apply_style_to_node. Returns { ok, styleId, name }.',
   inputShape: {
     name: z.string().describe('Style name, e.g. "Layout/8pt"'),
     grids: z.array(

@@ -23,8 +23,10 @@ const variableValue = z
 export const setVariableValueTool: ToolSpec = {
   name: SET_VARIABLE_VALUE_TOOL_NAME,
   description:
-    "Set a variable's value for a mode. value is a boolean / number / string, a color " +
-    '{ r, g, b, a } (0–1), or an alias { type: "VARIABLE_ALIAS", id }. Returns { ok, variableId, name }.',
+    "Set a variable's value for one mode (modeId comes from the variable's collection). value must " +
+    'match the variable resolvedType: a boolean, a number (FLOAT), a string, a color { r, g, b, a } ' +
+    '(0–1), or an alias { type: "VARIABLE_ALIAS", id } pointing at another variable. Create the ' +
+    'variable first with create_variable. Returns { ok, variableId, name }.',
   inputShape: {
     variableId: z.string().describe('Variable id'),
     modeId: z.string().describe('Mode id (from the collection)'),

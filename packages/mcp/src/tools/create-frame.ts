@@ -7,8 +7,10 @@ export const CREATE_FRAME_TOOL_NAME = 'create_frame';
 export const createFrameTool: ToolSpec = {
   name: CREATE_FRAME_TOOL_NAME,
   description:
-    'Create a frame, optionally sized/positioned and appended to a parent (else the current page). ' +
-    'Returns { ok, nodeId, name, type }.',
+    'Create a frame — the primary container for UI and the only node that hosts auto-layout — ' +
+    'optionally sized/positioned and appended to a parent (default: current page). Enable ' +
+    'auto-layout afterwards with set_auto_layout; for a canvas-level grouping container use ' +
+    'create_section instead. Returns { ok, nodeId, name, type }.',
   inputShape: {
     parentId: z
       .string()

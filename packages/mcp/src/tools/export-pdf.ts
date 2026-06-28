@@ -21,12 +21,12 @@ const inputShape = {
 export const exportPdfTool: ToolSpec = {
   name: EXPORT_PDF_TOOL_NAME,
   description:
-    'Export a node (or the current page) to a single PDF file on disk: { nodeId, path, empty? }. ' +
-    "Renders the target as one PDF page — Figma's plugin API exports one page per node and cannot " +
-    'paginate a page into one-frame-per-page or combine multiple nodes into a multi-page file. Pass a ' +
-    'frame / section id for a vector PDF of that node; omit nodeId for the current page (large pages ' +
-    'can be slow). path is null if the target is missing or not exportable; empty:true means it ' +
-    'rendered nothing (blank PDF).',
+    "Export a node (or the current page) to a single-page vector PDF file on disk. Figma's plugin " +
+    'API renders one PDF page per node and cannot paginate a page into one-frame-per-page or merge ' +
+    'multiple nodes into a multi-page file. Pass a frame / section / component id for a vector PDF ' +
+    'of that node; omit nodeId for the current page (large pages can be slow). For raster output ' +
+    '(PNG/JPG) use save_screenshots instead. Returns { nodeId, path, empty? }; path is null if the ' +
+    'target is missing or not exportable, and empty:true means it rendered a blank PDF.',
   inputShape,
   kind: 'local',
 };
