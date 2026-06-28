@@ -26,9 +26,10 @@ const reaction = z.looseObject({ trigger, actions: z.array(action) });
 export const setReactionsTool: ToolSpec = {
   name: SET_REACTIONS_TOOL_NAME,
   description:
-    "Replace a node's prototype reactions. Each reaction has a trigger (e.g. { type: 'ON_CLICK' }) " +
-    "and an actions array (e.g. { type: 'NODE', destinationId, navigation, transition }). Best used " +
-    'to round-trip get_reactions output. Returns { ok, nodeId }.',
+    "Replace all of a node's prototype reactions — this overwrites existing reactions rather than " +
+    "appending. Each reaction pairs a trigger (e.g. { type: 'ON_CLICK' }) with an actions array " +
+    "(e.g. { type: 'NODE', destinationId, navigation, transition }). Best used to round-trip " +
+    'get_reactions output; to clear all reactions instead use remove_reactions. Returns { ok, nodeId }.',
   inputShape: {
     nodeId: z.string().describe('Node to set reactions on'),
     reactions: z.array(reaction).describe('Reactions to apply (replaces existing)'),
