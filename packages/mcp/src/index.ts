@@ -9,6 +9,7 @@ import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
+import { wireShutdown } from './lifecycle.js';
 import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
@@ -165,5 +166,7 @@ const shutdown = async (): Promise<void> => {
   await node.stop();
   process.exit(0);
 };
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+// Exit on SIGINT/SIGTERM and on stdin EOF. stdin closes when the client that spawned us goes away
+// (including a crash that sends no signal); without this the process would linger holding the relay
+// port as a stale "zombie" leader serving an old build. wireShutdown runs shutdown at most once.
+wireShutdown({ proc: process, stdin: process.stdin, shutdown });
