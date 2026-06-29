@@ -2,7 +2,7 @@
 
 > The MCP server for **[Figwright](https://github.com/awdr74100/figwright)** — a bidirectional Figma agent for Claude Code and other MCP clients.
 
-Figwright bridges MCP clients to a Figma plugin over a local WebSocket relay, so an AI agent can both **read** your designs with high-fidelity grounding and **write** back to the canvas — no Figma paid tier required. The server exposes **92 tools** spanning reads, writes, and codebase-grounded context.
+Figwright bridges MCP clients to a Figma plugin over a local WebSocket relay, so an AI agent can both **read** your designs with high-fidelity grounding and **write** back to the canvas — no Figma paid tier required. The server exposes **93 tools** spanning reads, writes, and codebase-grounded context.
 
 ## Usage
 

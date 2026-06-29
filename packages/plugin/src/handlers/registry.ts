@@ -76,6 +76,7 @@ import { createSetInstancePropertiesHandler } from './set-instance-properties.js
 import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetMaskHandler } from './set-mask.js';
 import { createSetOpacityHandler } from './set-opacity.js';
+import { createSetPositionHandler } from './set-position.js';
 import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
 import { createSetTextPropertiesHandler } from './set-text-properties.js';
@@ -114,6 +115,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     resize_nodes: createResizeNodesHandler(figmaCtx),
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
     set_layout_props: createSetLayoutPropsHandler(figmaCtx),
+    set_position: createSetPositionHandler(figmaCtx),
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
     set_mask: createSetMaskHandler(figmaCtx),
     set_arc: createSetArcHandler(figmaCtx),

@@ -84,6 +84,7 @@ import { setInstancePropertiesTool } from './set-instance-properties.js';
 import { setLayoutPropsTool } from './set-layout-props.js';
 import { setMaskTool } from './set-mask.js';
 import { setOpacityTool } from './set-opacity.js';
+import { setPositionTool } from './set-position.js';
 import { setReactionsTool } from './set-reactions.js';
 import { setStrokesTool } from './set-strokes.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
@@ -144,6 +145,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setCornerRadiusTool,
   setStrokesTool,
   moveNodesTool,
+  setPositionTool,
   resizeNodesTool,
   setAutoLayoutTool,
   setLayoutPropsTool,
