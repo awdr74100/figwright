@@ -41,16 +41,41 @@ describe('set_position handler', () => {
     ).rejects.toThrow(/x must be a number/);
   });
 
-  it('surfaces an actionable error when Figma rejects the position (auto-layout child)', async () => {
+  it('refuses an in-flow auto-layout child up front (Figma would silently reflow it)', async () => {
     const node = {
       id: '1:1',
-      y: 0,
-      set x(_v: number) {
-        throw new Error('controlled by auto layout');
-      },
+      x: 16,
+      y: 16,
+      layoutPositioning: 'AUTO',
+      parent: { layoutMode: 'VERTICAL' },
     };
     await expect(
-      createSetPositionHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', x: 50 }),
-    ).rejects.toThrow(/layoutPositioning ABSOLUTE first/);
+      createSetPositionHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', x: 200 }),
+    ).rejects.toThrow(/layoutPositioning ABSOLUTE/);
+    expect(node.x).toBe(16); // not written
+  });
+
+  it('allows an ABSOLUTE child of an auto-layout frame', async () => {
+    const node = {
+      id: '1:1',
+      x: 0,
+      y: 0,
+      layoutPositioning: 'ABSOLUTE',
+      parent: { layoutMode: 'VERTICAL' },
+    };
+    await createSetPositionHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', x: 200, y: 8 });
+    expect(node).toMatchObject({ x: 200, y: 8 });
+  });
+
+  it('allows a child of a non-auto-layout parent', async () => {
+    const node = {
+      id: '1:1',
+      x: 0,
+      y: 0,
+      layoutPositioning: 'AUTO',
+      parent: { layoutMode: 'NONE' },
+    };
+    await createSetPositionHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', x: 50 });
+    expect(node.x).toBe(50);
   });
 });

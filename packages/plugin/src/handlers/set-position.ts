@@ -4,9 +4,12 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Set a node's parent-relative position (x / y). For a top-level node x/y are canvas coordinates;
- * for an absolutely-positioned child they are relative to its auto-layout parent. Figma controls
- * the x/y of an in-flow auto-layout child, so setting those throws — surface an actionable hint
- * (set layoutPositioning ABSOLUTE first) instead of a raw exception.
+ * for an absolutely-positioned child they are relative to its auto-layout parent.
+ *
+ * An in-flow auto-layout child is positioned by the layout: Figma does NOT throw on an x/y write,
+ * it silently reflows the node back — which would make this tool report a misleading success. So we
+ * detect that case up front (auto-layout parent + non-ABSOLUTE child) and return an actionable
+ * error pointing at layoutPositioning ABSOLUTE, rather than writing a no-op and claiming ok.
  */
 export const createSetPositionHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -23,17 +26,26 @@ export const createSetPositionHandler =
     if (!('x' in node) || !('y' in node)) {
       throw new Error(`set_position: node ${p.nodeId} has no position`);
     }
-    const target = node as { x: number; y: number };
-    try {
-      if (typeof p.x === 'number') target.x = p.x;
-      if (typeof p.y === 'number') target.y = p.y;
-    } catch (err) {
+
+    const parent = (node as SceneNode).parent;
+    const inFlowAutoLayout =
+      typeof parent === 'object' &&
+      parent !== null &&
+      'layoutMode' in parent &&
+      (parent as { layoutMode: string }).layoutMode !== 'NONE' &&
+      'layoutPositioning' in node &&
+      (node as { layoutPositioning: string }).layoutPositioning !== 'ABSOLUTE';
+    if (inFlowAutoLayout) {
       throw new Error(
-        `set_position: cannot set x/y on node ${p.nodeId} — a node in-flow inside an auto-layout ` +
-          `frame is positioned by the layout; set layoutPositioning ABSOLUTE first to place it freely`,
-        { cause: err },
+        `set_position: node ${p.nodeId} is an in-flow child of an auto-layout frame — its x/y are ` +
+          `controlled by the layout and a write would be silently reflowed away. Set ` +
+          `layoutPositioning ABSOLUTE (set_layout_props) first to place it freely.`,
       );
     }
+
+    const target = node as { x: number; y: number };
+    if (typeof p.x === 'number') target.x = p.x;
+    if (typeof p.y === 'number') target.y = p.y;
 
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
