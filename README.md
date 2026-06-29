@@ -15,16 +15,23 @@ Where Playwright drives the browser, Figwright drives Figma.
 
 </div>
 
-<!-- TODO(demo): drop a short GIF / screenshot of a real codegen → canvas round-trip here. -->
-
 ## What is Figwright?
 
 Figwright connects an **MCP server** to a **Figma plugin** over a local WebSocket relay, so an AI agent — Claude Code, Cursor, or any other MCP client — can work _with_ Figma instead of just looking at it.
 
 It works in both directions:
 
-- **Read** — turn a Figma selection into framework-aware code, grounded on faithful, de-duplicated design context (layout, typography, variables, components).
-- **Write** — author and edit the canvas directly: frames, text, auto-layout, styles, variables, components, whole screens.
+**Read** — turn a Figma selection into framework-aware code, grounded on faithful, de-duplicated design context (layout, typography, variables, components).
+
+<p align="center">
+  <img alt="Figwright turning a Figma selection into code" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/figma-to-code.gif" width="820">
+</p>
+
+**Write** — author and edit the canvas directly: frames, text, auto-layout, styles, variables, components, whole screens.
+
+<p align="center">
+  <img alt="Figwright building a design directly on the Figma canvas" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/code-to-figma.gif" width="820">
+</p>
 
 Everything runs on your machine and talks to Figma through a plugin, so it needs **no Figma Dev Mode seat** and **no paid tier**.
 
@@ -78,6 +85,33 @@ Your MCP client talks to the `@figwright/mcp` server over stdio; the server rela
 ```
 
 By design Figwright is **provider-first**: rather than a fixed compiler pipeline, the tools surface honest design context and let the model generate code that matches _your_ codebase. The [`figma-codegen`](#skills) skill encodes this approach.
+
+## The plugin
+
+The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img alt="Activity tab — every tool call with timing" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-activity.png" width="400"><br>
+      <sub><b>Activity</b> — every tool call, with timing</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img alt="Payload inspector — the exact data sent to the model" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-payload.png" width="400"><br>
+      <sub><b>Payload inspector</b> — the exact data sent to the model</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img alt="Context tab — file, page, and current selection" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-context.png" width="400"><br>
+      <sub><b>Context</b> — file, page, and current selection</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img alt="Debug tab — connection health and a one-click diagnostic bundle" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-debug.png" width="400"><br>
+      <sub><b>Debug</b> — connection health and a one-click diagnostic bundle</sub>
+    </td>
+  </tr>
+</table>
 
 ## Quick start
 
