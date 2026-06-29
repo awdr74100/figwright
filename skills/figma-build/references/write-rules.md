@@ -28,7 +28,10 @@ Set the value, then bind it — there are **three** binding paths by what's bein
   reads it back (`flex` / `grid`).
 - **Absolute `x`/`y` is only for where a top-level container sits on the canvas** — never to position
   children that belong in a layout. Hand-placing laid-out children is the cardinal write miss
-  (it looks right, then breaks the moment content changes).
+  (it looks right, then breaks the moment content changes). Set those exact coordinates with
+  `set_position` — for a top-level frame, or for an overlay / badge after
+  `layoutPositioning: 'ABSOLUTE'` (prefer `set_position` over a `move_nodes` delta that first needs
+  the current x/y read back).
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 
