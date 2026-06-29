@@ -194,6 +194,17 @@ describe('Follower HTTP client', () => {
     expect(await f.resolveActiveSession()).toBeUndefined();
   });
 
+  it('resolveLeaderVersion reads the leader-reported serverVersion', async () => {
+    const b = await startLeader();
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
+    expect(await f.resolveLeaderVersion()).toBe('test-1.0.0');
+  });
+
+  it('resolveLeaderVersion returns undefined when the leader is unreachable', async () => {
+    const f = new Follower({ leaderUrl: 'http://127.0.0.1:1', pingTimeoutMs: 200 });
+    expect(await f.resolveLeaderVersion()).toBeUndefined();
+  });
+
   it('sendRpc threads sessionId so the leader pins the call', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async () => ({ ok: true }));

@@ -8,7 +8,9 @@ export const PING_TOOL_NAME = 'ping';
 export const pingTool: ToolSpec = {
   name: PING_TOOL_NAME,
   description:
-    'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the Figma sandbox.',
+    'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the ' +
+    'Figma sandbox. On a follower it also reports the leader’s version and warns (versionSkew) ' +
+    'when a stale older server still owns the plugin.',
   inputShape: {},
   kind: 'read',
 };
@@ -19,6 +21,17 @@ export interface PingServerInfo {
   role: NodeRole;
   port: number | null;
   ts: number;
+  /**
+   * Follower path only: the version of the leader process that actually owns the plugin and runs
+   * the work. Usually equal to `version`; differs when a stale older server still holds the port.
+   */
+  leaderVersion?: string;
+  /**
+   * Present only when `leaderVersion` differs from `version` — a human-readable warning that a
+   * stale server process is serving the plugin, so this client's newer build isn't actually in
+   * effect.
+   */
+  versionSkew?: string;
 }
 
 /**
@@ -122,7 +135,26 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
     }
   }
 
-  // Follower path — no direct relay visibility, so no sessions info.
+  // Follower path — no direct relay visibility, so no sessions info. Surface the leader's version so
+  // a stale older leader still owning the plugin (this client's new build never took effect) is
+  // visible instead of silent — the zombie-leader trap. Best-effort, never gates routing.
+  const leaderVersion = await ctx.follower.resolveLeaderVersion();
+  const followerServer: PingServerInfo =
+    leaderVersion === undefined
+      ? server
+      : {
+          ...server,
+          leaderVersion,
+          ...(leaderVersion === server.version
+            ? {}
+            : {
+                versionSkew:
+                  `leader is v${leaderVersion} but this client's server is v${server.version} — a ` +
+                  `stale server process still owns the plugin, so your newer build isn't in effect. ` +
+                  `Kill the leader (lsof -iTCP:3055 -sTCP:LISTEN) so election promotes this version.`,
+              }),
+        };
+
   try {
     const plugin = await dispatchTool(
       {
@@ -133,11 +165,11 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       'ping',
       {},
     );
-    return { ok: true, hop: 'e2e', server, plugin };
+    return { ok: true, hop: 'e2e', server: followerServer, plugin };
   } catch (err) {
     const dispatchError = err instanceof Error ? err.message : String(err);
     ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
-    return { ok: true, hop: 'server-only', server, plugin: null, dispatchError };
+    return { ok: true, hop: 'server-only', server: followerServer, plugin: null, dispatchError };
   }
 };
 
