@@ -83,6 +83,29 @@ export class Follower {
     }
   }
 
+  /**
+   * Read the leader's reported serverVersion (from its /ping). Lets the ping tool surface a
+   * leader/follower version skew — e.g. a stale older leader process still owns the plugin while a
+   * newer client attaches as a follower (so ping reports the new version but the work runs on the
+   * old one). Returns undefined on any failure — purely informational, never gates routing.
+   */
+  async resolveLeaderVersion(): Promise<string | undefined> {
+    try {
+      const res = await this.opts.fetch(`${this.opts.leaderUrl}${PING_PATH}`, {
+        signal: AbortSignal.timeout(this.opts.pingTimeoutMs),
+      });
+      if (!res.ok) return undefined;
+      const body: unknown = await res.json();
+      const version =
+        typeof body === 'object' && body !== null
+          ? (body as { serverVersion?: unknown }).serverVersion
+          : undefined;
+      return typeof version === 'string' ? version : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async sendRpc(
     toolName: string,
     args?: unknown,

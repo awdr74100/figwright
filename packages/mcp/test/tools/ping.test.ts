@@ -91,6 +91,7 @@ describe('ping tool', () => {
       getLeader: () => null,
     });
     const follower = makeFollower({
+      resolveLeaderVersion: async () => '1.0.0',
       sendRpc: async () => ({
         kind: 'err' as const,
         requestId: 'r',
@@ -109,5 +110,66 @@ describe('ping tool', () => {
     expect(result.dispatchError).toContain('no plugin connected');
     expect(result.server.role).toBe(NodeRole.Follower);
     expect(result.server.port).toBeNull();
+  });
+
+  it('flags a leader/follower version skew (zombie-leader trap)', async () => {
+    const node = makeNode({
+      role: NodeRole.Follower,
+      isLeader: () => false,
+      getLeader: () => null,
+    });
+    const follower = makeFollower({
+      resolveLeaderVersion: async () => '0.1.0', // stale older leader still owns the plugin
+      sendRpc: async () => ({
+        kind: 'ok' as const,
+        requestId: 'r',
+        result: { apiVersion: '1.0.0' },
+      }),
+    });
+    const result = await handlePing({ node, follower, serverVersion: '0.2.0', log: () => {} });
+
+    expect(result.server.version).toBe('0.2.0');
+    expect(result.server.leaderVersion).toBe('0.1.0');
+    expect(result.server.versionSkew).toMatch(/leader is v0\.1\.0.*v0\.2\.0/);
+  });
+
+  it('reports leaderVersion with no skew warning when versions match', async () => {
+    const node = makeNode({
+      role: NodeRole.Follower,
+      isLeader: () => false,
+      getLeader: () => null,
+    });
+    const follower = makeFollower({
+      resolveLeaderVersion: async () => '0.2.0',
+      sendRpc: async () => ({
+        kind: 'ok' as const,
+        requestId: 'r',
+        result: { apiVersion: '1.0.0' },
+      }),
+    });
+    const result = await handlePing({ node, follower, serverVersion: '0.2.0', log: () => {} });
+
+    expect(result.server.leaderVersion).toBe('0.2.0');
+    expect(result.server.versionSkew).toBeUndefined();
+  });
+
+  it('omits leaderVersion when the leader version is unreachable', async () => {
+    const node = makeNode({
+      role: NodeRole.Follower,
+      isLeader: () => false,
+      getLeader: () => null,
+    });
+    const follower = makeFollower({
+      resolveLeaderVersion: async () => undefined,
+      sendRpc: async () => ({
+        kind: 'ok' as const,
+        requestId: 'r',
+        result: { apiVersion: '1.0.0' },
+      }),
+    });
+    const result = await handlePing({ node, follower, serverVersion: '0.2.0', log: () => {} });
+
+    expect(result.server.leaderVersion).toBeUndefined();
+    expect(result.server.versionSkew).toBeUndefined();
   });
 });
