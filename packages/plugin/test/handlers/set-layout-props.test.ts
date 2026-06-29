@@ -52,4 +52,44 @@ describe('set_layout_props handler', () => {
     ).rejects.toThrow(/layoutGrow/);
     await expect(createSetLayoutPropsHandler(fakeFigma({}))({})).rejects.toThrow(/nodeId/);
   });
+
+  it('sets layoutSizingHorizontal / layoutSizingVertical', async () => {
+    const node = {
+      id: '1:1',
+      layoutAlign: 'INHERIT',
+      layoutSizingHorizontal: 'FIXED',
+      layoutSizingVertical: 'FIXED',
+    };
+    await createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      layoutSizingHorizontal: 'HUG',
+      layoutSizingVertical: 'FILL',
+    });
+    expect(node).toMatchObject({ layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'FILL' });
+  });
+
+  it('throws when the node lacks the sizing property', async () => {
+    await expect(
+      createSetLayoutPropsHandler(fakeFigma({ '1:1': { id: '1:1', layoutAlign: 'INHERIT' } }))({
+        nodeId: '1:1',
+        layoutSizingVertical: 'HUG',
+      }),
+    ).rejects.toThrow(/does not support/);
+  });
+
+  it('surfaces an actionable error when Figma rejects a sizing value', async () => {
+    const node = {
+      id: '1:1',
+      layoutAlign: 'INHERIT',
+      set layoutSizingHorizontal(_v: string) {
+        throw new Error('not an auto layout frame');
+      },
+    };
+    await expect(
+      createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        layoutSizingHorizontal: 'HUG',
+      }),
+    ).rejects.toThrow(/HUG needs an auto-layout frame/);
+  });
 });

@@ -30,17 +30,23 @@ Set the value, then bind it — there are **three** binding paths by what's bein
   children that belong in a layout. Hand-placing laid-out children is the cardinal write miss
   (it looks right, then breaks the moment content changes).
 
-## Sizing: append first, then fill / hug
+## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 
-A child can only fill or hug **once it's inside an auto-layout parent** — append it first, _then_ size
-it. **There is no FILL/HUG enum on the write side**; you express it through `set_layout_props`:
+`set_layout_props` takes `layoutSizingHorizontal` / `layoutSizingVertical` = **`HUG`** (shrink to fit
+children) / **`FILL`** (stretch to fill the auto-layout parent) / **`FIXED`** (keep the current
+size) — the exact `layoutSizingHorizontal/Vertical` codegen reads, now settable. Reach for these
+first:
 
-- `layoutGrow: 1` → fill the **primary** axis (the layout's direction).
-- `layoutAlign: 'STRETCH'` → fill the **counter** axis.
-- `layoutGrow: 0` → hug.
+- A container (wrapper, row, card, button) should **`HUG`** so it shrinks to its content instead of
+  staying a fixed **100×100** box — this is the single most common write miss. A frame created
+  without an explicit `width`+`height` stays 100×100 with its counter axis FIXED until you set
+  `HUG`.
+- A child that should stretch fills with **`FILL`** — append it into its auto-layout parent first.
+- `FIXED` keeps an explicit size (e.g. a card pinned to a column width).
 
-This is the write-side inverse of the `layoutSizingHorizontal/Vertical` (`FILL` / `HUG` / `FIXED`)
-that codegen reads.
+`layoutGrow: 1` (primary axis) and `layoutAlign: 'STRETCH'` (counter axis) are the older per-axis
+equivalents of `FILL` and still work, but prefer the `layoutSizing*` enum. Avoid `resize_nodes` for
+content-driven sizing — it forces FIXED and re-introduces the 100×100 fights.
 
 ## Text uses a real font, not the fallback
 
