@@ -4,6 +4,38 @@ The cross-cutting rules every build follows — whether you're assembling a scre
 components or authoring a new asset. These mirror codegen's "reference tokens, not literals" rules,
 pointed at the canvas.
 
+## Where every value comes from (ground, don't invent)
+
+The top cause of an off-looking build is **invented values** — padding, sizes, radii, colours, type
+the model made up. Every value should trace to a source. In priority order:
+
+1. **The file's design system** (highest) — a variable / style / component already in the file. Reuse
+   and bind it (see below). `get_variable_defs` / `get_styles` / `scan_components` say what exists.
+2. **The source code / spec you were handed** — when building _from code_, the code already carries
+   exact values; read them off instead of re-deriving by eye. This is the mirror of codegen (which
+   reads exact values _out of_ Figma): building from code reads them _out of the code_.
+   - **Tailwind** → its scale: spacing `1/2/3/4/6/8/12/16` = `4/8/12/16/24/32/48/64`px (so `p-4`=16,
+     `gap-6`=24); radius `rounded-sm/-/-md/-lg/-xl/-2xl` = `2/4/6/8/12/16`px; text
+     `sm/base/lg/xl/2xl/3xl` = `14/16/18/20/24/30`px; `font-medium/semibold/bold` = `500/600/700`;
+     colour tokens → their hex (`slate-900`=#0F172A, `slate-500`=#64748B…). These are the defaults — a
+     `tailwind.config` overrides them, so prefer the project's config when you can see it.
+   - **CSS / inline styles** → read px / hex / rem directly (`1rem`=16px unless the project says
+     otherwise).
+   - **Design tokens in the code** (CSS vars, a theme object) → map each to the matching Figma
+     variable (source 1) if one exists, else carry its literal. Don't swap `p-6` for a guessed 32 —
+     it's 24.
+3. **A sensible scale** (only when neither applies — a vague description into an empty file) — pick
+   from a consistent scale, never one-off numbers:
+   - Spacing / padding / gap: the 8pt grid — `4, 8, 12, 16, 24, 32, 48, 64`.
+   - Type: `12, 14, 16, 20, 24, 32, 40` with a clear hierarchy (don't size every text differently).
+   - Radius: one of `4, 8, 12, 16`, consistent across siblings.
+   - Colour: a neutral ramp (background / surface / border / muted text / ink) + one accent — not a
+     fresh random hex per element.
+
+   Reuse the _same_ value for the same role across the design — repetition is what reads as
+   "designed". And prefer HUG/FILL sizing (below) so the layout computes sizes for you: the fewer raw
+   width/height numbers you invent, the fewer chances to get them wrong.
+
 ## Reference tokens, not literals
 
 Never hardcode a hex/px when the file has a token for it (`get_variable_defs` tells you what does).

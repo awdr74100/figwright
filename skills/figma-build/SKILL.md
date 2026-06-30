@@ -20,11 +20,14 @@ the user must have the target file open. Confirm a plugin is connected (`ping`) 
   view, modal/dialog/drawer/sidebar/panel, a single component, or a design-system asset.
 - **Not** for reading a Figma design into code — that's `figma-codegen`.
 
-## First, ground in the design system (reuse beats regenerate)
+## First, ground every value (reuse beats regenerate, invent last)
 
-The write-side mirror of codegen's grounding. The file almost certainly has a design system whose
-components/tokens correspond to the source UI. **Discover it first, then instance/bind it** — don't
-redraw boxes with hex.
+The write-side mirror of codegen's grounding: an off-looking build almost always comes from
+**invented values**. Trace every value to a source, in priority order — **the file's design system →
+the code/spec you were handed → a sensible default scale** (full detail + the Tailwind→px table in
+`references/write-rules.md`).
+
+Start by discovering the system (it almost certainly corresponds to the source UI):
 
 1. **`get_variable_defs`** → the file's variables (colour / spacing / radius / typography) with
    names + values + `hex`. These are the tokens you bind to.
@@ -32,16 +35,18 @@ redraw boxes with hex.
    than rebuild. Match the source UI pattern (a card, a list row, a nav, a button) to a component.
 3. **`get_styles`** → shared paint / text / effect styles to apply.
 
-Decide per element: **reuse** an existing component/variable/style, or **build new** only what the
-system genuinely lacks.
+Decide per element: **reuse** an existing component/variable/style; else take the **exact value from
+the source code** (Tailwind/CSS carry real px/hex — read them, don't eyeball); only **invent** from a
+consistent scale when neither exists.
 
 ## Two jobs — both follow the write rules
 
-Every build obeys the same cross-cutting rules — reference tokens (colour via
-`bind_variable_to_paint`, scalars via `bind_variable_to_node`, shared looks via
-`apply_style_to_node`), auto-layout for related children (absolute only for top-level placement),
-append-then-fill sizing (`layoutGrow`/`layoutAlign`, no FILL/HUG enum), and real fonts (a new TEXT
-node defaults to Inter). → **[`references/write-rules.md`](./references/write-rules.md).**
+Every build obeys the same cross-cutting rules — ground values (design system → source code → scale),
+reference tokens (colour via `bind_variable_to_paint`, scalars via `bind_variable_to_node`, shared
+looks via `apply_style_to_node`), auto-layout for related children (absolute only for top-level
+placement), HUG/FILL/FIXED sizing via `set_layout_props` (so the layout computes sizes — don't
+hardcode width/height), and real fonts (a new TEXT node defaults to Inter). →
+**[`references/write-rules.md`](./references/write-rules.md).**
 
 - **Assemble a screen / component from what exists** (the common case): recognise the UI pattern,
   `create_instance` matching components, bind tokens, build incrementally, screenshot-verify each
@@ -52,9 +57,11 @@ node defaults to Inter). → **[`references/write-rules.md`](./references/write-
 
 ## Verify visually (close the loop)
 
-`get_screenshot` the built node, compare it to the source intent, fix discrepancies, and
-re-screenshot — the same render-and-diff discipline codegen uses, in reverse. An `empty: true` export
-means the node rendered nothing (hidden / off-canvas).
+`get_screenshot` the built node, fix discrepancies, and re-screenshot — the same render-and-diff
+discipline codegen uses, in reverse. Check it against the source intent **and** against objective
+design health (this catches problems even when you built from a vague description with no source to
+compare): nothing clipped or overflowing, edges aligned, spacing consistent (one scale), a clear type
+hierarchy. An `empty: true` export means the node rendered nothing (hidden / off-canvas).
 
 ## Rules
 

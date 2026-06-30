@@ -55,10 +55,17 @@ a token for (`write-rules.md` has the three paths).
 
 ## 6. Verify visually — close the loop
 
-`get_screenshot` the built node, compare it to the source intent, fix discrepancies, re-screenshot —
-the same render-and-diff discipline codegen uses, in reverse. An `empty: true` export means the node
-rendered nothing (hidden / off-canvas / no visible content) — check it's appended, visible, and on
-the canvas.
+`get_screenshot` the built node, fix discrepancies, re-screenshot — the render-and-diff discipline
+codegen uses, in reverse. Check it against the source intent **and** against objective design health,
+which catches problems even when you built from a vague description with no source to compare:
+
+- nothing **clipped or overflowing** (a frame stuck at 100×100, text cut off);
+- edges **aligned**, not off by a few px;
+- **spacing consistent** — gaps / padding from one scale, not a different number each time;
+- a clear **type hierarchy** (heading / body / caption actually differ).
+
+An `empty: true` export means the node rendered nothing (hidden / off-canvas / no visible content) —
+check it's appended, visible, and on the canvas.
 
 ## Large builds: section by section
 
