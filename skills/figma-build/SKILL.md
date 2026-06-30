@@ -20,25 +20,29 @@ the user must have the target file open. Confirm a plugin is connected (`ping`) 
   view, modal/dialog/drawer/sidebar/panel, a single component, or a design-system asset.
 - **Not** for reading a Figma design into code — that's `figma-codegen`.
 
-## First, ground every value (reuse beats regenerate, invent last)
+## First, understand the environment, then build (provider-first)
 
-The write-side mirror of codegen's grounding: an off-looking build almost always comes from
-**invented values**. Trace every value to a source, in priority order — **the file's design system →
-the code/spec you were handed → a sensible default scale** (full detail + the Tailwind→px table in
-`references/write-rules.md`).
+The write-side mirror of codegen's grounding, and the **most important habit**: an off-looking build
+almost always comes from **invented values** or **assumed conventions**. So **understand this user's
+actual environment first, then build into it** — never apply a generic template. There's no single
+"right" stack; there's _their_ stack. Look at **both ends** before creating anything:
 
-Start by discovering the system (it almost certainly corresponds to the source UI):
+- **The Figma file** — its existing design system, which you'll reuse and bind to:
+  1. **`get_variable_defs`** → the file's variables (colour / spacing / radius / typography) with
+     names + values + `hex`. These are the tokens you bind to.
+  2. **`scan_components`** / **`get_local_components`** → existing components to **instance** rather
+     than rebuild. Match the source UI pattern (a card, a list row, a nav, a button) to a component.
+  3. **`get_styles`** → shared paint / text / effect styles to apply.
+- **The source you were handed** — when it's code, _which_ stack and styling system (Tailwind /
+  Chakra / MUI / CSS modules / vanilla …) and whether it has a config / theme / tokens file. That's
+  where its real values live — read them from there, don't assume a default.
 
-1. **`get_variable_defs`** → the file's variables (colour / spacing / radius / typography) with
-   names + values + `hex`. These are the tokens you bind to.
-2. **`scan_components`** / **`get_local_components`** → existing components to **instance** rather
-   than rebuild. Match the source UI pattern (a card, a list row, a nav, a button) to a component.
-3. **`get_styles`** → shared paint / text / effect styles to apply.
-
-Decide per element: **reuse** an existing component/variable/style; else take the **exact value from
-the source code** — be provider-first (resolve whatever styling system it uses to real px/hex: CSS
-literally, Tailwind/UnoCSS/Chakra/etc via their scale or config), don't eyeball; only **invent** from
-a consistent scale when neither exists.
+Then build, tracing every value to a source in priority order: **reuse** an existing
+component / variable / style; else take the **exact value from the source's own code** —
+provider-first, resolving whatever styling system it uses to real px / hex (CSS literally;
+Tailwind / Chakra / UnoCSS / … via their config or scale), never eyeballed; only **invent** from a
+consistent scale when neither exists. Full detail + the value-resolution method in
+`references/write-rules.md`.
 
 ## Two jobs — both follow the write rules
 
@@ -66,6 +70,9 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
 
 ## Rules
 
+- **Understand the environment, then build.** Read both the file's design system _and_ the source's
+  stack / styling system before creating anything — there's no single right stack, only _theirs_.
+  Ground every value (design system → the code's own values → a sensible scale); never invent.
 - **Reuse beats regenerate.** Instance existing components; bind existing variables/styles. Build new
   only what the system lacks, and name/structure it to fit.
 - **Reference tokens, not literals.** Colour via `bind_variable_to_paint`, scalars via
