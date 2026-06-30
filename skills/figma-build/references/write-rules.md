@@ -15,7 +15,7 @@ the model made up. Every value should trace to a source. In priority order:
    exact values; read them off instead of re-deriving by eye. This is the mirror of codegen (which
    reads exact values _out of_ Figma): building from code reads them _out of the code_. Be
    **provider-first** — resolve whatever styling system the code actually uses to its real px / hex;
-   don't assume one. There are two kinds of value:
+   don't assume one. Resolve each value by its kind:
    - **Literal** (vanilla CSS, inline styles, CSS-in-JS, compiled SCSS) → read the px / hex / rem
      straight off (`1rem`=16px unless the project says otherwise).
    - **Encoded / scaled** (utility classes, component-library props, named tokens — `p-4`,
