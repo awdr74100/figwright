@@ -200,11 +200,11 @@ Figwright exposes **93 MCP tools** in three groups:
 ## FAQ
 
 <details>
-<summary><strong>My MCP client can't start the server — <code>npx</code> or <code>node</code> "command not found".</strong></summary>
+<summary><strong>The server won't start — <code>command not found</code>, or it fails / disconnects with <code>-32000</code> ("Connection closed").</strong></summary>
 
-This almost always means your MCP client can't find `node` / `npx` on its `PATH` — it isn't specific to Figwright and affects any `npx`-launched MCP server. It's especially common when Node is managed by a version manager (**fnm, nvm, asdf, volta, mise**): those set `PATH` from shell hooks that only run in interactive terminals, so a GUI app or MCP client that spawns the command directly never inherits them.
+Both come down to how your MCP client launches the server: it spawns the `command` directly, **not** through your interactive shell, so it inherits none of what your shell sets up. That bites hardest when Node is managed by a version manager (**fnm, nvm, asdf, volta, mise**), since those configure `PATH` and npm from shell hooks that only run in a real terminal. It isn't specific to Figwright — it affects any `npx`-launched MCP server. There are two symptoms, with two different fixes.
 
-Fixes, easiest first:
+**`command not found` — the client can't find `npx` / `node` on its `PATH`.**
 
 - **Use an absolute path.** In a normal terminal run `which npx` (or `which node`) and use that full path as `command`:
 
@@ -219,9 +219,47 @@ Fixes, easiest first:
   }
   ```
 
-- **Install it and point at the binary.** Install the package (globally with `npm i -g @figwright/mcp`, or as a local dependency), then set `command` to the absolute path from `which figwright-mcp`. As a bonus this skips the network resolution that `npx … @latest` does on every launch.
+- **Or pass `PATH` through `env`.** If your client supports a per-server `env`, add your version manager's `bin` directory to `env.PATH`.
 
-- **Pass `PATH` through `env`.** If your client supports a per-server `env`, add your version manager's `bin` directory to `env.PATH`.
+**`-32000` / "Connection closed" / it just never connects — `npx` runs, but the server exits before the handshake.**
+
+`npx … @latest` re-resolves the package from the registry on **every** launch. In a directly-spawned environment that step can fail or stall — empty or different npm config, a corporate proxy or private registry that isn't configured there, or no network — so the process dies before MCP connects and the client reports the connection as closed. (A missing `node` for the binary's shebang lands here too.)
+
+The fix is to install the package so launch needs no registry fetch:
+
+- **As a project dependency — the quickest unblock.** Install it, then **drop `@latest`** from your config. The `@latest` tag is what forces the registry round-trip; without it, `npx` uses the copy already in `node_modules` (a project-scoped config like Claude Code's `.mcp.json` runs from your project root):
+
+  ```bash
+  pnpm add -D @figwright/mcp   # or: npm i -D @figwright/mcp
+  ```
+
+  ```json
+  {
+    "mcpServers": {
+      "figwright": {
+        "command": "npx",
+        "args": ["-y", "@figwright/mcp"]
+      }
+    }
+  }
+  ```
+
+- **Or globally, pinned to the binary.** Install once, then point `command` straight at it — no `npx`, no per-launch resolution. Use the absolute path from `which figwright-mcp`:
+
+  ```bash
+  npm i -g @figwright/mcp
+  which figwright-mcp
+  ```
+
+  ```json
+  {
+    "mcpServers": {
+      "figwright": {
+        "command": "/absolute/path/to/figwright-mcp"
+      }
+    }
+  }
+  ```
 
 </details>
 
