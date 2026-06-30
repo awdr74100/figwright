@@ -61,9 +61,10 @@ export interface DesignContextTextSegment {
  * - Full: + rotation / opacity / cornerRadius / fills / text mixin `truncated` marks children dropped
  *   at the depth limit; `deduped` marks an instance whose main component was already expanded (its
  *   children are omitted), with `mainComponentId` for cross-ref. A deduped instance keeps its own
- *   `textOverrides` — the visible text it actually renders — so codegen gets per-instance content
- *   without re-expanding the collapsed subtree (every card title / list item / form label
- *   differs).
+ *   `textOverrides` — the visible text it actually renders — and `propertyOverrides` — the visual
+ *   fields it renders differently from the main component (recoloured title, hidden badge) — so
+ *   codegen gets per-instance content _and_ per-instance styling without re-expanding the collapsed
+ *   subtree (every card title / list item / form label differs).
  *
  * Grounding fields (M3): `styleIds` / `boundVariables` link a node to design-system styles and
  * variables (id → token name, resolved downstream); `componentProperties` carries an INSTANCE's
@@ -168,6 +169,29 @@ export interface DesignContextNode {
    * away while the output stays small.
    */
   textOverrides?: readonly { name: string; characters: string }[];
+  /**
+   * Per-instance NON-text overrides of a deduped instance — the visual counterpart to
+   * `textOverrides`. The fields a child renders that differ from the main component: fill colour,
+   * stroke, effect, radius, opacity, blend, and visibility (hiding an optional element). Without
+   * this a deduped instance that recolours its title or hides a badge would silently collapse to
+   * the main component's defaults (the "every card looks identical" miss). Derived from Figma's
+   * native `instance.overrides`, so only genuinely-changed nodes appear; paints are simplified to
+   * hex like `globalVars` values. Text content stays in `textOverrides`. Only emitted on deduped
+   * instances that actually carry such overrides.
+   */
+  propertyOverrides?: readonly {
+    name: string;
+    visible?: boolean;
+    opacity?: number;
+    cornerRadius?: number;
+    cornerRadii?: unknown;
+    fills?: readonly unknown[];
+    strokes?: readonly unknown[];
+    strokeWeight?: number;
+    strokeAlign?: string;
+    effects?: readonly unknown[];
+    blendMode?: string;
+  }[];
   truncated?: boolean;
   children?: readonly DesignContextNode[];
 }
@@ -259,6 +283,25 @@ export const DesignContextNodeSchema = z.lazy(() =>
     textStyle: z.string().optional(),
     deduped: z.boolean().optional(),
     textOverrides: z.array(z.object({ name: z.string(), characters: z.string() })).optional(),
+    // Visual fields are opaque here (simplified paints carry hex in `color`), mirroring segments /
+    // globalVars' z.unknown().
+    propertyOverrides: z
+      .array(
+        z.object({
+          name: z.string(),
+          visible: z.boolean().optional(),
+          opacity: z.number().optional(),
+          cornerRadius: z.number().optional(),
+          cornerRadii: z.unknown().optional(),
+          fills: z.array(z.unknown()).optional(),
+          strokes: z.array(z.unknown()).optional(),
+          strokeWeight: z.number().optional(),
+          strokeAlign: z.string().optional(),
+          effects: z.array(z.unknown()).optional(),
+          blendMode: z.string().optional(),
+        }),
+      )
+      .optional(),
     truncated: z.boolean().optional(),
     children: z.array(DesignContextNodeSchema).optional(),
   }),
