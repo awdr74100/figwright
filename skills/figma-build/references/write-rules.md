@@ -33,7 +33,10 @@ the model made up. Every value should trace to a source. In priority order:
      `1/2/3/4/6/8/12/16`=`4/8/12/16/24/32/48/64`px (`p-4`=16, `gap-6`=24), radius
      `rounded-sm/-/-md/-lg/-xl/-2xl`=`2/4/6/8/12/16`px, text `sm/base/lg/xl/2xl/3xl`=
      `14/16/18/20/24/30`px, `font-medium/semibold/bold`=`500/600/700`, colour tokens→hex
-     (`slate-900`=#0F172A…).
+     (`slate-900`=#0F172A…). **Tailwind v4** is different: there's no `tailwind.config` — the theme
+     lives in a CSS `@theme { --color-…: …; --spacing-…: …; }` block as custom properties, and some
+     stock defaults changed from v3 (the colour palette moved to OKLCH), so read the project's CSS
+     `@theme` rather than assuming the v3 values above.
 
    - **Named design tokens** (CSS custom properties like `--space-md`, a theme object) → map each to
      the matching Figma variable (source 1) if one exists, else resolve to its literal value.
