@@ -13,17 +13,25 @@ the model made up. Every value should trace to a source. In priority order:
    and bind it (see below). `get_variable_defs` / `get_styles` / `scan_components` say what exists.
 2. **The source code / spec you were handed** — when building _from code_, the code already carries
    exact values; read them off instead of re-deriving by eye. This is the mirror of codegen (which
-   reads exact values _out of_ Figma): building from code reads them _out of the code_.
-   - **Tailwind** → its scale: spacing `1/2/3/4/6/8/12/16` = `4/8/12/16/24/32/48/64`px (so `p-4`=16,
-     `gap-6`=24); radius `rounded-sm/-/-md/-lg/-xl/-2xl` = `2/4/6/8/12/16`px; text
-     `sm/base/lg/xl/2xl/3xl` = `14/16/18/20/24/30`px; `font-medium/semibold/bold` = `500/600/700`;
-     colour tokens → their hex (`slate-900`=#0F172A, `slate-500`=#64748B…). These are the defaults — a
-     `tailwind.config` overrides them, so prefer the project's config when you can see it.
-   - **CSS / inline styles** → read px / hex / rem directly (`1rem`=16px unless the project says
-     otherwise).
-   - **Design tokens in the code** (CSS vars, a theme object) → map each to the matching Figma
-     variable (source 1) if one exists, else carry its literal. Don't swap `p-6` for a guessed 32 —
-     it's 24.
+   reads exact values _out of_ Figma): building from code reads them _out of the code_. Be
+   **provider-first** — resolve whatever styling system the code actually uses to its real px / hex;
+   don't assume one. There are two kinds of value:
+   - **Literal** (vanilla CSS, inline styles, CSS-in-JS, compiled SCSS) → read the px / hex / rem
+     straight off (`1rem`=16px unless the project says otherwise).
+   - **Encoded / scaled** (utility classes, component-library props, named tokens) → resolve through
+     that system's scale / config / theme, don't eyeball. Find the system's own definition first
+     (a `tailwind.config`, a theme object, a `_variables.scss`, CSS custom properties) — a default
+     you assumed can be wrong. The most common case is **Tailwind**, as a worked example: spacing
+     `1/2/3/4/6/8/12/16`=`4/8/12/16/24/32/48/64`px (`p-4`=16, `gap-6`=24), radius
+     `rounded-sm/-/-md/-lg/-xl/-2xl`=`2/4/6/8/12/16`px, text `sm/base/lg/xl/2xl/3xl`=
+     `14/16/18/20/24/30`px, `font-medium/semibold/bold`=`500/600/700`, colour tokens→hex
+     (`slate-900`=#0F172A…) — **and the same approach (not these numbers) applies to UnoCSS,
+     Bootstrap spacers, Chakra/MUI scale props, or any project theme**: resolve to the actual value.
+   - **Named design tokens** (CSS custom properties like `--space-md`, a theme object) → map each to
+     the matching Figma variable (source 1) if one exists, else resolve to its literal value.
+
+   Don't swap `p-6` for a guessed 32 — resolve it (Tailwind default: 24).
+
 3. **A sensible scale** (only when neither applies — a vague description into an empty file) — pick
    from a consistent scale, never one-off numbers:
    - Spacing / padding / gap: the 8pt grid — `4, 8, 12, 16, 24, 32, 48, 64`.

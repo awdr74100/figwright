@@ -36,8 +36,9 @@ Start by discovering the system (it almost certainly corresponds to the source U
 3. **`get_styles`** → shared paint / text / effect styles to apply.
 
 Decide per element: **reuse** an existing component/variable/style; else take the **exact value from
-the source code** (Tailwind/CSS carry real px/hex — read them, don't eyeball); only **invent** from a
-consistent scale when neither exists.
+the source code** — be provider-first (resolve whatever styling system it uses to real px/hex: CSS
+literally, Tailwind/UnoCSS/Chakra/etc via their scale or config), don't eyeball; only **invent** from
+a consistent scale when neither exists.
 
 ## Two jobs — both follow the write rules
 
