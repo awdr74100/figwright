@@ -7,6 +7,7 @@ import {
   type GetDesignContextResult,
   MIXED,
   type ResolvedToken,
+  type SerializedPaint,
   simplifyPaint,
 } from '@figwright/shared';
 
@@ -294,6 +295,76 @@ const collectTextOverrides = (instance: SceneNode): { name: string; characters: 
   return out;
 };
 
+/** Visual (non-text) fields a deduped instance may override; text lives in textOverrides. */
+const VISUAL_OVERRIDE_FIELDS = [
+  'fills',
+  'strokes',
+  'strokeWeight',
+  'strokeAlign',
+  'effects',
+  'cornerRadius',
+  'cornerRadii',
+  'opacity',
+  'blendMode',
+] as const;
+
+/**
+ * The non-text overrides a deduped instance actually renders — the visual counterpart to
+ * `collectTextOverrides`. Without it a deduped instance that recolours its title or hides an
+ * optional element collapses to the main component's defaults (the "every card looks identical"
+ * miss). Uses Figma's native `instance.overrides` to find exactly which nodes changed, then
+ * projects each one's visual fields (paints simplified to hex like globalVars). `characters` / font
+ * fields stay with textOverrides; visibility is carried since hiding an element is a common
+ * override. Hidden state and each field are only emitted when present, so an instance with only
+ * text changes yields nothing.
+ */
+const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknown>[] => {
+  // Which descendant nodes Figma reports a non-text visual override on (id → changed fields). We
+  // read instance.overrides for the *what changed*, then walk the subtree (like collectTextOverrides)
+  // for the actual values — no figma.getNodeById, so this stays sync and dependency-free.
+  const overridden = new Set<string>();
+  // overrides is always present on a real InstanceNode; guard so a node lacking it (tests, an
+  // unexpected node) is a no-op rather than a throw.
+  const ovs =
+    (instance as { overrides?: readonly { id: string; overriddenFields: readonly string[] }[] })
+      .overrides ?? [];
+  for (const ov of ovs) {
+    if (ov.id === instance.id) continue; // instance-level (componentProperties), not a child's visual
+    const fields = ov.overriddenFields as readonly string[];
+    if (
+      fields.includes('visible') ||
+      fields.some(f => (VISUAL_OVERRIDE_FIELDS as readonly string[]).includes(f))
+    ) {
+      overridden.add(ov.id);
+    }
+  }
+  if (overridden.size === 0) return [];
+
+  const out: Record<string, unknown>[] = [];
+  const visit = (n: SceneNode): void => {
+    if (overridden.has(n.id)) {
+      const proj = project(n, 'full') as unknown as Record<string, unknown>;
+      const entry: Record<string, unknown> = { name: n.name };
+      if (n.visible === false) entry.visible = false;
+      for (const f of VISUAL_OVERRIDE_FIELDS) {
+        const v = proj[f];
+        if (v === undefined) continue;
+        entry[f] =
+          f === 'fills' || f === 'strokes' ? (v as SerializedPaint[]).map(simplifyPaint) : v;
+      }
+      // Only a node that actually carries a visual override (beyond its name) is worth an entry.
+      if (Object.keys(entry).length > 1) out.push(entry);
+    }
+    if ('children' in n) {
+      for (const c of (n as SceneNode & { children: readonly SceneNode[] }).children) visit(c);
+    }
+  };
+  if ('children' in instance) {
+    for (const c of (instance as SceneNode & { children: readonly SceneNode[] }).children) visit(c);
+  }
+  return out;
+};
+
 /** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
 const buildNode = async (
   node: SceneNode,
@@ -332,6 +403,12 @@ const buildNode = async (
           expandChildren = false;
           const overrides = collectTextOverrides(node);
           if (overrides.length > 0) out.textOverrides = overrides;
+          const propOverrides = collectPropertyOverrides(node as InstanceNode);
+          if (propOverrides.length > 0) {
+            out.propertyOverrides = propOverrides as unknown as NonNullable<
+              DesignContextNode['propertyOverrides']
+            >;
+          }
         } else {
           ctx.seen.add(main.id);
         }

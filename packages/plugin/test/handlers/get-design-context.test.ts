@@ -332,6 +332,55 @@ describe('get_design_context handler', () => {
     ]);
   });
 
+  it('carries non-text propertyOverrides on a deduped instance (recoloured / hidden child)', async () => {
+    const main = { id: 'M:2' };
+    const mkInstance = (id: string, titleFill: unknown, overrides: unknown[]): SceneNode =>
+      node({
+        id,
+        type: 'INSTANCE',
+        children: [
+          node({
+            id: `${id}-title`,
+            name: 'Title',
+            type: 'TEXT',
+            characters: 'Plan',
+            fills: titleFill,
+          }),
+          node({ id: `${id}-badge`, name: 'Badge', type: 'RECTANGLE', visible: id === 'p1' }),
+        ],
+        // Figma's native override list: instance 2 recolours its title and hides its badge.
+        overrides,
+        getMainComponentAsync: async () => main,
+      });
+    const blackFill = [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }];
+    const blueFill = [
+      { type: 'SOLID', visible: true, opacity: 1, color: { r: 0.145, g: 0.388, b: 0.922 } },
+    ];
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({
+        selection: [
+          mkInstance('p1', blackFill, []),
+          mkInstance('p2', blueFill, [
+            { id: 'p2-title', overriddenFields: ['fills'] },
+            { id: 'p2-badge', overriddenFields: ['visible'] },
+          ]),
+        ],
+      }),
+    )({ dedupeComponents: true, detail: 'full' })) as GetDesignContextResult;
+
+    // first instance expands, no overrides bag
+    expect(result.nodes[0]?.deduped).toBeUndefined();
+    expect(result.nodes[0]?.propertyOverrides).toBeUndefined();
+
+    // second instance is collapsed but keeps its recoloured title + hidden badge as overrides
+    expect(result.nodes[1]?.deduped).toBe(true);
+    const overrides = result.nodes[1]?.propertyOverrides;
+    const title = overrides?.find(o => o.name === 'Title');
+    const badge = overrides?.find(o => o.name === 'Badge');
+    expect((title?.fills as { color: string }[] | undefined)?.[0]?.color).toBe('#2563EB');
+    expect(badge?.visible).toBe(false);
+  });
+
   it('surfaces grounding fields (styleIds / boundVariables / componentProperties) at full detail only', async () => {
     const grounded = node({
       id: 'g',
