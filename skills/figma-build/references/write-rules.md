@@ -18,15 +18,23 @@ the model made up. Every value should trace to a source. In priority order:
    don't assume one. There are two kinds of value:
    - **Literal** (vanilla CSS, inline styles, CSS-in-JS, compiled SCSS) → read the px / hex / rem
      straight off (`1rem`=16px unless the project says otherwise).
-   - **Encoded / scaled** (utility classes, component-library props, named tokens) → resolve through
-     that system's scale / config / theme, don't eyeball. Find the system's own definition first
-     (a `tailwind.config`, a theme object, a `_variables.scss`, CSS custom properties) — a default
-     you assumed can be wrong. The most common case is **Tailwind**, as a worked example: spacing
+   - **Encoded / scaled** (utility classes, component-library props, named tokens — `p-4`,
+     `<Box p={4}>`, `var(--space-md)`) → don't eyeball; resolve the same three ways every time:
+     **(a)** spot which system it is, **(b)** find that system's value definition — its
+     config / theme / variables file, falling back to the system's documented default scale only when
+     the project doesn't override it, **(c)** look the token up there. The step is identical across
+     systems; only _where the scale lives_ and _the token syntax_ differ — e.g. Tailwind `p-4` (its
+     spacing scale) · Chakra `p={4}` (`theme.space[4]`) · MUI `sx={{ p: 2 }}` (`spacing(2)`, 8px
+     base) · SCSS `$space-md` (`_variables.scss`) · CSS `var(--space-md)` (its `:root` value) · plain
+     `padding: 16px` (literal). Don't hardcode a default you assumed — find the project's own
+     definition first.
+
+     For reference, **Tailwind's defaults** (the most common system): spacing
      `1/2/3/4/6/8/12/16`=`4/8/12/16/24/32/48/64`px (`p-4`=16, `gap-6`=24), radius
      `rounded-sm/-/-md/-lg/-xl/-2xl`=`2/4/6/8/12/16`px, text `sm/base/lg/xl/2xl/3xl`=
      `14/16/18/20/24/30`px, `font-medium/semibold/bold`=`500/600/700`, colour tokens→hex
-     (`slate-900`=#0F172A…) — **and the same approach (not these numbers) applies to UnoCSS,
-     Bootstrap spacers, Chakra/MUI scale props, or any project theme**: resolve to the actual value.
+     (`slate-900`=#0F172A…).
+
    - **Named design tokens** (CSS custom properties like `--space-md`, a theme object) → map each to
      the matching Figma variable (source 1) if one exists, else resolve to its literal value.
 
