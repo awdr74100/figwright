@@ -4,6 +4,54 @@ The cross-cutting rules every build follows — whether you're assembling a scre
 components or authoring a new asset. These mirror codegen's "reference tokens, not literals" rules,
 pointed at the canvas.
 
+## Where every value comes from (ground, don't invent)
+
+The top cause of an off-looking build is **invented values** — padding, sizes, radii, colours, type
+the model made up. Every value should trace to a source. In priority order:
+
+1. **The file's design system** (highest) — a variable / style / component already in the file. Reuse
+   and bind it (see below). `get_variable_defs` / `get_styles` / `scan_components` say what exists.
+2. **The source code / spec you were handed** — when building _from code_, the code already carries
+   exact values; read them off instead of re-deriving by eye. This is the mirror of codegen (which
+   reads exact values _out of_ Figma): building from code reads them _out of the code_. Be
+   **provider-first** — resolve whatever styling system the code actually uses to its real px / hex;
+   don't assume one. Resolve each value by its kind:
+   - **Literal** (vanilla CSS, inline styles, CSS-in-JS, compiled SCSS) → read the px / hex / rem
+     straight off (`1rem`=16px unless the project says otherwise).
+   - **Encoded / scaled** (utility classes, component-library props, named tokens — `p-4`,
+     `<Box p={4}>`, `var(--space-md)`) → don't eyeball; resolve the same three ways every time:
+     **(a)** spot which system it is, **(b)** find that system's value definition — its
+     config / theme / variables file, falling back to the system's documented default scale only when
+     the project doesn't override it, **(c)** look the token up there. The step is identical across
+     systems; only _where the scale lives_ and _the token syntax_ differ — e.g. Tailwind `p-4` (its
+     spacing scale) · Chakra `p={4}` (`theme.space[4]`) · MUI `sx={{ p: 2 }}` (`spacing(2)`, 8px
+     base) · SCSS `$space-md` (`_variables.scss`) · CSS `var(--space-md)` (its `:root` value) · plain
+     `padding: 16px` (literal). Don't hardcode a default you assumed — find the project's own
+     definition first.
+
+     For reference, **Tailwind's defaults** (the most common system): spacing
+     `1/2/3/4/6/8/12/16`=`4/8/12/16/24/32/48/64`px (`p-4`=16, `gap-6`=24), radius
+     `rounded-sm/-/-md/-lg/-xl/-2xl`=`2/4/6/8/12/16`px, text `sm/base/lg/xl/2xl/3xl`=
+     `14/16/18/20/24/30`px, `font-medium/semibold/bold`=`500/600/700`, colour tokens→hex
+     (`slate-900`=#0F172A…).
+
+   - **Named design tokens** (CSS custom properties like `--space-md`, a theme object) → map each to
+     the matching Figma variable (source 1) if one exists, else resolve to its literal value.
+
+   Don't swap `p-6` for a guessed 32 — resolve it (Tailwind default: 24).
+
+3. **A sensible scale** (only when neither applies — a vague description into an empty file) — pick
+   from a consistent scale, never one-off numbers:
+   - Spacing / padding / gap: the 8pt grid — `4, 8, 12, 16, 24, 32, 48, 64`.
+   - Type: `12, 14, 16, 20, 24, 32, 40` with a clear hierarchy (don't size every text differently).
+   - Radius: one of `4, 8, 12, 16`, consistent across siblings.
+   - Colour: a neutral ramp (background / surface / border / muted text / ink) + one accent — not a
+     fresh random hex per element.
+
+   Reuse the _same_ value for the same role across the design — repetition is what reads as
+   "designed". And prefer HUG/FILL sizing (below) so the layout computes sizes for you: the fewer raw
+   width/height numbers you invent, the fewer chances to get them wrong.
+
 ## Reference tokens, not literals
 
 Never hardcode a hex/px when the file has a token for it (`get_variable_defs` tells you what does).
