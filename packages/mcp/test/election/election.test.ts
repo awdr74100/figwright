@@ -135,13 +135,44 @@ describe('Election', () => {
     expect(node.role).toBe(NodeRole.Follower);
   });
 
-  it('determineRole: port taken by dead binder → eventually follower', async () => {
+  it('determineRole: port held by a non-Figwright process → conflicted, not follower', async () => {
     const port = await freePort();
     const blocker = createServer();
     await new Promise<void>(resolve => blocker.listen(port, '127.0.0.1', () => resolve()));
     blockers.push(blocker);
     const { node, election } = buildElection(port, 100);
     await election.determineRole();
+    // The squatter answers no Figwright /ping, so we must NOT attach as its follower (that would
+    // forward every RPC into a wall). Stay conflicted and keep contending.
+    expect(node.role).toBe(NodeRole.Conflicted);
+  });
+
+  it('tick: conflicted node takes the port once the squatter releases it', async () => {
+    const port = await freePort();
+    const blocker = createServer();
+    await new Promise<void>(resolve => blocker.listen(port, '127.0.0.1', () => resolve()));
+    const { node, election } = buildElection(port, 100);
+    await election.determineRole();
+    expect(node.role).toBe(NodeRole.Conflicted);
+
+    // Squatter goes away → the next tick should bind the freed port and lead.
+    await new Promise<void>(resolve => blocker.close(() => resolve()));
+    await election.tickOnce();
+    expect(node.role).toBe(NodeRole.Leader);
+  });
+
+  it('tick: conflicted node follows once a real Figwright leader takes the port', async () => {
+    const port = await freePort();
+    const blocker = createServer();
+    await new Promise<void>(resolve => blocker.listen(port, '127.0.0.1', () => resolve()));
+    const { node, election } = buildElection(port, 100);
+    await election.determineRole();
+    expect(node.role).toBe(NodeRole.Conflicted);
+
+    // Squatter leaves and a real Figwright leader takes the port → next tick resolves to follower.
+    await new Promise<void>(resolve => blocker.close(() => resolve()));
+    await startLeaderHarness(port);
+    await election.tickOnce();
     expect(node.role).toBe(NodeRole.Follower);
   });
 

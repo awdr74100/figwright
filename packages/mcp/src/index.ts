@@ -154,11 +154,13 @@ for (const prompt of PROMPTS) {
 const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
+const roleDetail = node.isLeader()
+  ? `relay on :${node.getLeader()?.port ?? DEFAULT_PORT}`
+  : node.isConflicted()
+    ? `:${DEFAULT_PORT} held by a non-Figwright process — contending for it`
+    : `follower → ${node.leaderUrl}`;
 log(
-  `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ` +
-    (node.isLeader()
-      ? `relay on :${node.getLeader()?.port ?? DEFAULT_PORT}`
-      : `follower → ${node.leaderUrl}`),
+  `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ${roleDetail}`,
 );
 
 const shutdown = async (): Promise<void> => {

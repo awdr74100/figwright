@@ -208,8 +208,13 @@ export class RelayClient {
     this.update({
       status: 'disconnected',
       port: null,
+      // A browser WebSocket can't tell "nothing is listening" from "a non-WebSocket process holds the
+      // port", so word this to cover both without over-claiming: it connects on its own once the MCP
+      // server starts, and if it never does, a foreign process on that port is the likely culprit.
       lastError:
-        this.state.lastError ?? `no relay server found on ports [${this.opts.ports.join(', ')}]`,
+        this.state.lastError ??
+        `no Figwright server on :${this.opts.ports.join(', ')} yet — it connects automatically once ` +
+          `the MCP server starts; if it never does, another process may be holding that port`,
     });
     if (!this.stopped) void this.runReconnectLoop();
   }
