@@ -88,12 +88,15 @@ const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
 /**
  * Cold-start (never-yet-connected) polling is capped far tighter than a true reconnect: when the
  * plugin opened before the server, the user just launched their MCP client and the leader appears
- * within a second, so we want to notice almost immediately. Probing the single fixed port is a
- * sub-millisecond refused connection while nothing listens, so polling this fast is cheap. A
- * dropped live socket (hasConnected) keeps the gentler exponential ceiling instead — that's a real
- * fault, not an imminent arrival, so there's no reason to hammer it.
+ * within a second, so we want to notice almost immediately. This cap IS the residual latency — once
+ * the server is up the plugin connects on its next poll, so the wait averages half this value.
+ * Probing the single fixed port is a sub-microsecond refused connection while nothing listens, so
+ * polling this fast costs nothing (localhost has no push channel to announce the server — polling
+ * is the only way to notice an imminent arrival). A dropped live socket (hasConnected) keeps the
+ * gentler exponential ceiling instead — that's a real fault, not an imminent arrival, so no reason
+ * to hammer.
  */
-const COLD_START_MAX_DELAY_MS = 300;
+const COLD_START_MAX_DELAY_MS = 150;
 
 export class RelayClient {
   readonly sessionId: string;
