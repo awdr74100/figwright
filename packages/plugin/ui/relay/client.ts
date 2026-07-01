@@ -76,7 +76,13 @@ export interface RelayClientOptions {
   reconnectMaxDelayMs?: number;
 }
 
-const DEFAULT_HELLO_TIMEOUT_MS = 2_000;
+// How long a probe waits for the server's $hello reply before abandoning the socket and retrying. A
+// healthy leader answers in sub-millisecond on localhost, so a probe that stays silent this long isn't
+// a healthy server we're about to reach — it's a port owner mid-handoff (an old leader releasing :3055
+// as a new one takes over) or a momentarily CPU-starved event loop. Waiting the old 2s each such
+// attempt made a handoff feel like many seconds; 1s halves the per-retry waste while keeping a ~1000×
+// margin over a healthy reply, so we never abandon a server that was actually about to answer.
+const DEFAULT_HELLO_TIMEOUT_MS = 1_000;
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
 /**
