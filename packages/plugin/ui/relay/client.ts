@@ -76,9 +76,27 @@ export interface RelayClientOptions {
   reconnectMaxDelayMs?: number;
 }
 
-const DEFAULT_HELLO_TIMEOUT_MS = 2_000;
+// How long a probe waits for the server's $hello reply before abandoning the socket and retrying. A
+// healthy leader answers in sub-millisecond on localhost, so a probe that stays silent this long isn't
+// a healthy server we're about to reach — it's a port owner mid-handoff (an old leader releasing :3055
+// as a new one takes over) or a momentarily CPU-starved event loop. Waiting the old 2s each such
+// attempt made a handoff feel like many seconds; 1s halves the per-retry waste while keeping a ~1000×
+// margin over a healthy reply, so we never abandon a server that was actually about to answer.
+const DEFAULT_HELLO_TIMEOUT_MS = 1_000;
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
+/**
+ * Cold-start (never-yet-connected) polling is capped far tighter than a true reconnect: when the
+ * plugin opened before the server, the user just launched their MCP client and the leader appears
+ * within a second, so we want to notice almost immediately. This cap IS the residual latency — once
+ * the server is up the plugin connects on its next poll, so the wait averages half this value.
+ * Probing the single fixed port is a sub-microsecond refused connection while nothing listens, so
+ * polling this fast costs nothing (localhost has no push channel to announce the server — polling
+ * is the only way to notice an imminent arrival). A dropped live socket (hasConnected) keeps the
+ * gentler exponential ceiling instead — that's a real fault, not an imminent arrival, so no reason
+ * to hammer.
+ */
+const COLD_START_MAX_DELAY_MS = 150;
 
 export class RelayClient {
   readonly sessionId: string;
@@ -99,6 +117,13 @@ export class RelayClient {
   private listeners = new Set<(s: RelayClientState) => void>();
   private stopped = false;
   private reconnecting = false;
+  /**
+   * The in-flight back-off sleep's timer + its resolver, so wake()/disconnect() can cut the sleep
+   * short and probe now (or exit). Both null whenever we're not mid-sleep (loop not started, or
+   * already probing). settleBackoff() is the single place either one resolves.
+   */
+  private wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private settleSleep: ((woken: boolean) => void) | null = null;
   /**
    * True once we've established at least one live socket — distinguishes a cold-start retry from a
    * true reconnect.
@@ -189,12 +214,20 @@ export class RelayClient {
     if (!this.stopped) void this.runReconnectLoop();
   }
 
-  /** Probe each candidate port once; resolves true on the first successful hello, false if all fail. */
+  /**
+   * Probe the candidate port(s) in order; resolve true on the first successful hello, false if all
+   * fail. In production `ports` is just [DEFAULT_PORT]: figwright's leader always binds that one
+   * fixed port (the server never hops to a fallback), so there's no range to sweep — a miss simply
+   * means the server isn't up yet and the caller retries. Probing that single port is a
+   * sub-millisecond refused connection when nothing is listening, which is what lets the reconnect
+   * loop poll quickly without ever stalling on an unrelated service that happens to hold a nearby
+   * port.
+   */
   private async probeAllPorts(): Promise<boolean> {
     for (const port of this.opts.ports) {
       if (this.stopped) return false;
       try {
-        // eslint-disable-next-line no-await-in-loop -- intentional sequential port probe
+        // eslint-disable-next-line no-await-in-loop -- probe candidate ports in order
         await this.attemptPort(port);
         return true;
       } catch (err) {
@@ -206,6 +239,9 @@ export class RelayClient {
 
   async disconnect(): Promise<void> {
     this.stopped = true;
+    // Cut short any in-flight back-off sleep so the reconnect loop sees `stopped` and exits now instead
+    // of waiting out the full delay.
+    this.settleBackoff(true);
     this.heartbeat?.stop();
     this.heartbeat = null;
     if (this.socket !== null) {
@@ -213,6 +249,21 @@ export class RelayClient {
       this.socket = null;
     }
     this.update({ status: 'disconnected', sessionResumed: false, connectedAt: null });
+  }
+
+  /**
+   * Cut the current reconnect back-off short and probe now. Browsers throttle — and after a few
+   * minutes of a hidden tab, freeze — timers, so a back-off sleep that began while the user
+   * switched away (e.g. to launch their MCP client) can stall long past when the server actually
+   * came up. The UI calls this when the plugin tab returns to the foreground (and on any sandbox
+   * context event) to collapse that dead time to ~immediate. No-op unless we're mid-reconnect: a
+   * live or in-progress connection needs no nudge, and after disconnect() there's nothing to
+   * resume.
+   */
+  wake(): void {
+    if (this.stopped) return;
+    if (this.state.status === 'connected' || this.state.status === 'connecting') return;
+    this.settleBackoff(true);
   }
 
   private attemptPort(port: number): Promise<void> {
@@ -421,18 +472,18 @@ export class RelayClient {
     this.reconnecting = true;
     // A live socket that dropped is a true reconnect; retrying a never-established cold-start connect
     // is not. Capture the distinction now so a successful retry only bumps `reconnectCount` in the
-    // former case (keeps the diagnostic count honest).
+    // former case (keeps the diagnostic count honest), and so cold-start uses the tighter ceiling —
+    // the server is imminent, so we probe more eagerly. (hasConnected only flips false→true, and a
+    // successful probe returns, so it's stable for this loop's lifetime.)
     const countSuccessAsReconnect = this.hasConnected;
+    const maxDelay = this.hasConnected ? this.opts.reconnectMaxDelayMs : COLD_START_MAX_DELAY_MS;
     try {
       let attempt = 0;
       while (!this.stopped) {
-        const delay = Math.min(
-          this.opts.reconnectInitialDelayMs * 2 ** attempt,
-          this.opts.reconnectMaxDelayMs,
-        );
+        const delay = Math.min(this.opts.reconnectInitialDelayMs * 2 ** attempt, maxDelay);
         this.update({ status: 'reconnecting' });
         // eslint-disable-next-line no-await-in-loop -- back-off pacing requires sequential awaits
-        await new Promise<void>(resolve => setTimeout(resolve, delay));
+        const woken = await this.backoffSleep(delay);
         if (this.stopped) return;
         // eslint-disable-next-line no-await-in-loop -- back-off pacing requires sequential awaits
         if (await this.probeAllPorts()) {
@@ -441,11 +492,42 @@ export class RelayClient {
           }
           return;
         }
-        attempt += 1;
+        // A wake (tab refocus) means the user is back and expecting a live connection — restart the
+        // back-off from the floor so we keep probing quickly rather than easing back to the ceiling.
+        attempt = woken ? 0 : attempt + 1;
       }
     } finally {
       this.reconnecting = false;
     }
+  }
+
+  /**
+   * Sleep `ms`, or resolve early if wake()/disconnect() fires. Resolves true when cut short, false
+   * on a natural timeout — the loop resets its back-off on a wake so a post-foreground probe starts
+   * fast.
+   */
+  private backoffSleep(ms: number): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      this.settleSleep = resolve;
+      this.wakeTimer = setTimeout(() => this.settleBackoff(false), ms);
+    });
+  }
+
+  /**
+   * Resolve the in-flight back-off sleep exactly once, from whichever source fires first — the
+   * timer (woken=false) or wake()/disconnect() (woken=true). Nulling `settleSleep` first makes it
+   * idempotent, so the losing source is a no-op. Also the single place the pending timer is
+   * cleared.
+   */
+  private settleBackoff(woken: boolean): void {
+    const resolve = this.settleSleep;
+    if (resolve === null) return;
+    this.settleSleep = null;
+    if (this.wakeTimer !== null) {
+      clearTimeout(this.wakeTimer);
+      this.wakeTimer = null;
+    }
+    resolve(woken);
   }
 
   private startHeartbeat(ws: WebSocket): void {

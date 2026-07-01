@@ -1,10 +1,9 @@
 export const PROTOCOL_VERSION = '0.1.0';
 
+// The relay leader always binds this one fixed port. The election never hops to a fallback: a node
+// that can't bind it becomes a follower (which listens on nothing), so the plugin only ever needs to
+// reach DEFAULT_PORT. There is deliberately no port range to scan.
 export const DEFAULT_PORT = 3055;
-export const PORT_FALLBACK_COUNT = 10;
-
-export const portRange = (): number[] =>
-  Array.from({ length: PORT_FALLBACK_COUNT }, (_, i) => DEFAULT_PORT + i);
 
 export const ErrorCode = {
   InvalidRequest: 'INVALID_REQUEST',
