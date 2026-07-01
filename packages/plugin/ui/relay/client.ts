@@ -203,19 +203,37 @@ export class RelayClient {
     if (!this.stopped) void this.runReconnectLoop();
   }
 
-  /** Probe each candidate port once; resolves true on the first successful hello, false if all fail. */
+  /**
+   * Probe every candidate port concurrently; resolve true on the first successful hello, false if
+   * all fail. Concurrent, not sequential: a port that accepts the socket but never answers hello
+   * costs a full helloTimeout, and probing one-by-one let a few such ports (e.g. unrelated local
+   * services squatting a fallback port) stall the whole sweep for helloTimeout×N — during which the
+   * real leader on :3055 stayed unreachable even though it was already up. Racing bounds a sweep to
+   * a single helloTimeout and cancels the losing probes the instant one wins.
+   */
   private async probeAllPorts(): Promise<boolean> {
-    for (const port of this.opts.ports) {
-      if (this.stopped) return false;
-      try {
-        // eslint-disable-next-line no-await-in-loop -- intentional sequential port probe
-        await this.attemptPort(port);
-        return true;
-      } catch (err) {
-        this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
-      }
+    if (this.stopped) return false;
+    const controller = new AbortController();
+    const probes = this.opts.ports.map(port =>
+      this.attemptPort(port, controller.signal).then(
+        () => {
+          // First hello wins — cancel the still-pending probes so no port holds a socket open.
+          controller.abort();
+          return true;
+        },
+        (err: unknown) => {
+          this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
+          // Stay rejected so Promise.any waits for a real success rather than settling on this miss.
+          throw err;
+        },
+      ),
+    );
+    try {
+      return await Promise.any(probes);
+    } catch {
+      // Every probe rejected — no server answered a hello on any candidate port.
+      return false;
     }
-    return false;
   }
 
   async disconnect(): Promise<void> {
@@ -247,7 +265,7 @@ export class RelayClient {
     this.settleBackoff(true);
   }
 
-  private attemptPort(port: number): Promise<void> {
+  private attemptPort(port: number, signal: AbortSignal): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const url = `ws://${this.opts.host}:${port}`;
       const ws = new this.opts.WS(url);
@@ -259,6 +277,7 @@ export class RelayClient {
         ws.onmessage = null;
         ws.onclose = null;
         clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
       };
 
       const fail = (msg: string): void => {
@@ -275,6 +294,15 @@ export class RelayClient {
         () => fail(`hello timeout on port ${port}`),
         this.opts.helloTimeoutMs,
       );
+
+      // Another port won the concurrent sweep — abandon this probe now instead of holding the socket
+      // open until its hello timeout (that per-port stall is exactly what the concurrent probe fixes).
+      const onAbort = (): void => fail(`superseded on port ${port}`);
+      if (signal.aborted) {
+        fail(`superseded on port ${port}`);
+        return;
+      }
+      signal.addEventListener('abort', onAbort);
 
       ws.onopen = () => {
         const helloParams: HelloParams = {
@@ -319,6 +347,16 @@ export class RelayClient {
 
         const result = envelope.result as HelloResult;
         cleanup();
+        if (this.socket !== null || signal.aborted) {
+          // A concurrent probe already claimed the connection — drop this redundant socket.
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+          reject(new Error(`superseded on port ${port}`));
+          return;
+        }
         this.hasConnected = true;
         this.socket = ws;
         this.startHeartbeat(ws);

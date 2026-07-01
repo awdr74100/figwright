@@ -145,6 +145,33 @@ describe('RelayClient', () => {
     expect(sockets).toHaveLength(2);
   });
 
+  it('is not stalled by a port that accepts the socket but never answers hello', async () => {
+    const { WS, sockets } = buildFakeFactory((sock, port) => {
+      sock.fireOpen();
+      // :3055 opens but never replies to hello — a sequential probe would sit on its 10s hello
+      // timeout before ever reaching :3056. Concurrent probing must connect immediately regardless.
+      if (port === 3055) return;
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+
+    const client = new RelayClient({
+      ports: [3055, 3056],
+      clientVersion: '0.0.0',
+      WS,
+      helloTimeoutMs: 10_000,
+    });
+    await client.connect();
+
+    expect(client.getState().status).toBe('connected');
+    expect(client.getState().port).toBe(3056);
+    // Both ports were probed at once, not one-after-another.
+    expect(sockets).toHaveLength(2);
+    await client.disconnect();
+  });
+
   it('enters the retry loop (not a terminal throw) when no server is up yet', async () => {
     const { WS } = buildFakeFactory(sock => sock.fireServerClose(1006, 'refused'));
     const client = new RelayClient({
