@@ -5,7 +5,8 @@ import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispa
 import type { Follower } from '../src/election/follower.js';
 import type { Node } from '../src/election/node.js';
 
-const makeNode = (overrides: Partial<Node>): Node => overrides as unknown as Node;
+const makeNode = (overrides: Partial<Node>): Node =>
+  ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
 const makeFollower = (overrides: Partial<Follower>): Follower => overrides as unknown as Follower;
 
 describe('dispatchTool', () => {
@@ -30,6 +31,23 @@ describe('dispatchTool', () => {
     const result = await dispatchTool({ node, follower }, 'my_tool', { x: 1 });
     expect(result).toEqual({ from: 'leader-relay', echoed: { x: 1 } });
     expect(calls).toEqual([{ name: 'my_tool', args: { x: 1 } }]);
+  });
+
+  it('fails fast with an actionable error when the node is port-conflicted', async () => {
+    const node = makeNode({ isConflicted: () => true, port: 3055, isLeader: () => false });
+    let forwarded = false;
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => {
+        forwarded = true;
+        return { kind: 'ok', requestId: 'r', result: null };
+      },
+    });
+
+    await expect(dispatchTool({ node, follower }, 'get_document', {})).rejects.toThrow(
+      /port 3055 is held by a non-Figwright process/,
+    );
+    // Must NOT forward to the squatter holding the port.
+    expect(forwarded).toBe(false);
   });
 
   it('routes to Follower.sendRpc when local node is not leader', async () => {

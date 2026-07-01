@@ -41,6 +41,17 @@ export const dispatchTool = async (
   const retryDelayMs = opts.retryDelayMs ?? DEFAULT_DISPATCH_RETRY_DELAY_MS;
   const log = ctx.log ?? ((): void => {});
 
+  // The relay port is held by a non-Figwright process, so there's no leader to reach and no point
+  // forwarding to the squatter. Fail fast with an actionable message rather than retrying into a wall.
+  if (ctx.node.isConflicted()) {
+    throw new DispatchError(
+      ErrorCode.NotLeader,
+      `port ${ctx.node.port} is held by a non-Figwright process, so Figwright can't run tools against ` +
+        `your plugin. Free that port (e.g. lsof -iTCP:${ctx.node.port} -sTCP:LISTEN) and Figwright ` +
+        `reconnects automatically.`,
+    );
+  }
+
   let lastError: Error | null = null;
 
   /* eslint-disable no-await-in-loop -- retry/backoff loop is intentionally sequential */
@@ -104,6 +115,9 @@ export const dispatchTool = async (
  * — in that case sub-calls run unpinned, i.e. the pre-existing most-active routing on each call.
  */
 export const resolveRoutingSession = async (ctx: DispatchContext): Promise<string | undefined> => {
+  // A conflicted node has no leader to ask (the port holder isn't Figwright) — resolve to undefined so
+  // sub-calls run unpinned, and don't waste an HTTP round-trip on the squatter.
+  if (ctx.node.isConflicted()) return undefined;
   if (ctx.node.isLeader()) {
     return ctx.node.getLeader()?.relay.pickActiveSessionId();
   }

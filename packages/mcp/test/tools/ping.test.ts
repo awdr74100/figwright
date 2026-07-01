@@ -8,7 +8,7 @@ import { toToolDefinition } from '../tool-schema.js';
 const pingToolDefinition = toToolDefinition(pingTool);
 
 const makeNode = (overrides: Partial<Node> & { role?: NodeRole }): Node =>
-  overrides as unknown as Node;
+  ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
 const makeFollower = (overrides: Partial<Follower>): Follower => overrides as unknown as Follower;
 
 describe('ping tool', () => {
@@ -39,6 +39,25 @@ describe('ping tool', () => {
     expect(result.server.version).toBe('1.0.0');
     expect(result.server.role).toBe(NodeRole.Leader);
     expect(result.server.port).toBe(3055);
+  });
+
+  it('surfaces a portConflict warning when the node is conflicted', async () => {
+    const node = makeNode({
+      role: NodeRole.Conflicted,
+      isLeader: () => false,
+      isConflicted: () => true,
+      port: 3055,
+      getLeader: () => null,
+    });
+    const result = await handlePing({
+      node,
+      follower: makeFollower({}),
+      serverVersion: '1.0.0',
+    });
+    expect(result.hop).toBe('server-only');
+    expect(result.plugin).toBeNull();
+    expect(result.server.role).toBe(NodeRole.Conflicted);
+    expect(result.server.portConflict).toMatch(/port 3055 is held by a non-Figwright process/);
   });
 
   it('returns e2e hop with plugin info + sessions when dispatch succeeds (leader path)', async () => {

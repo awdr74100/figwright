@@ -9,6 +9,10 @@ export const NodeRole = {
   Unknown: 'unknown',
   Leader: 'leader',
   Follower: 'follower',
+  // The port is held by a process that isn't a Figwright leader (it didn't answer a Figwright /ping),
+  // so this node can neither lead nor safely follow it. It keeps contending for the port instead of
+  // attaching as a follower of a foreign process. See Election.determineRole / tick.
+  Conflicted: 'conflicted',
 } as const;
 export type NodeRole = (typeof NodeRole)[keyof typeof NodeRole];
 
@@ -56,6 +60,14 @@ export class Node {
 
   isFollower(): boolean {
     return this.currentRole === NodeRole.Follower;
+  }
+
+  isConflicted(): boolean {
+    return this.currentRole === NodeRole.Conflicted;
+  }
+
+  get port(): number {
+    return this.opts.port;
   }
 
   get leaderUrl(): string {
@@ -109,6 +121,26 @@ export class Node {
     }
     this.setRole(NodeRole.Follower);
     this.opts.log(`[node] became FOLLOWER (leader @ ${this.leaderUrl})`);
+  }
+
+  /**
+   * Enter the port-conflict state: :port is held by a process that isn't a Figwright leader. Unlike
+   * becomeFollower this never points RPC at the squatter — dispatch fails fast with a clear message
+   * while the election keeps contending for the port (see Election.tick), so the moment the
+   * squatter releases :port we take over. Idempotent.
+   */
+  becomeConflicted(): void {
+    if (this.currentRole === NodeRole.Conflicted) return;
+    if (this.leader !== null) {
+      const { http, relay } = this.leader;
+      this.leader = null;
+      void relay.stop().catch(() => {
+        /* ignore */
+      });
+      http.close();
+    }
+    this.setRole(NodeRole.Conflicted);
+    this.opts.log(`[node] PORT CONFLICT — :${this.opts.port} is held by a non-Figwright process`);
   }
 
   getLeader(): LeaderResources | null {
