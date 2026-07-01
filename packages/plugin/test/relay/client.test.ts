@@ -200,6 +200,67 @@ describe('RelayClient', () => {
     await client.disconnect();
   });
 
+  it('wake() cuts the cold-start back-off short and connects immediately', async () => {
+    let attempt = 0;
+    const { WS } = buildFakeFactory(sock => {
+      attempt += 1;
+      if (attempt === 1) {
+        // Plugin opened before the server: the first probe finds nothing.
+        sock.fireServerClose(1006, 'refused');
+        return;
+      }
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+
+    const client = new RelayClient({
+      ports: [3055],
+      clientVersion: '0.0.0',
+      WS,
+      // A one-second floor means the natural back-off can't fire inside the 50ms window below — only
+      // wake() (a tab refocus) can pull the retry forward.
+      reconnectInitialDelayMs: 1_000,
+    });
+
+    await client.connect();
+    expect(client.getState().status).toBe('reconnecting');
+
+    // Server came up while the tab was hidden; the user refocuses Figma. wake() must probe now rather
+    // than sitting out the 1s sleep.
+    client.wake();
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(client.getState().status).toBe('connected');
+    // A woken cold-start retry is still a first connection, not a reconnect.
+    expect(client.getState().reconnectCount).toBe(0);
+    await client.disconnect();
+  });
+
+  it('wake() is a no-op while connected (no extra probe socket)', async () => {
+    const { WS, sockets } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.0.0', WS });
+    await client.connect();
+    expect(client.getState().status).toBe('connected');
+
+    client.wake();
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // Still on the one live socket — a foreground nudge must not churn an already-healthy connection.
+    expect(client.getState().status).toBe('connected');
+    expect(sockets).toHaveLength(1);
+    await client.disconnect();
+  });
+
   it('treats err envelope to hello as port failure and tries next', async () => {
     const { WS, sockets } = buildFakeFactory((sock, port) => {
       sock.fireOpen();

@@ -142,6 +142,10 @@ useEventListener(globalThis, 'message', (event: MessageEvent) => {
   const msg = (event.data as { pluginMessage?: unknown } | null)?.pluginMessage;
   if (isPluginContextEvent(msg)) {
     context.value = msg;
+    // A context push is proof the user is active here right now — a throttle-immune signal (postMessage
+    // isn't clamped like background-tab timers). Nudge the relay to probe now in case a reconnect
+    // stalled while backgrounded; wake() no-ops when already connected.
+    client.wake();
     // Each context push from sandbox means the user just interacted (open / selection-change /
     // page-change). Tell the leader — params carry file/page identity so ping can report which
     // file is being routed instead of an opaque session id.
@@ -156,7 +160,13 @@ useEventListener(globalThis, 'message', (event: MessageEvent) => {
 // app (it's not per-tab), which is exactly the broadcast that made background files steal routing.
 // emitActivity's `visible` gate keeps the background side (going → hidden) silent.
 watch(visibility, v => {
-  if (v === 'visible') emitActivity();
+  if (v !== 'visible') return;
+  // Returning to the foreground unfreezes throttled timers. Browsers throttle (and after a few minutes
+  // freeze) timers in hidden tabs, so a reconnect back-off that began while the user switched away — the
+  // classic "opened the plugin, then launched the MCP client" flow — can stall long past when the server
+  // came up. Nudge the client to probe now so it connects immediately instead of waiting out that sleep.
+  client.wake();
+  emitActivity();
 });
 
 // Mirror the relay client's state into a ref — subscribe synchronously so the panel reflects the
