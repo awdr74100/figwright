@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {
+  DEFAULT_PORT,
   isPluginContextEvent,
   type PluginContextEvent,
-  portRange,
   PROTOCOL_VERSION,
 } from '@figwright/shared';
 import {
@@ -56,7 +56,9 @@ const statusColor = {
 const appVersion = __APP_VERSION__;
 
 const client = new RelayClient({
-  ports: portRange(),
+  // The relay leader always binds DEFAULT_PORT — the server never hops to a fallback — so we probe
+  // exactly that one port. Scanning a range would only risk stalling on unrelated local services.
+  ports: [DEFAULT_PORT],
   clientVersion: appVersion,
   log: msg => console.log(msg),
 });

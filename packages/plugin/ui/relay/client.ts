@@ -80,12 +80,14 @@ const DEFAULT_HELLO_TIMEOUT_MS = 2_000;
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
 /**
- * Cold-start (never-yet-connected) back-off is capped tighter than a true reconnect. When the
+ * Cold-start (never-yet-connected) polling is capped far tighter than a true reconnect: when the
  * plugin opened before the server, the user just launched their MCP client and the leader appears
- * within a second — a snappier ceiling means we notice it almost immediately instead of sitting out
- * a long sleep. A dropped live socket (hasConnected) keeps the gentler ceiling.
+ * within a second, so we want to notice almost immediately. Probing the single fixed port is a
+ * sub-millisecond refused connection while nothing listens, so polling this fast is cheap. A
+ * dropped live socket (hasConnected) keeps the gentler exponential ceiling instead — that's a real
+ * fault, not an imminent arrival, so there's no reason to hammer it.
  */
-const COLD_START_MAX_DELAY_MS = 2_000;
+const COLD_START_MAX_DELAY_MS = 300;
 
 export class RelayClient {
   readonly sessionId: string;
@@ -204,36 +206,26 @@ export class RelayClient {
   }
 
   /**
-   * Probe every candidate port concurrently; resolve true on the first successful hello, false if
-   * all fail. Concurrent, not sequential: a port that accepts the socket but never answers hello
-   * costs a full helloTimeout, and probing one-by-one let a few such ports (e.g. unrelated local
-   * services squatting a fallback port) stall the whole sweep for helloTimeout×N — during which the
-   * real leader on :3055 stayed unreachable even though it was already up. Racing bounds a sweep to
-   * a single helloTimeout and cancels the losing probes the instant one wins.
+   * Probe the candidate port(s) in order; resolve true on the first successful hello, false if all
+   * fail. In production `ports` is just [DEFAULT_PORT]: figwright's leader always binds that one
+   * fixed port (the server never hops to a fallback), so there's no range to sweep — a miss simply
+   * means the server isn't up yet and the caller retries. Probing that single port is a
+   * sub-millisecond refused connection when nothing is listening, which is what lets the reconnect
+   * loop poll quickly without ever stalling on an unrelated service that happens to hold a nearby
+   * port.
    */
   private async probeAllPorts(): Promise<boolean> {
-    if (this.stopped) return false;
-    const controller = new AbortController();
-    const probes = this.opts.ports.map(port =>
-      this.attemptPort(port, controller.signal).then(
-        () => {
-          // First hello wins — cancel the still-pending probes so no port holds a socket open.
-          controller.abort();
-          return true;
-        },
-        (err: unknown) => {
-          this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
-          // Stay rejected so Promise.any waits for a real success rather than settling on this miss.
-          throw err;
-        },
-      ),
-    );
-    try {
-      return await Promise.any(probes);
-    } catch {
-      // Every probe rejected — no server answered a hello on any candidate port.
-      return false;
+    for (const port of this.opts.ports) {
+      if (this.stopped) return false;
+      try {
+        // eslint-disable-next-line no-await-in-loop -- probe candidate ports in order
+        await this.attemptPort(port);
+        return true;
+      } catch (err) {
+        this.opts.log(`[relay-client] port ${port} failed: ${(err as Error).message}`);
+      }
     }
+    return false;
   }
 
   async disconnect(): Promise<void> {
@@ -265,7 +257,7 @@ export class RelayClient {
     this.settleBackoff(true);
   }
 
-  private attemptPort(port: number, signal: AbortSignal): Promise<void> {
+  private attemptPort(port: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const url = `ws://${this.opts.host}:${port}`;
       const ws = new this.opts.WS(url);
@@ -277,7 +269,6 @@ export class RelayClient {
         ws.onmessage = null;
         ws.onclose = null;
         clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
       };
 
       const fail = (msg: string): void => {
@@ -294,15 +285,6 @@ export class RelayClient {
         () => fail(`hello timeout on port ${port}`),
         this.opts.helloTimeoutMs,
       );
-
-      // Another port won the concurrent sweep — abandon this probe now instead of holding the socket
-      // open until its hello timeout (that per-port stall is exactly what the concurrent probe fixes).
-      const onAbort = (): void => fail(`superseded on port ${port}`);
-      if (signal.aborted) {
-        fail(`superseded on port ${port}`);
-        return;
-      }
-      signal.addEventListener('abort', onAbort);
 
       ws.onopen = () => {
         const helloParams: HelloParams = {
@@ -347,16 +329,6 @@ export class RelayClient {
 
         const result = envelope.result as HelloResult;
         cleanup();
-        if (this.socket !== null || signal.aborted) {
-          // A concurrent probe already claimed the connection — drop this redundant socket.
-          try {
-            ws.close();
-          } catch {
-            /* ignore */
-          }
-          reject(new Error(`superseded on port ${port}`));
-          return;
-        }
         this.hasConnected = true;
         this.socket = ws;
         this.startHeartbeat(ws);
