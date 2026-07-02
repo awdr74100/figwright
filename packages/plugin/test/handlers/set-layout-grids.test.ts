@@ -36,6 +36,36 @@ describe('set_layout_grids handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  it('omits offset on a CENTER grid (Figma rejects the key there)', async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    const handler = createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }));
+    await handler({
+      nodeId: '1:1',
+      // A CENTER grid needs sectionSize and must NOT carry offset; the converter drops offset here.
+      grids: [
+        {
+          pattern: 'COLUMNS',
+          visible: true,
+          count: 6,
+          alignment: 'CENTER',
+          sectionSize: 64,
+          offset: 40,
+        },
+      ],
+    });
+    expect(frame.layoutGrids).toEqual([
+      {
+        pattern: 'COLUMNS',
+        visible: true,
+        count: 6,
+        gutterSize: 0,
+        alignment: 'CENTER',
+        sectionSize: 64,
+      },
+    ]);
+    expect((frame.layoutGrids[0] as { offset?: number }).offset).toBeUndefined();
+  });
+
   it('sets a uniform GRID (baseline) grid', async () => {
     const frame = { id: '1:1', layoutGrids: [] as unknown[] };
     const handler = createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }));

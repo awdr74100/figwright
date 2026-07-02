@@ -39,13 +39,16 @@ export const toFigmaLayoutGrid = (g: SerializedLayoutGrid): LayoutGrid => {
     return { pattern: 'GRID', visible: g.visible, sectionSize: g.sectionSize ?? 10 };
   }
   if (g.pattern === 'ROWS' || g.pattern === 'COLUMNS') {
+    const alignment = g.alignment ?? 'STRETCH';
     return {
       pattern: g.pattern,
       visible: g.visible,
-      alignment: g.alignment ?? 'STRETCH',
+      alignment,
       gutterSize: g.gutterSize ?? 0,
       count: g.count ?? 1,
-      offset: g.offset ?? 0,
+      // Figma rejects `offset` on a CENTER grid at runtime (it's ignored there) — only MIN/MAX/STRETCH
+      // accept it. Omit it for CENTER so a valid centered grid isn't rejected for carrying the key.
+      ...(alignment === 'CENTER' ? {} : { offset: g.offset ?? 0 }),
       ...(g.sectionSize === undefined ? {} : { sectionSize: g.sectionSize }),
     } as LayoutGrid;
   }
