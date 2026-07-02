@@ -73,6 +73,7 @@ import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
 import { createSetFillsHandler } from './set-fills.js';
 import { createSetInstancePropertiesHandler } from './set-instance-properties.js';
+import { createSetLayoutGridsHandler } from './set-layout-grids.js';
 import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetMaskHandler } from './set-mask.js';
 import { createSetOpacityHandler } from './set-opacity.js';
@@ -115,6 +116,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     resize_nodes: createResizeNodesHandler(figmaCtx),
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
     set_layout_props: createSetLayoutPropsHandler(figmaCtx),
+    set_layout_grids: createSetLayoutGridsHandler(figmaCtx),
     set_position: createSetPositionHandler(figmaCtx),
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
     set_mask: createSetMaskHandler(figmaCtx),

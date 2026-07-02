@@ -80,6 +80,13 @@ Set the value, then bind it — there are **three** binding paths by what's bein
   `set_position` — for a top-level frame, or for an overlay / badge after
   `layoutPositioning: 'ABSOLUTE'` (prefer `set_position` over a `move_nodes` delta that first needs
   the current x/y read back).
+- **Responsive column scaffold → `set_layout_grids`, not `set_auto_layout`.** These are orthogonal:
+  `set_auto_layout` arranges a frame's _children_ (flex/grid); `set_layout_grids` overlays the frame's
+  own **layout grid** — the `COLUMNS` grid (a 12-col system: `count` + `gutterSize` + `alignment`) or a
+  `GRID` baseline (`sectionSize`, e.g. 8pt) a designer aligns content to. When you're reproducing a
+  page that has an explicit column system (the input code's container `grid-cols-12` / max-width +
+  gutters), set it as a real layout grid so it round-trips and codegen reads the breakpoint structure
+  back. Pass `[]` to clear.
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 

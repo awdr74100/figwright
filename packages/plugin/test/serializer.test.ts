@@ -295,6 +295,36 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
     expect(out.strokeWeight).toBe(MIXED);
   });
 
+  it('surfaces dashPattern / non-default strokeCap / strokeJoin on a dashed stroke', () => {
+    const out = serializeFlatSync(
+      fake({
+        strokes: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        strokeWeight: 1,
+        dashPattern: [4, 2],
+        strokeCap: 'ROUND',
+        strokeJoin: 'ROUND',
+      }),
+    );
+    expect(out.dashPattern).toEqual([4, 2]);
+    expect(out.strokeCap).toBe('ROUND');
+    expect(out.strokeJoin).toBe('ROUND');
+  });
+
+  it('omits dashPattern (empty=solid) and the no-op strokeCap NONE / strokeJoin MITER', () => {
+    const out = serializeFlatSync(
+      fake({
+        strokes: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        strokeWeight: 1,
+        dashPattern: [],
+        strokeCap: 'NONE',
+        strokeJoin: 'MITER',
+      }),
+    );
+    expect(out.dashPattern).toBeUndefined();
+    expect(out.strokeCap).toBeUndefined();
+    expect(out.strokeJoin).toBeUndefined();
+  });
+
   it('surfaces per-side strokeWeights when strokeWeight is mixed (e.g. a top/bottom-only border)', () => {
     const out = serializeFlatSync(
       fake({
@@ -567,6 +597,33 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
   it('serializes clipsContent', () => {
     expect(serializeFlatSync(fake({ clipsContent: true })).clipsContent).toBe(true);
   });
+
+  it("surfaces a frame's own layoutGrids (the responsive column system)", () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'FRAME',
+        layoutGrids: [
+          { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+        ],
+      }),
+    );
+    expect(out.layoutGrids).toEqual([
+      { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+    ]);
+  });
+
+  it('omits layoutGrids when the frame defines none', () => {
+    expect(serializeFlatSync(fake({ type: 'FRAME', layoutGrids: [] })).layoutGrids).toBeUndefined();
+  });
+
+  it('surfaces overflowDirection on a scrolling frame, omits the NONE default', () => {
+    expect(
+      serializeFlatSync(fake({ type: 'FRAME', overflowDirection: 'VERTICAL' })).overflowDirection,
+    ).toBe('VERTICAL');
+    expect(
+      serializeFlatSync(fake({ type: 'FRAME', overflowDirection: 'NONE' })).overflowDirection,
+    ).toBeUndefined();
+  });
 });
 
 describe('serializeFlat — style links / component properties', () => {
@@ -708,6 +765,154 @@ describe('serializeFlat — typography', () => {
       }),
     );
     expect(out.segments).toBeUndefined();
+  });
+
+  it('surfaces a node-level uniform hyperlink (whole text is one link)', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Docs',
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        hyperlink: { type: 'URL', value: 'https://x.dev' },
+        getStyledTextSegments: () => [],
+      }),
+    );
+    expect(out.hyperlink).toEqual({ type: 'URL', value: 'https://x.dev' });
+  });
+
+  it('expands segments for a partial hyperlink even when the 5 style basics are uniform', () => {
+    const segments = [
+      {
+        characters: 'Agree to ',
+        start: 0,
+        end: 9,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+      {
+        characters: 'Terms',
+        start: 9,
+        end: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+        hyperlink: { type: 'URL', value: 'https://x.dev/terms' },
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Agree to Terms',
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        // A partial link makes the node's hyperlink `mixed` (a symbol) → no node-level link, expand runs.
+        hyperlink: Symbol('figma.mixed'),
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    expect(out.hyperlink).toBeUndefined();
+    expect(out.segments).toHaveLength(2);
+    expect(out.segments?.[1]?.hyperlink).toEqual({ type: 'URL', value: 'https://x.dev/terms' });
+    expect(out.segments?.[0]?.hyperlink).toBeUndefined();
+  });
+
+  it('expands segments for a uniform list (probed via getRangeListOptions) and carries listOptions', () => {
+    const segments = [
+      {
+        characters: 'One\nTwo',
+        start: 0,
+        end: 7,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+        listOptions: { type: 'UNORDERED' },
+        indentation: 1,
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'One\nTwo',
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        getRangeListOptions: () => ({ type: 'UNORDERED' }),
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    expect(out.segments).toHaveLength(1);
+    expect(out.segments?.[0]?.listOptions).toBe('UNORDERED');
+    expect(out.segments?.[0]?.indentation).toBe(1);
+  });
+
+  it('does not expand segments when the list probe reports NONE', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'plain',
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        getRangeListOptions: () => ({ type: 'NONE' }),
+        getStyledTextSegments: () => [],
+      }),
+    );
+    expect(out.segments).toBeUndefined();
+  });
+
+  it('carries per-run lineHeight only when non-default, never a mixed marker', () => {
+    const segments = [
+      {
+        characters: 'A',
+        start: 0,
+        end: 1,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+        lineHeight: { unit: 'PIXELS', value: 22 },
+      },
+      {
+        characters: 'B',
+        start: 1,
+        end: 2,
+        fontName: { family: 'Inter', style: 'Bold' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+        lineHeight: { unit: 'AUTO' },
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'AB',
+        fontName: Symbol('figma.mixed'),
+        fontSize: 14,
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    expect(out.segments?.[0]?.lineHeight).toEqual({ unit: 'PIXELS', value: 22 });
+    // AUTO leading is the no-op → omitted, never emitted as `mixed`.
+    expect(out.segments?.[1]?.lineHeight).toBeUndefined();
   });
 });
 

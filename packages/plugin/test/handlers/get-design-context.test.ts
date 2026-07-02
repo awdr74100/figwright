@@ -252,6 +252,81 @@ describe('get_design_context handler', () => {
     expect(compact.nodes[0]?.segments).toBeUndefined();
   });
 
+  it("surfaces a frame's layoutGrids + overflowDirection at full detail (breakpoint ground truth)", async () => {
+    const frame = node({
+      id: 'fr',
+      type: 'FRAME',
+      layoutGrids: [
+        { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+      ],
+      overflowDirection: 'VERTICAL',
+    });
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [frame] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(full.nodes[0]?.layoutGrids).toEqual([
+      { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+    ]);
+    expect(full.nodes[0]?.overflowDirection).toBe('VERTICAL');
+
+    // Not surfaced below full (the hot exploration default stays lean).
+    const compact = (await createGetDesignContextHandler(fakeFigma({ selection: [frame] }))({
+      detail: 'compact',
+    })) as GetDesignContextResult;
+    expect(compact.nodes[0]?.layoutGrids).toBeUndefined();
+  });
+
+  it('carries per-run hyperlink / listOptions / indentation through to the segments (structure survives)', async () => {
+    const list = node({
+      id: 'lt',
+      type: 'TEXT',
+      characters: 'Read the docs\nStar the repo',
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 14,
+      textCase: 'ORIGINAL',
+      textDecoration: 'NONE',
+      // A uniform list is style-uniform, so the list probe (not a style mix) is what forces segments.
+      getRangeListOptions: () => ({ type: 'ORDERED' }),
+      getStyledTextSegments: () => [
+        {
+          characters: 'Read the docs\n',
+          start: 0,
+          end: 14,
+          fontName: { family: 'Inter', style: 'Regular' },
+          fontSize: 14,
+          fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, visible: true, opacity: 1 }],
+          textDecoration: 'NONE',
+          textCase: 'ORIGINAL',
+          listOptions: { type: 'ORDERED' },
+          indentation: 1,
+          hyperlink: { type: 'URL', value: 'https://x.dev/docs' },
+        },
+        {
+          characters: 'Star the repo',
+          start: 14,
+          end: 27,
+          fontName: { family: 'Inter', style: 'Regular' },
+          fontSize: 14,
+          fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 }, visible: true, opacity: 1 }],
+          textDecoration: 'NONE',
+          textCase: 'ORIGINAL',
+          listOptions: { type: 'ORDERED' },
+          indentation: 1,
+        },
+      ],
+    });
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [list] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(full.nodes[0]?.segments?.[0]).toMatchObject({
+      listOptions: 'ORDERED',
+      indentation: 1,
+      hyperlink: { type: 'URL', value: 'https://x.dev/docs' },
+    });
+    expect(full.nodes[0]?.segments?.[1]?.listOptions).toBe('ORDERED');
+    expect(full.nodes[0]?.segments?.[1]?.hyperlink).toBeUndefined();
+  });
+
   it('uses the selection, and throws when nothing is selected', async () => {
     const sel = node({ id: 'sel' });
     const pageNode = node({ id: 'page' });

@@ -257,21 +257,51 @@ const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   }
 };
 
-const SEGMENT_FIELDS = ['fontName', 'fontSize', 'fills', 'textDecoration', 'textCase'] as const;
+// Per-run fields we break a mixed TEXT node on. Beyond the 5 style basics we ask for the structural
+// runs — hyperlink (→ <a>), listOptions (→ <ol>/<ul>), indentation (list nesting) — plus per-run
+// lineHeight/letterSpacing, so inline links / list items / leading changes survive instead of
+// collapsing to a single `mixed` marker.
+const SEGMENT_FIELDS = [
+  'fontName',
+  'fontSize',
+  'fills',
+  'textDecoration',
+  'textCase',
+  'lineHeight',
+  'letterSpacing',
+  'hyperlink',
+  'listOptions',
+  'indentation',
+] as const;
 
 /** Break a mixed-style TEXT node into runs of uniform styling (so inline bold/links/colors survive). */
 const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
   const segments = text.getStyledTextSegments([...SEGMENT_FIELDS]);
-  return segments.map(s => ({
-    characters: s.characters,
-    start: s.start,
-    end: s.end,
-    fontName: { family: s.fontName.family, style: s.fontName.style },
-    fontSize: s.fontSize,
-    fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint)) : [],
-    textDecoration: s.textDecoration,
-    textCase: s.textCase,
-  }));
+  return segments.map(s => {
+    const out: SerializedTextSegment = {
+      characters: s.characters,
+      start: s.start,
+      end: s.end,
+      fontName: { family: s.fontName.family, style: s.fontName.style },
+      fontSize: s.fontSize,
+      fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint)) : [],
+      textDecoration: s.textDecoration,
+      textCase: s.textCase,
+    };
+    // Per-run leading / tracking, only when they carry a concrete non-default value (AUTO leading /
+    // 0 tracking are the no-ops). A segment is a uniform run, so these are never `mixed` on a real
+    // node — skip the MIXED fallback so a run stays lean rather than emitting a meaningless marker.
+    const lh = serializeLineHeight(s.lineHeight);
+    if (lh !== MIXED && lh.unit !== 'AUTO') out.lineHeight = lh;
+    const ls = serializeLetterSpacing(s.letterSpacing);
+    if (ls !== MIXED && ls.value !== 0) out.letterSpacing = ls;
+    // Structural runs: an inline link, a list item (ORDERED/UNORDERED) at some indentation depth.
+    if (s.hyperlink != null) out.hyperlink = { type: s.hyperlink.type, value: s.hyperlink.value };
+    if (s.listOptions != null && s.listOptions.type !== 'NONE')
+      out.listOptions = s.listOptions.type;
+    if (typeof s.indentation === 'number' && s.indentation > 0) out.indentation = s.indentation;
+    return out;
+  });
 };
 
 const collectComponentProperties = (node: SceneNode, out: SerializedNode): void => {
@@ -399,6 +429,17 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       }
       const align = (node as { strokeAlign?: unknown }).strokeAlign;
       if (typeof align === 'string') out.strokeAlign = align;
+      // Dash pattern (px on/off runs) → dashed/dotted borders and SVG stroke-dasharray. Empty = solid
+      // (the common case) → omit. strokeCap (line ends / arrowheads) omitted at NONE; strokeJoin
+      // omitted at the MITER default. These matter for dividers, LINE and VECTOR strokes.
+      const dash = (node as { dashPattern?: unknown }).dashPattern;
+      if (Array.isArray(dash) && dash.length > 0 && dash.every(d => typeof d === 'number')) {
+        out.dashPattern = dash as number[];
+      }
+      const cap = (node as { strokeCap?: unknown }).strokeCap;
+      if (typeof cap === 'string' && cap !== 'NONE') out.strokeCap = cap;
+      const join = (node as { strokeJoin?: unknown }).strokeJoin;
+      if (typeof join === 'string' && join !== 'MITER') out.strokeJoin = join;
     }
   }
   if ('effects' in node) {
@@ -451,6 +492,20 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
   ) {
     out.clipsContent = (node as { clipsContent: boolean }).clipsContent;
   }
+  // A frame's own layout grids — the explicit responsive column system (12-col, baseline) a designer
+  // sets up. This is ground-truth breakpoint structure codegen otherwise infers; emit only when the
+  // frame actually defines grids. overflowDirection is the scroll axis of a clipping frame (→
+  // overflow-x/y), omitted at NONE.
+  if ('layoutGrids' in node) {
+    const grids = (node as { layoutGrids?: unknown }).layoutGrids;
+    if (Array.isArray(grids) && grids.length > 0) {
+      out.layoutGrids = grids.map(g => serializeLayoutGrid(g as LayoutGrid));
+    }
+  }
+  if ('overflowDirection' in node) {
+    const dir = (node as { overflowDirection?: unknown }).overflowDirection;
+    if (typeof dir === 'string' && dir !== 'NONE') out.overflowDirection = dir;
+  }
 
   collectStyleLinks(node, out);
   collectComponentProperties(node, out);
@@ -472,14 +527,37 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     out.maxLines = text.maxLines;
     if (typeof text.paragraphSpacing === 'number') out.paragraphSpacing = text.paragraphSpacing;
     if (typeof text.paragraphIndent === 'number') out.paragraphIndent = text.paragraphIndent;
-    // Only expand per-run styling when the node is actually mixed (uniform text needs no segments).
-    const isMixed =
+    // Node-level hyperlink: a uniform link over the whole node → <a href>. `hyperlink` is an object
+    // when uniform, figma.mixed (a symbol) when only part of the text links (surfaced per-run in
+    // segments), null when none. Emit only the uniform-object case; mixed drives needsSegments below.
+    // Detect mixed via `typeof === 'symbol'` (the file's type-guard idiom, no figma.mixed ref).
+    const link = text.hyperlink;
+    const linkMixed = typeof link === 'symbol';
+    if (link !== null && !linkMixed && typeof link === 'object') {
+      out.hyperlink = { type: link.type, value: link.value };
+    }
+    // A list carries no node-level accessor, so probe once (cheap range read) to know whether the
+    // text is bulleted/numbered. A uniform list has uniform style → wouldn't trip the style-mix test,
+    // yet its <ol>/<ul> structure must survive; segments (split on listOptions/indentation) recover it
+    // — a flat uniform list stays a single segment, a nested one splits by depth.
+    const len = typeof text.characters === 'string' ? text.characters.length : 0;
+    let hasList = false;
+    if (len > 0 && typeof text.getRangeListOptions === 'function') {
+      const lo = text.getRangeListOptions(0, len);
+      hasList =
+        typeof lo === 'symbol' || (typeof lo === 'object' && lo !== null && lo.type !== 'NONE');
+    }
+    // Expand per-run styling when the node varies in style, carries a partial link, or is a list —
+    // uniform plain text needs no segments.
+    const needsSegments =
       out.fontSize === MIXED ||
       out.fontName === MIXED ||
       out.fills === MIXED ||
       out.textCase === MIXED ||
-      out.textDecoration === MIXED;
-    if (isMixed && typeof text.getStyledTextSegments === 'function') {
+      out.textDecoration === MIXED ||
+      linkMixed ||
+      hasList;
+    if (needsSegments && typeof text.getStyledTextSegments === 'function') {
       out.segments = serializeTextSegments(text);
     }
   }

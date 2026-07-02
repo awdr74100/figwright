@@ -76,6 +76,9 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.strokeWeight !== undefined) out.strokeWeight = flat.strokeWeight;
   if (flat.strokeWeights !== undefined) out.strokeWeights = flat.strokeWeights;
   if (flat.strokeAlign !== undefined) out.strokeAlign = flat.strokeAlign;
+  if (flat.dashPattern !== undefined) out.dashPattern = flat.dashPattern;
+  if (flat.strokeCap !== undefined) out.strokeCap = flat.strokeCap;
+  if (flat.strokeJoin !== undefined) out.strokeJoin = flat.strokeJoin;
   if (flat.effects !== undefined) out.effects = flat.effects;
   // Auto-layout / positioning — surfaced here (not just get_node) so codegen reads exact padding /
   // gap / justify / align / grid placement instead of inferring them from x/y/w/h geometry.
@@ -90,6 +93,10 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (flat.gridChild !== undefined) out.gridChild = flat.gridChild;
   if (flat.constraints !== undefined) out.constraints = flat.constraints;
   if (flat.clipsContent !== undefined) out.clipsContent = flat.clipsContent;
+  // A frame's own layout grids (the explicit responsive column system) + scroll overflow — ground
+  // truth for breakpoints that codegen otherwise infers from geometry.
+  if (flat.layoutGrids !== undefined) out.layoutGrids = flat.layoutGrids;
+  if (flat.overflowDirection !== undefined) out.overflowDirection = flat.overflowDirection;
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;
@@ -118,21 +125,32 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
     out.textTruncation = flat.textTruncation;
   }
   if (typeof flat.maxLines === 'number') out.maxLines = flat.maxLines;
+  // A node-level hyperlink (whole text is one link → <a href>); partial links ride in segments below.
+  if (flat.hyperlink !== undefined) out.hyperlink = flat.hyperlink;
   // Per-run styling of a mixed TEXT node — serializeFlatSync already computed this (only set when the
-  // node is genuinely mixed), get_design_context just used to drop it. Carry it so inline bold / links
-  // / coloured spans survive instead of collapsing to a single `mixed` marker. fills are simplified to
-  // hex like every other paint in this view.
+  // node is genuinely mixed, carries a partial link, or is a list), get_design_context just used to
+  // drop it. Carry it so inline bold / links / list items survive instead of collapsing to a single
+  // `mixed` marker. fills are simplified to hex like every other paint in this view; the structural
+  // per-run fields (hyperlink / listOptions / indentation) and leading/tracking pass through as-is.
   if (flat.segments !== undefined) {
-    out.segments = flat.segments.map(s => ({
-      characters: s.characters,
-      start: s.start,
-      end: s.end,
-      fontName: s.fontName,
-      fontSize: s.fontSize,
-      fills: s.fills.map(simplifyPaint),
-      textDecoration: s.textDecoration,
-      textCase: s.textCase,
-    }));
+    out.segments = flat.segments.map(s => {
+      const seg: NonNullable<DesignContextNode['segments']>[number] = {
+        characters: s.characters,
+        start: s.start,
+        end: s.end,
+        fontName: s.fontName,
+        fontSize: s.fontSize,
+        fills: s.fills.map(simplifyPaint),
+        textDecoration: s.textDecoration,
+        textCase: s.textCase,
+      };
+      if (s.lineHeight !== undefined) seg.lineHeight = s.lineHeight;
+      if (s.letterSpacing !== undefined) seg.letterSpacing = s.letterSpacing;
+      if (s.hyperlink !== undefined) seg.hyperlink = s.hyperlink;
+      if (s.listOptions !== undefined) seg.listOptions = s.listOptions;
+      if (s.indentation !== undefined) seg.indentation = s.indentation;
+      return seg;
+    });
   }
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);

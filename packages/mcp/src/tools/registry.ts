@@ -81,6 +81,7 @@ import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
 import { setFillsTool } from './set-fills.js';
 import { setInstancePropertiesTool } from './set-instance-properties.js';
+import { setLayoutGridsTool } from './set-layout-grids.js';
 import { setLayoutPropsTool } from './set-layout-props.js';
 import { setMaskTool } from './set-mask.js';
 import { setOpacityTool } from './set-opacity.js';
@@ -149,6 +150,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   resizeNodesTool,
   setAutoLayoutTool,
   setLayoutPropsTool,
+  setLayoutGridsTool,
   setBlendModeTool,
   setMaskTool,
   setArcTool,

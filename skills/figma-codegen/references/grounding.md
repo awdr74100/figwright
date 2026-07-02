@@ -42,10 +42,18 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   - **Mixed (inline) styling → read `segments`.** When a value reads `"mixed"` (e.g. `fontSize` or
     `textDecoration`), the node carries `segments` — each a run of uniform styling with its own
     `characters`, `fontName`, `fontSize`, `fills` (hex), `textDecoration`, `textCase` over offsets
-    `start`/`end`. These describe runs **within** the node's `characters` (not extra text) — emit each
-    as its own span: the underlined/coloured `Privacy Policy` inside a sentence, the bold word in a
-    label, the smaller `/mo` after a price. Dropping them flattens the whole string to one style (a
-    link with no underline, a price with no emphasis) — the classic mixed-text miss.
+    `start`/`end` (plus per-run `lineHeight`/`letterSpacing` when they differ). These describe runs
+    **within** the node's `characters` (not extra text) — emit each as its own span: the
+    underlined/coloured `Privacy Policy` inside a sentence, the bold word in a label, the smaller
+    `/mo` after a price. Dropping them flattens the whole string to one style (a link with no
+    underline, a price with no emphasis) — the classic mixed-text miss.
+  - **Inline links & lists → `segments` carry structure, not just style.** A run may carry
+    `hyperlink` (`{ type: 'URL' | 'NODE', value }`) → emit an `<a href>` (or router link for a
+    `NODE` target); a partial link is the reason a whole node reads mixed. A run may carry
+    `listOptions` (`ORDERED` / `UNORDERED`) with an `indentation` depth → emit real `<ol>`/`<ul>`
+    list items nested by depth, **not** newline-separated text with literal bullet characters. A
+    node whose _whole_ text is one uniform link instead carries a node-level `hyperlink`; a fully
+    uniform list still expands to a single `segment` so its `listOptions` survives.
 - **Per-side borders.** When `strokeWeight` is `mixed`, the node carries `strokeWeights`
   `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
   **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row
@@ -55,6 +63,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `box-shadow 0 0 0 Npx <colour>`, **never a plain `border`**, so it doesn't grow the box or shift
   its position (selection rings / focus outlines are `OUTSIDE`). `CENTER` straddles the edge (half the
   weight each side).
+- **Dashed / dotted strokes & line ends.** A stroke may carry `dashPattern` (px on/off run lengths)
+  → `border-style: dashed` (or `dotted` for short even runs), and for an SVG line/divider
+  `stroke-dasharray`. Without it a dashed separator or a cut-line renders solid. A `LINE` / `VECTOR`
+  stroke may also carry `strokeCap` (`ROUND` / `SQUARE`, or an arrowhead like `ARROW_LINES`) →
+  `stroke-linecap` / an SVG marker, and `strokeJoin` (`ROUND` / `BEVEL`) → `stroke-linejoin`; both
+  are omitted at their no-op defaults (`NONE` / `MITER`), so anything present is real intent.
 - **Per-corner radius.** When `cornerRadius` is `mixed`, the node carries `cornerRadii`
   `{ topLeft, topRight, bottomRight, bottomLeft }` — round only those corners (`rounded-t` /
   `rounded-tl` / …), **never a uniform radius**. A card rounded on one edge, a tab, or a chat bubble
@@ -111,6 +125,18 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   width exceeds its content — prefer `min-w-*` over a hard `w-*`**: Figma has no native min-width, so a
   designer expresses "at least this wide, but let longer/i18n text grow" as `FIXED`. Reserve a hard
   `w-*` for things that are genuinely a fixed size (sidebars, fixed cards, avatars).
+- **Layout grids — the frame's own responsive column system (don't infer breakpoints, read them).**
+  A frame may carry `layoutGrids`: `COLUMNS` / `ROWS` with a `count` (e.g. 12), `gutterSize`, and
+  `alignment`, or a uniform `GRID` with `sectionSize` (an 8px baseline). This is the designer's
+  **explicit** responsive scaffold — map a `COLUMNS` grid straight to your CSS grid / container
+  (`grid-cols-12 gap-[gutter]`, the page `max-w` + padding from the grid's margins) instead of
+  reverse-engineering column widths from child geometry. When several breakpoint frames each carry a
+  `count: 12` columns grid, that's the shared track system across breakpoints — keep the columns
+  fixed and let the gutters/margins flex. A uniform `GRID` is the spacing baseline: round paddings/
+  gaps to it. This is ground truth the geometry only approximates, so prefer it.
+- **Scroll overflow.** A clipping frame may carry `overflowDirection` (`HORIZONTAL` / `VERTICAL` /
+  `BOTH`) — the axis the content scrolls on. Emit `overflow-x-auto` / `overflow-y-auto` / `overflow-auto`
+  (a horizontal card carousel, a scrollable panel), don't just clip it. Omitted (`NONE`) means no scroll.
 - **Absolute positioning & constraints — a node placed by coordinates, not flow.** Two
   mutually-exclusive signals say "this isn't in an auto-layout flow"; read the anchor so it survives a
   resize instead of being hardcoded to a corner.

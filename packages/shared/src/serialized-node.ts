@@ -227,7 +227,20 @@ export const SerializedMainComponentSchema = z.object({
 });
 export type SerializedMainComponent = z.infer<typeof SerializedMainComponentSchema>;
 
-/** A run of uniformly-styled characters within a mixed-style TEXT node (→ inline spans / links). */
+/** A hyperlink target on a text run or node: a URL, or an in-file NODE link (`value` is the id). */
+export const SerializedHyperlinkSchema = z.object({
+  type: z.string(),
+  value: z.string(),
+});
+export type SerializedHyperlink = z.infer<typeof SerializedHyperlinkSchema>;
+
+/**
+ * A run of uniformly-styled characters within a mixed-style TEXT node (→ inline spans / links).
+ * `lineHeight` / `letterSpacing` are per-run overrides (omitted at their no-op default so a plain
+ * run stays lean); `hyperlink` makes the run an `<a>`; `listOptions` (ORDERED / UNORDERED) makes it
+ * a list item (`<ol>` / `<ul>`); `indentation` is the list/blockquote nesting depth. The last three
+ * are the structural bits the node-level `mixed` markers flag but can't locate.
+ */
 export const SerializedTextSegmentSchema = z.object({
   characters: z.string(),
   start: z.number(),
@@ -237,6 +250,11 @@ export const SerializedTextSegmentSchema = z.object({
   fills: z.array(SerializedPaintSchema),
   textDecoration: z.string(),
   textCase: z.string(),
+  lineHeight: z.union([SerializedLineHeightSchema, z.literal(MIXED)]).optional(),
+  letterSpacing: z.union([SerializedLetterSpacingSchema, z.literal(MIXED)]).optional(),
+  hyperlink: SerializedHyperlinkSchema.optional(),
+  listOptions: z.string().optional(),
+  indentation: z.number().optional(),
 });
 export type SerializedTextSegment = z.infer<typeof SerializedTextSegmentSchema>;
 
@@ -281,6 +299,16 @@ export interface SerializedNode {
    */
   strokeWeights?: { top: number; right: number; bottom: number; left: number };
   strokeAlign?: string;
+  /**
+   * Dash pattern (px on/off run lengths) → `border-style: dashed` / `dotted` and SVG
+   * `stroke-dasharray`. Omitted when empty (a solid stroke), so only genuinely dashed/dotted
+   * borders carry it.
+   */
+  dashPattern?: readonly number[];
+  /** Stroke line cap (ROUND / SQUARE / arrow heads); omitted when NONE. Matters for LINE / VECTOR. */
+  strokeCap?: string;
+  /** Stroke line join (ROUND / BEVEL); omitted at the MITER default. */
+  strokeJoin?: string;
   effects?: readonly SerializedEffect[];
   layout?: SerializedAutoLayout;
   // how this node sizes/positions itself inside an auto-layout parent
@@ -294,6 +322,18 @@ export interface SerializedNode {
   // non-auto-layout positioning
   constraints?: SerializedConstraints;
   clipsContent?: boolean;
+  /**
+   * A frame's own layout grids (COLUMNS / ROWS / GRID) — the explicit responsive column system a
+   * designer sets up (12-col, 8px baseline). This is the ground-truth breakpoint scaffold codegen
+   * otherwise has to infer; present only on frames that actually define grids. Distinct from
+   * `layout` (auto-layout flex/grid of children).
+   */
+  layoutGrids?: readonly SerializedLayoutGrid[];
+  /**
+   * Scroll behaviour of a clipping frame (HORIZONTAL / VERTICAL / BOTH) → overflow; omitted when
+   * NONE.
+   */
+  overflowDirection?: string;
   // design-system links (→ tokens / shared styles for codegen)
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
@@ -315,6 +355,12 @@ export interface SerializedNode {
   maxLines?: number | null;
   paragraphSpacing?: number;
   paragraphIndent?: number;
+  /**
+   * A node-level hyperlink (the whole text is a link → `<a href>`). Present only when the entire
+   * node carries one uniform link; a link on only part of the text surfaces per-run in `segments`
+   * instead.
+   */
+  hyperlink?: SerializedHyperlink;
   /** Present only for mixed-style TEXT: per-run styling so rich text isn't flattened. */
   segments?: readonly SerializedTextSegment[];
   children?: readonly SerializedNode[];
@@ -367,6 +413,9 @@ export const SerializedNodeSchema = z.lazy(() =>
       })
       .optional(),
     strokeAlign: z.string().optional(),
+    dashPattern: z.array(z.number()).optional(),
+    strokeCap: z.string().optional(),
+    strokeJoin: z.string().optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     layout: SerializedAutoLayoutSchema.optional(),
     layoutSizingHorizontal: z.string().optional(),
@@ -377,6 +426,8 @@ export const SerializedNodeSchema = z.lazy(() =>
     gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),
+    layoutGrids: z.array(SerializedLayoutGridSchema).optional(),
+    overflowDirection: z.string().optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
@@ -395,6 +446,7 @@ export const SerializedNodeSchema = z.lazy(() =>
     maxLines: z.number().nullable().optional(),
     paragraphSpacing: z.number().optional(),
     paragraphIndent: z.number().optional(),
+    hyperlink: SerializedHyperlinkSchema.optional(),
     segments: z.array(SerializedTextSegmentSchema).optional(),
     children: z.array(SerializedNodeSchema).optional(),
   }),

@@ -9,6 +9,8 @@ import {
   SerializedEffectSchema,
   SerializedFontNameSchema,
   SerializedGridChildSchema,
+  SerializedHyperlinkSchema,
+  SerializedLayoutGridSchema,
   SerializedLetterSpacingSchema,
   SerializedLineHeightSchema,
   SerializedMainComponentSchema,
@@ -21,6 +23,8 @@ import type {
   SerializedConstraints,
   SerializedEffect,
   SerializedGridChild,
+  SerializedHyperlink,
+  SerializedLayoutGrid,
   SerializedLetterSpacing,
   SerializedLineHeight,
   SerializedMainComponent,
@@ -48,6 +52,14 @@ export interface DesignContextTextSegment {
   fills: readonly SimplifiedPaint[];
   textDecoration: string;
   textCase: string;
+  // Per-run structural bits the node-level `mixed` markers flag but can't locate: an inline link
+  // (→ `<a>`), a list item (→ `<ol>`/`<ul>`) at some indentation, or per-run leading/tracking.
+  // Each omitted at its no-op default so a plain run stays lean.
+  lineHeight?: SerializedLineHeight | typeof MIXED;
+  letterSpacing?: SerializedLetterSpacing | typeof MIXED;
+  hyperlink?: SerializedHyperlink;
+  listOptions?: string;
+  indentation?: number;
 }
 
 /**
@@ -110,6 +122,12 @@ export interface DesignContextNode {
    */
   strokeWeights?: { top: number; right: number; bottom: number; left: number };
   strokeAlign?: string;
+  /** Dash pattern (px on/off) → `border-style: dashed`/`dotted`; omitted for a solid stroke. */
+  dashPattern?: readonly number[];
+  /** Stroke line cap (ROUND / SQUARE / arrows); omitted when NONE. */
+  strokeCap?: string;
+  /** Stroke line join (ROUND / BEVEL); omitted at the MITER default. */
+  strokeJoin?: string;
   effects?: readonly SerializedEffect[];
   // auto-layout / positioning — surfaced to the main grounding tool (not just get_node) so codegen
   // reads exact padding / gap / justify / align instead of inferring them from geometry. H/V carry
@@ -124,6 +142,18 @@ export interface DesignContextNode {
   gridChild?: SerializedGridChild;
   constraints?: SerializedConstraints;
   clipsContent?: boolean;
+  /**
+   * A frame's own layout grids (COLUMNS / ROWS / GRID) — the explicit responsive column scaffold a
+   * designer defines (12-col, baseline). Ground-truth breakpoint structure codegen otherwise
+   * infers; present only on frames that define grids. Distinct from `layout` (auto-layout of
+   * children).
+   */
+  layoutGrids?: readonly SerializedLayoutGrid[];
+  /**
+   * Scroll behaviour of a clipping frame (HORIZONTAL / VERTICAL / BOTH) → overflow; omitted when
+   * NONE.
+   */
+  overflowDirection?: string;
   characters?: string;
   fontSize?: number | typeof MIXED;
   fontName?: z.infer<typeof SerializedFontNameSchema> | typeof MIXED;
@@ -141,6 +171,11 @@ export interface DesignContextNode {
   textAlignVertical?: string;
   textTruncation?: string;
   maxLines?: number | null;
+  /**
+   * Node-level hyperlink (the whole text is one link → `<a href>`); partial links live in
+   * `segments`.
+   */
+  hyperlink?: SerializedHyperlink;
   // Per-run styling of a *mixed* TEXT node — the only way to recover which characters carry the
   // inline bold / link / coloured span that the node-level `mixed` markers flag but can't locate.
   // Present only when the node is actually mixed (so uniform text stays clean).
@@ -236,6 +271,9 @@ export const DesignContextNodeSchema = z.lazy(() =>
       .object({ top: z.number(), right: z.number(), bottom: z.number(), left: z.number() })
       .optional(),
     strokeAlign: z.string().optional(),
+    dashPattern: z.array(z.number()).optional(),
+    strokeCap: z.string().optional(),
+    strokeJoin: z.string().optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     layout: SerializedAutoLayoutSchema.optional(),
     layoutSizingHorizontal: z.string().optional(),
@@ -246,6 +284,8 @@ export const DesignContextNodeSchema = z.lazy(() =>
     gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),
+    layoutGrids: z.array(SerializedLayoutGridSchema).optional(),
+    overflowDirection: z.string().optional(),
     characters: z.string().optional(),
     fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
     fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),
@@ -257,6 +297,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     textAlignVertical: z.string().optional(),
     textTruncation: z.string().optional(),
     maxLines: z.number().nullable().optional(),
+    hyperlink: SerializedHyperlinkSchema.optional(),
     // Simplified paints are opaque here (hex lives in `color`), mirroring globalVars' z.unknown().
     segments: z
       .array(
@@ -269,6 +310,11 @@ export const DesignContextNodeSchema = z.lazy(() =>
           fills: z.array(z.unknown()),
           textDecoration: z.string(),
           textCase: z.string(),
+          lineHeight: z.union([SerializedLineHeightSchema, z.literal(MIXED)]).optional(),
+          letterSpacing: z.union([SerializedLetterSpacingSchema, z.literal(MIXED)]).optional(),
+          hyperlink: SerializedHyperlinkSchema.optional(),
+          listOptions: z.string().optional(),
+          indentation: z.number().optional(),
         }),
       )
       .optional(),
