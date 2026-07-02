@@ -13,7 +13,14 @@ describe('set_layout_grids handler', () => {
     const result = (await handler({
       nodeId: '1:1',
       grids: [
-        { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+        {
+          pattern: 'COLUMNS',
+          visible: true,
+          count: 12,
+          gutterSize: 24,
+          alignment: 'STRETCH',
+          offset: 32,
+        },
       ],
     })) as MutateResult;
     expect(frame.layoutGrids).toEqual([
@@ -23,7 +30,7 @@ describe('set_layout_grids handler', () => {
         count: 12,
         gutterSize: 24,
         alignment: 'STRETCH',
-        offset: 0,
+        offset: 32,
       },
     ]);
     expect(result).toEqual({ ok: true, nodeId: '1:1' });

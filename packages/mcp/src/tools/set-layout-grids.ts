@@ -26,6 +26,10 @@ export const setLayoutGridsTool: ToolSpec = {
           count: z.number().optional().describe('Number of columns/rows (ROWS/COLUMNS)'),
           gutterSize: z.number().optional().describe('Gap between columns/rows (ROWS/COLUMNS)'),
           alignment: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH']).optional(),
+          offset: z
+            .number()
+            .optional()
+            .describe('Page margin from the frame edge (ignored when CENTER)'),
         }),
       )
       .describe('Layout grids to set; [] clears all grids on the frame'),

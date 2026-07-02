@@ -20,6 +20,7 @@ export const createGridStyleTool: ToolSpec = {
         count: z.number().optional(),
         gutterSize: z.number().optional(),
         alignment: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH']).optional(),
+        offset: z.number().optional(),
       }),
     ),
     description: z.string().optional(),

@@ -126,11 +126,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   designer expresses "at least this wide, but let longer/i18n text grow" as `FIXED`. Reserve a hard
   `w-*` for things that are genuinely a fixed size (sidebars, fixed cards, avatars).
 - **Layout grids — the frame's own responsive column system (don't infer breakpoints, read them).**
-  A frame may carry `layoutGrids`: `COLUMNS` / `ROWS` with a `count` (e.g. 12), `gutterSize`, and
-  `alignment`, or a uniform `GRID` with `sectionSize` (an 8px baseline). This is the designer's
-  **explicit** responsive scaffold — map a `COLUMNS` grid straight to your CSS grid / container
-  (`grid-cols-12 gap-[gutter]`, the page `max-w` + padding from the grid's margins) instead of
-  reverse-engineering column widths from child geometry. When several breakpoint frames each carry a
+  A frame may carry `layoutGrids`: `COLUMNS` / `ROWS` with a `count` (e.g. 12), `gutterSize`,
+  `alignment`, and `offset` (the page margin from the frame edge → container horizontal padding), or
+  a uniform `GRID` with `sectionSize` (an 8px baseline). This is the designer's **explicit**
+  responsive scaffold — map a `COLUMNS` grid straight to your CSS grid / container (`grid-cols-12
+gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering column widths and
+  margins from child geometry. When several breakpoint frames each carry a
   `count: 12` columns grid, that's the shared track system across breakpoints — keep the columns
   fixed and let the gutters/margins flex. A uniform `GRID` is the spacing baseline: round paddings/
   gaps to it. This is ground truth the geometry only approximates, so prefer it.

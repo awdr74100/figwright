@@ -536,14 +536,17 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     if (link !== null && !linkMixed && typeof link === 'object') {
       out.hyperlink = { type: link.type, value: link.value };
     }
-    // A list carries no node-level accessor, so probe once (cheap range read) to know whether the
-    // text is bulleted/numbered. A uniform list has uniform style → wouldn't trip the style-mix test,
-    // yet its <ol>/<ul> structure must survive; segments (split on listOptions/indentation) recover it
-    // — a flat uniform list stays a single segment, a nested one splits by depth.
-    const len = typeof text.characters === 'string' ? text.characters.length : 0;
+    // A list carries no node-level accessor, so probe (a cheap range read) to know whether the text is
+    // bulleted/numbered — a uniform list has uniform style and wouldn't trip the style-mix test, yet
+    // its <ol>/<ul> structure must survive; segments (split on listOptions/indentation) recover it.
+    // Gate the probe on a hard line break: a list is inherently multi-line (one paragraph per item),
+    // so single-line text (the bulk of nodes — labels, buttons, headings) can't be a meaningful list
+    // and skips the probe entirely. This keeps the hot path free of a per-text-node call while still
+    // catching every real list. (A one-item single-line list is missed, as it already was on main.)
+    const chars = typeof text.characters === 'string' ? text.characters : '';
     let hasList = false;
-    if (len > 0 && typeof text.getRangeListOptions === 'function') {
-      const lo = text.getRangeListOptions(0, len);
+    if (chars.includes('\n') && typeof text.getRangeListOptions === 'function') {
+      const lo = text.getRangeListOptions(0, chars.length);
       hasList =
         typeof lo === 'symbol' || (typeof lo === 'object' && lo !== null && lo.type !== 'NONE');
     }
@@ -660,5 +663,10 @@ export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
     alignment: grid.alignment,
   };
   if (typeof grid.sectionSize === 'number') out.sectionSize = grid.sectionSize;
+  // offset = the page margin between the grid and the frame edge (→ container horizontal padding).
+  // Omit the no-op (0) and the CENTER case (which ignores offset) so only a real margin surfaces.
+  if (typeof grid.offset === 'number' && grid.offset !== 0 && grid.alignment !== 'CENTER') {
+    out.offset = grid.offset;
+  }
   return out;
 };

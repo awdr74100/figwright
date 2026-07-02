@@ -106,7 +106,12 @@ export const SerializedEffectSchema = z.object({
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
-/** `pattern` is ROWS / COLUMNS / GRID; column/row grids add count / gutterSize / alignment. */
+/**
+ * `pattern` is ROWS / COLUMNS / GRID; column/row grids add count / gutterSize / alignment / offset.
+ * `offset` is the margin between the grid and the frame edge — the responsive container's
+ * horizontal page margin (→ container padding); omitted when 0 or when alignment is CENTER (which
+ * ignores it).
+ */
 export const SerializedLayoutGridSchema = z.object({
   pattern: z.string(),
   visible: z.boolean(),
@@ -114,6 +119,7 @@ export const SerializedLayoutGridSchema = z.object({
   count: z.number().optional(),
   gutterSize: z.number().optional(),
   alignment: z.string().optional(),
+  offset: z.number().optional(),
 });
 export type SerializedLayoutGrid = z.infer<typeof SerializedLayoutGridSchema>;
 

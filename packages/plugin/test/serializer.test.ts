@@ -858,19 +858,45 @@ describe('serializeFlat — typography', () => {
     expect(out.segments?.[0]?.indentation).toBe(1);
   });
 
-  it('does not expand segments when the list probe reports NONE', () => {
+  it('skips the list probe entirely for single-line text (the hot-path perf gate)', () => {
+    let probed = false;
     const out = serializeFlatSync(
       fake({
         type: 'TEXT',
-        characters: 'plain',
+        characters: 'Buy now', // no newline → can't be a list → never probed
         fontSize: 14,
         fontName: { family: 'Inter', style: 'Regular' },
         textCase: 'ORIGINAL',
         textDecoration: 'NONE',
-        getRangeListOptions: () => ({ type: 'NONE' }),
+        getRangeListOptions: () => {
+          probed = true;
+          return { type: 'UNORDERED' };
+        },
         getStyledTextSegments: () => [],
       }),
     );
+    expect(probed).toBe(false);
+    expect(out.segments).toBeUndefined();
+  });
+
+  it('probes multi-line text but expands no segments when it is not a list (NONE)', () => {
+    let probed = false;
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'line one\nline two', // multi-line, but a plain paragraph, not a list
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        getRangeListOptions: () => {
+          probed = true;
+          return { type: 'NONE' };
+        },
+        getStyledTextSegments: () => [],
+      }),
+    );
+    expect(probed).toBe(true);
     expect(out.segments).toBeUndefined();
   });
 
@@ -1061,5 +1087,39 @@ describe('serializeLayoutGrid', () => {
       sectionSize: 8,
     } as unknown as LayoutGrid);
     expect(out).toEqual({ pattern: 'GRID', visible: true, sectionSize: 8 });
+  });
+
+  it('surfaces a non-zero offset (the page margin) on a row/column grid', () => {
+    const out = serializeLayoutGrid({
+      pattern: 'COLUMNS',
+      visible: true,
+      count: 12,
+      gutterSize: 24,
+      alignment: 'STRETCH',
+      offset: 32,
+    } as unknown as LayoutGrid);
+    expect(out.offset).toBe(32);
+  });
+
+  it('omits offset when it is 0 or when alignment is CENTER (which ignores it)', () => {
+    const zero = serializeLayoutGrid({
+      pattern: 'COLUMNS',
+      visible: true,
+      count: 12,
+      gutterSize: 24,
+      alignment: 'STRETCH',
+      offset: 0,
+    } as unknown as LayoutGrid);
+    expect(zero.offset).toBeUndefined();
+
+    const centered = serializeLayoutGrid({
+      pattern: 'COLUMNS',
+      visible: true,
+      count: 12,
+      gutterSize: 24,
+      alignment: 'CENTER',
+      offset: 32,
+    } as unknown as LayoutGrid);
+    expect(centered.offset).toBeUndefined();
   });
 });

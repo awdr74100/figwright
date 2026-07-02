@@ -45,7 +45,7 @@ export const toFigmaLayoutGrid = (g: SerializedLayoutGrid): LayoutGrid => {
       alignment: g.alignment ?? 'STRETCH',
       gutterSize: g.gutterSize ?? 0,
       count: g.count ?? 1,
-      offset: 0,
+      offset: g.offset ?? 0,
       ...(g.sectionSize === undefined ? {} : { sectionSize: g.sectionSize }),
     } as LayoutGrid;
   }
