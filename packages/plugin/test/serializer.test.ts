@@ -940,6 +940,54 @@ describe('serializeFlat — typography', () => {
     // AUTO leading is the no-op → omitted, never emitted as `mixed`.
     expect(out.segments?.[1]?.lineHeight).toBeUndefined();
   });
+
+  it('carries per-run token bindings (styleIds + boundVariables) on a mixed run', () => {
+    const segments = [
+      {
+        characters: 'Agree to ',
+        start: 0,
+        end: 9,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+        textStyleId: '',
+        fillStyleId: '',
+      },
+      {
+        characters: 'Terms',
+        start: 9,
+        end: 14,
+        fontName: { family: 'Inter', style: 'Bold' },
+        fontSize: 14,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0.4, b: 1 } }],
+        textDecoration: 'UNDERLINE',
+        textCase: 'ORIGINAL',
+        // The link run binds a shared text style, a fill style, and a colour variable.
+        textStyleId: 'S:link,',
+        fillStyleId: 'S:brandfill,',
+        boundVariables: { fills: { type: 'VARIABLE_ALIAS', id: 'VariableID:primary' } },
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Agree to Terms',
+        fontName: Symbol('figma.mixed'),
+        fontSize: 14,
+        textCase: 'ORIGINAL',
+        textDecoration: Symbol('figma.mixed'),
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    // The plain run carries no bindings (empty ids omitted).
+    expect(out.segments?.[0]?.styleIds).toBeUndefined();
+    expect(out.segments?.[0]?.boundVariables).toBeUndefined();
+    // The link run carries its style ids (raw, incl. Figma's trailing comma) + variable id list.
+    expect(out.segments?.[1]?.styleIds).toEqual({ text: 'S:link,', fill: 'S:brandfill,' });
+    expect(out.segments?.[1]?.boundVariables).toEqual({ fills: ['VariableID:primary'] });
+  });
 });
 
 describe('serializeTree', () => {

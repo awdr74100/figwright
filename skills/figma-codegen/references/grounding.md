@@ -54,6 +54,13 @@ the obvious ones. These are ordered by how easily they're silently dropped.
     list items nested by depth, **not** newline-separated text with literal bullet characters. A
     node whose _whole_ text is one uniform link instead carries a node-level `hyperlink`; a fully
     uniform list still expands to a single `segment` so its `listOptions` survives.
+  - **Per-run tokens → a run's `styleIds` / `boundVariables` resolve like a node's own.** A run may
+    carry `styleIds` (`text` / `fill` → a shared text/fill style id) and `boundVariables` (e.g. a
+    colour token on `fills`), resolved to names in the top-level `styles` / `variables` maps just
+    like node-level bindings. Prefer the resolved token (the `Link/Default` text style, the
+    `Primary/500` colour) over the run's raw hex — on a mixed node the node-level fill reads `mixed`,
+    so a run's binding is the **only** place the inline link's colour/type token survives. Emit the
+    class/variable, not a one-off hex, so the link tracks the design system.
 - **Per-side borders.** When `strokeWeight` is `mixed`, the node carries `strokeWeights`
   `{ top, right, bottom, left }` — emit only the non-zero sides (`border-t` / `border-b` / …),
   **never a uniform `border`**. Collapsing a per-side stroke into a full border turns a table row

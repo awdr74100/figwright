@@ -261,6 +261,12 @@ export const SerializedTextSegmentSchema = z.object({
   hyperlink: SerializedHyperlinkSchema.optional(),
   listOptions: z.string().optional(),
   indentation: z.number().optional(),
+  // Per-run design-system bindings: a run may link a shared text style (`text`) / fill style
+  // (`fill`) or bind variables (a colour token on `fills`, a size token on `fontSize`). A mixed TEXT
+  // node's node-level fills are `mixed`, so this is the only place a run's token binding survives —
+  // without it an inline link bound to Primary/500 + Body/Bold collapses to a bare hex.
+  styleIds: SerializedStyleIdsSchema.optional(),
+  boundVariables: z.record(z.string(), z.array(z.string())).optional(),
 });
 export type SerializedTextSegment = z.infer<typeof SerializedTextSegmentSchema>;
 

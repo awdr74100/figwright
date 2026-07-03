@@ -21,6 +21,17 @@ const isDetailLevel = (value: unknown): value is DetailLevel =>
   typeof value === 'string' && (DETAIL_LEVELS as readonly string[]).includes(value);
 
 /**
+ * Strip Figma's trailing-comma artifact from *StyleId values (e.g. "S:abc,") so the id matches the
+ * `styles` resolution map key and joins cleanly downstream. Used for a node's own styleIds and for
+ * a mixed TEXT run's per-segment styleIds.
+ */
+const cleanStyleIds = (ids: Record<string, string>): Record<string, string> => {
+  const cleaned: Record<string, string> = {};
+  for (const [k, raw] of Object.entries(ids)) cleaned[k] = raw.replace(/,+$/, '');
+  return cleaned;
+};
+
+/**
  * Project a node down to the fields a given detail level exposes. Detail-gated on purpose:
  * get_design_context is the hot read path and defaults to `compact`, so minimal/compact read their
  * few values straight off the node and skip the full serializeFlatSync — which maps every
@@ -149,20 +160,19 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
       if (s.hyperlink !== undefined) seg.hyperlink = s.hyperlink;
       if (s.listOptions !== undefined) seg.listOptions = s.listOptions;
       if (s.indentation !== undefined) seg.indentation = s.indentation;
+      // Per-run token bindings — same shape (and trailing-comma cleaning) as a node's own, so
+      // collectRefs / resolveTokens resolve them to names alongside the node-level ones.
+      if (s.styleIds !== undefined)
+        seg.styleIds = cleanStyleIds(s.styleIds as Record<string, string>);
+      if (s.boundVariables !== undefined) seg.boundVariables = s.boundVariables;
       return seg;
     });
   }
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
   // globalVars dedup in P3.
-  if (flat.styleIds !== undefined) {
-    // Figma's *StyleId values carry a trailing comma artifact (e.g. "S:abc,"); strip it so the id
-    // matches the `styles` resolution map key and joins cleanly downstream.
-    const ids = flat.styleIds as Record<string, string>;
-    const cleaned: Record<string, string> = {};
-    for (const [k, raw] of Object.entries(ids)) cleaned[k] = raw.replace(/,+$/, '');
-    out.styleIds = cleaned;
-  }
+  if (flat.styleIds !== undefined)
+    out.styleIds = cleanStyleIds(flat.styleIds as Record<string, string>);
   if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
   if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
   return out;
@@ -174,15 +184,24 @@ const collectRefs = (
 ): { varIds: Set<string>; styleIds: Set<string> } => {
   const varIds = new Set<string>();
   const styleIds = new Set<string>();
-  const visit = (n: DesignContextNode): void => {
-    if (n.boundVariables) {
-      for (const ids of Object.values(n.boundVariables)) for (const id of ids) varIds.add(id);
+  // A node and a mixed-TEXT run carry the same binding shape; collect from either.
+  const collectFrom = (bearer: {
+    boundVariables?: Readonly<Record<string, readonly string[]>>;
+    styleIds?: unknown;
+  }): void => {
+    if (bearer.boundVariables) {
+      for (const ids of Object.values(bearer.boundVariables)) for (const id of ids) varIds.add(id);
     }
-    if (n.styleIds) {
-      for (const id of Object.values(n.styleIds as Record<string, string>)) {
+    if (bearer.styleIds) {
+      for (const id of Object.values(bearer.styleIds as Record<string, string>)) {
         if (id !== '') styleIds.add(id);
       }
     }
+  };
+  const visit = (n: DesignContextNode): void => {
+    collectFrom(n);
+    // Per-run token bindings on a mixed TEXT node resolve alongside the node-level ones.
+    if (n.segments) for (const seg of n.segments) collectFrom(seg);
     if (n.children) for (const c of n.children) visit(c);
   };
   for (const n of nodes) visit(n);

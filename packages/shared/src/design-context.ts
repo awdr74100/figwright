@@ -60,6 +60,11 @@ export interface DesignContextTextSegment {
   hyperlink?: SerializedHyperlink;
   listOptions?: string;
   indentation?: number;
+  // Per-run design-system bindings (ids resolved to names in the top-level `styles` / `variables`
+  // maps, like a node's own). A run's shared text/fill style + variable bindings — the only place a
+  // token survives on a mixed TEXT node, whose node-level fills read `mixed`.
+  styleIds?: SerializedStyleIds;
+  boundVariables?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -315,6 +320,8 @@ export const DesignContextNodeSchema = z.lazy(() =>
           hyperlink: SerializedHyperlinkSchema.optional(),
           listOptions: z.string().optional(),
           indentation: z.number().optional(),
+          styleIds: SerializedStyleIdsSchema.optional(),
+          boundVariables: z.record(z.string(), z.array(z.string())).optional(),
         }),
       )
       .optional(),

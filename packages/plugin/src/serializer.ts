@@ -272,6 +272,11 @@ const SEGMENT_FIELDS = [
   'hyperlink',
   'listOptions',
   'indentation',
+  // Per-run design-system bindings — the token grounding that a mixed node's node-level `mixed` fills
+  // would otherwise lose (an inline link bound to Primary/500 + Body/Bold).
+  'textStyleId',
+  'fillStyleId',
+  'boundVariables',
 ] as const;
 
 /** Break a mixed-style TEXT node into runs of uniform styling (so inline bold/links/colors survive). */
@@ -300,6 +305,22 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
     if (s.listOptions != null && s.listOptions.type !== 'NONE')
       out.listOptions = s.listOptions.type;
     if (typeof s.indentation === 'number' && s.indentation > 0) out.indentation = s.indentation;
+    // Per-run design-system bindings (mirrors collectStyleLinks for a node): a run's shared fill/text
+    // style ids + variable bindings. Ids are carried raw here and resolved to token names downstream
+    // (get_design_context's resolveTokens), exactly like a node's own styleIds / boundVariables.
+    const styleIds: SerializedStyleIds = {};
+    if (typeof s.fillStyleId === 'string' && s.fillStyleId !== '') styleIds.fill = s.fillStyleId;
+    if (typeof s.textStyleId === 'string' && s.textStyleId !== '') styleIds.text = s.textStyleId;
+    if (Object.keys(styleIds).length > 0) out.styleIds = styleIds;
+    const bound = s.boundVariables;
+    if (typeof bound === 'object' && bound !== null) {
+      const result: Record<string, string[]> = {};
+      for (const [field, val] of Object.entries(bound)) {
+        const ids = aliasIds(val);
+        if (ids.length > 0) result[field] = ids;
+      }
+      if (Object.keys(result).length > 0) out.boundVariables = result;
+    }
     return out;
   });
 };
