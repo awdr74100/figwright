@@ -228,6 +228,21 @@ const aliasIds = (val: unknown): string[] => {
     .map(a => a.id);
 };
 
+/**
+ * Collapse a Figma `boundVariables` record (per field, an alias or alias[]) to flat id lists per
+ * field, dropping fields with none. Shared by node-level and per-run (mixed TEXT segment) bindings.
+ * Returns undefined when nothing is bound, so the caller only sets the field when it's meaningful.
+ */
+const collectBoundVariables = (raw: unknown): Record<string, string[]> | undefined => {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const result: Record<string, string[]> = {};
+  for (const [field, val] of Object.entries(raw)) {
+    const ids = aliasIds(val);
+    if (ids.length > 0) result[field] = ids;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
 const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   const styleIds: SerializedStyleIds = {};
   const pick = (
@@ -246,15 +261,8 @@ const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   if (text !== undefined) styleIds.text = text;
   if (Object.keys(styleIds).length > 0) out.styleIds = styleIds;
 
-  const bound = (node as { boundVariables?: unknown }).boundVariables;
-  if (typeof bound === 'object' && bound !== null) {
-    const result: Record<string, string[]> = {};
-    for (const [field, val] of Object.entries(bound)) {
-      const ids = aliasIds(val);
-      if (ids.length > 0) result[field] = ids;
-    }
-    if (Object.keys(result).length > 0) out.boundVariables = result;
-  }
+  const bound = collectBoundVariables((node as { boundVariables?: unknown }).boundVariables);
+  if (bound !== undefined) out.boundVariables = bound;
 };
 
 // Per-run fields we break a mixed TEXT node on. Beyond the 5 style basics we ask for the structural
@@ -312,15 +320,8 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
     if (typeof s.fillStyleId === 'string' && s.fillStyleId !== '') styleIds.fill = s.fillStyleId;
     if (typeof s.textStyleId === 'string' && s.textStyleId !== '') styleIds.text = s.textStyleId;
     if (Object.keys(styleIds).length > 0) out.styleIds = styleIds;
-    const bound = s.boundVariables;
-    if (typeof bound === 'object' && bound !== null) {
-      const result: Record<string, string[]> = {};
-      for (const [field, val] of Object.entries(bound)) {
-        const ids = aliasIds(val);
-        if (ids.length > 0) result[field] = ids;
-      }
-      if (Object.keys(result).length > 0) out.boundVariables = result;
-    }
+    const bound = collectBoundVariables(s.boundVariables);
+    if (bound !== undefined) out.boundVariables = bound;
     return out;
   });
 };
