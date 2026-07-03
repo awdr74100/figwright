@@ -23,6 +23,10 @@ describe('tool budgets', () => {
       'export_pdf',
       'get_document',
       'get_design_context',
+      // Unbounded full-subtree serializations — at least as heavy as get_design_context on a large
+      // frame, so they get the same window instead of the 30s default that beheaded big trees.
+      'get_node',
+      'get_nodes_info',
       'scan_text_nodes',
       'scan_nodes_by_types',
     ]) {

@@ -30,6 +30,11 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'export_pdf',
   'get_document',
   'get_design_context',
+  // Full recursive subtree serialization with no depth limit or dedupe (per mixed TEXT a
+  // getStyledTextSegments call, per INSTANCE an async main-component resolve) — on a large frame
+  // this is at least as heavy as get_design_context, which already has the wide budget.
+  'get_node',
+  'get_nodes_info',
   'scan_text_nodes',
   'scan_nodes_by_types',
 ]);
