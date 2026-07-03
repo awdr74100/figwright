@@ -8,17 +8,21 @@ export const GET_DESIGN_CONTEXT_TOOL_NAME = 'get_design_context';
 export const getDesignContextTool: ToolSpec = {
   name: GET_DESIGN_CONTEXT_TOOL_NAME,
   description:
-    'Get a depth-limited, token-efficient node tree for exploring large files — prefer this over ' +
-    'get_document. Starts from nodeId, else the current selection, else the current page. ' +
-    'depth limits child levels (omit or 0 = unlimited). detail is minimal / compact / full. ' +
-    'dedupeComponents collapses repeated component instances (children of an already-seen main ' +
-    'component are omitted and flagged deduped). A deduped instance still carries textOverrides — ' +
-    'the visible text it renders ({ name, characters }) — so per-instance content (card titles, ' +
-    'list items, form labels) is available without re-expanding the collapsed subtree.',
+    'Get a depth-limited, token-efficient node tree — the main design-grounding read; prefer it ' +
+    'over get_document / get_node for anything large. Starts from nodeId (a pasted Figma URL also ' +
+    'works), else the current selection; errors when neither is available. ' +
+    'detail: minimal (id/name/type) / compact (+ geometry; the default) / full — only full carries ' +
+    'styling, layout, text and design-system tokens resolved to names plus a deduped globalVars ' +
+    'style table, so always use full (with dedupeComponents: true) when generating code; compact ' +
+    'is for cheap structure scans. depth limits child levels (omit or 0 = unlimited; cut nodes are ' +
+    'flagged truncated). dedupeComponents collapses repeated instances of an already-expanded main ' +
+    'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +
+    'characters } — the visible text it actually renders) and propertyOverrides (its per-instance ' +
+    'visual diffs), so per-instance content survives without re-expanding the collapsed subtree.',
   inputShape: {
     nodeId: z
       .string()
-      .describe('Root node id; omit to use the selection or current page')
+      .describe('Root node id (a pasted Figma URL also works); omit to use the selection')
       .optional(),
     depth: z
       .number()
