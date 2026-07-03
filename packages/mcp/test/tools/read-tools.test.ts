@@ -186,7 +186,8 @@ describe('M1 read tools — definitions', () => {
       properties: {
         nodeIds: { type: 'array', items: { type: 'string' } },
         format: { type: 'string', enum: ['PNG', 'JPG', 'SVG'] },
-        scale: { type: 'number', minimum: 0 },
+        // .positive() — the plugin rejects scale <= 0, so the advertised schema must too
+        scale: { type: 'number', exclusiveMinimum: 0 },
       },
     });
   });

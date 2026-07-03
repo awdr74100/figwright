@@ -94,7 +94,15 @@ describe('get_screenshot handler', () => {
       base64: 'b64(1)',
       empty: true,
     });
-    expect(result.images[1]).toEqual({ nodeId: '1:6', format: 'PNG', base64: 'b64(3)' }); // no empty
+    // no empty flag; the tiny 10×10 node auto-fits up (×4 cap) and reports its raster size
+    expect(result.images[1]).toEqual({
+      nodeId: '1:6',
+      format: 'PNG',
+      base64: 'b64(3)',
+      width: 40,
+      height: 40,
+      scale: 4,
+    });
   });
 
   it('recovers a fully-clipped node via useAbsoluteBounds instead of shipping blank', async () => {
@@ -111,17 +119,21 @@ describe('get_screenshot handler', () => {
     } as unknown as BaseNode;
     const handler = createGetScreenshotHandler(fakeFigma({ '1:7': clippedWithBox }, calls));
     const result = (await handler({ nodeIds: ['1:7'] })) as GetScreenshotResult;
+    // The 150×100 intrinsic box auto-fits up to the 512px legibility floor (512/150 → 3.41).
     expect(result.images[0]).toEqual({
       nodeId: '1:7',
       format: 'PNG',
       base64: 'b64(4)',
       recovered: true,
+      width: 512,
+      height: 341,
+      scale: 3.41,
     });
     // Exported once, with useAbsoluteBounds so Figma renders the node's own box, not the clipped region.
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({
       format: 'PNG',
-      constraint: { type: 'SCALE', value: 1 },
+      constraint: { type: 'SCALE', value: 3.41 },
       useAbsoluteBounds: true,
     });
   });
@@ -140,13 +152,65 @@ describe('get_screenshot handler', () => {
     } as unknown as BaseNode;
     const handler = createGetScreenshotHandler(fakeFigma({ '1:8': hidden }, calls));
     const result = (await handler({ nodeIds: ['1:8'] })) as GetScreenshotResult;
+    // A blank isn't auto-fitted (scale stays 1); its box size is still reported for context.
     expect(result.images[0]).toEqual({
       nodeId: '1:8',
       format: 'PNG',
       base64: 'b64(1)',
       empty: true,
+      width: 50,
+      height: 50,
+      scale: 1,
     });
     expect(calls[0]?.useAbsoluteBounds).toBeUndefined();
+  });
+
+  it('auto-fits an oversized frame down (long edge → 1536) and reports the raster size', async () => {
+    const calls: ExportCall[] = [];
+    const big = {
+      id: '2:1',
+      absoluteRenderBounds: { x: 0, y: 0, width: 3072, height: 2000 },
+      exportAsync: async (settings: ExportCall) => {
+        calls.push(settings);
+        return new Uint8Array([7]);
+      },
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(fakeFigma({ '2:1': big }, calls));
+    const result = (await handler({ nodeIds: ['2:1'] })) as GetScreenshotResult;
+    expect(calls[0]).toEqual({ format: 'PNG', constraint: { type: 'SCALE', value: 0.5 } });
+    expect(result.images[0]).toEqual({
+      nodeId: '2:1',
+      format: 'PNG',
+      base64: 'b64(1)',
+      width: 1536,
+      height: 1000,
+      scale: 0.5,
+    });
+  });
+
+  it('keeps a mid-size node at 1x, and honors an explicit scale over auto-fit', async () => {
+    const calls: ExportCall[] = [];
+    const mkNode = (id: string, width: number, height: number): BaseNode =>
+      ({
+        id,
+        absoluteRenderBounds: { x: 0, y: 0, width, height },
+        exportAsync: async (settings: ExportCall) => {
+          calls.push(settings);
+          return new Uint8Array([1]);
+        },
+      }) as unknown as BaseNode;
+    const lookup = { '3:1': mkNode('3:1', 800, 600), '3:2': mkNode('3:2', 3072, 2000) };
+
+    // 800×600 sits inside the [512, 1536] window → no fitting
+    const handler = createGetScreenshotHandler(fakeFigma(lookup, calls));
+    const mid = (await handler({ nodeIds: ['3:1'] })) as GetScreenshotResult;
+    expect(calls[0]?.constraint).toEqual({ type: 'SCALE', value: 1 });
+    expect(mid.images[0]).toMatchObject({ width: 800, height: 600, scale: 1 });
+
+    // explicit scale wins even on an oversized node (the old behaviour stays reachable)
+    const forced = (await handler({ nodeIds: ['3:2'], scale: 1 })) as GetScreenshotResult;
+    expect(calls[1]?.constraint).toEqual({ type: 'SCALE', value: 1 });
+    expect(forced.images[0]).toMatchObject({ width: 3072, height: 2000, scale: 1 });
   });
 
   it('throws on empty/invalid nodeIds, bad format, or non-positive scale', async () => {

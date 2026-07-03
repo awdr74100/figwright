@@ -19,6 +19,29 @@ describe('screenshotContent', () => {
     ]);
   });
 
+  it('labels a raster with its exported size + scale when the plugin reports them', () => {
+    const result: GetScreenshotResult = {
+      images: [
+        { nodeId: '1:1', format: 'PNG', base64: 'AAAA', width: 1536, height: 1000, scale: 0.5 },
+        {
+          nodeId: '1:2',
+          format: 'PNG',
+          base64: 'BBBB',
+          width: 96,
+          height: 96,
+          scale: 4,
+          recovered: true,
+        },
+      ],
+    };
+    const blocks = screenshotContent(result);
+    expect(blocks[0]).toEqual({ type: 'text', text: '1:1 (PNG 1536×1000px @0.5x)' });
+    expect(blocks[2]).toEqual({
+      type: 'text',
+      text: '1:2 (PNG 96×96px @4x) — ↺ recovered (clipped/off-canvas; rendered at intrinsic bounds)',
+    });
+  });
+
   it('returns SVG markup as readable text rather than an image block', () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>';
     const result: GetScreenshotResult = {

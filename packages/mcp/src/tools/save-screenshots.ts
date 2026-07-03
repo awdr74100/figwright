@@ -22,7 +22,7 @@ const inputShape = {
     .enum(SCREENSHOT_FORMATS)
     .describe('Export format: PNG (default) / JPG / SVG')
     .optional(),
-  scale: z.number().min(0).describe('Raster scale factor (PNG/JPG), default 1').optional(),
+  scale: z.number().positive().describe('Raster scale factor (PNG/JPG), default 1').optional(),
 };
 
 export const saveScreenshotsTool: ToolSpec = {
@@ -85,7 +85,9 @@ export const handleSaveScreenshots = async (
 
   const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
   if (args.format !== undefined) screenshotArgs.format = args.format;
-  if (args.scale !== undefined) screenshotArgs.scale = args.scale;
+  // Always pass an explicit scale: an omitted scale makes get_screenshot auto-fit the raster for
+  // model consumption, but files written to disk are user artifacts and must stay full-res.
+  screenshotArgs.scale = args.scale ?? 1;
 
   const { images } = (await dispatch(
     GET_SCREENSHOT_TOOL_NAME,

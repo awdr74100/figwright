@@ -37,6 +37,15 @@ export const ScreenshotImageSchema = z.object({
   base64: z.string().nullable(),
   empty: z.boolean().optional(),
   recovered: z.boolean().optional(),
+  /**
+   * Raster export size (px) + the effective export scale — the anchor for mapping raster px back to
+   * design px, essential when the scale was auto-fitted (omitted `scale` fits the long edge to a
+   * legible window) or the node was recovered at intrinsic bounds. Computed from bounds × scale
+   * (±1px of Figma's own rounding). Absent for SVG and when the node's bounds are unknown.
+   */
+  width: z.number().optional(),
+  height: z.number().optional(),
+  scale: z.number().optional(),
 });
 export type ScreenshotImage = z.infer<typeof ScreenshotImageSchema>;
 

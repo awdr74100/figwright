@@ -8,18 +8,26 @@ export const GET_SCREENSHOT_TOOL_NAME = 'get_screenshot';
 export const getScreenshotTool: ToolSpec = {
   name: GET_SCREENSHOT_TOOL_NAME,
   description:
-    'Export nodes as base64 images: { images: [{ nodeId, format, base64, recovered?, empty? }] }. format is PNG ' +
-    '(default) / JPG / SVG; scale applies to raster formats (default 1). base64 is null for missing or ' +
-    'non-exportable nodes. Nodes that are fully clipped or off-canvas (carousels, masks, off-screen states) ' +
-    'are auto-recovered at their intrinsic bounds and flagged recovered:true. empty:true means the node ' +
-    'genuinely renders nothing even unclipped (hidden / no content) so the export is blank.',
+    'Export nodes as images the model can see, one image block per node: { images: [{ nodeId, format, ' +
+    'base64, width?, height?, scale?, recovered?, empty? }] }. format is PNG (default) / JPG / SVG. ' +
+    'scale applies to raster formats; when omitted, each node is auto-fitted to a legible size ' +
+    '(long edge into ~512–1536px: oversized frames scale down, tiny icons scale up ≤4x) — pass an ' +
+    'explicit scale to force one. Each raster label reports the exported width×height px and the ' +
+    'scale, the anchor for mapping raster px back to design px. base64 is null for missing or ' +
+    'non-exportable nodes. Nodes that are fully clipped or off-canvas (carousels, masks, off-screen ' +
+    'states) are auto-recovered at their intrinsic bounds and flagged recovered:true. empty:true ' +
+    'means the node genuinely renders nothing even unclipped (hidden / no content) so the export is blank.',
   inputShape: {
     nodeIds: z.array(z.string()).describe('Figma node ids to export'),
     format: z
       .enum(SCREENSHOT_FORMATS)
       .describe('Export format: PNG (default) / JPG / SVG')
       .optional(),
-    scale: z.number().min(0).describe('Raster scale factor (PNG/JPG), default 1').optional(),
+    scale: z
+      .number()
+      .positive()
+      .describe('Raster scale factor (PNG/JPG); omit to auto-fit each node to a legible size')
+      .optional(),
   },
   kind: 'read',
 };
@@ -47,12 +55,18 @@ export const screenshotContent = (result: GetScreenshotResult): ScreenshotConten
       : img.recovered
         ? ' — ↺ recovered (clipped/off-canvas; rendered at intrinsic bounds)'
         : '';
+    // Raster size + scale in the label anchors raster px ↔ design px (vital once the scale is
+    // auto-fitted). Absent on SVG and on results from an older plugin build — degrade to the bare label.
+    const dims =
+      img.width !== undefined && img.height !== undefined
+        ? ` ${img.width}×${img.height}px${img.scale !== undefined ? ` @${img.scale}x` : ''}`
+        : '';
     const mimeType = RASTER_MIME[img.format];
     if (mimeType === undefined) {
       const markup = Buffer.from(img.base64, 'base64').toString('utf8');
       blocks.push({ type: 'text', text: `${img.nodeId} (${img.format})${emptyNote}:\n${markup}` });
     } else {
-      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format})${emptyNote}` });
+      blocks.push({ type: 'text', text: `${img.nodeId} (${img.format}${dims})${emptyNote}` });
       blocks.push({ type: 'image', data: img.base64, mimeType });
     }
   }
