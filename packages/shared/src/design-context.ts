@@ -170,12 +170,27 @@ export interface DesignContextNode {
   letterSpacing?: SerializedLetterSpacing | typeof MIXED;
   textCase?: string | typeof MIXED;
   textDecoration?: string | typeof MIXED;
+  /**
+   * Space between paragraphs (px) and first-line indent (px) — without them multi-paragraph text
+   * (article bodies, FAQs) renders with the paragraphs butted together / unindented. Style-level
+   * like lineHeight (a Figma text style carries both), so dedup folds them into the textStyle
+   * bundle. Omitted at the 0 default.
+   */
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
   // Per-node text behaviour (not part of the shared style) — stays inline: the same heading style is
   // centered here, left there; truncation/maxLines vary per instance. → text-align / line-clamp.
   textAlignHorizontal?: string;
   textAlignVertical?: string;
   textTruncation?: string;
   maxLines?: number | null;
+  /**
+   * How the text box sizes: NONE = fixed box, HEIGHT = fixed width + auto height (the width is a
+   * real wrap constraint), TRUNCATE = legacy ellipsis. Omitted at the WIDTH_AND_HEIGHT (hug)
+   * default. Outside auto-layout this is the only signal whether width/height are constraints to
+   * emit or just the text's own rendered size.
+   */
+  textAutoResize?: string;
   /**
    * Node-level hyperlink (the whole text is one link → `<a href>`); partial links live in
    * `segments`.
@@ -298,10 +313,13 @@ export const DesignContextNodeSchema = z.lazy(() =>
     letterSpacing: z.union([SerializedLetterSpacingSchema, z.literal(MIXED)]).optional(),
     textCase: z.union([z.string(), z.literal(MIXED)]).optional(),
     textDecoration: z.union([z.string(), z.literal(MIXED)]).optional(),
+    paragraphSpacing: z.number().optional(),
+    paragraphIndent: z.number().optional(),
     textAlignHorizontal: z.string().optional(),
     textAlignVertical: z.string().optional(),
     textTruncation: z.string().optional(),
     maxLines: z.number().nullable().optional(),
+    textAutoResize: z.string().optional(),
     hyperlink: SerializedHyperlinkSchema.optional(),
     // Simplified paints are opaque here (hex lives in `color`), mirroring globalVars' z.unknown().
     segments: z

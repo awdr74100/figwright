@@ -127,6 +127,8 @@ interface TextStyleBundle {
   letterSpacing?: SerializedLetterSpacing;
   textCase?: string;
   textDecoration?: string;
+  paragraphSpacing?: number;
+  paragraphIndent?: number;
 }
 
 /**
@@ -205,6 +207,16 @@ export const dedupeStyles = (
       if (typeof n.textDecoration === 'string' && n.textDecoration !== MIXED) {
         bundle.textDecoration = n.textDecoration;
         delete out.textDecoration;
+      }
+      // Paragraph structure is style-level too (a Figma text style carries both) and never `mixed`
+      // (node-level props), so present always means a real non-zero value → fold unconditionally.
+      if (typeof n.paragraphSpacing === 'number') {
+        bundle.paragraphSpacing = n.paragraphSpacing;
+        delete out.paragraphSpacing;
+      }
+      if (typeof n.paragraphIndent === 'number') {
+        bundle.paragraphIndent = n.paragraphIndent;
+        delete out.paragraphIndent;
       }
       out.textStyle = register(bundle, 'text');
       delete out.fontSize;

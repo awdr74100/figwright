@@ -34,10 +34,17 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `uppercase`/`lowercase`/`capitalize` — **the characters in the tree are the original casing, so a
   dropped `UPPER` ships a lowercase button**), `textDecoration` (`UNDERLINE`/`STRIKETHROUGH` →
   `underline`/`line-through` — a link with no underline is the classic miss), `lineHeight`
-  (`{unit,value}` → `leading-*`; absent = font default), and `letterSpacing` (`{unit,value}` →
-  `tracking-*`; absent = 0). Per-node (inline, not in the bundle): `textAlignHorizontal`/`Vertical`
-  (`CENTER`/`RIGHT`/`JUSTIFIED` → `text-center`/`text-right`/`text-justify`; absent = left/top) and
-  `textTruncation: 'ENDING'` + `maxLines` (→ `line-clamp-N` / `truncate`). Each is omitted when it's
+  (`{unit,value}` → `leading-*`; absent = font default), `letterSpacing` (`{unit,value}` →
+  `tracking-*`; absent = 0), `paragraphSpacing` (px between the paragraphs `characters` splits into
+  at `\n` → margin between the `<p>`s you emit; absent = 0, the paragraphs butt together), and
+  `paragraphIndent` (px first-line indent → `text-indent`). Per-node (inline, not in the bundle):
+  `textAlignHorizontal`/`Vertical` (`CENTER`/`RIGHT`/`JUSTIFIED` → `text-center`/`text-right`/
+  `text-justify`; absent = left/top), `textTruncation: 'ENDING'` + `maxLines` (→ `line-clamp-N` /
+  `truncate`), and `textAutoResize` — how the text box sizes, the signal for whether its
+  width/height are real constraints: absent = hug (the box is just the text's own rendered size —
+  don't emit a width), `HEIGHT` = fixed width + auto height (the width is a wrap constraint — emit
+  it), `NONE` = fixed box (emit both, mind clipping); inside auto-layout trust
+  `layoutSizingHorizontal/Vertical` instead. Each is omitted when it's
   the no-op default, so anything present is real intent — translate it, don't drop it.
   - **Mixed (inline) styling → read `segments`.** When a value reads `"mixed"` (e.g. `fontSize` or
     `textDecoration`), the node carries `segments` — each a run of uniform styling with its own

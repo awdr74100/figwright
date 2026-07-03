@@ -168,6 +168,26 @@ describe('dedupeStyles', () => {
     });
   });
 
+  it('folds paragraphSpacing / paragraphIndent into the textStyle bundle (style-level, like lineHeight)', () => {
+    const body: DesignContextNode = {
+      ...textNode('body', 'Inter', 'Regular', 16),
+      paragraphSpacing: 12,
+      paragraphIndent: 24,
+    };
+    const { nodes, globalVars } = dedupeStyles([body]);
+
+    // folded into the bundle, inline copies dropped
+    expect(nodes[0]?.paragraphSpacing).toBeUndefined();
+    expect(nodes[0]?.paragraphIndent).toBeUndefined();
+    expect(globalVars.styles[nodes[0]!.textStyle!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Regular',
+      fontSize: 16,
+      paragraphSpacing: 12,
+      paragraphIndent: 24,
+    });
+  });
+
   it("emits a node's own style refs before its children (no shadow-on-child misattribution)", () => {
     const card: DesignContextNode = {
       id: 'card',

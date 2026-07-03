@@ -103,6 +103,9 @@ describe('get_design_context handler', () => {
       textAlignVertical: 'TOP', // default → omitted
       textTruncation: 'ENDING',
       maxLines: 2,
+      paragraphSpacing: 12,
+      paragraphIndent: 24,
+      textAutoResize: 'HEIGHT',
     });
     const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'full',
@@ -112,6 +115,7 @@ describe('get_design_context handler', () => {
     // the shared text-style attributes are deduped into the bundle, not left inline
     expect(n?.lineHeight).toBeUndefined();
     expect(n?.textCase).toBeUndefined();
+    expect(n?.paragraphSpacing).toBeUndefined();
     expect(full.globalVars?.styles[n!.textStyle!]).toEqual({
       fontFamily: 'Inter',
       fontStyle: 'Bold',
@@ -120,12 +124,16 @@ describe('get_design_context handler', () => {
       letterSpacing: { unit: 'PERCENT', value: 5 },
       textCase: 'UPPER',
       textDecoration: 'UNDERLINE',
+      paragraphSpacing: 12,
+      paragraphIndent: 24,
     });
     // per-node behaviour stays inline; the TOP vertical default is dropped as noise
     expect(n?.textAlignHorizontal).toBe('CENTER');
     expect(n?.textAlignVertical).toBeUndefined();
     expect(n?.textTruncation).toBe('ENDING');
     expect(n?.maxLines).toBe(2);
+    // HEIGHT = fixed width + auto height — the width is a real wrap constraint, so it surfaces
+    expect(n?.textAutoResize).toBe('HEIGHT');
   });
 
   it('omits no-op default typography (plain left-aligned body text stays clean)', async () => {
@@ -143,6 +151,9 @@ describe('get_design_context handler', () => {
       textAlignVertical: 'TOP',
       textTruncation: 'DISABLED',
       maxLines: null,
+      paragraphSpacing: 0,
+      paragraphIndent: 0,
+      textAutoResize: 'WIDTH_AND_HEIGHT',
     });
     const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
       detail: 'full',
@@ -156,6 +167,10 @@ describe('get_design_context handler', () => {
     expect(n?.textAlignHorizontal).toBeUndefined();
     expect(n?.textTruncation).toBeUndefined();
     expect(n?.maxLines).toBeUndefined();
+    // 0 spacing/indent and the WIDTH_AND_HEIGHT (hug) default are no-ops → omitted
+    expect(n?.paragraphSpacing).toBeUndefined();
+    expect(n?.paragraphIndent).toBeUndefined();
+    expect(n?.textAutoResize).toBeUndefined();
     // bundle is just the font — no default typography baked in
     expect(full.globalVars?.styles[n!.textStyle!]).toEqual({
       fontFamily: 'Inter',
@@ -650,13 +665,18 @@ describe('get_design_context handler', () => {
     expect(full.nodes[0]?.boundVariables).toEqual({ fills: ['VariableID:9:9'] }); // raw id stays as fallback
   });
 
-  it('resolves a nodeId root, returning empty for misses', async () => {
+  it('resolves a nodeId root, and refuses a miss / non-scene node instead of returning empty', async () => {
     const target = node({ id: '1:2' });
+    const page = { id: '0:1', name: 'Page 1', type: 'PAGE' } as unknown as BaseNode;
     const handler = createGetDesignContextHandler(
-      fakeFigma({ lookup: { '1:2': target as unknown as BaseNode } }),
+      fakeFigma({ lookup: { '1:2': target as unknown as BaseNode, '0:1': page } }),
     );
     expect(((await handler({ nodeId: '1:2' })) as GetDesignContextResult).nodes[0]?.id).toBe('1:2');
-    expect(((await handler({ nodeId: 'nope' })) as GetDesignContextResult).nodes).toEqual([]);
+    // A miss used to yield { nodes: [] } — indistinguishable from an empty design, so callers
+    // walked on with nothing. It must be a loud, actionable error carrying the id instead.
+    await expect(handler({ nodeId: 'nope' })).rejects.toThrow(/"nope" not found/);
+    // A PAGE/DOCUMENT id is not groundable either — same loud refusal, naming the type.
+    await expect(handler({ nodeId: '0:1' })).rejects.toThrow(/is a PAGE/);
   });
 
   it('attaches a breakpoint hint when the selection spans width buckets — even at compact', async () => {

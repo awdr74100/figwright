@@ -136,6 +136,19 @@ const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
     out.textTruncation = flat.textTruncation;
   }
   if (typeof flat.maxLines === 'number') out.maxLines = flat.maxLines;
+  // Paragraph structure + box sizing the serializer computes but this view used to drop (same miss
+  // class as the typography above). paragraphSpacing/Indent are style-level → dedupeStyles folds
+  // them into the textStyle bundle; textAutoResize is per-node behaviour → stays inline. Each is
+  // omitted at its no-op default (0 / WIDTH_AND_HEIGHT hug) so plain text stays clean.
+  if (typeof flat.paragraphSpacing === 'number' && flat.paragraphSpacing !== 0) {
+    out.paragraphSpacing = flat.paragraphSpacing;
+  }
+  if (typeof flat.paragraphIndent === 'number' && flat.paragraphIndent !== 0) {
+    out.paragraphIndent = flat.paragraphIndent;
+  }
+  if (flat.textAutoResize !== undefined && flat.textAutoResize !== 'WIDTH_AND_HEIGHT') {
+    out.textAutoResize = flat.textAutoResize;
+  }
   // A node-level hyperlink (whole text is one link → <a href>); partial links ride in segments below.
   if (flat.hyperlink !== undefined) out.hyperlink = flat.hyperlink;
   // Per-run styling of a mixed TEXT node — serializeFlatSync already computed this (only set when the
@@ -502,7 +515,23 @@ export const createGetDesignContextHandler =
     let roots: readonly SceneNode[];
     if (typeof p.nodeId === 'string') {
       const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-      roots = node !== null && isSceneNode(node) ? [node] : [];
+      // A miss used to return { nodes: [] } — indistinguishable from an empty design, so the caller
+      // (an LLM, or component_map/icon_map reusing this handler) walked on with nothing and produced
+      // silently-wrong output. Refuse loudly with the id instead, like the empty-selection case.
+      if (node === null) {
+        throw new Error(
+          `get_design_context: node "${p.nodeId}" not found in this file. Check the id (a pasted ` +
+            'Figma URL works too), or select the target in Figma and call without nodeId.',
+        );
+      }
+      if (!isSceneNode(node)) {
+        throw new Error(
+          `get_design_context: "${p.nodeId}" is a ${node.type}, not a frame/layer. Pass a frame or ` +
+            'layer id, or select nodes on that page and call without nodeId — grounding a whole ' +
+            'page is too large and ambiguous.',
+        );
+      }
+      roots = [node];
     } else if (figmaCtx.currentPage.selection.length > 0) {
       roots = figmaCtx.currentPage.selection;
     } else {
