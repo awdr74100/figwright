@@ -81,6 +81,7 @@ import { createSetPositionHandler } from './set-position.js';
 import { createSetReactionsHandler } from './set-reactions.js';
 import { createSetStrokesHandler } from './set-strokes.js';
 import { createSetTextPropertiesHandler } from './set-text-properties.js';
+import { createSetTextRangeHandler } from './set-text-range.js';
 import { createSetTextHandler } from './set-text.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
@@ -103,6 +104,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     set_fills: createSetFillsHandler(figmaCtx),
     set_text: createSetTextHandler(figmaCtx),
     set_text_properties: createSetTextPropertiesHandler(figmaCtx),
+    set_text_range: createSetTextRangeHandler(figmaCtx),
     create_frame: createCreateFrameHandler(figmaCtx),
     set_opacity: createSetOpacityHandler(figmaCtx),
     set_visible: createSetVisibleHandler(figmaCtx),

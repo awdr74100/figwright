@@ -112,3 +112,15 @@ A new `TEXT` node defaults to a **fallback font (Inter)**, not the design system
 family/style with `set_text_properties` after creating it (the plugin loads the node's fonts on
 edit). In a file whose typography is driven by `STRING` variables (a `font family` / `weight` token),
 read those off `get_variable_defs` and apply the same family — don't leave headings in Inter.
+
+## Inline rich text → `set_text_range`, not a separate node per span
+
+When a single text block mixes styles — a link inside a sentence, a bold word, a coloured span, a
+`/mo` after a price, a bulleted list — keep it **one `TEXT` node** and style the character ranges with
+`set_text_range` (`ranges: [{ start, end, … }]`), the write-side mirror of what codegen reads back as
+`segments`. **Never split an inline link/emphasis into its own sibling node** (it breaks reflow and
+reads as separate text). Each range takes the same props as a read segment — `fontName` / `fills` /
+`textDecoration` for emphasis, `hyperlink` for links, `listOptions` + `indentation` for real
+`<ol>`/`<ul>` items — plus design-system bindings `textStyleId` / `fillStyleId` / `boundVariables`, so
+the link tracks `Primary/500` rather than a one-off hex. Set the whole string first (`create_text` /
+`set_text`), then style the ranges.

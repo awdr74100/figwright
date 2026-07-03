@@ -89,6 +89,7 @@ import { setPositionTool } from './set-position.js';
 import { setReactionsTool } from './set-reactions.js';
 import { setStrokesTool } from './set-strokes.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
+import { setTextRangeTool } from './set-text-range.js';
 import { setTextTool } from './set-text.js';
 import { setVariableValueTool } from './set-variable-value.js';
 import { setVisibleTool } from './set-visible.js';
@@ -136,6 +137,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setFillsTool,
   setTextTool,
   setTextPropertiesTool,
+  setTextRangeTool,
   createFrameTool,
   setOpacityTool,
   setVisibleTool,
