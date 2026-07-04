@@ -673,6 +673,21 @@ export const serializeEffect = (effect: Effect): SerializedEffect => {
   return out;
 };
 
+/**
+ * A variable's designer-declared code-side names ({ WEB / ANDROID / iOS → string }), dropping empty
+ * strings (a cleared declaration). Returns undefined when nothing meaningful is declared, so
+ * callers only emit the field when it carries real intent. Shared by get_variable_defs and
+ * get_design_context's resolveTokens.
+ */
+export const serializeCodeSyntax = (raw: unknown): Record<string, string> | undefined => {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const out: Record<string, string> = {};
+  for (const [platform, name] of Object.entries(raw)) {
+    if (typeof name === 'string' && name !== '') out[platform] = name;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
   if (grid.pattern === 'GRID') {
     return { pattern: 'GRID', visible: grid.visible ?? true, sectionSize: grid.sectionSize };

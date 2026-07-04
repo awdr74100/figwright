@@ -18,6 +18,13 @@ per-property fidelity catalog, and how to ground a page too big for one call.
   stub carries its own `textOverrides` (`{ name, characters }` for every visible TEXT it renders) —
   fill each repeated element's text from that, so cards/rows/form-fields get their distinct titles /
   labels / values without re-expanding the un-deduped tree or drilling per instance.
+- **A variable's `codeSyntax` is the declared code name — prefer it over deriving one.** An entry in
+  the top-level `variables` map may carry `codeSyntax` (`{ WEB: '--color-primary', … }`): the
+  designer's own declaration of the code-side token, stronger than any name you'd derive from the
+  Figma name (`Primary/500` → `primary-500`). Use the platform key matching the stack (WEB for
+  css/Tailwind). It's a naming declaration, not a guarantee the token exists — when it matches a
+  token in the project (theme file / `token_map`), use it verbatim; when it matches nothing (a stale
+  declaration after a rename), trust the project's actual token found by value/name instead.
 
 ## Per-node visual fidelity
 

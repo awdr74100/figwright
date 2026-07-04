@@ -22,7 +22,10 @@ const fakeFigma = (opts: {
   selection?: SceneNode[];
   pageChildren?: SceneNode[];
   lookup?: Record<string, BaseNode | null>;
-  variables?: Record<string, { name: string; resolvedType: string }>;
+  variables?: Record<
+    string,
+    { name: string; resolvedType: string; codeSyntax?: Record<string, string> }
+  >;
   styles?: Record<string, { name: string; type: string }>;
 }): typeof figma =>
   ({
@@ -571,7 +574,14 @@ describe('get_design_context handler', () => {
     const handler = createGetDesignContextHandler(
       fakeFigma({
         selection: [a, b],
-        variables: { 'VariableID:181:4147': { name: 'Primary/500', resolvedType: 'COLOR' } },
+        variables: {
+          'VariableID:181:4147': {
+            name: 'Primary/500',
+            resolvedType: 'COLOR',
+            // Designer-declared code-side name; empty declarations must not leak through.
+            codeSyntax: { WEB: '--color-primary', ANDROID: '' },
+          },
+        },
         styles: { 'S:text1': { name: 'Body/Bold', type: 'TEXT' } },
       }),
     );
@@ -580,7 +590,11 @@ describe('get_design_context handler', () => {
     // styleId comma stripped on the node so it joins the map key
     expect(full.nodes[0]?.styleIds).toEqual({ fill: 'S:text1' });
     expect(full.variables).toEqual({
-      'VariableID:181:4147': { name: 'Primary/500', type: 'COLOR' },
+      'VariableID:181:4147': {
+        name: 'Primary/500',
+        type: 'COLOR',
+        codeSyntax: { WEB: '--color-primary' },
+      },
     });
     expect(full.styles).toEqual({ 'S:text1': { name: 'Body/Bold', type: 'TEXT' } });
   });

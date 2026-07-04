@@ -115,6 +115,36 @@ describe('get_variable_defs handler', () => {
     });
   });
 
+  it('carries codeSyntax only when a platform name is actually declared', async () => {
+    const mkVar = (id: string, codeSyntax: unknown): unknown => ({
+      id,
+      name: `v/${id}`,
+      key: `k${id}`,
+      resolvedType: 'COLOR',
+      variableCollectionId: 'VC:1',
+      valuesByMode: { m1: { r: 0, g: 0, b: 0, a: 1 } },
+      codeSyntax,
+    });
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [],
+        [
+          mkVar('V:1', { WEB: '--color-primary', iOS: 'ColorPrimary' }),
+          mkVar('V:2', {}), // nothing declared → field omitted
+          mkVar('V:3', { WEB: '' }), // cleared declaration (empty string) → omitted too
+        ],
+      ),
+    );
+    const result = (await handler(undefined)) as GetVariableDefsResult;
+
+    expect(result.variables[0]?.codeSyntax).toEqual({
+      WEB: '--color-primary',
+      iOS: 'ColorPrimary',
+    });
+    expect(result.variables[1]?.codeSyntax).toBeUndefined();
+    expect(result.variables[2]?.codeSyntax).toBeUndefined();
+  });
+
   it('passes primitive values through unchanged', async () => {
     const handler = createGetVariableDefsHandler(
       fakeFigma(

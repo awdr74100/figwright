@@ -384,10 +384,16 @@ export const DesignContextNodeSchema = z.lazy(() =>
  * top-level `variables` / `styles` maps so a token referenced by 100 nodes costs one entry — nodes
  * keep the id, the consumer joins id → name. The node's own inline value (fill color, fontSize, …)
  * remains the fallback when a ref is unresolved (e.g. a library var not subscribed).
+ *
+ * `codeSyntax` (variables only) is the code-side name the designer declared per platform (WEB /
+ * ANDROID / iOS → e.g. `--color-primary`) — authoritative naming intent when present, skipping the
+ * heuristic name join; verify it against the project's actual tokens before emitting (it can go
+ * stale after a codebase migration). Omitted when the variable declares none.
  */
 export const ResolvedTokenSchema = z.object({
   name: z.string(),
   type: z.string(),
+  codeSyntax: z.record(z.string(), z.string()).optional(),
 });
 export type ResolvedToken = z.infer<typeof ResolvedTokenSchema>;
 

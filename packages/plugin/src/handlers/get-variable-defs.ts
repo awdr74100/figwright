@@ -1,6 +1,7 @@
 import { type GetVariableDefsResult, type SerializedVariableValue, toHex } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { serializeCodeSyntax } from '../serializer.js';
 
 const serializeVariableValue = (value: VariableValue): SerializedVariableValue => {
   if (typeof value === 'object' && value !== null) {
@@ -33,19 +34,26 @@ export const createGetVariableDefsHandler =
         modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
         variableIds: [...c.variableIds],
       })),
-      variables: variables.map(varDef => ({
-        id: varDef.id,
-        name: varDef.name,
-        key: varDef.key,
-        resolvedType: varDef.resolvedType,
-        collectionId: varDef.variableCollectionId,
-        valuesByMode: Object.fromEntries(
-          Object.entries(varDef.valuesByMode).map(([modeId, value]) => [
-            modeId,
-            serializeVariableValue(value),
-          ]),
-        ),
-      })),
+      variables: variables.map(varDef => {
+        const out: GetVariableDefsResult['variables'][number] = {
+          id: varDef.id,
+          name: varDef.name,
+          key: varDef.key,
+          resolvedType: varDef.resolvedType,
+          collectionId: varDef.variableCollectionId,
+          valuesByMode: Object.fromEntries(
+            Object.entries(varDef.valuesByMode).map(([modeId, value]) => [
+              modeId,
+              serializeVariableValue(value),
+            ]),
+          ),
+        };
+        // Designer-declared code-side name (e.g. WEB → `--color-primary`) — authoritative naming
+        // intent that skips the heuristic name join; only emitted when actually declared.
+        const codeSyntax = serializeCodeSyntax(varDef.codeSyntax);
+        if (codeSyntax !== undefined) out.codeSyntax = codeSyntax;
+        return out;
+      }),
     };
     return result;
   };

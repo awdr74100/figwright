@@ -12,7 +12,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlatSync } from '../serializer.js';
+import { serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
@@ -240,7 +240,14 @@ const resolveTokens = async (
       [...varIds].map(async id => {
         try {
           const v = await getVar.call(figmaCtx.variables, id);
-          if (v !== null) variables[id] = { name: v.name, type: v.resolvedType };
+          if (v !== null) {
+            const token: ResolvedToken = { name: v.name, type: v.resolvedType };
+            // Designer-declared code-side name (e.g. WEB → `--color-primary`) — carried when
+            // declared so the consumer can skip the heuristic name join.
+            const codeSyntax = serializeCodeSyntax((v as { codeSyntax?: unknown }).codeSyntax);
+            if (codeSyntax !== undefined) token.codeSyntax = codeSyntax;
+            variables[id] = token;
+          }
         } catch {
           /* unresolved ref — skip, inline value remains the fallback */
         }

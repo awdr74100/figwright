@@ -48,6 +48,12 @@ export const SerializedVariableSchema = z.object({
   resolvedType: z.string(),
   collectionId: z.string(),
   valuesByMode: z.record(z.string(), SerializedVariableValueSchema),
+  /**
+   * Designer-declared code-side name per platform (WEB / ANDROID / iOS → e.g. `--color-primary`) —
+   * authoritative naming intent that skips the heuristic Figma-name → code-token join when present.
+   * Omitted when the variable declares none.
+   */
+  codeSyntax: z.record(z.string(), z.string()).optional(),
 });
 export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 
