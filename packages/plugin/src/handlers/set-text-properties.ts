@@ -4,10 +4,11 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
  * Set a TEXT node's typography + layout/overflow props. Typography (fontName/fontSize/lineHeight/
- * letterSpacing/textCase/textDecoration) mutates the node's runs, so Figma requires every font on
- * the node — plus the target fontName, if changing it — to be loaded first. Layout/overflow props
- * (textAutoResize/truncation/maxLines) are node-level and need no font load. Applied in order
- * autoResize → truncation → maxLines because maxLines only takes effect once truncation is ENDING.
+ * letterSpacing/textCase/textDecoration/paragraphSpacing/paragraphIndent) mutates the node's runs,
+ * so Figma requires every font on the node — plus the target fontName, if changing it — to be
+ * loaded first. Layout/overflow props (textAutoResize/truncation/maxLines) are node-level and need
+ * no font load. Applied in order autoResize → truncation → maxLines because maxLines only takes
+ * effect once truncation is ENDING.
  */
 export const createSetTextPropertiesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -20,12 +21,26 @@ export const createSetTextPropertiesHandler =
       letterSpacing?: unknown;
       textCase?: unknown;
       textDecoration?: unknown;
+      paragraphSpacing?: unknown;
+      paragraphIndent?: unknown;
       textTruncation?: unknown;
       maxLines?: unknown;
       textAutoResize?: unknown;
     };
     if (typeof p.nodeId !== 'string')
       throw new TypeError('set_text_properties: nodeId must be a string');
+    if (
+      p.paragraphSpacing !== undefined &&
+      (typeof p.paragraphSpacing !== 'number' || p.paragraphSpacing < 0)
+    ) {
+      throw new TypeError('set_text_properties: paragraphSpacing must be a non-negative number');
+    }
+    if (
+      p.paragraphIndent !== undefined &&
+      (typeof p.paragraphIndent !== 'number' || p.paragraphIndent < 0)
+    ) {
+      throw new TypeError('set_text_properties: paragraphIndent must be a non-negative number');
+    }
     if (p.textAutoResize !== undefined && typeof p.textAutoResize !== 'string') {
       throw new TypeError('set_text_properties: textAutoResize must be a string');
     }
@@ -50,7 +65,9 @@ export const createSetTextPropertiesHandler =
       p.lineHeight !== undefined ||
       p.letterSpacing !== undefined ||
       p.textCase !== undefined ||
-      p.textDecoration !== undefined;
+      p.textDecoration !== undefined ||
+      p.paragraphSpacing !== undefined ||
+      p.paragraphIndent !== undefined;
     if (settingTypography) {
       const fonts: FontName[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
@@ -66,6 +83,8 @@ export const createSetTextPropertiesHandler =
       if (p.textCase !== undefined) text.textCase = p.textCase as TextNode['textCase'];
       if (p.textDecoration !== undefined)
         text.textDecoration = p.textDecoration as TextNode['textDecoration'];
+      if (p.paragraphSpacing !== undefined) text.paragraphSpacing = p.paragraphSpacing as number;
+      if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
     }
 
     if (p.textAutoResize !== undefined)

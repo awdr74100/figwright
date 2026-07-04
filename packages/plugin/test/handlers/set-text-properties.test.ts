@@ -89,6 +89,26 @@ describe('set_text_properties handler', () => {
     });
   });
 
+  it('sets paragraphSpacing / paragraphIndent after loading fonts (they mutate text layout)', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'First paragraph.\nSecond paragraph.',
+      fontName: { family: 'Inter', style: 'Regular' },
+      paragraphSpacing: 0,
+      paragraphIndent: 0,
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      paragraphSpacing: 12,
+      paragraphIndent: 24,
+    });
+
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+    expect(node).toMatchObject({ paragraphSpacing: 12, paragraphIndent: 24 });
+  });
+
   it('does not load fonts when only layout/overflow props change', async () => {
     const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
     const node = { id: '1:1', type: 'TEXT', textAutoResize: 'NONE' };
@@ -117,5 +137,18 @@ describe('set_text_properties handler', () => {
         maxLines: 'x',
       }),
     ).rejects.toThrow(/maxLines/);
+    // Figma rejects negative paragraph values at the API boundary — refuse before touching the node.
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma({ id: '1:1', type: 'TEXT' }))({
+        nodeId: '1:1',
+        paragraphSpacing: -1,
+      }),
+    ).rejects.toThrow(/paragraphSpacing/);
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma({ id: '1:1', type: 'TEXT' }))({
+        nodeId: '1:1',
+        paragraphIndent: -1,
+      }),
+    ).rejects.toThrow(/paragraphIndent/);
   });
 });

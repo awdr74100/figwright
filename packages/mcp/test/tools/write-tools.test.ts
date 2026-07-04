@@ -194,7 +194,7 @@ describe('M2 write tool definitions', () => {
     expect(createInstanceToolDefinition.inputSchema.required).toBeUndefined();
   });
 
-  it('set_text_properties requires nodeId; truncation/maxLines/autoResize optional', () => {
+  it('set_text_properties requires nodeId; truncation/maxLines/autoResize/paragraph optional', () => {
     expect(setTextPropertiesToolDefinition.name).toBe(SET_TEXT_PROPERTIES_TOOL_NAME);
     expect(setTextPropertiesToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId'],
@@ -202,6 +202,8 @@ describe('M2 write tool definitions', () => {
         textTruncation: { enum: ['DISABLED', 'ENDING'] },
         maxLines: { anyOf: [{ type: 'number' }, { type: 'null' }] },
         textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
+        paragraphSpacing: { type: 'number', minimum: 0 },
+        paragraphIndent: { type: 'number', minimum: 0 },
       },
     });
   });

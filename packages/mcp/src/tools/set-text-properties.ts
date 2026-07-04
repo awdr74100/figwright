@@ -20,9 +20,11 @@ export const setTextPropertiesTool: ToolSpec = {
   name: SET_TEXT_PROPERTIES_TOOL_NAME,
   description:
     "Set a TEXT node's typography and layout/overflow properties. Typography: fontName " +
-    '({ family, style }), fontSize, lineHeight, letterSpacing, textCase, textDecoration — these ' +
-    'load the required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line ' +
-    'clamp), textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
+    '({ family, style }), fontSize, lineHeight, letterSpacing, textCase, textDecoration, ' +
+    'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
+    'into at "\\n" — the write half of the same fields get_design_context reads) — these load the ' +
+    'required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
+    'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
     'textTruncation is ENDING. Returns { ok, nodeId }.',
   inputShape: {
     nodeId: z.string().describe('TEXT node id'),
@@ -34,6 +36,16 @@ export const setTextPropertiesTool: ToolSpec = {
     fontSize: z.number().positive().optional().describe('Font size in px'),
     lineHeight: lineHeight.optional(),
     letterSpacing: letterSpacing.optional(),
+    paragraphSpacing: z
+      .number()
+      .min(0)
+      .optional()
+      .describe('Space between paragraphs in px (paragraphs split at "\\n")'),
+    paragraphIndent: z
+      .number()
+      .min(0)
+      .optional()
+      .describe('First-line indent of each paragraph in px'),
     textCase: z
       .enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS', 'SMALL_CAPS_FORCED'])
       .optional(),

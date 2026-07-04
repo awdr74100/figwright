@@ -124,3 +124,9 @@ reads as separate text). Each range takes the same props as a read segment — `
 `<ol>`/`<ul>` items — plus design-system bindings `textStyleId` / `fillStyleId` / `boundVariables`, so
 the link tracks `Primary/500` rather than a one-off hex. Set the whole string first (`create_text` /
 `set_text`), then style the ranges.
+
+The same one-node rule applies to **multi-paragraph body text** (an article body, an FAQ answer,
+legal copy): keep the paragraphs in one `TEXT` node separated by `\n` and set the source's
+`p + p { margin }` / `text-indent` as `paragraphSpacing` / `paragraphIndent` via
+`set_text_properties` — don't fake the rhythm by splitting each paragraph into its own node in an
+auto-layout stack (that turns one flowing text into N boxes and reads back as unrelated nodes).
