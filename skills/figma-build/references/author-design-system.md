@@ -35,7 +35,10 @@ Then **bind** the new variable the same way you'd bind an existing one — colou
   picker-UX nicety, not a correctness issue — note it if the user wanted a scoped token.
 - **Modes are plan-gated.** `add_variable_mode` (e.g. a `Dark` mode) fails with
   `Limited to 1 modes only` on free/Starter files — the tool is faithfully surfacing Figma's plan
-  limit. Multi-mode theming needs a paid plan.
+  limit. Don't stop at the error: fall back to a **paired collection** — create a second collection
+  named for the theme (e.g. `Color/Dark`) holding the **same variable names** with that theme's
+  values, and tell the user why (the same-name pairing is what `figma-codegen` recognises as a
+  theme axis when reading the file back). Native multi-mode theming needs a paid plan.
 
 **Cleanup:** delete a single variable with `delete_variable`, or a whole collection (and every
 variable in it) with `delete_variable_collection` — remove an authoring mistake rather than leaving

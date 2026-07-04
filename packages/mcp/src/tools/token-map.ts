@@ -34,6 +34,12 @@ export interface TokenMapResult {
   mappings: TokenMapping[];
   /** Figma token names with no project token candidate ≥ 0.5 — the gap to define. */
   unmapped: string[];
+  /**
+   * The file's theme axes: every variable collection with more than one mode (e.g. Light/Dark),
+   * with its mode names and default. Mappings whose variable actually changes per mode carry the
+   * per-theme values on figmaModes; this is the file-level summary that says themes exist at all.
+   */
+  themedCollections: { name: string; modes: string[]; defaultMode: string }[];
   profile: ProjectProfile;
   /** Repo-relative token source that was parsed, or null when none was usable. */
   tokenSource: string | null;
@@ -51,7 +57,12 @@ export const tokenMapTool: ToolSpec = {
     'match is name-based with an exact color value-match as confirmation. On a Tailwind project a ' +
     'variable that hits a framework built-in scale (spacing/N, line-height/N, weight/*) is reported as ' +
     "status 'framework-builtin' with { builtin: { scale, step } } rather than unmapped — it has no " +
-    '@theme token but the utility (p-4 / gap-4, leading-7, font-bold) is still usable. tokenSource ' +
+    '@theme token but the utility (p-4 / gap-4, leading-7, font-bold) is still usable. A variable in ' +
+    'a multi-mode collection whose value differs per mode (a Light/Dark theme) carries figmaModes ' +
+    '(mode name → value per theme; figmaValue is only the default mode), and the result lists ' +
+    'themedCollections — keep such tokens theme-aware (a token that itself switches per theme, or ' +
+    "the non-default values wired through the project's dark-mode mechanism), never just the " +
+    'default-mode literal. tokenSource ' +
     'overrides the ' +
     'detected styling config; rootDir defaults to the server cwd. Tailwind v3 JS configs are not yet ' +
     'parsed (pass tokenSource to a CSS file). Returns { mappings (candidate + confidence + status + ' +
@@ -125,6 +136,13 @@ export const handleTokenMap = async (
     tailwind: profile.styling.system === 'tailwind',
   });
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.figmaName);
+  const themedCollections = defs.collections
+    .filter(c => c.modes.length > 1)
+    .map(c => ({
+      name: c.name,
+      modes: c.modes.map(m => m.name),
+      defaultMode: c.modes.find(m => m.modeId === c.defaultModeId)?.name ?? c.modes[0]?.name ?? '',
+    }));
 
   const readNote =
     source !== null && usedSource === null
@@ -134,6 +152,7 @@ export const handleTokenMap = async (
   return {
     mappings,
     unmapped,
+    themedCollections,
     profile,
     tokenSource: usedSource,
     projectTokenCount: projectTokens.length,

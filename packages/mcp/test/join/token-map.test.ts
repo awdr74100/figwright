@@ -245,6 +245,25 @@ describe('joinTokens', () => {
     });
   });
 
+  it('carries figmaModes through the join untouched (theme-dependent token)', () => {
+    const themed: FigmaToken = {
+      ...fig('bg/surface', '#FFFFFF'),
+      modes: { Light: '#FFFFFF', Dark: '#0A0A0A' },
+    };
+    const [m] = joinTokens([themed], [proj('color-surface', '#FFFFFF', 'surface', 'color')], {
+      threshold: 0.7,
+      tailwind: true,
+    });
+    // Matching still runs on the default-mode value; the per-theme values ride along verbatim.
+    expect(m?.candidate?.token).toBe('color-surface');
+    expect(m?.figmaModes).toEqual({ Light: '#FFFFFF', Dark: '#0A0A0A' });
+  });
+
+  it('leaves figmaModes absent for a single-mode token', () => {
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, { threshold: 0.7 });
+    expect(m?.figmaModes).toBeUndefined();
+  });
+
   it('caps confidence when the name matches but a known color value disagrees (B1)', () => {
     // Same step + stem (grey-100), but the project shade drifted from Figma's — name says yes,
     // value says verify, so it must not read as a confirmed "high" reuse.

@@ -53,6 +53,14 @@ Run the grounded tools against the selection, then generate — **trust them ove
      `leading-7`, `font-bold`), **not** an arbitrary `p-[16px]`. This is **not** a gap.
    - `unmapped`: use the value but call out the gap (offer to add it to the token source); don't
      hardcode silently.
+   - `figmaModes` (`{ Light: …, Dark: … }`, with the file's theme axes on `themedCollections`): the
+     token is **theme-dependent** — `figmaValue` is only the default mode, never the whole story.
+     Mapped: emit `candidate.ref` and confirm the project token itself switches per theme (`.dark` /
+     `[data-theme]` / `prefers-color-scheme` / a `dark:` story); if the project defines only one
+     value, wire the other mode's value into that mechanism or surface a theme gap. Unmapped: the
+     default mode is the base, other modes ride the project's dark-mode mechanism (`dark:` variants /
+     `prefers-color-scheme`). Themes encoded without native modes — paired collections or name
+     groups (`Color/Light/*` + `Color/Dark/*`, a plan-limited workaround) — get the same treatment.
 
 4. **Export the assets grounding can't carry** — logos, photos, icons have no pixels and otherwise
    render as grey blocks. `get_screenshot` (and `icon_map` first for icons, to reuse curated `.svg`s).

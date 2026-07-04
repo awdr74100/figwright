@@ -13,6 +13,15 @@ export interface TokenMapping {
   figmaName: string;
   figmaValue: FigmaToken['value'];
   figmaType: string;
+  /**
+   * Per-theme values (mode name → resolved value), carried through from the Figma side when the
+   * variable lives in a multi-mode collection and its value actually differs between modes — i.e.
+   * it is theme-dependent and figmaValue is only the default mode. Codegen must keep such a token
+   * theme-aware: a mapped candidate's project token should itself switch per theme, and an unmapped
+   * one needs its non-default values wired through the project's theme mechanism (dark: variants /
+   * prefers-color-scheme / [data-theme]) rather than dropped.
+   */
+  figmaModes?: FigmaToken['modes'];
   candidate?: {
     /** Project token name (custom property without `--`), e.g. "color-primary-500". */
     token: string;
@@ -286,6 +295,7 @@ const joinOne = (
     figmaName: figma.name,
     figmaValue: figma.value,
     figmaType: figma.type,
+    ...(figma.modes === undefined ? {} : { figmaModes: figma.modes }),
     status: 'unmapped',
   };
 
