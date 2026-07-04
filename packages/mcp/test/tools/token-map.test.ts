@@ -74,7 +74,56 @@ describe('handleTokenMap', () => {
     expect(primary?.status).toBe('high');
 
     expect(result.unmapped).toContain('Accent/Teal');
+    expect(result.themedCollections).toEqual([]); // single-mode file — no theme axes
     expect(result.profile.styling.tailwindVersion).toBe(4);
+  });
+
+  it('surfaces theme axes and per-mode values for a multi-mode collection', async () => {
+    const themedDefs: GetVariableDefsResult = {
+      collections: [
+        ...defs.collections,
+        {
+          id: 'theme',
+          name: 'Theme',
+          key: 'k',
+          defaultModeId: 'light',
+          modes: [
+            { modeId: 'light', name: 'Light' },
+            { modeId: 'dark', name: 'Dark' },
+          ],
+          variableIds: [],
+        },
+      ],
+      variables: [
+        ...defs.variables,
+        {
+          id: 'bg',
+          name: 'bg/surface',
+          key: 'k',
+          resolvedType: 'COLOR',
+          collectionId: 'theme',
+          valuesByMode: {
+            light: { r: 1, g: 1, b: 1, a: 1 },
+            dark: { r: 0.039, g: 0.039, b: 0.039, a: 1 },
+          },
+        },
+      ],
+    };
+    const themedDispatch: ToolDispatcher = async tool => {
+      if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return themedDefs;
+      throw new Error(`unexpected dispatch: ${tool}`);
+    };
+
+    const result = await handleTokenMap(themedDispatch, { rootDir: dir });
+    expect(result.themedCollections).toEqual([
+      { name: 'Theme', modes: ['Light', 'Dark'], defaultMode: 'Light' },
+    ]);
+    const surface = result.mappings.find(m => m.figmaName === 'bg/surface');
+    expect(surface?.figmaModes).toEqual({ Light: '#FFFFFF', Dark: '#0A0A0A' });
+    // Single-mode variables in the same file stay mode-less.
+    const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+    expect(primary?.figmaModes).toBeUndefined();
+    expect(primary?.status).toBe('high');
   });
 
   it('aggregates repo CSS custom properties when no single token config is detected (plain CSS vars)', async () => {
