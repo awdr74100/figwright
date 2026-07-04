@@ -71,6 +71,23 @@ Then emit code in the detected stack (the profile comes back on `component_map` 
 not call `analyze_project` yourself): compose the reused components, wrap unmapped pieces, and apply
 token references for colour/spacing/radius/typography.
 
+## Keep code in sync as the design changes
+
+Codegen is rarely one-shot — the design keeps moving. To make the second pass an incremental edit
+instead of a regeneration:
+
+- **After you generate**, `design_diff` on the section/component `nodeId` saves a baseline (its
+  `get_design_context`) under `.figwright/snapshots/`. Committing that file lets teammates share the
+  baseline; the tool never touches git.
+- **When asked to re-sync** ("the design changed, update the component"), `design_diff` the same
+  `nodeId` again: it returns the per-node, per-property delta — `added` / `removed` / `changed` nodes
+  with resolved values (a fill, a padding, a text string, a token rebind), each with a readable `path`
+  (`Card / Header / Title`). Edit only the code those nodes map to; don't regenerate the screen.
+  Ground each changed value the usual way (it's a `get_design_context` slice), then `design_diff` with
+  `update: true` to accept the new design as the baseline.
+- Scope it by the same `nodeId` unit you coded from. `no-changes` means the design is untouched since
+  the baseline — nothing to do.
+
 ## Responsive & verify
 
 - **Responsive by default** — root is `w-full`, never the artboard's fixed width; ground breakpoints

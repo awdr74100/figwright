@@ -32,6 +32,7 @@ import { deletePageTool } from './delete-page.js';
 import { deleteStyleTool } from './delete-style.js';
 import { deleteVariableCollectionTool } from './delete-variable-collection.js';
 import { deleteVariableTool } from './delete-variable.js';
+import { designDiffTool } from './design-diff.js';
 import { detachInstanceTool } from './detach-instance.js';
 import { exportPdfTool } from './export-pdf.js';
 import { findReplaceTextTool } from './find-replace-text.js';
@@ -134,6 +135,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   componentMapTool,
   tokenMapTool,
   iconMapTool,
+  designDiffTool,
   // Writes
   setFillsTool,
   setTextTool,

@@ -23,6 +23,7 @@ const SERVER_ONLY_TOOLS = new Set([
   'component_map',
   'token_map',
   'icon_map',
+  'design_diff',
 ]);
 
 const serverNames = ALL_TOOL_SPECS.map(s => s.name);

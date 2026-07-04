@@ -14,6 +14,7 @@ import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
+import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
 import { EXPORT_PDF_TOOL_NAME, handleExportPdf } from './tools/export-pdf.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
@@ -103,6 +104,7 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
     textResult(await handleComponentMap(await routedDispatch(), args)),
   [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
   [ICON_MAP_TOOL_NAME]: async args => textResult(await handleIconMap(await routedDispatch(), args)),
+  [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(dispatch, args)),
 };
 
 // Reversible writes that destroy data — surfaced via the destructiveHint annotation. Other writes
