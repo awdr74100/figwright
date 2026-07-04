@@ -1,10 +1,12 @@
 import type { SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
+import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
 import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
 import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
 import { createBatchHandler } from './batch.js';
+import { createBindComponentPropertyHandler } from './bind-component-property.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
 import { createBindVariableToPaintHandler } from './bind-variable-to-paint.js';
 import { createCloneNodeHandler } from './clone-node.js';
@@ -22,12 +24,14 @@ import { createCreateTextStyleHandler } from './create-text-style.js';
 import { createCreateTextHandler } from './create-text.js';
 import { createCreateVariableCollectionHandler } from './create-variable-collection.js';
 import { createCreateVariableHandler } from './create-variable.js';
+import { createDeleteComponentPropertyHandler } from './delete-component-property.js';
 import { createDeleteNodesHandler } from './delete-nodes.js';
 import { createDeletePageHandler } from './delete-page.js';
 import { createDeleteStyleHandler } from './delete-style.js';
 import { createDeleteVariableCollectionHandler } from './delete-variable-collection.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
+import { createEditComponentPropertyHandler } from './edit-component-property.js';
 import { createExportPdfHandler } from './export-pdf.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
@@ -166,6 +170,10 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     remove_reactions: createRemoveReactionsHandler(figmaCtx),
     swap_component: createSwapComponentHandler(figmaCtx),
     set_instance_properties: createSetInstancePropertiesHandler(figmaCtx),
+    add_component_property: createAddComponentPropertyHandler(figmaCtx),
+    bind_component_property: createBindComponentPropertyHandler(figmaCtx),
+    edit_component_property: createEditComponentPropertyHandler(figmaCtx),
+    delete_component_property: createDeleteComponentPropertyHandler(figmaCtx),
     detach_instance: createDetachInstanceHandler(figmaCtx),
     import_image: createImportImageHandler(figmaCtx),
     import_svg: createImportSvgHandler(figmaCtx),

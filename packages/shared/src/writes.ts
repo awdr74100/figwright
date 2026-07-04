@@ -69,6 +69,19 @@ export const VariableResultSchema = z.object({
 });
 export type VariableResult = z.infer<typeof VariableResultSchema>;
 
+/**
+ * Result of a component-property authoring write (add / edit / delete_component_property). The
+ * propertyId is the name-with-unique-suffix ("Show Icon#12:5") Figma assigns — the handle every
+ * later bind / edit / delete and set_instance_properties call must use, so it's echoed back.
+ */
+export const ComponentPropertyResultSchema = z.object({
+  ok: z.literal(true),
+  componentId: z.string(),
+  propertyId: z.string(),
+  name: z.string(),
+});
+export type ComponentPropertyResult = z.infer<typeof ComponentPropertyResultSchema>;
+
 /** One step in an atomic batch: a write tool name + the params it would normally receive. */
 export const BatchOpSchema = z.object({
   tool: z.string(),

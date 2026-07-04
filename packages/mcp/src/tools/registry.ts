@@ -3,12 +3,14 @@
 // inputShape); the write set is derived from `kind`, not maintained by hand. A registry test asserts
 // these stay in sync with the plugin's handler map so a new tool can't be half-wired.
 
+import { addComponentPropertyTool } from './add-component-property.js';
 import { addPageTool } from './add-page.js';
 import { addVariableModeTool } from './add-variable-mode.js';
 import { analyzeProjectTool } from './analyze-project.js';
 import { applyStyleToNodeTool } from './apply-style-to-node.js';
 import { batchRenameNodesTool } from './batch-rename-nodes.js';
 import { batchTool } from './batch.js';
+import { bindComponentPropertyTool } from './bind-component-property.js';
 import { bindVariableToNodeTool } from './bind-variable-to-node.js';
 import { bindVariableToPaintTool } from './bind-variable-to-paint.js';
 import { cloneNodeTool } from './clone-node.js';
@@ -27,6 +29,7 @@ import { createTextStyleTool } from './create-text-style.js';
 import { createTextTool } from './create-text.js';
 import { createVariableCollectionTool } from './create-variable-collection.js';
 import { createVariableTool } from './create-variable.js';
+import { deleteComponentPropertyTool } from './delete-component-property.js';
 import { deleteNodesTool } from './delete-nodes.js';
 import { deletePageTool } from './delete-page.js';
 import { deleteStyleTool } from './delete-style.js';
@@ -34,6 +37,7 @@ import { deleteVariableCollectionTool } from './delete-variable-collection.js';
 import { deleteVariableTool } from './delete-variable.js';
 import { designDiffTool } from './design-diff.js';
 import { detachInstanceTool } from './detach-instance.js';
+import { editComponentPropertyTool } from './edit-component-property.js';
 import { exportPdfTool } from './export-pdf.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { getAnnotationsTool } from './get-annotations.js';
@@ -196,6 +200,10 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   removeReactionsTool,
   swapComponentTool,
   setInstancePropertiesTool,
+  addComponentPropertyTool,
+  bindComponentPropertyTool,
+  editComponentPropertyTool,
+  deleteComponentPropertyTool,
   detachInstanceTool,
   importImageTool,
   importSvgTool,

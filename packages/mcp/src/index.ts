@@ -114,6 +114,7 @@ const DESTRUCTIVE_TOOLS = new Set([
   'delete_page',
   'delete_style',
   'delete_variable',
+  'delete_component_property',
   'ungroup_nodes',
 ]);
 

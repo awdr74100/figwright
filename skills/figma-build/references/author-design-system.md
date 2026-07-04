@@ -71,5 +71,20 @@ look (a shadow, a type ramp step).
    back (`get_node`) to confirm the property was derived (each child keeps its `Prop=Value` name under
    the set).
 
+**Non-variant properties** (a real DS component usually needs these too — an optional icon, editable
+label text, a swappable nested icon) are authored separately from variants, and each is a **declare +
+bind** pair:
+
+1. **`add_component_property`** (`componentId`, `name`, `type`, `defaultValue`) → declares a `BOOLEAN`
+   (show/hide), `TEXT` (editable string), or `INSTANCE_SWAP` (swappable instance) property. Returns a
+   `propertyId` (`Show Icon#4:2`). The property is **inert on its own** — declaring is only half.
+2. **`bind_component_property`** (`nodeId`, `field`, `propertyId`) attaches it to the sublayer it
+   drives: `visible` for a BOOLEAN, `characters` for a TEXT node, `mainComponent` for an INSTANCE.
+   Bind the same property to several layers by calling once per layer (one BOOLEAN hiding a whole
+   group). **A declared-but-unbound property controls nothing** — always bind, then `get_component_api`
+   to confirm the property and its default read back.
+3. **`edit_component_property`** renames / re-defaults (returns a new `propertyId` on rename);
+   **`delete_component_property`** removes it. VARIANT properties stay the domain of `combine_as_variants`.
+
 Once authored, switch back to the reuse path: `create_instance` the new component, bind the new
 tokens, and assemble (see `assemble-screens.md`).
