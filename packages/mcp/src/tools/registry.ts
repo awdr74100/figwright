@@ -91,6 +91,7 @@ import { setStrokesTool } from './set-strokes.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
 import { setTextRangeTool } from './set-text-range.js';
 import { setTextTool } from './set-text.js';
+import { setVariableCodeSyntaxTool } from './set-variable-code-syntax.js';
 import { setVariableValueTool } from './set-variable-value.js';
 import { setVisibleTool } from './set-visible.js';
 import type { ToolSpec } from './spec.js';
@@ -176,6 +177,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   bindVariableToNodeTool,
   bindVariableToPaintTool,
   renameVariableTool,
+  setVariableCodeSyntaxTool,
   deleteVariableTool,
   deleteVariableCollectionTool,
   groupNodesTool,

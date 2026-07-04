@@ -38,7 +38,7 @@ Everything runs on your machine and talks to Figma through a plugin, so it needs
 ## Why Figwright
 
 - **Free** — no Figma Dev Mode or paid seat. The official Dev Mode MCP is gated; Figwright isn't.
-- **Bidirectional** — not read-only. **95 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
+- **Bidirectional** — not read-only. **96 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen** — Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
 - **Any MCP client** — Claude Code, Cursor, and other MCP-capable agents all work the same way.
 - **Open & extensible** — the read/write workflows ship as installable [skills](#skills) you can adopt or fork.

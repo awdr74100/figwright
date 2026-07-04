@@ -64,6 +64,8 @@ export const VariableResultSchema = z.object({
   ok: z.literal(true),
   variableId: z.string(),
   name: z.string(),
+  /** The per-platform declarations now in effect (set_variable_code_syntax echoes them back). */
+  codeSyntax: z.record(z.string(), z.string()).optional(),
 });
 export type VariableResult = z.infer<typeof VariableResultSchema>;
 

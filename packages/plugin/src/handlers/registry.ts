@@ -83,6 +83,7 @@ import { createSetStrokesHandler } from './set-strokes.js';
 import { createSetTextPropertiesHandler } from './set-text-properties.js';
 import { createSetTextRangeHandler } from './set-text-range.js';
 import { createSetTextHandler } from './set-text.js';
+import { createSetVariableCodeSyntaxHandler } from './set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
@@ -145,6 +146,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
     bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
+    set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     delete_variable_collection: createDeleteVariableCollectionHandler(figmaCtx),
     // Structure + bulk text

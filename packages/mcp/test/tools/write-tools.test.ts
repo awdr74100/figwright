@@ -31,6 +31,10 @@ import {
   setTextPropertiesTool,
 } from '../../src/tools/set-text-properties.js';
 import { SET_TEXT_TOOL_NAME, setTextTool } from '../../src/tools/set-text.js';
+import {
+  SET_VARIABLE_CODE_SYNTAX_TOOL_NAME,
+  setVariableCodeSyntaxTool,
+} from '../../src/tools/set-variable-code-syntax.js';
 import { SET_VISIBLE_TOOL_NAME, setVisibleTool } from '../../src/tools/set-visible.js';
 import { UNLOCK_NODES_TOOL_NAME, unlockNodesTool } from '../../src/tools/unlock-nodes.js';
 import { toToolDefinition } from '../tool-schema.js';
@@ -57,6 +61,7 @@ const setOpacityToolDefinition = toToolDefinition(setOpacityTool);
 const setStrokesToolDefinition = toToolDefinition(setStrokesTool);
 const setTextPropertiesToolDefinition = toToolDefinition(setTextPropertiesTool);
 const setTextToolDefinition = toToolDefinition(setTextTool);
+const setVariableCodeSyntaxToolDefinition = toToolDefinition(setVariableCodeSyntaxTool);
 const setVisibleToolDefinition = toToolDefinition(setVisibleTool);
 const unlockNodesToolDefinition = toToolDefinition(unlockNodesTool);
 
@@ -204,6 +209,25 @@ describe('M2 write tool definitions', () => {
         textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
         paragraphSpacing: { type: 'number', minimum: 0 },
         paragraphIndent: { type: 'number', minimum: 0 },
+      },
+    });
+  });
+
+  it('set_variable_code_syntax requires variableId + codeSyntax with nullable platform names', () => {
+    expect(setVariableCodeSyntaxToolDefinition.name).toBe(SET_VARIABLE_CODE_SYNTAX_TOOL_NAME);
+    expect(setVariableCodeSyntaxToolDefinition.inputSchema).toMatchObject({
+      required: ['variableId', 'codeSyntax'],
+      properties: {
+        variableId: { type: 'string' },
+        codeSyntax: {
+          type: 'object',
+          properties: {
+            // string sets (non-empty), null removes — the set_text_properties partial idiom
+            WEB: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+            ANDROID: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+            iOS: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+          },
+        },
       },
     });
   });

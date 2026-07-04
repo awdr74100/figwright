@@ -19,6 +19,11 @@ Build the collection top-down — the collection hands you the mode id you need 
    type: a number for `FLOAT`, a string for `STRING`, a boolean for `BOOLEAN`, `{ r, g, b, a }`
    (0–1) for `COLOR`, or `{ type: "VARIABLE_ALIAS", id }` to alias another variable (semantic token
    → primitive token).
+4. **`set_variable_code_syntax`** (`variableId`, `codeSyntax: { WEB: "--color-primary" }`) — when
+   the variable comes **from an existing code token** (a CSS custom property, a Tailwind theme key),
+   declare that source name here. It closes the round-trip: future codegen reads it back as the
+   authoritative name (`codeSyntax` on the resolved token) instead of re-deriving one from the
+   Figma name. Skip it for tokens that have no code-side counterpart yet.
 
 Then **bind** the new variable the same way you'd bind an existing one — colour via
 `bind_variable_to_paint`, scalars via `bind_variable_to_node` (see `write-rules.md`).
