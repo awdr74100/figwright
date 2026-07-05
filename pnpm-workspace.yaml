@@ -5,7 +5,6 @@ onlyBuiltDependencies:
   - esbuild
   - '@parcel/watcher'
   - '@tailwindcss/oxide'
-  - lefthook
   - oxlint
   - oxfmt
 
