@@ -42,11 +42,31 @@ export const normalizeNodeId = (raw: string): string => {
   return value;
 };
 
-const STRING_ID_FIELDS = ['nodeId', 'parentId'] as const;
+/**
+ * Every top-level tool-arg field that carries a _canvas node id_ (page / frame / layer / component
+ * / instance) — i.e. a value a user may paste as a Figma URL or dash-form id. Fields in other id
+ * namespaces (styleId, variableId, collectionId, propertyId, modeId, componentKey) are deliberately
+ * absent: their values never come from a canvas URL and must not be rewritten. Nested ids (e.g. a
+ * reaction action's destinationId, per-item ids inside `renames`) are out of scope — normalization
+ * is shallow by design. A registry test asserts every canvas-id field on an advertised tool is
+ * listed here, so a new tool can't silently miss URL normalization.
+ */
+export const STRING_ID_FIELDS = [
+  'nodeId',
+  'parentId',
+  'newParentId',
+  'pageId',
+  'root',
+  'rootId',
+  'componentId',
+  'instanceId',
+  'fromNodeId',
+] as const;
 
 /**
  * Normalize the id-bearing fields of a tool's argument object in place of the caller having to do
- * it: `nodeId` / `parentId` (strings) and `nodeIds` (string array). Non-object args pass through.
+ * it: every STRING_ID_FIELDS entry (strings) and `nodeIds` (string array). Non-object args pass
+ * through.
  */
 export const normalizeIdArgs = (args: unknown): unknown => {
   if (typeof args !== 'object' || args === null) return args;
