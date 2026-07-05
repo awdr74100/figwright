@@ -106,6 +106,12 @@ first:
 equivalents of `FILL` and still work, but prefer the `layoutSizing*` enum. Avoid `resize_nodes` for
 content-driven sizing — it forces FIXED and re-introduces the 100×100 fights.
 
+When the source code carries `min-width` / `max-width` / `min-height` / `max-height` (a `max-w-md`
+card, a `min-w-[120px]` button), author them as real bounds via `set_layout_props`'s `minWidth` /
+`maxWidth` / `minHeight` / `maxHeight` (px; `null` clears) instead of freezing the current size with
+`FIXED` — the frame then resizes the way the CSS does, and codegen reads the same bounds back.
+Bounds apply to auto-layout frames and their direct children.
+
 ## Text uses a real font, not the fallback
 
 A new `TEXT` node defaults to a **fallback font (Inter)**, not the design system's font. Set the real

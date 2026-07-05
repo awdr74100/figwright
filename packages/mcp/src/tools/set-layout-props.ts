@@ -14,8 +14,10 @@ export const setLayoutPropsTool: ToolSpec = {
     'sizes with resize_nodes. layoutAlign (STRETCH = fill the counter axis, INHERIT = default) and ' +
     'layoutGrow (1 = fill the primary axis, 0 = hug) are the older per-axis equivalents. ' +
     'layoutPositioning (ABSOLUTE = ignore the flow and position freely, AUTO = participate in ' +
-    'layout). HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. Any field ' +
-    'may be omitted to leave it unchanged. Returns { ok, nodeId }.',
+    'layout). minWidth / maxWidth / minHeight / maxHeight set responsive size bounds (→ min-w / ' +
+    'max-w); pass null to clear a bound. Bounds apply to auto-layout frames and their direct ' +
+    'children. HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. Any ' +
+    'field may be omitted to leave it unchanged. Returns { ok, nodeId }.',
   inputShape: {
     nodeId: z.string().describe('Node id — an auto-layout frame, or a child inside one'),
     layoutSizingHorizontal: z
@@ -39,6 +41,30 @@ export const setLayoutPropsTool: ToolSpec = {
       .enum(['AUTO', 'ABSOLUTE'])
       .optional()
       .describe('ABSOLUTE takes the node out of the auto-layout flow'),
+    minWidth: z
+      .number()
+      .positive()
+      .nullable()
+      .optional()
+      .describe('Minimum width in px (null clears the bound)'),
+    maxWidth: z
+      .number()
+      .positive()
+      .nullable()
+      .optional()
+      .describe('Maximum width in px (null clears the bound)'),
+    minHeight: z
+      .number()
+      .positive()
+      .nullable()
+      .optional()
+      .describe('Minimum height in px (null clears the bound)'),
+    maxHeight: z
+      .number()
+      .positive()
+      .nullable()
+      .optional()
+      .describe('Maximum height in px (null clears the bound)'),
   },
   kind: 'write',
 };

@@ -106,6 +106,11 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.layoutGrow !== undefined) out.layoutGrow = flat.layoutGrow;
   if (flat.layoutAlign !== undefined) out.layoutAlign = flat.layoutAlign;
   if (flat.layoutPositioning !== undefined) out.layoutPositioning = flat.layoutPositioning;
+  // Min/max size bounds — explicit responsive constraints (→ min-w / max-w / min-h / max-h).
+  if (flat.minWidth !== undefined) out.minWidth = flat.minWidth;
+  if (flat.maxWidth !== undefined) out.maxWidth = flat.maxWidth;
+  if (flat.minHeight !== undefined) out.minHeight = flat.minHeight;
+  if (flat.maxHeight !== undefined) out.maxHeight = flat.maxHeight;
   if (flat.gridChild !== undefined) out.gridChild = flat.gridChild;
   if (flat.constraints !== undefined) out.constraints = flat.constraints;
   if (flat.clipsContent !== undefined) out.clipsContent = flat.clipsContent;

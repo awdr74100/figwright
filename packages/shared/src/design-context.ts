@@ -144,6 +144,14 @@ export interface DesignContextNode {
   layoutGrow?: number;
   layoutAlign?: string;
   layoutPositioning?: string;
+  /**
+   * Min/max size bounds (auto-layout frames and their direct children) — explicit responsive
+   * constraints (→ min-w / max-w / min-h / max-h); only set bounds surface.
+   */
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
   gridChild?: SerializedGridChild;
   constraints?: SerializedConstraints;
   clipsContent?: boolean;
@@ -301,6 +309,10 @@ export const DesignContextNodeSchema = z.lazy(() =>
     layoutGrow: z.number().optional(),
     layoutAlign: z.string().optional(),
     layoutPositioning: z.string().optional(),
+    minWidth: z.number().optional(),
+    maxWidth: z.number().optional(),
+    minHeight: z.number().optional(),
+    maxHeight: z.number().optional(),
     gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),

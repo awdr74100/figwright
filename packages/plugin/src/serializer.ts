@@ -508,6 +508,23 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     }
   }
 
+  // Min/max size bounds — the designer's explicit responsive constraints (→ min-w / max-w /
+  // min-h / max-h). They apply to auto-layout frames AND their direct children, so this sits
+  // outside the isAutoLayoutParent branch above (a top-level auto-layout frame carries its own
+  // maxWidth). Unset bounds read null and are omitted, so plain nodes stay lean.
+  if ('minWidth' in node) {
+    const n = node as {
+      minWidth?: number | null;
+      maxWidth?: number | null;
+      minHeight?: number | null;
+      maxHeight?: number | null;
+    };
+    if (typeof n.minWidth === 'number') out.minWidth = n.minWidth;
+    if (typeof n.maxWidth === 'number') out.maxWidth = n.maxWidth;
+    if (typeof n.minHeight === 'number') out.minHeight = n.minHeight;
+    if (typeof n.maxHeight === 'number') out.maxHeight = n.maxHeight;
+  }
+
   if (
     'clipsContent' in node &&
     typeof (node as { clipsContent: unknown }).clipsContent === 'boolean'

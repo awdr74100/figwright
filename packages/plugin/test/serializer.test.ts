@@ -533,6 +533,24 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
     expect(out.constraints).toBeUndefined();
   });
 
+  it('captures min/max size bounds, omitting unset (null) ones', () => {
+    // Bounds apply to auto-layout frames AND their children — a top-level auto-layout frame
+    // (no auto-layout parent) still carries its own maxWidth, so no parent gating.
+    const out = serializeFlatSync(
+      fake({ minWidth: 120, maxWidth: null, minHeight: null, maxHeight: 480 }),
+    );
+    expect(out.minWidth).toBe(120);
+    expect(out.maxWidth).toBeUndefined();
+    expect(out.minHeight).toBeUndefined();
+    expect(out.maxHeight).toBe(480);
+  });
+
+  it('omits min/max entirely for nodes without the properties', () => {
+    const out = serializeFlatSync(fake({}));
+    expect(out.minWidth).toBeUndefined();
+    expect(out.maxHeight).toBeUndefined();
+  });
+
   it('flags ABSOLUTE layoutPositioning', () => {
     const out = serializeFlatSync(
       fake({ parent: { id: '1:1', layoutMode: 'VERTICAL' }, layoutPositioning: 'ABSOLUTE' }),

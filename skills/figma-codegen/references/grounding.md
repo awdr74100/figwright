@@ -141,11 +141,16 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `HUG`→fit-content, `FIXED`→explicit) + `layoutGrow` + `layoutAlign` decide how it fills its parent.
   A `FIXED` size is real intent, not the measured content size — emit it, don't let the element
   collapse to its content (e.g. a shadcn `Button` defaults to content width; a `FIXED` 220px button
-  needs the width pinned or it comes out too narrow). **But on a control that would otherwise hug its
-  content — a button/badge/chip/tag (auto-layout + a `FILL`/`layoutGrow` text child) whose `FIXED`
-  width exceeds its content — prefer `min-w-*` over a hard `w-*`**: Figma has no native min-width, so a
-  designer expresses "at least this wide, but let longer/i18n text grow" as `FIXED`. Reserve a hard
-  `w-*` for things that are genuinely a fixed size (sidebars, fixed cards, avatars).
+  needs the width pinned or it comes out too narrow).
+- **Min/max size bounds — explicit responsive constraints, never infer when present.** A node may
+  carry `minWidth` / `maxWidth` / `minHeight` / `maxHeight` (auto-layout frames and their direct
+  children; only set bounds appear). These are the designer's literal `min-w-* / max-w-* / min-h-* /
+max-h-*` — map them directly and let the corresponding `w`/`h` stay fluid. When a node carries
+  no bounds, fall back to the heuristic: **on a control that would otherwise hug its content — a
+  button/badge/chip/tag (auto-layout + a `FILL`/`layoutGrow` text child) whose `FIXED` width
+  exceeds its content — prefer `min-w-*` over a hard `w-*`** (designers often express "at least
+  this wide, but let longer/i18n text grow" as `FIXED`). Reserve a hard `w-*` for things that are
+  genuinely a fixed size (sidebars, fixed cards, avatars).
 - **Layout grids — the frame's own responsive column system (don't infer breakpoints, read them).**
   A frame may carry `layoutGrids`: `COLUMNS` / `ROWS` with a `count` (e.g. 12), `gutterSize`,
   `alignment`, and `offset` (the page margin from the frame edge → container horizontal padding), or

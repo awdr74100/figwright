@@ -329,6 +329,15 @@ export interface SerializedNode {
   layoutGrow?: number;
   layoutAlign?: string;
   layoutPositioning?: string;
+  /**
+   * Min/max size bounds (auto-layout frames and their direct children) — the designer's explicit
+   * responsive constraints (→ min-w / max-w / min-h / max-h). Unset bounds are null in Figma and
+   * omitted here, so only real constraints surface.
+   */
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
   /** Placement inside a GRID auto-layout parent (only when the parent's layoutMode is GRID). */
   gridChild?: SerializedGridChild;
   // non-auto-layout positioning
@@ -435,6 +444,10 @@ export const SerializedNodeSchema = z.lazy(() =>
     layoutGrow: z.number().optional(),
     layoutAlign: z.string().optional(),
     layoutPositioning: z.string().optional(),
+    minWidth: z.number().optional(),
+    maxWidth: z.number().optional(),
+    minHeight: z.number().optional(),
+    maxHeight: z.number().optional(),
     gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),

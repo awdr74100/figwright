@@ -4,6 +4,9 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 type SizingAxis = 'layoutSizingHorizontal' | 'layoutSizingVertical';
 
+const SIZE_BOUNDS = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'] as const;
+type SizeBound = (typeof SIZE_BOUNDS)[number];
+
 /**
  * Apply a HUG / FILL / FIXED sizing value to one axis. Figma throws when the context is wrong (HUG
  * needs an auto-layout frame or text node; FILL needs an auto-layout parent) — turn that into an
@@ -45,11 +48,21 @@ export const createSetLayoutPropsHandler =
       layoutAlign?: unknown;
       layoutGrow?: unknown;
       layoutPositioning?: unknown;
+      minWidth?: unknown;
+      maxWidth?: unknown;
+      minHeight?: unknown;
+      maxHeight?: unknown;
     };
     if (typeof p.nodeId !== 'string')
       throw new TypeError('set_layout_props: nodeId must be a string');
     if (p.layoutGrow !== undefined && (typeof p.layoutGrow !== 'number' || p.layoutGrow < 0)) {
       throw new TypeError('set_layout_props: layoutGrow must be a non-negative number');
+    }
+    for (const bound of SIZE_BOUNDS) {
+      const v = p[bound];
+      if (v !== undefined && v !== null && (typeof v !== 'number' || v <= 0)) {
+        throw new TypeError(`set_layout_props: ${bound} must be a positive number or null`);
+      }
     }
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
@@ -70,6 +83,26 @@ export const createSetLayoutPropsHandler =
     if (typeof p.layoutPositioning === 'string') n.layoutPositioning = p.layoutPositioning;
     setSizing(n, 'layoutSizingHorizontal', p.layoutSizingHorizontal, p.nodeId);
     setSizing(n, 'layoutSizingVertical', p.layoutSizingVertical, p.nodeId);
+
+    // Min/max size bounds (null clears). Figma throws outside the supported context (an
+    // auto-layout frame or its direct child) — translate to an actionable message.
+    const bounds = node as Partial<Record<SizeBound, number | null>>;
+    for (const bound of SIZE_BOUNDS) {
+      const v = p[bound];
+      if (v === undefined) continue;
+      if (!(bound in node)) {
+        throw new Error(`set_layout_props: node ${p.nodeId} does not support ${bound}`);
+      }
+      try {
+        bounds[bound] = v as number | null;
+      } catch (err) {
+        throw new Error(
+          `set_layout_props: cannot set ${bound} on node ${p.nodeId} — min/max bounds apply to ` +
+            `auto-layout frames and their direct children`,
+          { cause: err },
+        );
+      }
+    }
 
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;

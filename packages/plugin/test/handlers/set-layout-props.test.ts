@@ -77,6 +77,52 @@ describe('set_layout_props handler', () => {
     ).rejects.toThrow(/does not support/);
   });
 
+  it('sets and clears min/max size bounds', async () => {
+    const node = {
+      id: '1:1',
+      layoutAlign: 'INHERIT',
+      minWidth: null,
+      maxWidth: 800,
+      minHeight: null,
+      maxHeight: null,
+    };
+    await createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      minWidth: 120,
+      maxWidth: null, // clears the existing bound
+      maxHeight: 300,
+    });
+    expect(node).toMatchObject({ minWidth: 120, maxWidth: null, minHeight: null, maxHeight: 300 });
+  });
+
+  it('rejects a non-positive bound and a node without bounds', async () => {
+    await expect(
+      createSetLayoutPropsHandler(fakeFigma({ '1:1': { id: '1:1', layoutAlign: 'INHERIT' } }))({
+        nodeId: '1:1',
+        minWidth: 0,
+      }),
+    ).rejects.toThrow(/minWidth must be a positive number or null/);
+    await expect(
+      createSetLayoutPropsHandler(fakeFigma({ '1:1': { id: '1:1', layoutAlign: 'INHERIT' } }))({
+        nodeId: '1:1',
+        maxHeight: 100,
+      }),
+    ).rejects.toThrow(/does not support maxHeight/);
+  });
+
+  it('surfaces an actionable error when Figma rejects a bound', async () => {
+    const node = {
+      id: '1:1',
+      layoutAlign: 'INHERIT',
+      set minWidth(_v: number | null) {
+        throw new Error('node must be an auto layout frame or child');
+      },
+    };
+    await expect(
+      createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({ nodeId: '1:1', minWidth: 50 }),
+    ).rejects.toThrow(/bounds apply to auto-layout frames/);
+  });
+
   it('surfaces an actionable error when Figma rejects a sizing value', async () => {
     const node = {
       id: '1:1',
