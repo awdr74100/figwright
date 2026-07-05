@@ -8,8 +8,11 @@ import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
 import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
 import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
+import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
 import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
+import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
+import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
@@ -17,9 +20,11 @@ const makeFigma = (initial: Record<string, Record<string, unknown>>) => {
   const store = new Map<string, Record<string, unknown>>(Object.entries(initial));
   let seq = 100;
   const currentPage = { appendChild: vi.fn<(n: unknown) => void>() };
+  const loadFontAsync = vi.fn<(font: unknown) => Promise<void>>(async () => {});
   const figmaCtx = {
     mixed: Symbol('mixed'),
     currentPage,
+    loadFontAsync,
     getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
     createFrame: () => {
       const id = `9:${(seq += 1)}`;
@@ -38,13 +43,16 @@ const makeFigma = (initial: Record<string, Record<string, unknown>>) => {
       return node;
     },
   } as unknown as typeof figma;
-  return { figmaCtx, store };
+  return { figmaCtx, store, loadFontAsync };
 };
 
 const realWrites = (figmaCtx: typeof figma): SandboxHandlers => ({
   rename_node: createRenameNodeHandler(figmaCtx),
   set_opacity: createSetOpacityHandler(figmaCtx),
   set_fills: createSetFillsHandler(figmaCtx),
+  set_strokes: createSetStrokesHandler(figmaCtx),
+  set_corner_radius: createSetCornerRadiusHandler(figmaCtx),
+  set_text_properties: createSetTextPropertiesHandler(figmaCtx),
   move_nodes: createMoveNodesHandler(figmaCtx),
   create_frame: createCreateFrameHandler(figmaCtx),
   create_component: createCreateComponentHandler(figmaCtx),
@@ -208,6 +216,137 @@ describe('batch handler', () => {
         ],
       }),
     ).rejects.toThrow(/undo\(s\) FAILED.*cannot remove.*partially changed/);
+  });
+
+  it('restores per-corner radii on rollback when cornerRadius reads mixed', async () => {
+    // Corners differ → the uniform cornerRadius getter is figma.mixed (a symbol the undo must
+    // skip); the per-corner snapshot is what actually restores the node.
+    const { figmaCtx, store } = makeFigma({
+      '1:1': {
+        id: '1:1',
+        cornerRadius: Symbol('mixed'),
+        topLeftRadius: 8,
+        topRightRadius: 0,
+        bottomRightRadius: 4,
+        bottomLeftRadius: 0,
+      },
+      '1:2': { id: '1:2', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_corner_radius', params: { nodeId: '1:1', radius: 12 } },
+          { tool: 'set_fills', params: { nodeId: '1:2', fills: [{ type: 'GRADIENT_LINEAR' }] } },
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(store.get('1:1')).toMatchObject({
+      topLeftRadius: 8,
+      topRightRadius: 0,
+      bottomRightRadius: 4,
+      bottomLeftRadius: 0,
+    });
+  });
+
+  it('restores strokeAlign / dashPattern / per-side weights on rollback', async () => {
+    const { figmaCtx, store } = makeFigma({
+      '1:1': {
+        id: '1:1',
+        strokes: [SOLID(0.2)],
+        strokeWeight: Symbol('mixed'), // per-side weights differ
+        strokeAlign: 'INSIDE',
+        dashPattern: [4, 2],
+        strokeTopWeight: 1,
+        strokeRightWeight: 0,
+        strokeBottomWeight: 2,
+        strokeLeftWeight: 0,
+      },
+      '1:2': { id: '1:2', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_strokes',
+            params: {
+              nodeId: '1:1',
+              strokes: [SOLID(0.9)],
+              strokeWeight: 3,
+              strokeAlign: 'CENTER',
+              dashPattern: [],
+            },
+          },
+          { tool: 'set_fills', params: { nodeId: '1:2', fills: [{ type: 'GRADIENT_LINEAR' }] } },
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(store.get('1:1')).toMatchObject({
+      strokes: [SOLID(0.2)],
+      strokeAlign: 'INSIDE',
+      dashPattern: [4, 2],
+      strokeTopWeight: 1,
+      strokeRightWeight: 0,
+      strokeBottomWeight: 2,
+      strokeLeftWeight: 0,
+    });
+  });
+
+  it('restores typography on set_text_properties rollback, reloading fonts first', async () => {
+    const { figmaCtx, store, loadFontAsync } = makeFigma({
+      '1:1': {
+        id: '1:1',
+        type: 'TEXT',
+        characters: 'Hi',
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 12,
+        lineHeight: { unit: 'AUTO' },
+        letterSpacing: { value: 0, unit: 'PIXELS' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        paragraphSpacing: 0,
+        paragraphIndent: 0,
+        textAutoResize: 'WIDTH_AND_HEIGHT',
+        textTruncation: 'DISABLED',
+        maxLines: null,
+      },
+      '1:2': { id: '1:2', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_text_properties',
+            params: {
+              nodeId: '1:1',
+              fontName: { family: 'Arial', style: 'Bold' },
+              fontSize: 24,
+              textCase: 'UPPER',
+              paragraphSpacing: 8,
+              textAutoResize: 'HEIGHT',
+            },
+          },
+          { tool: 'set_fills', params: { nodeId: '1:2', fills: [{ type: 'GRADIENT_LINEAR' }] } },
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(store.get('1:1')).toMatchObject({
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 12,
+      textCase: 'ORIGINAL',
+      paragraphSpacing: 0,
+      textAutoResize: 'WIDTH_AND_HEIGHT',
+    });
+    // The undo reloads the captured (pre-op) font before restoring — it's the final font load.
+    expect(loadFontAsync.mock.calls.at(-1)).toEqual([{ family: 'Inter', style: 'Regular' }]);
   });
 
   it('replays as a unit under idempotency: same requestId applies its ops once', async () => {

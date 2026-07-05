@@ -124,6 +124,67 @@ const createComponentInverse: BatchInverse = {
   undo: componentCreateInverse.undo,
 };
 
+// Every field the set_text_properties handler can write. The snapshot must cover all of them —
+// an inverse that captures a subset would "roll back" while silently leaving the rest changed,
+// breaking the all-or-nothing contract. Restore order matters at the tail: maxLines only takes
+// effect once textTruncation is ENDING, so truncation is restored before maxLines (mirrors the
+// handler's apply order).
+const TEXT_PROPERTY_KEYS = [
+  'fontName',
+  'fontSize',
+  'lineHeight',
+  'letterSpacing',
+  'textCase',
+  'textDecoration',
+  'paragraphSpacing',
+  'paragraphIndent',
+  'textAutoResize',
+  'textTruncation',
+  'maxLines',
+] as const;
+
+/**
+ * Set_text_properties mutates typography, which Figma only allows with the node's fonts loaded — so
+ * the undo must reload the captured fonts before restoring, exactly like setTextInverse. A per-run
+ * `mixed` value (symbol) can't be restored node-level and is skipped; every other field
+ * round-trips.
+ */
+const setTextPropertiesInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = (params as { nodeId?: unknown } | null)?.nodeId;
+    if (typeof id !== 'string') {
+      throw new TypeError('batch/set_text_properties: nodeId must be a string');
+    }
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    if (node === null || node.type !== 'TEXT') {
+      throw new Error(`batch/set_text_properties: node ${id} is not a TEXT node`);
+    }
+    const text = node as TextNode;
+    const fonts =
+      text.fontName === figmaCtx.mixed && text.characters.length > 0
+        ? text.getRangeAllFontNames(0, text.characters.length)
+        : [text.fontName as FontName];
+    const bag = text as unknown as Record<string, unknown>;
+    const snapshot: Record<string, unknown> = {};
+    for (const k of TEXT_PROPERTY_KEYS) if (k in text) snapshot[k] = bag[k];
+    return { id, snapshot, fonts };
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, snapshot, fonts } = captured as {
+      id: string;
+      snapshot: Record<string, unknown>;
+      fonts: FontName[];
+    };
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    if (node === null || node.type !== 'TEXT') return;
+    await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
+    const bag = node as unknown as Record<string, unknown>;
+    for (const k of TEXT_PROPERTY_KEYS) {
+      if (k in snapshot && k in node && restorable(snapshot[k])) bag[k] = snapshot[k];
+    }
+  },
+};
+
 /** Set_text needs every font loaded before `characters` can be restored. */
 const setTextInverse: BatchInverse = {
   async capture(figmaCtx, params) {
@@ -157,21 +218,41 @@ const setTextInverse: BatchInverse = {
 const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Single-node property mutations.
   set_fills: nodeProps('set_fills', ['fills']),
-  set_strokes: nodeProps('set_strokes', ['strokes', 'strokeWeight']),
+  // Snapshot every field the handler can write, not just the headline one: a subset snapshot would
+  // "roll back" while silently leaving the rest changed. The per-side weights are also what rescue
+  // a node whose uniform strokeWeight reads figma.mixed (a symbol, skipped by `restorable`) — they
+  // are plain numbers, so mixed-stroke nodes still restore fully. Order matters: the uniform weight
+  // is restored before the per-side values so the sides override it (mirrors the handler).
+  set_strokes: nodeProps('set_strokes', [
+    'strokes',
+    'strokeWeight',
+    'strokeAlign',
+    'dashPattern',
+    'strokeTopWeight',
+    'strokeRightWeight',
+    'strokeBottomWeight',
+    'strokeLeftWeight',
+  ]),
   set_opacity: nodeProps('set_opacity', ['opacity']),
   set_visible: nodeProps('set_visible', ['visible']),
-  set_corner_radius: nodeProps('set_corner_radius', ['cornerRadius']),
+  // Same full-coverage rule as set_strokes: per-corner radii are plain numbers, so a node whose
+  // uniform cornerRadius reads figma.mixed (skipped by `restorable`) still restores through them
+  // (a plain-cornerRadius node like an ellipse has no per-corner props — the `in node` guard skips
+  // them and the uniform value alone round-trips). Uniform first, corners after (handler order).
+  set_corner_radius: nodeProps('set_corner_radius', [
+    'cornerRadius',
+    'topLeftRadius',
+    'topRightRadius',
+    'bottomRightRadius',
+    'bottomLeftRadius',
+  ]),
   set_arc: nodeProps('set_arc', ['arcData']),
   set_blend_mode: nodeProps('set_blend_mode', ['blendMode']),
   set_effects: nodeProps('set_effects', ['effects']),
   set_constraints: nodeProps('set_constraints', ['constraints']),
   rename_node: nodeProps('rename_node', ['name']),
   set_text: setTextInverse,
-  set_text_properties: nodeProps('set_text_properties', [
-    'textAutoResize',
-    'textTruncation',
-    'maxLines',
-  ]),
+  set_text_properties: setTextPropertiesInverse,
   // Multi-node mutations.
   move_nodes: nodesSnapshot(
     'move_nodes',
