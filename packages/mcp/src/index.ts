@@ -107,20 +107,12 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(dispatch, args)),
 };
 
-// Reversible writes that destroy data — surfaced via the destructiveHint annotation. Other writes
-// (creates / property sets) are non-destructive; reads/locals are read-only (derived from kind).
-const DESTRUCTIVE_TOOLS = new Set([
-  'delete_nodes',
-  'delete_page',
-  'delete_style',
-  'delete_variable',
-  'delete_component_property',
-  'ungroup_nodes',
-]);
-
+// Annotations are derived from each spec, never hand-kept here: `kind` drives readOnlyHint and the
+// spec's own `destructive` flag drives destructiveHint (a registry test asserts every delete_*
+// carries it, so a new destructive tool can't ship silently marked "non-destructive").
 const annotationsFor = (spec: ToolSpec): ToolAnnotations =>
   spec.kind === 'write'
-    ? { readOnlyHint: false, destructiveHint: DESTRUCTIVE_TOOLS.has(spec.name) }
+    ? { readOnlyHint: false, destructiveHint: spec.destructive === true }
     : { readOnlyHint: true };
 
 for (const spec of ALL_TOOL_SPECS) {

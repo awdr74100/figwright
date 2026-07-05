@@ -16,4 +16,5 @@ export const deleteComponentPropertyTool: ToolSpec = {
     propertyId: z.string().describe('Property id to delete (name#id, from get_component_api)'),
   },
   kind: 'write',
+  destructive: true,
 };

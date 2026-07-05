@@ -13,4 +13,5 @@ export const deletePageTool: ToolSpec = {
     pageId: z.string().describe('Page id to delete'),
   },
   kind: 'write',
+  destructive: true,
 };

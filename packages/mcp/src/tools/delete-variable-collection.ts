@@ -14,4 +14,5 @@ export const deleteVariableCollectionTool: ToolSpec = {
     collectionId: z.string().describe('Variable collection id to delete'),
   },
   kind: 'write',
+  destructive: true,
 };

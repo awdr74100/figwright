@@ -15,4 +15,6 @@ export const detachInstanceTool: ToolSpec = {
     instanceId: z.string().describe('Instance node id to detach'),
   },
   kind: 'write',
+  // Severs the instance→component link permanently (Figma has no re-attach) — the binding is lost.
+  destructive: true,
 };

@@ -14,4 +14,6 @@ export const removeReactionsTool: ToolSpec = {
     nodeId: z.string().describe('Node to clear reactions from'),
   },
   kind: 'write',
+  // Deletes the node's prototype reactions outright — data that can't be recovered afterwards.
+  destructive: true,
 };

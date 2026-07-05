@@ -14,4 +14,5 @@ export const deleteNodesTool: ToolSpec = {
     nodeIds: z.array(z.string()).describe('Node ids to delete'),
   },
   kind: 'write',
+  destructive: true,
 };

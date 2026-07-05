@@ -79,6 +79,23 @@ describe('tool registry', () => {
     expect(writes.filter(n => !handlerKeys.includes(n))).toEqual([]);
   });
 
+  it('every delete_* tool declares destructive, and destructive only appears on writes', () => {
+    // destructiveHint is derived from the spec's own flag (index.ts annotationsFor) — an unflagged
+    // delete would actively advertise destructiveHint:false, so lock the naming convention to the
+    // flag. Non-delete destructive tools (ungroup_nodes, remove_reactions, detach_instance) are
+    // judgment calls made at the spec; only the mechanical rule is asserted here.
+    const unflaggedDeletes = ALL_TOOL_SPECS.filter(
+      s => s.name.startsWith('delete_') && s.destructive !== true,
+    ).map(s => s.name);
+    const nonWriteDestructive = ALL_TOOL_SPECS.filter(
+      s => s.destructive === true && s.kind !== 'write',
+    ).map(s => s.name);
+    expect({ unflaggedDeletes, nonWriteDestructive }).toEqual({
+      unflaggedDeletes: [],
+      nonWriteDestructive: [],
+    });
+  });
+
   it('every input schema property declares a type (no untyped polymorphic params)', () => {
     const offenders: string[] = [];
     for (const spec of ALL_TOOL_SPECS) {

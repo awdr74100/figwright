@@ -13,4 +13,6 @@ export const ungroupNodesTool: ToolSpec = {
     nodeIds: z.array(z.string()).describe('Group node ids to ungroup'),
   },
   kind: 'write',
+  // Dissolves the GROUP node itself — the grouping (and the node id) is destroyed, not recoverable.
+  destructive: true,
 };

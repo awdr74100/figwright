@@ -12,4 +12,5 @@ export const deleteStyleTool: ToolSpec = {
     styleId: z.string().describe('Style id to delete'),
   },
   kind: 'write',
+  destructive: true,
 };
