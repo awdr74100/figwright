@@ -8,6 +8,6 @@
   "documentAccess": "dynamic-page",
   "networkAccess": {
     "allowedDomains": ["*"],
-    "reasoning": "Connects only to a local Figwright WebSocket on 127.0.0.1; the listen port falls back across a range, so all origins are allowed for simplicity (the plugin never reaches the public network)."
+    "reasoning": "The core connection is a local WebSocket relay on 127.0.0.1:3055 (the Figwright MCP server on this machine). Open domains are required because the import_image tool can additionally fetch an image from a user-supplied URL."
   }
 }
