@@ -14,6 +14,8 @@ type AutoLayoutTarget = {
   primaryAxisAlignItems: string;
   counterAxisAlignItems: string;
   layoutWrap: string;
+  counterAxisSpacing: number | null;
+  counterAxisAlignContent: string;
   gridRowCount: number;
   gridColumnCount: number;
   gridRowGap: number;
@@ -60,6 +62,22 @@ export const createSetAutoLayoutHandler =
         if (typeof p.counterAxisAlignItems === 'string')
           target.counterAxisAlignItems = p.counterAxisAlignItems;
         if (typeof p.layoutWrap === 'string') target.layoutWrap = p.layoutWrap;
+        // Wrap cross-axis: the row gap and the row distribution (→ CSS row-gap / align-content).
+        // Only meaningful under WRAP, so applied after layoutWrap (enabling wrap and setting its
+        // row gap works in one call) and rejected loudly otherwise — Figma would otherwise ignore
+        // the value, and a silent no-op is the worst failure mode for an authoring tool.
+        const wantsCrossAxis =
+          p.counterAxisSpacing !== undefined || p.counterAxisAlignContent !== undefined;
+        if (wantsCrossAxis && target.layoutWrap !== 'WRAP') {
+          throw new Error(
+            'set_auto_layout: counterAxisSpacing / counterAxisAlignContent apply only to a ' +
+              'wrapping flex — pass layoutWrap: "WRAP" (in this call or before)',
+          );
+        }
+        if (typeof p.counterAxisSpacing === 'number')
+          target.counterAxisSpacing = p.counterAxisSpacing;
+        if (typeof p.counterAxisAlignContent === 'string')
+          target.counterAxisAlignContent = p.counterAxisAlignContent;
       }
     }
 

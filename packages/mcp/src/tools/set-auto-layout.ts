@@ -8,8 +8,10 @@ export const setAutoLayoutTool: ToolSpec = {
   name: SET_AUTO_LAYOUT_TOOL_NAME,
   description:
     "Configure a frame's auto layout. layoutMode NONE disables it; HORIZONTAL/VERTICAL enable flex " +
-    '(padding / itemSpacing / alignment / wrap); GRID enables CSS-Grid-style layout ' +
-    '(padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). Returns { ok, nodeId }.',
+    '(padding / itemSpacing / alignment / wrap, plus counterAxisSpacing / counterAxisAlignContent ' +
+    'for the wrapped cross axis — the CSS row-gap / align-content); GRID enables CSS-Grid-style ' +
+    'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). ' +
+    'Returns { ok, nodeId }.',
   inputShape: {
     nodeId: z.string(),
     layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']),
@@ -22,6 +24,21 @@ export const setAutoLayoutTool: ToolSpec = {
     primaryAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional(),
     counterAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'BASELINE']).optional(),
     layoutWrap: z.enum(['NO_WRAP', 'WRAP']).optional(),
+    counterAxisSpacing: z
+      .number()
+      .min(0)
+      .optional()
+      .describe(
+        'Cross-axis gap between wrapped rows (px) — the CSS row-gap when it differs from ' +
+          'itemSpacing (gap: 16px 8px). Requires layoutWrap WRAP (settable in the same call)',
+      ),
+    counterAxisAlignContent: z
+      .enum(['AUTO', 'SPACE_BETWEEN'])
+      .optional()
+      .describe(
+        'How wrapped rows distribute along the cross axis: AUTO packs them at counterAxisSpacing, ' +
+          'SPACE_BETWEEN spreads them (align-content). Requires layoutWrap WRAP',
+      ),
     // GRID
     gridRowCount: z.number().int().positive().optional(),
     gridColumnCount: z.number().int().positive().optional(),

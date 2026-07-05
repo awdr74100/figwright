@@ -17,6 +17,8 @@ const makeFrame = () => ({
   primaryAxisAlignItems: 'MIN',
   counterAxisAlignItems: 'MIN',
   layoutWrap: 'NO_WRAP',
+  counterAxisSpacing: null as number | null,
+  counterAxisAlignContent: 'AUTO',
   gridRowCount: 0,
   gridColumnCount: 0,
   gridRowGap: 0,
@@ -73,6 +75,40 @@ describe('set_auto_layout handler', () => {
     expect(node.gridColumnGap).toBe(12);
     expect(node.itemSpacing).toBe(0); // unchanged — itemSpacing is flex-only
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
+  it('sets the wrap cross-axis (row gap + align-content) when enabling WRAP in the same call', async () => {
+    const node = makeFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      layoutMode: 'HORIZONTAL',
+      itemSpacing: 8,
+      layoutWrap: 'WRAP',
+      counterAxisSpacing: 16,
+      counterAxisAlignContent: 'SPACE_BETWEEN',
+    });
+    expect(node.layoutWrap).toBe('WRAP');
+    expect(node.counterAxisSpacing).toBe(16);
+    expect(node.counterAxisAlignContent).toBe('SPACE_BETWEEN');
+  });
+
+  it('sets the row gap on an already-wrapping frame without re-passing layoutWrap', async () => {
+    const node = makeFrame();
+    node.layoutWrap = 'WRAP';
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({ nodeId: '1:1', layoutMode: 'HORIZONTAL', counterAxisSpacing: 24 });
+    expect(node.counterAxisSpacing).toBe(24);
+  });
+
+  it('rejects cross-axis fields on a non-wrapping flex instead of a silent no-op', async () => {
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': makeFrame() }));
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'HORIZONTAL', counterAxisSpacing: 16 }),
+    ).rejects.toThrow(/apply only to a wrapping flex/);
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'VERTICAL', counterAxisAlignContent: 'SPACE_BETWEEN' }),
+    ).rejects.toThrow(/layoutWrap/);
   });
 
   it('throws on bad layoutMode or a node without auto layout', async () => {
