@@ -41,8 +41,13 @@ const cleanStyleIds = (ids: Record<string, string>): Record<string, string> => {
  * The full branch is one serializeFlatSync, every field from flat — so no detail level does more
  * work than it used to. Across all branches, no-op defaults (visible=true / rotation=0 / opacity=1)
  * are omitted.
+ *
+ * Exported for the projection-coverage guard test: the full branch below is a hand-copied field
+ * list, historically this codebase's most recurring bug (serializer emits a dimension, this
+ * projection silently drops it). The guard diffs these fields against SerializedNodeSchema so a new
+ * serializer dimension fails a test instead of silently missing from codegen grounding.
  */
-const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
+export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode => {
   if (detail === 'minimal') return { id: node.id, name: node.name, type: node.type };
   if (detail === 'compact') {
     const out: DesignContextNode = {
