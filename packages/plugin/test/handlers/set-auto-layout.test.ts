@@ -111,6 +111,27 @@ describe('set_auto_layout handler', () => {
     ).rejects.toThrow(/layoutWrap/);
   });
 
+  it('rejects the contradiction before mutating anything (no partial change left behind)', async () => {
+    // NO_WRAP + counterAxisSpacing is contradictory input. Caught live: the first cut applied
+    // layoutWrap (and layoutMode/itemSpacing) before throwing, leaving a partial change.
+    const node = makeFrame();
+    node.layoutMode = 'HORIZONTAL';
+    node.layoutWrap = 'WRAP';
+    node.itemSpacing = 8;
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await expect(
+      handler({
+        nodeId: '1:1',
+        layoutMode: 'HORIZONTAL',
+        itemSpacing: 99,
+        layoutWrap: 'NO_WRAP',
+        counterAxisSpacing: 20,
+      }),
+    ).rejects.toThrow(/apply only to a wrapping flex/);
+    // Every field untouched — the reject happened before the first mutation.
+    expect(node).toMatchObject({ layoutMode: 'HORIZONTAL', layoutWrap: 'WRAP', itemSpacing: 8 });
+  });
+
   it('throws on bad layoutMode or a node without auto layout', async () => {
     const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': makeFrame() }));
     await expect(handler({ nodeId: '1:1', layoutMode: 'DIAGONAL' })).rejects.toThrow(/layoutMode/);

@@ -38,6 +38,24 @@ export const createSetAutoLayoutHandler =
       throw new Error(`set_auto_layout: node ${p.nodeId} not found or has no auto layout`);
     }
     const target = node as unknown as AutoLayoutTarget;
+
+    // Wrap cross-axis (counterAxisSpacing / counterAxisAlignContent → CSS row-gap /
+    // align-content) is only meaningful on a wrapping flex. Validate BEFORE any mutation —
+    // this is a contradiction in the inputs, and rejecting it after layoutWrap was already
+    // applied would leave a partial change behind (caught live). Rejected loudly rather than
+    // deferred to Figma, whose silent ignore is the worst failure mode for an authoring tool.
+    const wantsCrossAxis =
+      p.counterAxisSpacing !== undefined || p.counterAxisAlignContent !== undefined;
+    if (wantsCrossAxis && (p.layoutMode === 'HORIZONTAL' || p.layoutMode === 'VERTICAL')) {
+      const effectiveWrap = typeof p.layoutWrap === 'string' ? p.layoutWrap : target.layoutWrap;
+      if (effectiveWrap !== 'WRAP') {
+        throw new Error(
+          'set_auto_layout: counterAxisSpacing / counterAxisAlignContent apply only to a ' +
+            'wrapping flex — pass layoutWrap: "WRAP" (in this call or before)',
+        );
+      }
+    }
+
     // Set the mode first: grid counts / gaps only become writable once layoutMode is GRID.
     target.layoutMode = p.layoutMode;
 
@@ -62,18 +80,8 @@ export const createSetAutoLayoutHandler =
         if (typeof p.counterAxisAlignItems === 'string')
           target.counterAxisAlignItems = p.counterAxisAlignItems;
         if (typeof p.layoutWrap === 'string') target.layoutWrap = p.layoutWrap;
-        // Wrap cross-axis: the row gap and the row distribution (→ CSS row-gap / align-content).
-        // Only meaningful under WRAP, so applied after layoutWrap (enabling wrap and setting its
-        // row gap works in one call) and rejected loudly otherwise — Figma would otherwise ignore
-        // the value, and a silent no-op is the worst failure mode for an authoring tool.
-        const wantsCrossAxis =
-          p.counterAxisSpacing !== undefined || p.counterAxisAlignContent !== undefined;
-        if (wantsCrossAxis && target.layoutWrap !== 'WRAP') {
-          throw new Error(
-            'set_auto_layout: counterAxisSpacing / counterAxisAlignContent apply only to a ' +
-              'wrapping flex — pass layoutWrap: "WRAP" (in this call or before)',
-          );
-        }
+        // Wrap cross-axis, validated up front; applied after layoutWrap so enabling wrap and
+        // setting its row gap works in one call.
         if (typeof p.counterAxisSpacing === 'number')
           target.counterAxisSpacing = p.counterAxisSpacing;
         if (typeof p.counterAxisAlignContent === 'string')
