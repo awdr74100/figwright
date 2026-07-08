@@ -283,8 +283,7 @@ const onResizeEnd = (e: PointerEvent): void => {
                 <p class="mb-1 text-fig-muted">request</p>
                 <pre
                   class="mb-2 max-h-40 overflow-auto rounded bg-black/30 p-2 text-[11px] leading-snug"
-                  >{{ e.request.preview }}</pre
-                >
+                  >{{ e.request.preview }}</pre>
               </template>
               <div class="mb-1 flex items-center gap-2 text-fig-muted">
                 <span class="min-w-0 truncate"
@@ -299,8 +298,7 @@ const onResizeEnd = (e: PointerEvent): void => {
               </div>
               <pre
                 class="max-h-64 overflow-auto rounded bg-black/30 p-2 text-[11px] leading-snug"
-                >{{ e.payload.preview }}</pre
-              >
+                >{{ e.payload.preview }}</pre>
               <p v-if="e.payload.truncated" class="mt-1 text-fig-muted">
                 Showing the first part only — the full result was larger.
               </p>
