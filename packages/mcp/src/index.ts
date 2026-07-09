@@ -20,6 +20,7 @@ import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screens
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS } from './tools/registry.js';
+import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
 import type { ToolSpec } from './tools/spec.js';
@@ -92,6 +93,8 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   }),
   [SAVE_SCREENSHOTS_TOOL_NAME]: async args =>
     textResult(await handleSaveScreenshots(dispatch, args)),
+  [SAVE_IMAGE_FILLS_TOOL_NAME]: async args =>
+    textResult(await handleSaveImageFills(dispatch, args)),
   [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(dispatch, args)),
   [GET_SCREENSHOT_TOOL_NAME]: async args => ({
     content: screenshotContent(

@@ -73,6 +73,7 @@ import { reorderNodesTool } from './reorder-nodes.js';
 import { reparentNodesTool } from './reparent-nodes.js';
 import { resizeNodesTool } from './resize-nodes.js';
 import { rotateNodesTool } from './rotate-nodes.js';
+import { saveImageFillsTool } from './save-image-fills.js';
 import { saveScreenshotsTool } from './save-screenshots.js';
 import { scanComponentsTool } from './scan-components.js';
 import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
@@ -131,6 +132,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   getDesignContextTool,
   getScreenshotTool,
   saveScreenshotsTool,
+  saveImageFillsTool,
   exportPdfTool,
   // Server-local (filesystem; no plugin handler — like save_screenshots). analyze_project is an
   // optional standalone probe; scan_components / component_map also run detection internally.

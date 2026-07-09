@@ -66,6 +66,7 @@ import { createReorderNodesHandler } from './reorder-nodes.js';
 import { createReparentNodesHandler } from './reparent-nodes.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
 import { createRotateNodesHandler } from './rotate-nodes.js';
+import { createSaveImageFillsHandler } from './save-image-fills.js';
 import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './scan-text-nodes.js';
 import { createSearchNodesHandler } from './search-nodes.js';
@@ -206,6 +207,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     list_files: createListFilesHandler(figmaCtx),
     get_design_context: createGetDesignContextHandler(figmaCtx),
     get_screenshot: createGetScreenshotHandler(figmaCtx),
+    save_image_fills: createSaveImageFillsHandler(figmaCtx),
     export_pdf: createExportPdfHandler(figmaCtx),
   };
 

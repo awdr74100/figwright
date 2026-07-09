@@ -63,7 +63,9 @@ Run the grounded tools against the selection, then generate — **trust them ove
      groups (`Color/Light/*` + `Color/Dark/*`, a plan-limited workaround) — get the same treatment.
 
 4. **Export the assets grounding can't carry** — logos, photos, icons have no pixels and otherwise
-   render as grey blocks. `get_screenshot` (and `icon_map` first for icons, to reuse curated `.svg`s).
+   render as grey blocks. `save_image_fills` for `IMAGE`-fill nodes (the original asset, not a
+   clipped re-render), `icon_map` first for icons (reuse curated `.svg`s), `get_screenshot` only for
+   the composited look.
    → **Full asset/icon/svg/colour-contract workflow:
    [`references/assets-and-icons.md`](./references/assets-and-icons.md).**
 

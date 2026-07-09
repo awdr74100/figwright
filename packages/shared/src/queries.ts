@@ -93,6 +93,66 @@ export const ExportPdfResultSchema = z.object({
 });
 export type ExportPdfResult = z.infer<typeof ExportPdfResultSchema>;
 
+// ── save_image_fills ─────────────────────────────────────────────────────────
+/**
+ * One IMAGE fill's ORIGINAL bytes, as uploaded — no mask, clip, crop, scale, or effects applied
+ * (unlike get_screenshot / save_screenshots, which re-render the composited node). `index` is the
+ * paint's position in node.fills; `imageHash` identifies the shared asset (the same hash reused
+ * across nodes points at one file). `base64` is null when the hash can't be resolved to an image.
+ * `width`/`height` are the image's intrinsic pixel size; `scaleMode` is how the fill is displayed.
+ */
+export const ImageFillBytesSchema = z.object({
+  index: z.number(),
+  imageHash: z.string().nullable(),
+  base64: z.string().nullable(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  scaleMode: z.string().optional(),
+});
+export type ImageFillBytes = z.infer<typeof ImageFillBytesSchema>;
+
+/**
+ * A node's extractable image fills. `images` is empty when the node is missing, has no `fills`
+ * property, or carries no IMAGE paint; `mixed:true` marks a node whose `fills` are mixed
+ * (per-text-range) and so weren't enumerable.
+ */
+export const NodeImageFillsSchema = z.object({
+  nodeId: z.string(),
+  images: z.array(ImageFillBytesSchema),
+  mixed: z.boolean().optional(),
+});
+export type NodeImageFills = z.infer<typeof NodeImageFillsSchema>;
+
+/** Plugin-side result: raw image-fill bytes per node, before the server lands them on disk. */
+export const ImageFillsResultSchema = z.object({ nodes: z.array(NodeImageFillsSchema) });
+export type ImageFillsResult = z.infer<typeof ImageFillsResultSchema>;
+
+/**
+ * Per-fill write result. `path` is the written file (named by imageHash so identical images share
+ * one file) or null when the fill's image couldn't be resolved. `format` is sniffed from the bytes
+ * (PNG / JPG / GIF / WEBP, or BIN for an unrecognized container) and absent when path is null.
+ */
+export const SavedImageFillSchema = z.object({
+  index: z.number(),
+  imageHash: z.string().nullable(),
+  format: z.string().optional(),
+  path: z.string().nullable(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  scaleMode: z.string().optional(),
+});
+export type SavedImageFill = z.infer<typeof SavedImageFillSchema>;
+
+export const SavedNodeImageFillsSchema = z.object({
+  nodeId: z.string(),
+  images: z.array(SavedImageFillSchema),
+  mixed: z.boolean().optional(),
+});
+export type SavedNodeImageFills = z.infer<typeof SavedNodeImageFillsSchema>;
+
+export const SaveImageFillsResultSchema = z.object({ nodes: z.array(SavedNodeImageFillsSchema) });
+export type SaveImageFillsResult = z.infer<typeof SaveImageFillsResultSchema>;
+
 // ── get_viewport ───────────────────────────────────────────────────────────
 export const GetViewportResultSchema = z.object({
   center: z.object({ x: z.number(), y: z.number() }),

@@ -8,13 +8,24 @@ pixel asset grounding can't encode.
 
 ## What to export, and how
 
-- A node with an **`IMAGE` fill** (a photo / product-shot rectangle) → `get_screenshot` `PNG` (scale 2).
+- A node with an **`IMAGE` fill** (a photo / product-shot rectangle) → **`save_image_fills`**. It
+  writes the **original** uploaded asset (no clip, crop, scale, gradient, or mask baked in) and reports
+  each fill's `scaleMode` + intrinsic size, so you reproduce the display in CSS (`FILL`→`object-fit:
+cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render. It dedupes a reused
+  asset to one file (named by hash) and handles a node carrying several image fills. Reach for
+  `save_screenshots` / `get_screenshot` `PNG` **only** when you specifically need the **composited**
+  look — a `CROP` region, mask, or gradient overlay you can't reproduce in CSS.
 - A **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
   small square instance) → **`icon_map` first, `get_screenshot` `SVG` only as the fallback** (below).
 - **Logos / brand marks are always exported**, never typed by hand.
+- Because `save_image_fills` reads the source bytes, a **clipped / off-canvas** node still yields its
+  full asset — the empty/recovered dance below only applies to the screenshot fallback. A **`path:
+null`** (or `images: []`) means the fill's image couldn't be resolved / the node has no image fill;
+  don't invent a file, fall back to a screenshot or skip.
 - An **`empty: true` export rendered nothing** (node hidden / fully clipped / off-canvas — e.g. a
-  marquee's off-screen edge logos). Don't ship the blank file: if grounding shows the instance has
-  art, re-export its `mainComponent`; if it's genuinely empty, skip it.
+  marquee's off-screen edge logos) — a **screenshot-fallback** concern only. Don't ship the blank
+  file: if grounding shows the instance has art, re-export its `mainComponent`; if it's genuinely
+  empty, skip it.
 
 ## Icons: reuse before re-export (`icon_map`)
 

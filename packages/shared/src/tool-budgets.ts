@@ -27,6 +27,7 @@ export const BUDGET_LAYER_MARGIN_MS = 5_000;
 const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'get_screenshot',
   'save_screenshots',
+  'save_image_fills',
   'export_pdf',
   'get_document',
   'get_design_context',
