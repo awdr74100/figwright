@@ -1,9 +1,10 @@
-import { glob, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { fdir } from 'fdir';
 import ignore, { type Ignore } from 'ignore';
 
-import { globExclude, isIgnoredPath } from './ignored-dirs.js';
+import { IGNORED_DIRS } from './ignored-dirs.js';
 
 // The one repo file walk shared by every server-side scan (components, the Tailwind CSS probe, the
 // token aggregator). "What to skip" is layered defense-in-depth so it's correct with OR without a
@@ -11,19 +12,24 @@ import { globExclude, isIgnoredPath } from './ignored-dirs.js';
 //
 //   1. .gitignore (+ .git/info/exclude) — the target project's own, authoritative declaration of what
 //      isn't hand-written source. Read when present; honored via the `ignore` package (gitignore-spec
-//      matcher: anchoring, globs, negation, directory rules). This is the strongest, most general
-//      signal — it auto-covers a project's vendor/build/generated dirs without us hardcoding them.
-//   2. IGNORED_DIRS baseline — pruned at the glob level (globExclude), so node_modules / vendor are
-//      never descended into (traversal cost independent of their size). This is the *fallback*: when a
-//      project has no .gitignore, this is the only directory defense, so it must stay.
-//   3. cap — a terminal yield limit, the last line against a pathological repo with a huge custom dir
-//      that's neither in the baseline nor gitignored.
+//      matcher: anchoring, globs, negation, directory rules). Applied per *file* so negations survive
+//      (`!Special.tsx` under `*.tsx` re-includes) — a directory-level prune couldn't put a negated
+//      child back. This is the strongest, most general signal — it auto-covers a project's
+//      vendor/build/generated dirs without us hardcoding them.
+//   2. IGNORED_DIRS baseline (+ dotfiles/dot-dirs) — pruned at the traversal level (fdir `exclude`), so
+//      node_modules / vendor are never descended into (cost independent of their size). This is the
+//      *fallback*: when a project has no .gitignore, this is the only directory defense, so it must
+//      stay. Dot-directories and dotfiles are skipped too, matching the prior node:fs glob semantics
+//      (its `*`/`**` never crossed a leading dot).
+//   3. cap — a terminal limit (fdir `withMaxFiles`, which counts kept files and early-stops the walk),
+//      the last line against a pathological repo with a huge custom dir that's neither baseline nor
+//      gitignored.
 //
 // The .gitignore layer is a *union* on top of the baseline, never a replacement — so "no .gitignore"
 // degrades exactly to the baseline-only behavior (no regression), and "has .gitignore" only adds
 // precision (skips gitignored source-like files the baseline would miss). The matcher needs full
-// repo-relative paths (rules can be anchored / path-specific), which is why it post-filters the glob
-// results rather than riding the basename-only `exclude` callback.
+// repo-relative posix paths (rules can be anchored / path-specific), which is why the walk forces a
+// `/` separator on every platform.
 
 const DEFAULT_CAP = 5000;
 
@@ -63,20 +69,23 @@ export async function* walkRepoFiles(
 ): AsyncGenerator<string> {
   const cap = opts.cap ?? DEFAULT_CAP;
   const exts = opts.extensions?.map(e => (e.startsWith('.') ? e : `.${e}`));
-  // One glob per extension, not a `{a,b}` brace group: node's fs glob won't expand a single-element
-  // brace (`**/*{.vue}` finds nothing), which silently sank every single-extension profile.
-  const patterns = exts === undefined ? ['**/*'] : exts.map(e => `**/*${e}`);
-
   const matcher = await buildIgnoreMatcher(rootDir);
-  let count = 0;
 
-  for await (const entry of glob(patterns, { cwd: rootDir, exclude: globExclude })) {
-    const rel = typeof entry === 'string' ? entry : String(entry);
-    const posix = rel.split(/[\\/]/).join('/'); // gitignore matcher wants posix-relative paths
-    if (isIgnoredPath(posix)) continue; // defense-in-depth (exclude already pruned these dirs)
-    if (matcher.ignores(posix)) continue; // gitignored source-like file
-    if (count >= cap) break;
-    count += 1;
-    yield posix;
-  }
+  const files = await new fdir()
+    .withRelativePaths() // repo-relative paths, files only (never directory entries)
+    .withPathSeparator('/') // posix on every platform — the gitignore matcher requires it
+    .withMaxFiles(cap) // counts kept files and early-stops the walk (pathological-repo guard)
+    // Directory pruning: never descend baseline dirs (node_modules/vendor/…) or dot-directories. fdir
+    // hands `exclude` the directory basename, matching IGNORED_DIRS' per-segment semantics.
+    .exclude(dirName => dirName.startsWith('.') || IGNORED_DIRS.has(dirName))
+    .filter(path => {
+      const base = path.slice(path.lastIndexOf('/') + 1);
+      if (base.startsWith('.')) return false; // dotfile — parity with node:fs glob (`*` skips leading dot)
+      if (exts !== undefined && !exts.some(e => base.endsWith(e))) return false;
+      return !matcher.ignores(path); // gitignored source-like file (negation-aware)
+    })
+    .crawl(rootDir)
+    .withPromise();
+
+  yield* files;
 }

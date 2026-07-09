@@ -53,6 +53,23 @@ describe('walkRepoFiles', () => {
     ]);
   });
 
+  it('skips dotfiles and never descends dot-directories (parity with the prior node:fs glob)', async () => {
+    const root = await make({
+      'src/Keep.tsx': 'x',
+      '.hidden.tsx': 'x', // root dotfile → skipped
+      'src/.secret.tsx': 'x', // nested dotfile → skipped
+      '.storybook/Preview.tsx': 'x', // non-baseline dot-dir → not descended
+      'sub/.dot/Deep.tsx': 'x', // nested dot-dir → not descended
+    });
+    expect(await collect(root, { extensions: ['.tsx'] })).toEqual(['src/Keep.tsx']);
+  });
+
+  it('yields only files, never directory entries', async () => {
+    const root = await make({ 'src/a.tsx': 'x', 'src/nested/b.css': 'x' });
+    // No extension filter → every file, but never the "src" / "src/nested" directories themselves.
+    expect(await collect(root)).toEqual(['src/a.tsx', 'src/nested/b.css']);
+  });
+
   it('walks a non-baseline dir when there is no .gitignore (degrades to baseline-only)', async () => {
     const root = await make({ 'src/A.tsx': 'x', 'generated/B.tsx': 'x' });
     // No .gitignore → "generated" isn't baseline → it IS walked (matches pre-gitignore behavior).

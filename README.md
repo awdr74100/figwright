@@ -194,7 +194,7 @@ Figwright exposes **102 MCP tools** in three groups:
 ## Requirements
 
 - An **MCP client** (Claude Code, Cursor, …).
-- **Node.js 24 LTS or newer** — the server runs via `npx`.
+- **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported.)
 - **Figma** — the free tier is enough; the desktop app is needed to import the plugin in development.
 
 ## FAQ

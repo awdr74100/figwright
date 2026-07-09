@@ -21,6 +21,7 @@
     "currentpagechange",
     "selectionchange",
     "vueuse",
-    "changelogen"
+    "changelogen",
+    "fdir"
   ]
 }

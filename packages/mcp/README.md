@@ -23,7 +23,7 @@ The server talks to the Figwright Figma plugin running in your Figma app. See th
 
 ## Requirements
 
-- Node.js 24 LTS or newer
+- Node.js 20.19+ or 22.12+ (the server runs via `npx` as its own process, independent of your project's Node version)
 
 ## Links
 
