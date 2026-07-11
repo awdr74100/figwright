@@ -767,11 +767,11 @@ describe('get_design_context handler', () => {
 describe('get_design_context node-count bail (budget)', () => {
   /** A root whose subtree exceeds DESIGN_CONTEXT_BAIL_NODES: sections × leaves grid + 1 root. */
   const bigTree = (sections = 8, leavesPer = 250): SceneNode => {
-    const sectionNodes = Array.from({ length: sections }, (unusedS, s) =>
+    const sectionNodes = Array.from({ length: sections }, (_a, s) =>
       node({
         id: `s${s}`,
         name: `Section ${s}`,
-        children: Array.from({ length: leavesPer }, (unusedL, l) =>
+        children: Array.from({ length: leavesPer }, (_b, l) =>
           node({ id: `s${s}-l${l}`, type: 'RECTANGLE' }),
         ),
       }),
@@ -828,10 +828,10 @@ describe('get_design_context node-count bail (budget)', () => {
   });
 
   it('descends through a single-child wrapper and caps very wide plans', async () => {
-    const wide = Array.from({ length: 80 }, (unusedW, i) =>
+    const wide = Array.from({ length: 80 }, (_a, i) =>
       node({
         id: `w${i}`,
-        children: Array.from({ length: 30 }, (unusedL, l) => node({ id: `w${i}-l${l}` })),
+        children: Array.from({ length: 30 }, (_b, l) => node({ id: `w${i}-l${l}` })),
       }),
     );
     const wrapper = node({ id: 'wrap', name: 'Wrapper', children: wide });
