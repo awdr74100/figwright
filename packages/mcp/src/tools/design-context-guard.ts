@@ -61,6 +61,9 @@ const projectToCompact = (node: DesignContextNode): DesignContextNode => {
   if (node.y !== undefined) out.y = node.y;
   if (node.width !== undefined) out.width = node.width;
   if (node.height !== undefined) out.height = node.height;
+  // The plugin sets an instance's mainComponentId at every detail level (only the resolved
+  // mainComponent object is full-only), so the downgrade keeps instance→component identity too.
+  if (node.mainComponentId !== undefined) out.mainComponentId = node.mainComponentId;
   if (node.truncated === true) out.truncated = true;
   if (node.deduped === true) out.deduped = true;
   if (node.children !== undefined) out.children = node.children.map(projectToCompact);

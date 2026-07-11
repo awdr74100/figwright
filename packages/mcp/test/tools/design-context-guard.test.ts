@@ -38,7 +38,10 @@ const oversizedFull = (): GetDesignContextResult => {
   const sections = ['a', 'b'].map((s, i) =>
     leaf(`s${i}`, {
       name: `Section ${s}`,
-      type: 'FRAME',
+      type: i === 1 ? 'INSTANCE' : 'FRAME',
+      // The second section is an instance: identity (mainComponentId) must survive the compact
+      // downgrade while the full-only resolved mainComponent object must not.
+      ...(i === 1 ? { mainComponentId: 'c:9', mainComponent: { id: 'c:9', name: 'Card' } } : {}),
       x: 0,
       y: 0,
       width: 100,
@@ -110,6 +113,10 @@ describe('handleDesignContext (the public-path guard)', () => {
     expect(r.sectionPlan).toBeUndefined();
     expect(r.globalVars).toBeUndefined();
     expect(r.nodes[0]?.children).toHaveLength(2);
+    // Instance→component identity survives the downgrade (plugin compact carries it too);
+    // the full-only resolved mainComponent object does not.
+    expect(r.nodes[0]?.children?.[1]?.mainComponentId).toBe('c:9');
+    expect(r.nodes[0]?.children?.[1]?.mainComponent).toBeUndefined();
     const firstLeaf = r.nodes[0]?.children?.[0]?.children?.[0];
     expect(firstLeaf).toEqual({
       id: 's0-l0',
