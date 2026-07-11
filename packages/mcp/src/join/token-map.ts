@@ -335,7 +335,12 @@ const joinOne = (
     const target = splitScale(figma.name);
     const scored = valueMatches
       .map(token => ({ token, score: nameScore(target, token, typography) }))
-      .toSorted((a, b) => b.score - a.score || a.token.name.localeCompare(b.token.name));
+      // Code-point name compare (not localeCompare) so the tie-break order is environment-independent.
+      .toSorted(
+        (a, b) =>
+          b.score - a.score ||
+          (a.token.name < b.token.name ? -1 : a.token.name > b.token.name ? 1 : 0),
+      );
     const top = scored[0] as NameMatch;
     const runnerUp = scored[1];
     const nameDisambiguates =
