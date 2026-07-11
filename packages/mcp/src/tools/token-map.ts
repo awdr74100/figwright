@@ -54,7 +54,10 @@ export const tokenMapTool: ToolSpec = {
     "Map the document's Figma variables to the project's design tokens, so generated code references " +
     'existing tokens instead of hard-coded values. Joins the grounded Figma variable names + values ' +
     'against tokens parsed from the project CSS (Tailwind v4 @theme or :root custom properties); the ' +
-    'match is name-based with an exact color value-match as confirmation. On a Tailwind project a ' +
+    'match is name-based with an exact color value-match as confirmation. When several project ' +
+    'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
+    "below 'high' and candidate.ambiguousWith lists the other same-value tokens — verify that pick " +
+    'semantically instead of trusting it blindly. On a Tailwind project a ' +
     'variable that hits a framework built-in scale (spacing/N, line-height/N, weight/*) is reported as ' +
     "status 'framework-builtin' with { builtin: { scale, step } } rather than unmapped — it has no " +
     '@theme token but the utility (p-4 / gap-4, leading-7, font-bold) is still usable. A variable in ' +

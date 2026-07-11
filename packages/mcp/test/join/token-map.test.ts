@@ -275,3 +275,61 @@ describe('joinTokens', () => {
     expect(m?.status).not.toBe('high');
   });
 });
+
+describe('joinTokens — same-value siblings (value-match ambiguity)', () => {
+  // Real projects alias one color to several tokens; #FFFFFF is the canonical case. A value-only
+  // match must never bind an arbitrary sibling at high confidence — that silently diverges the
+  // moment the wrongly-chosen token is retuned.
+  const whites: ProjectToken[] = [
+    proj('color-white', '#FFFFFF', 'white', 'color'),
+    proj('color-background', '#FFFFFF', 'background', 'color'),
+    proj('color-card', '#FFFFFF', 'card', 'color'),
+  ];
+
+  it('lets the name pick the winner among same-value tokens', () => {
+    const [m] = joinTokens([fig('Colors/Card', '#FFFFFF')], whites, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-card');
+    expect(m?.candidate?.matchedBy).toEqual(['name', 'value']);
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+    expect(m?.status).toBe('high');
+  });
+
+  it('caps below high and lists the siblings when the name carries no signal', () => {
+    const [m] = joinTokens([fig('Brand/Snow', '#FFFFFF')], whites, { threshold: 0.7 });
+    expect(m?.candidate).toBeDefined();
+    expect(m?.candidate?.matchedBy).toEqual(['value']);
+    expect(m?.candidate?.confidence).toBeLessThan(0.85);
+    expect(m?.status).toBe('medium');
+    // The pick plus its listed siblings must cover all three same-value tokens exactly.
+    const names = [m?.candidate?.token, ...(m?.candidate?.ambiguousWith ?? [])].toSorted();
+    expect(names).toEqual(['color-background', 'color-card', 'color-white']);
+  });
+
+  it('is deterministic regardless of project token order', () => {
+    const [a] = joinTokens([fig('Brand/Snow', '#FFFFFF')], whites, { threshold: 0.7 });
+    const [b] = joinTokens([fig('Brand/Snow', '#FFFFFF')], whites.toReversed(), {
+      threshold: 0.7,
+    });
+    expect(a?.candidate?.token).toBe(b?.candidate?.token);
+    expect(a?.candidate?.ambiguousWith).toEqual(b?.candidate?.ambiguousWith);
+  });
+
+  it('treats a name-score tie among siblings as ambiguous, not a confident pick', () => {
+    // Without utilities, "brand" Dice-scores identically against color-brand and brand-color
+    // (0.615 each) — no split, so the pick must be flagged, not confidently bound.
+    const tied = [proj('color-brand', '#123456'), proj('brand-color', '#123456')];
+    const [m] = joinTokens([fig('brand', '#123456')], tied, { threshold: 0.7 });
+    expect(m?.candidate?.ambiguousWith).toHaveLength(1);
+    expect(m?.status).not.toBe('high');
+  });
+
+  it('keeps the unique value-match at 0.9 high (unchanged behaviour)', () => {
+    const unique = [proj('color-primary-500', '#6266F0', 'primary-500', 'color')];
+    const [m] = joinTokens([fig('Brand/Indigo', '#6266F0')], unique, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-primary-500');
+    expect(m?.candidate?.matchedBy).toEqual(['value']);
+    expect(m?.candidate?.confidence).toBe(0.9);
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+    expect(m?.status).toBe('high');
+  });
+});

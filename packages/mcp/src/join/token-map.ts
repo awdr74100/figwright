@@ -4,7 +4,9 @@ import { diceSimilarity, type MappingStatus } from './component-map.js';
 
 // The token join: Figma variable → project design token. Name-match is the primary, framework-agnostic
 // signal (normalized Figma "Primary/500" vs project "color-primary-500" / utility "primary-500"); an
-// exact color value-match is a strong confirmation that survives naming drift. Value-match is limited
+// exact color value-match is a strong confirmation that survives naming drift — but only a *unique*
+// one is trusted on its own; same-value siblings are split by name or reported as ambiguous (see
+// joinOne). Value-match is limited
 // to hex colors on purpose — Tailwind v4 defaults ship oklch() and Figma exports hex, so cross-space
 // color matching (and unit-aware number matching) is deferred; those still fall back to name-match.
 // Pure, like the component join, so it's unit-testable without Figma or the filesystem.
@@ -32,6 +34,13 @@ export interface TokenMapping {
     confidence: number;
     /** Which signals agreed: name similarity and/or exact color value. */
     matchedBy: ('name' | 'value')[];
+    /**
+     * Other project tokens sharing the exact same color value, present only when the value alone
+     * had to pick among them (no name signal split the tie). The candidate is then a capped,
+     * deterministic pick — verify it semantically (or add an explicit override) before relying on
+     * it; binding the wrong same-value sibling silently diverges when that token is later retuned.
+     */
+    ambiguousWith?: string[];
   };
   /**
    * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
@@ -162,6 +171,14 @@ interface NameMatch {
   score: number;
 }
 
+/** Name-similarity score of one project token against a pre-split Figma name (max over its names). */
+const nameScore = (target: Scaled, token: ProjectToken, typography: boolean): number => {
+  let score = 0;
+  for (const name of matchNames(token))
+    score = Math.max(score, stepGatedScore(target, splitScale(name), typography));
+  return score;
+};
+
 const bestNameMatch = (
   figmaName: string,
   projectTokens: readonly ProjectToken[],
@@ -170,9 +187,7 @@ const bestNameMatch = (
   const target = splitScale(figmaName);
   let best: NameMatch | null = null;
   for (const token of projectTokens) {
-    let score = 0;
-    for (const name of matchNames(token))
-      score = Math.max(score, stepGatedScore(target, splitScale(name), typography));
+    const score = nameScore(target, token, typography);
     if (best === null || score > best.score) best = { token, score };
   }
   return best;
@@ -192,6 +207,7 @@ const candidateFrom = (
   confidence: number,
   matchedBy: ('name' | 'value')[],
   tailwind: boolean,
+  ambiguousWith?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
   ref: refOf(token, tailwind),
@@ -199,6 +215,9 @@ const candidateFrom = (
   ...(tailwind && token.utility !== undefined ? { utility: token.utility } : {}),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
+  ...(ambiguousWith !== undefined && ambiguousWith.length > 0
+    ? { ambiguousWith: [...ambiguousWith] }
+    : {}),
 });
 
 const statusFor = (confidence: number, threshold: number): MappingStatus => {
@@ -299,25 +318,55 @@ const joinOne = (
     status: 'unmapped',
   };
 
-  const nameMatch = bestNameMatch(
-    figma.name,
-    projectTokens,
-    isTypographyCollection(figma.collection),
-  );
+  const typography = isTypographyCollection(figma.collection);
+  const nameMatch = bestNameMatch(figma.name, projectTokens, typography);
 
-  // Exact color value-match: strong, naming-independent evidence.
+  // Exact color value-match: strong, naming-independent evidence — but only when it's unique.
+  // Real projects routinely alias one color to several tokens (--white / --background / --card all
+  // #FFFFFF); binding to "the first parsed" would pick an arbitrary sibling at high confidence, and
+  // a semantically wrong token is worse than a raw value (it silently diverges when that token is
+  // later retuned). Duplicates are split by name; when the name carries no signal the pick is
+  // capped below 'high' and the same-value siblings are surfaced on ambiguousWith.
   const figmaHex = typeof figma.value === 'string' ? normHex(figma.value) : null;
-  const valueMatch =
-    figmaHex === null ? undefined : projectTokens.find(t => normHex(t.value) === figmaHex);
+  const valueMatches =
+    figmaHex === null ? [] : projectTokens.filter(t => normHex(t.value) === figmaHex);
 
-  if (valueMatch !== undefined) {
-    const nameAgrees =
-      nameMatch !== null && nameMatch.token === valueMatch && nameMatch.score >= 0.5;
-    const confidence = nameAgrees ? 1 : 0.9;
-    const matchedBy: ('name' | 'value')[] = nameAgrees ? ['name', 'value'] : ['value'];
+  if (valueMatches.length > 0) {
+    const target = splitScale(figma.name);
+    const scored = valueMatches
+      .map(token => ({ token, score: nameScore(target, token, typography) }))
+      .toSorted((a, b) => b.score - a.score || a.token.name.localeCompare(b.token.name));
+    const top = scored[0] as NameMatch;
+    const runnerUp = scored[1];
+    const nameDisambiguates =
+      scored.length === 1 ||
+      (top.score >= 0.5 && (runnerUp === undefined || top.score > runnerUp.score));
+
+    if (nameDisambiguates) {
+      const nameAgrees =
+        nameMatch !== null && nameMatch.token === top.token && nameMatch.score >= 0.5;
+      const confidence = nameAgrees ? 1 : 0.9;
+      const matchedBy: ('name' | 'value')[] =
+        nameAgrees || (scored.length > 1 && top.score >= 0.5) ? ['name', 'value'] : ['value'];
+      return {
+        ...base,
+        candidate: candidateFrom(top.token, confidence, matchedBy, opts.tailwind === true),
+        status: statusFor(confidence, opts.threshold),
+      };
+    }
+
+    // Same-value siblings the name can't split: a deterministic pick (best name score, then token
+    // name), capped below the high bar so it reads as "verify me", with the alternatives attached.
+    const confidence = 0.7;
     return {
       ...base,
-      candidate: candidateFrom(valueMatch, confidence, matchedBy, opts.tailwind === true),
+      candidate: candidateFrom(
+        top.token,
+        confidence,
+        ['value'],
+        opts.tailwind === true,
+        scored.slice(1).map(s => s.token.name),
+      ),
       status: statusFor(confidence, opts.threshold),
     };
   }
