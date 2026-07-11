@@ -11,10 +11,12 @@ export const getDesignContextTool: ToolSpec = {
     'Get a depth-limited, token-efficient node tree — the main design-grounding read; prefer it ' +
     'over get_document / get_node for anything large. Starts from nodeId (a pasted Figma URL also ' +
     'works), else the current selection; errors when neither is available. ' +
-    'detail: minimal (id/name/type) / compact (+ geometry; the default) / full — only full carries ' +
-    'styling, layout, text and design-system tokens resolved to names plus a deduped globalVars ' +
-    'style table, so always use full (with dedupeComponents: true) when generating code; compact ' +
-    'is for cheap structure scans. depth limits child levels (omit or 0 = unlimited; cut nodes are ' +
+    'detail: minimal (id/name/type) / compact (+ geometry) / full (+ styling, layout, text and ' +
+    'design-system tokens resolved to names plus a deduped globalVars style table). Defaults to ' +
+    'full with dedupeComponents true — the code-generation view; pass detail: compact explicitly ' +
+    'for a cheap structure scan. An over-budget full result degrades gracefully: first to the ' +
+    'compact structure of the same tree (note attached), then to a sectionPlan. ' +
+    'depth limits child levels (omit or 0 = unlimited; cut nodes are ' +
     'flagged truncated). dedupeComponents collapses repeated instances of an already-expanded main ' +
     'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +
     'characters } — the visible text it actually renders) and propertyOverrides (its per-instance ' +
@@ -34,11 +36,11 @@ export const getDesignContextTool: ToolSpec = {
       .optional(),
     detail: z
       .enum(DETAIL_LEVELS)
-      .describe('How much per-node data: minimal / compact (default) / full')
+      .describe('How much per-node data: minimal / compact / full (default)')
       .optional(),
     dedupeComponents: z
       .boolean()
-      .describe('Collapse repeated instances of the same main component')
+      .describe('Collapse repeated instances of the same main component (default true)')
       .optional(),
   },
   kind: 'read',
