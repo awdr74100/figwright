@@ -196,6 +196,10 @@ throws away the structure inside each section → empty cards/rows). Scope **hor
 2. Then `get_design_context` **each section by its `nodeId` at full detail** (`dedupeComponents: true`),
    build that section, and move on. One section in context at a time.
 
+The tool enforces this on the worst cases: an over-budget call returns a **`sectionPlan`**
+(`{ sections: [{ nodeId, name, nodes }] }` + a `note`) instead of the tree — that plan **is** step 1,
+already done; ground each listed section by its `nodeId` as in step 2.
+
 **Ground every section the same way — never eyeball values off the screenshot for "the easy ones".**
 This is the cardinal failure: grounding the first sections properly, then guessing the rest to save
 effort. It produces a cascade of systematic errors — heading font-sizes all guessed too small, an

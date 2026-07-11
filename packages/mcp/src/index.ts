@@ -14,8 +14,10 @@ import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
+import { handleDesignContext } from './tools/design-context-guard.js';
 import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
 import { EXPORT_PDF_TOOL_NAME, handleExportPdf } from './tools/export-pdf.js';
+import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
@@ -108,6 +110,11 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [TOKEN_MAP_TOOL_NAME]: async args => textResult(await handleTokenMap(dispatch, args)),
   [ICON_MAP_TOOL_NAME]: async args => textResult(await handleIconMap(await routedDispatch(), args)),
   [DESIGN_DIFF_TOOL_NAME]: async args => textResult(await handleDesignDiff(dispatch, args)),
+  // The guarded public path: arms the plugin's node-count bail (budget: true) and applies the
+  // payload-size net + below-full note. Internal dispatches (design_diff, component/icon map) call
+  // the tool directly and stay raw.
+  [GET_DESIGN_CONTEXT_TOOL_NAME]: async args =>
+    textResult(await handleDesignContext(dispatch, args)),
 };
 
 // Annotations are derived from each spec, never hand-kept here: `kind` drives readOnlyHint and the

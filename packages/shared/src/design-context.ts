@@ -431,6 +431,48 @@ export const DesignContextMetricsSchema = z.object({
 });
 export type DesignContextMetrics = z.infer<typeof DesignContextMetricsSchema>;
 
+// Guardrail budgets for get_design_context (the hot grounding read). Two nets, outer coarse + inner
+// precise, both firing ONLY on the public tool path (the mcp layer marks it with budget: true);
+// internal consumers (design_diff snapshots, component/icon map walks) read the payload in-process —
+// it never enters an LLM context — so they always get the raw tree.
+//
+// - DESIGN_CONTEXT_BAIL_NODES gates plugin-side, BEFORE serialization: a cheap sync count walk so a
+//   hopeless tree skips the heavy main-thread work entirely. The count can't model dedupeComponents
+//   (it shrinks the payload, not the visit count), so the threshold is deliberately high — real
+//   whole-page groundings of several hundred nodes succeed today and must keep working; only
+//   pathological sizes bail.
+// - DESIGN_CONTEXT_CHAR_BUDGET gates mcp-side, AFTER serialization: the precise net. Anchored to
+//   Claude Code's default MCP result cap (MAX_MCP_OUTPUT_TOKENS = 25k tokens ≈ 100k chars of
+//   minified JSON) — a result beyond it errors out today and delivers nothing, so replacing it with
+//   a section plan is strictly an upgrade.
+export const DESIGN_CONTEXT_BAIL_NODES = 1500;
+export const DESIGN_CONTEXT_CHAR_BUDGET = 100_000;
+
+/** One entry of a section plan: a subtree the caller should ground individually. */
+export const DesignContextSectionSchema = z.object({
+  nodeId: z.string(),
+  name: z.string(),
+  type: z.string(),
+  /** Direct children of the section (0 = a leaf). */
+  childCount: z.number(),
+  /** Total nodes in the section's subtree — the size signal for splitting further. */
+  nodes: z.number(),
+});
+export type DesignContextSection = z.infer<typeof DesignContextSectionSchema>;
+
+export const DesignContextSectionPlanSchema = z.object({
+  /** Which net fired: the plugin's pre-serialization node count, or the mcp payload-size net. */
+  reason: z.enum(['node-count', 'payload-size']),
+  /** Nodes the full call would have serialized (node-count reason). */
+  totalNodes: z.number().optional(),
+  /** Serialized size in chars of the payload that was withheld (payload-size reason). */
+  payloadChars: z.number().optional(),
+  sections: z.array(DesignContextSectionSchema),
+  /** How many sections were dropped when the plan itself had to be capped (very wide flat trees). */
+  sectionsOmitted: z.number().optional(),
+});
+export type DesignContextSectionPlan = z.infer<typeof DesignContextSectionPlanSchema>;
+
 export const GetDesignContextResultSchema = z.object({
   nodes: z.array(DesignContextNodeSchema),
   /**
@@ -441,6 +483,17 @@ export const GetDesignContextResultSchema = z.object({
    * Omitted when there's nothing to warn about.
    */
   hint: z.string().optional(),
+  /**
+   * Set when the requested tree was too large to return whole (see the budget constants above):
+   * `nodes` then holds only the roots' identity (minimal projection) and `sections` lists the
+   * subtrees to ground individually — call get_design_context per section nodeId at full detail.
+   */
+  sectionPlan: DesignContextSectionPlanSchema.optional(),
+  /**
+   * One-line, deterministic guidance attached by the mcp layer: on a below-full detail it points
+   * codegen callers at detail 'full'; on a section plan it spells out the per-section next step.
+   */
+  note: z.string().optional(),
   /** Deduplicated style table; nodes carry `fill` / `textStyle` refs into it. Full detail only. */
   globalVars: GlobalVarsSchema.optional(),
   /** Id → token, for variable ids referenced by any node's `boundVariables`. Omitted when empty. */

@@ -1,7 +1,9 @@
 import {
   computeMetrics,
   dedupeStyles,
+  DESIGN_CONTEXT_BAIL_NODES,
   type DesignContextNode,
+  type DesignContextSection,
   DETAIL_LEVELS,
   type DetailLevel,
   type GetDesignContextResult,
@@ -498,6 +500,74 @@ const buildNode = async (
   return out;
 };
 
+/**
+ * Count the nodes a buildNode walk would visit, honoring the same depth cap — pure and sync (no
+ * serialization, no async main-component resolves), so bailing on a hopeless tree costs
+ * milliseconds instead of the full serialization it avoids. Deliberately ignores dedupeComponents
+ * (dedupe shrinks the payload, not the visit count), which is one reason the bail threshold is set
+ * high.
+ */
+const countNodes = (nodes: readonly SceneNode[], remainingDepth: number): number => {
+  let total = 0;
+  for (const node of nodes) {
+    total += 1;
+    if (remainingDepth !== 0 && 'children' in node) {
+      const next = remainingDepth < 0 ? -1 : remainingDepth - 1;
+      total += countNodes((node as SceneNode & { children: readonly SceneNode[] }).children, next);
+    }
+  }
+  return total;
+};
+
+// A very wide flat tree (hundreds of direct children) would otherwise produce a plan as unwieldy as
+// the payload it replaces; keep the head and report how many were dropped.
+const MAX_PLAN_SECTIONS = 60;
+
+/**
+ * The bail response for a tree too large to serialize whole: the roots' identity plus a section
+ * plan (one entry per top-level subtree, with sizes) the caller grounds one at a time. Sections
+ * come from the single root's children (its grandchildren when it only has one child — a page-like
+ * wrapper); a multi-root selection sections at the roots themselves.
+ */
+const sectionPlanResult = (
+  roots: readonly SceneNode[],
+  totalNodes: number,
+): GetDesignContextResult => {
+  let sectionNodes: readonly SceneNode[] = roots;
+  for (let hops = 0; hops < 2 && sectionNodes.length === 1; hops += 1) {
+    const only = sectionNodes[0] as SceneNode;
+    if (!('children' in only)) break;
+    const children = (only as SceneNode & { children: readonly SceneNode[] }).children;
+    if (children.length === 0) break;
+    sectionNodes = children;
+  }
+  const sections: DesignContextSection[] = sectionNodes.slice(0, MAX_PLAN_SECTIONS).map(node => ({
+    nodeId: node.id,
+    name: node.name,
+    type: node.type,
+    childCount:
+      'children' in node
+        ? (node as SceneNode & { children: readonly SceneNode[] }).children.length
+        : 0,
+    nodes: countNodes([node], -1),
+  }));
+  const omitted = sectionNodes.length - sections.length;
+  return {
+    nodes: roots.map(node => ({ id: node.id, name: node.name, type: node.type })),
+    sectionPlan: {
+      reason: 'node-count',
+      totalNodes,
+      sections,
+      ...(omitted > 0 ? { sectionsOmitted: omitted } : {}),
+    },
+    note:
+      `This tree is ${totalNodes} nodes — too large to serialize whole. Ground it section by ` +
+      'section: call get_design_context per section nodeId (detail: full, dedupeComponents: true) ' +
+      'and build each before moving on. Do not retry this call unscoped and do not depth-cap the ' +
+      'whole page.',
+  };
+};
+
 export const createGetDesignContextHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
@@ -506,6 +576,7 @@ export const createGetDesignContextHandler =
       depth?: unknown;
       detail?: unknown;
       dedupeComponents?: unknown;
+      budget?: unknown;
     };
 
     if (p.nodeId !== undefined && typeof p.nodeId !== 'string') {
@@ -559,6 +630,15 @@ export const createGetDesignContextHandler =
         'Nothing selected. Select one or more frames/layers in Figma (or pass an explicit nodeId). ' +
           'get_design_context no longer scans the whole page — it is too large and ambiguous.',
       );
+    }
+
+    // Pre-serialization bail, public tool path only (budget is injected by the mcp tool handler and
+    // never by internal consumers — design_diff / component_map / icon_map read the payload
+    // in-process, where size is harmless, so they always get the raw tree). Full detail only:
+    // that's the branch whose per-node serialization + per-TEXT segment calls are worth skipping.
+    if (p.budget === true && ctx.detail === 'full') {
+      const total = countNodes(roots, remainingDepth);
+      if (total > DESIGN_CONTEXT_BAIL_NODES) return sectionPlanResult(roots, total);
     }
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));

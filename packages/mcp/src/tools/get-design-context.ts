@@ -18,7 +18,10 @@ export const getDesignContextTool: ToolSpec = {
     'flagged truncated). dedupeComponents collapses repeated instances of an already-expanded main ' +
     'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +
     'characters } — the visible text it actually renders) and propertyOverrides (its per-instance ' +
-    'visual diffs), so per-instance content survives without re-expanding the collapsed subtree.',
+    'visual diffs), so per-instance content survives without re-expanding the collapsed subtree. ' +
+    'A tree too large to return whole comes back as a sectionPlan instead ({ sections: [{ nodeId, ' +
+    'name, nodes, … }] } + a note): do not retry unscoped — call again per section nodeId at ' +
+    'detail full and build section by section.',
   inputShape: {
     nodeId: z
       .string()

@@ -37,8 +37,11 @@ describe('handleDesignDiff', () => {
   // dispatch stub: design_diff's only round-trip is get_design_context; return the mutable currentCtx.
   const dispatch: ToolDispatcher = async (tool, args) => {
     if (tool !== GET_DESIGN_CONTEXT_TOOL_NAME) throw new Error(`unexpected dispatch: ${tool}`);
-    // The tool must always ask for full detail + dedupe (the codegen-equivalent baseline view).
+    // The tool must always ask for full detail + dedupe (the codegen-equivalent baseline view) and
+    // must NOT arm the public-path budget guard: a snapshot needs the raw tree, never a section
+    // plan, no matter how large the node is.
     expect(args).toMatchObject({ detail: 'full', dedupeComponents: true });
+    expect(args).not.toHaveProperty('budget');
     return currentCtx;
   };
 
