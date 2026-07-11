@@ -51,6 +51,12 @@ Run the grounded tools against the selection, then generate — **trust them ove
    - `candidate.ambiguousWith` (several project tokens share that exact value and the name couldn't
      split them): a capped, verify-me pick — choose the semantically right sibling for the context
      (or keep the value and flag the gap), never treat it as a confirmed reuse.
+   - On a document with few or no variables (most real-world files), `get_design_context`'s own
+     `projectTokens` map is the fallback: any raw color in the payload that exactly equals a project
+     token's value is annotated there (`{ "#6266F0": { ref, name } }`). Before hardcoding a hex, look
+     it up and emit the `ref` when it fits the context semantically; an entry with `candidates` lists
+     same-value tokens to choose between by meaning. A bound Figma variable always outranks a
+     raw-value match.
    - `framework-builtin` (Tailwind built-in scale step, e.g. `spacing/4`, `line-height/7`,
      `weight/Bold`): carries `builtin: { scale, step }` — compose the utility (`p-4`/`gap-4`,
      `leading-7`, `font-bold`), **not** an arbitrary `p-[16px]`. This is **not** a gap.

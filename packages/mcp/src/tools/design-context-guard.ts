@@ -6,6 +6,7 @@ import {
 } from '@figwright/shared';
 import { z } from 'zod';
 
+import { annotateProjectTokens, loadTokenValueIndex } from '../tokens/token-index.js';
 import { getDesignContextTool } from './get-design-context.js';
 
 // The public-path guard around get_design_context, the hot grounding read. Internal consumers
@@ -131,18 +132,21 @@ export const sectionPlanFromPayload = (
 
 /**
  * The public MCP handler for get_design_context: apply the codegen-view defaults, dispatch armed
- * with budget, then walk the degradation cascade.
+ * with budget, annotate raw colors with the project's tokens (the value-reverse join), then walk
+ * the degradation cascade. `loadIndex` is injectable for tests; the default reads the server-cwd
+ * project the same way token_map does.
  */
 export const handleDesignContext = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
+  loadIndex: typeof loadTokenValueIndex = loadTokenValueIndex,
 ): Promise<GetDesignContextResult> => {
   // Parsing with the public shape also strips any caller-supplied `budget` key, so arming the
   // plugin bail stays exclusively this wrapper's decision.
   const args = z.object(getDesignContextTool.inputShape).parse(rawArgs ?? {});
   const detail = args.detail ?? 'full';
   const dedupeComponents = args.dedupeComponents ?? true;
-  const result = (await dispatch(getDesignContextTool.name, {
+  const raw = (await dispatch(getDesignContextTool.name, {
     ...args,
     detail,
     dedupeComponents,
@@ -150,7 +154,16 @@ export const handleDesignContext = async (
   })) as GetDesignContextResult;
 
   // The plugin's node-count bail already produced the plan — nothing further to measure.
-  if (result.sectionPlan !== undefined) return result;
+  if (raw.sectionPlan !== undefined) return raw;
+
+  // Value-reverse join, full detail only (below full there are no styling colors to annotate).
+  // The annotated payload is the deliverable, so it's what the size nets measure; loadTokenValueIndex
+  // never throws and returns an empty index off a non-web project, keeping this a no-op there.
+  let result = raw;
+  if (detail === 'full') {
+    const { index, tailwind } = await loadIndex(process.cwd());
+    result = annotateProjectTokens(raw, index, tailwind);
+  }
 
   const payloadChars = JSON.stringify(result).length;
   if (payloadChars <= DESIGN_CONTEXT_CHAR_BUDGET) {

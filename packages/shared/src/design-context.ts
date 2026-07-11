@@ -473,6 +473,30 @@ export const DesignContextSectionPlanSchema = z.object({
 });
 export type DesignContextSectionPlan = z.infer<typeof DesignContextSectionPlanSchema>;
 
+/** One project design token a raw color value maps to: the literal to emit + the property name. */
+export const ProjectTokenMatchSchema = z.object({
+  /**
+   * The reference codegen should emit: a Tailwind utility base on a Tailwind project, else
+   * var(--name).
+   */
+  ref: z.string(),
+  /** Custom property name without the leading `--`. */
+  name: z.string(),
+});
+export type ProjectTokenMatch = z.infer<typeof ProjectTokenMatchSchema>;
+
+/**
+ * The value-reverse join annotation for one raw color: a single entry when exactly one project
+ * token carries that value, or an unordered candidates list when several share it (the caller picks
+ * by meaning, never blindly). Value-equality evidence only — a bound Figma variable or a token_map
+ * name match always outranks it.
+ */
+export const ProjectTokenAnnotationSchema = z.union([
+  ProjectTokenMatchSchema,
+  z.object({ candidates: z.array(ProjectTokenMatchSchema) }),
+]);
+export type ProjectTokenAnnotation = z.infer<typeof ProjectTokenAnnotationSchema>;
+
 export const GetDesignContextResultSchema = z.object({
   nodes: z.array(DesignContextNodeSchema),
   /**
@@ -500,6 +524,15 @@ export const GetDesignContextResultSchema = z.object({
   variables: z.record(z.string(), ResolvedTokenSchema).optional(),
   /** Id → token, for shared-style ids referenced by any node's `styleIds`. Omitted when empty. */
   styles: z.record(z.string(), ResolvedTokenSchema).optional(),
+  /**
+   * Raw color → project design token(s) with that exact value (the value-reverse join), keyed by
+   * the color string exactly as it appears in this payload — so a caller about to emit a raw hex
+   * can look it up verbatim. Attached by the mcp layer on public full-detail results when the
+   * project's CSS defines matching tokens; omitted when empty. Value-equality evidence only: prefer
+   * a semantically fitting entry (or keep the raw value) over blind use, and let a bound Figma
+   * variable win over a raw-value match.
+   */
+  projectTokens: z.record(z.string(), ProjectTokenAnnotationSchema).optional(),
   /** Simplification metrics; full detail only. */
   metrics: DesignContextMetricsSchema.optional(),
 });

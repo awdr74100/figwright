@@ -210,6 +210,56 @@ describe('handleDesignContext (the public-path guard)', () => {
   });
 });
 
+describe('handleDesignContext — value-reverse annotation', () => {
+  const indexOf = (tokens: { name: string; value: string }[]) =>
+    new Map(
+      tokens.map(t => [
+        t.value.toUpperCase(),
+        [{ name: t.name, value: t.value, cssVar: `var(--${t.name})` }],
+      ]),
+    );
+
+  it('annotates raw colors on a full result via the injected index loader', async () => {
+    const { dispatch } = dispatcher({
+      nodes: [leaf('1:1')],
+      globalVars: { styles: { s: { color: '#6266F0' } } },
+    });
+    const r = await handleDesignContext(dispatch, {}, async () => ({
+      index: indexOf([{ name: 'color-primary', value: '#6266F0' }]),
+      tailwind: false,
+    }));
+    expect(r.projectTokens).toEqual({
+      '#6266F0': { ref: 'var(--color-primary)', name: 'color-primary' },
+    });
+  });
+
+  it('never annotates below full detail', async () => {
+    const { dispatch } = dispatcher({
+      nodes: [leaf('1:1')],
+      globalVars: { styles: { s: { color: '#6266F0' } } },
+    });
+    let loaderCalls = 0;
+    const r = await handleDesignContext(dispatch, { detail: 'compact' }, async () => {
+      loaderCalls += 1;
+      return { index: indexOf([{ name: 'color-primary', value: '#6266F0' }]), tailwind: false };
+    });
+    expect(loaderCalls).toBe(0);
+    expect(r.projectTokens).toBeUndefined();
+  });
+
+  it('drops annotations with the styling on a compact downgrade', async () => {
+    const { dispatch } = dispatcher(oversizedFull());
+    const r = await handleDesignContext(dispatch, {}, async () => ({
+      index: indexOf([{ name: 'color-primary', value: '#6266F0' }]),
+      tailwind: false,
+    }));
+    // Over budget → structure-only view; the annotation must not survive on a payload whose
+    // colors are gone.
+    expect(r.note).toMatch(/structure-only/);
+    expect(r.projectTokens).toBeUndefined();
+  });
+});
+
 describe('sectionPlanFromPayload', () => {
   it('descends through single-child wrappers (two hops max) to find sections', () => {
     const sections = [leaf('a', { children: [leaf('a1')] }), leaf('b')];

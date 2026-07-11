@@ -1,4 +1,5 @@
 import type { FigmaToken } from '../tokens/figma-tokens.js';
+import { normHex } from '../tokens/hex.js';
 import type { ProjectToken } from '../tokens/tokens.js';
 import { diceSimilarity, type MappingStatus } from './component-map.js';
 
@@ -51,16 +52,6 @@ export interface TokenMapping {
   builtin?: { scale: string; step: string };
   status: MappingStatus;
 }
-
-/** Normalize a hex color for comparison: expand shorthand, drop a fully-opaque alpha, uppercase. */
-const normHex = (raw: string): string | null => {
-  const m = /^#([0-9a-fA-F]{3,8})$/.exec(raw.trim());
-  if (m === null) return null;
-  let h = m[1] ?? '';
-  if (h.length === 3) h = [...h].map(c => c + c).join('');
-  if (h.length === 8 && h.slice(6).toUpperCase() === 'FF') h = h.slice(0, 6);
-  return `#${h.toUpperCase()}`;
-};
 
 /** The names a project token can be matched against: its Tailwind utility base and its raw name. */
 const matchNames = (token: ProjectToken): string[] =>
