@@ -34,7 +34,10 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Effects (`effects` / `styleIds.effect`).** Drop/inner shadow or blur. **The easiest fidelity to
   lose**: they come from a _shared effect style_, so they read as one field and quietly vanish. A card
   with a shadow in Figma but flat output is the classic miss (e.g. `DROP_SHADOW 0/4/8 #0000000D` →
-  `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`).
+  `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`). A blur's `type` decides the CSS: `LAYER_BLUR` blurs the
+  element itself (`filter: blur`), but `BACKGROUND_BLUR` blurs what shows through from behind
+  (`backdrop-filter: blur` — the frosted-glass / glassmorphism pattern, typically paired with a
+  semi-transparent fill); emitting it as `filter`, or dropping it, loses the glass look entirely.
 - **Text / typography.** A TEXT node carries more than `characters` + font — and the rest reads as
   one quiet field each, so it vanishes and the model re-guesses it off the raster. The shared style
   attributes fold into the `textStyle` bundle in `globalVars`: `textCase` (`UPPER`/`LOWER`/`TITLE` →

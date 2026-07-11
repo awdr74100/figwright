@@ -48,6 +48,9 @@ Run the grounded tools against the selection, then generate — **trust them ove
    - mapped: reference `candidate.ref` (`bg-primary-500`, `var(--color-primary-500)`) — never the raw
      hex/px `get_design_context` resolved. `matchedBy: ['name']` on a colour (value drifted): use it
      but flag the mismatch.
+   - `candidate.ambiguousWith` (several project tokens share that exact value and the name couldn't
+     split them): a capped, verify-me pick — choose the semantically right sibling for the context
+     (or keep the value and flag the gap), never treat it as a confirmed reuse.
    - `framework-builtin` (Tailwind built-in scale step, e.g. `spacing/4`, `line-height/7`,
      `weight/Bold`): carries `builtin: { scale, step }` — compose the utility (`p-4`/`gap-4`,
      `leading-7`, `font-bold`), **not** an arbitrary `p-[16px]`. This is **not** a gap.
