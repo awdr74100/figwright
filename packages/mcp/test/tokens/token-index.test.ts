@@ -63,7 +63,11 @@ describe('annotateProjectTokens', () => {
     // Keyed exactly as it appears in the payload (lowercase here), value ref is the CSS var
     // off-Tailwind.
     expect(r.projectTokens).toEqual({
-      '#6266f0': { ref: 'var(--color-primary-500)', name: 'color-primary-500' },
+      '#6266f0': {
+        ref: 'var(--color-primary-500)',
+        name: 'color-primary-500',
+        matchedBy: ['value'],
+      },
     });
   });
 
@@ -71,7 +75,11 @@ describe('annotateProjectTokens', () => {
     const index = buildTokenValueIndex([proj('color-primary-500', '#6266F0', 'primary-500')]);
     const payload = result({ globalVars: { styles: { abc: { color: '#6266F0' } } } });
     const r = annotateProjectTokens(payload, index, true);
-    expect(r.projectTokens?.['#6266F0']).toEqual({ ref: 'primary-500', name: 'color-primary-500' });
+    expect(r.projectTokens?.['#6266F0']).toEqual({
+      ref: 'primary-500',
+      name: 'color-primary-500',
+      matchedBy: ['value'],
+    });
   });
 
   it('lists 2–3 same-value tokens as unranked candidates, sorted by name', () => {
@@ -82,6 +90,7 @@ describe('annotateProjectTokens', () => {
     const payload = result({ globalVars: { styles: { s: { color: '#FFFFFF' } } } });
     const r = annotateProjectTokens(payload, index, false);
     expect(r.projectTokens?.['#FFFFFF']).toEqual({
+      matchedBy: ['value'],
       candidates: [
         { ref: 'var(--color-background)', name: 'color-background' },
         { ref: 'var(--color-white)', name: 'color-white' },
@@ -121,6 +130,7 @@ describe('annotateProjectTokens', () => {
     expect(r.projectTokens?.['#00000040']).toEqual({
       ref: 'var(--color-shadow)',
       name: 'color-shadow',
+      matchedBy: ['value'],
     });
   });
 

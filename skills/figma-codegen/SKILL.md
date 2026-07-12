@@ -53,10 +53,12 @@ Run the grounded tools against the selection, then generate — **trust them ove
      (or keep the value and flag the gap), never treat it as a confirmed reuse.
    - On a document with few or no variables (most real-world files), `get_design_context`'s own
      `projectTokens` map is the fallback: any raw color in the payload that exactly equals a project
-     token's value is annotated there (`{ "#6266F0": { ref, name } }`). Before hardcoding a hex, look
-     it up and emit the `ref` when it fits the context semantically; an entry with `candidates` lists
-     same-value tokens to choose between by meaning. A bound Figma variable always outranks a
-     raw-value match.
+     token's value is annotated there (`{ "#6266F0": { ref, name, matchedBy: ["value"] } }`). Before
+     hardcoding a hex, look it up and emit the `ref` when it fits the context semantically.
+     `matchedBy: ["value"]` marks the entry as name-blind value-equality evidence — a hypothesis to
+     verify, not a resolved binding: an entry with `candidates` lists same-value tokens to choose
+     between by meaning, a semantically wrong token is **worse** than the raw value (keep the raw
+     value and note the gap instead), and a bound Figma variable always outranks a raw-value match.
    - `framework-builtin` (Tailwind built-in scale step, e.g. `spacing/4`, `line-height/7`,
      `weight/Bold`): carries `builtin: { scale, step }` — compose the utility (`p-4`/`gap-4`,
      `leading-7`, `font-bold`), **not** an arbitrary `p-[16px]`. This is **not** a gap.

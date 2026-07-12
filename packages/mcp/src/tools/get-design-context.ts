@@ -24,10 +24,12 @@ export const getDesignContextTool: ToolSpec = {
     'A tree too large to return whole comes back as a sectionPlan instead ({ sections: [{ nodeId, ' +
     'name, nodes, … }] } + a note): do not retry unscoped — call again per section nodeId at ' +
     'detail full and build section by section. On a full result, raw color values that exactly ' +
-    "equal a project design token are annotated in projectTokens ({ '#6266F0': { ref, name } }, or " +
-    '{ candidates: [...] } when several tokens share the value) — value-equality evidence only: ' +
-    'emit the ref when it fits the context semantically, keep the raw value otherwise, and let a ' +
-    'bound Figma variable win over a raw-value match.',
+    "equal a project design token are annotated in projectTokens ({ '#6266F0': { ref, name, " +
+    "matchedBy: ['value'] } }, or { matchedBy, candidates: [...] } when several tokens share the " +
+    "value). matchedBy: ['value'] marks every entry as name-blind value-equality evidence — a " +
+    'hypothesis to verify, not a resolved binding: emit the ref only when the token fits the ' +
+    'context semantically, keep the raw value otherwise, and let a bound Figma variable win over ' +
+    'a raw-value match.',
   inputShape: {
     nodeId: z
       .string()

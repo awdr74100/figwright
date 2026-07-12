@@ -488,12 +488,17 @@ export type ProjectTokenMatch = z.infer<typeof ProjectTokenMatchSchema>;
 /**
  * The value-reverse join annotation for one raw color: a single entry when exactly one project
  * token carries that value, or an unordered candidates list when several share it (the caller picks
- * by meaning, never blindly). Value-equality evidence only — a bound Figma variable or a token_map
- * name match always outranks it.
+ * by meaning, never blindly). Every entry carries `matchedBy: ['value']` — the same weak-evidence
+ * vocabulary token_map uses — so it self-documents as a name-blind hypothesis to verify, never a
+ * resolved binding: a bound Figma variable or a token_map name match always outranks it, and when
+ * the token doesn't fit the context semantically the raw value is the right emit.
  */
 export const ProjectTokenAnnotationSchema = z.union([
-  ProjectTokenMatchSchema,
-  z.object({ candidates: z.array(ProjectTokenMatchSchema) }),
+  ProjectTokenMatchSchema.extend({ matchedBy: z.tuple([z.literal('value')]) }),
+  z.object({
+    matchedBy: z.tuple([z.literal('value')]),
+    candidates: z.array(ProjectTokenMatchSchema),
+  }),
 ]);
 export type ProjectTokenAnnotation = z.infer<typeof ProjectTokenAnnotationSchema>;
 

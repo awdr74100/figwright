@@ -229,7 +229,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
       tailwind: false,
     }));
     expect(r.projectTokens).toEqual({
-      '#6266F0': { ref: 'var(--color-primary)', name: 'color-primary' },
+      '#6266F0': { ref: 'var(--color-primary)', name: 'color-primary', matchedBy: ['value'] },
     });
   });
 
