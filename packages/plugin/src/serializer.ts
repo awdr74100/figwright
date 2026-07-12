@@ -585,10 +585,14 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
   if ('targetAspectRatio' in node) {
     const ratio = (node as { targetAspectRatio?: { x?: unknown; y?: unknown } | null })
       .targetAspectRatio;
+    // Both axes must be positive: a zero/negative side would emit an invalid `aspect-ratio: x / y`
+    // (aspect-[0/9] or a div-by-zero). A locked ratio is always positive, so this only guards the
+    // degenerate case — symmetric on x and y rather than checking one side.
     if (
       ratio != null &&
       typeof ratio.x === 'number' &&
       typeof ratio.y === 'number' &&
+      ratio.x > 0 &&
       ratio.y > 0
     ) {
       out.targetAspectRatio = { x: ratio.x, y: ratio.y };

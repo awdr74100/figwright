@@ -219,6 +219,10 @@ describe('serializeFlat', () => {
     expect(defaults.numberOfFixedChildren).toBeUndefined();
     expect(defaults.targetAspectRatio).toBeUndefined();
     expect(defaults.annotations).toBeUndefined();
+
+    // A degenerate ratio (a zero side) is dropped, not emitted as an invalid aspect-[0/9].
+    const degenerate = serializeFlatSync(fake({ targetAspectRatio: { x: 0, y: 9 } }));
+    expect(degenerate.targetAspectRatio).toBeUndefined();
   });
 
   it('serializes a PATTERN paint with its tiling geometry (source node + repeat)', () => {

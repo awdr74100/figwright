@@ -90,6 +90,32 @@ describe('dedupeStyles', () => {
     expect(globalVars.styles[nodes[0]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
   });
 
+  it('carries filtersApplied on an IMAGE fill (the export-the-composited-render signal)', () => {
+    // The signal the LLM actually reads lives in globalVars (the simplified paint), not the raw
+    // fill — so an in-fill colour grade must survive simplifyPaint, or codegen ships the original
+    // ungraded bytes. Untouched images (no filtersApplied) stay lean.
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [
+          { type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL', filtersApplied: true },
+        ],
+      },
+      {
+        id: 'b',
+        name: 'b',
+        type: 'RECTANGLE',
+        fills: [{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      { type: 'IMAGE', scaleMode: 'FILL', filtersApplied: true },
+    ]);
+    expect(globalVars.styles[nodes[1]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
+  });
+
   it('carries the tiling geometry on a PATTERN fill (source node + repeat)', () => {
     const { nodes, globalVars } = dedupeStyles([
       {
