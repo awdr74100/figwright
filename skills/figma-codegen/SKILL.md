@@ -45,6 +45,8 @@ Run the grounded tools against the selection, then generate — **trust them ove
      inferred from the instances you happened to see.
 
 3. **`token_map`** → every Figma variable joined to a project token with `status` + `ref` + `matchedBy`.
+   A document's shared paint styles (single solid color styles — the token mechanism of
+   pre-variables files) join the same way, marked `source: 'style'`.
    - mapped: reference `candidate.ref` (`bg-primary-500`, `var(--color-primary-500)`) — never the raw
      hex/px `get_design_context` resolved. `matchedBy: ['name']` on a colour (value drifted): use it
      but flag the mismatch.

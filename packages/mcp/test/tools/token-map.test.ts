@@ -2,9 +2,10 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { GetVariableDefsResult } from '@figwright/shared';
+import type { GetStylesResult, GetVariableDefsResult } from '@figwright/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { GET_STYLES_TOOL_NAME } from '../../src/tools/get-styles.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from '../../src/tools/get-variable-defs.js';
 import { handleTokenMap, type ToolDispatcher } from '../../src/tools/token-map.js';
 
@@ -39,8 +40,11 @@ const defs: GetVariableDefsResult = {
   ],
 };
 
+const emptyStyles: GetStylesResult = { paints: [], texts: [], effects: [], grids: [] };
+
 const dispatch: ToolDispatcher = async tool => {
   if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return defs;
+  if (tool === GET_STYLES_TOOL_NAME) return emptyStyles;
   throw new Error(`unexpected dispatch: ${tool}`);
 };
 
@@ -111,6 +115,7 @@ describe('handleTokenMap', () => {
     };
     const themedDispatch: ToolDispatcher = async tool => {
       if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return themedDefs;
+      if (tool === GET_STYLES_TOOL_NAME) return emptyStyles;
       throw new Error(`unexpected dispatch: ${tool}`);
     };
 
@@ -168,5 +173,85 @@ describe('handleTokenMap', () => {
     expect(result.tokenSource).toBeNull();
     expect(result.note).toMatch(/v3/i);
     await rm(v3, { recursive: true, force: true });
+  });
+
+  it('joins a pre-variables file (zero variables) via its shared paint styles', async () => {
+    // The 寶島 class of document: the palette lives in paint styles, get_variable_defs is empty.
+    // Without the style source the whole join came back empty on exactly these files.
+    const noVars: GetVariableDefsResult = { collections: [], variables: [] };
+    const styles: GetStylesResult = {
+      ...emptyStyles,
+      paints: [
+        {
+          id: 'S:1',
+          name: 'Primary/500',
+          key: 'k1',
+          description: '',
+          paints: [
+            { type: 'SOLID', visible: true, opacity: 1, color: { r: 0.384, g: 0.4, b: 0.941 } },
+          ],
+        },
+        {
+          id: 'S:2',
+          name: 'Hero/Gradient',
+          key: 'k2',
+          description: '',
+          paints: [
+            {
+              type: 'GRADIENT_LINEAR',
+              visible: true,
+              opacity: 1,
+              gradientStops: [],
+              gradientTransform: [
+                [1, 0, 0],
+                [0, 1, 0],
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const styleDispatch: ToolDispatcher = async tool => {
+      if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return noVars;
+      if (tool === GET_STYLES_TOOL_NAME) return styles;
+      throw new Error(`unexpected dispatch: ${tool}`);
+    };
+
+    const result = await handleTokenMap(styleDispatch, { rootDir: dir });
+    const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+    expect(primary?.source).toBe('style');
+    expect(primary?.candidate?.ref).toBe('primary-500');
+    expect(primary?.status).toBe('high');
+    // The gradient style is a look, not a token — it must not join or pollute unmapped.
+    expect(result.mappings.some(m => m.figmaName === 'Hero/Gradient')).toBe(false);
+  });
+
+  it('keeps variable rows source-less when both variables and styles exist', async () => {
+    const styles: GetStylesResult = {
+      ...emptyStyles,
+      paints: [
+        {
+          id: 'S:1',
+          name: 'Primary/500',
+          key: 'k1',
+          description: '',
+          paints: [
+            { type: 'SOLID', visible: true, opacity: 1, color: { r: 0.384, g: 0.4, b: 0.941 } },
+          ],
+        },
+      ],
+    };
+    const bothDispatch: ToolDispatcher = async tool => {
+      if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return defs;
+      if (tool === GET_STYLES_TOOL_NAME) return styles;
+      throw new Error(`unexpected dispatch: ${tool}`);
+    };
+
+    const result = await handleTokenMap(bothDispatch, { rootDir: dir });
+    const rows = result.mappings.filter(m => m.figmaName === 'Primary/500');
+    // Variable first (source-less), style row after — both map, neither shadows the other.
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.source).toBeUndefined();
+    expect(rows[1]?.source).toBe('style');
   });
 });

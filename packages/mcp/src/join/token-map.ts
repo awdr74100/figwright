@@ -50,6 +50,11 @@ export interface TokenMapping {
    * "font-weight", use font-{step} (font-bold).
    */
   builtin?: { scale: string; step: string };
+  /**
+   * 'style' when the Figma side is a shared paint style rather than a variable (the design-token
+   * mechanism of pre-variables files). Absent for variables.
+   */
+  source?: 'style';
   status: MappingStatus;
 }
 
@@ -306,6 +311,7 @@ const joinOne = (
     figmaValue: figma.value,
     figmaType: figma.type,
     ...(figma.modes === undefined ? {} : { figmaModes: figma.modes }),
+    ...(figma.source === undefined ? {} : { source: figma.source }),
     status: 'unmapped',
   };
 

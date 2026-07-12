@@ -1,10 +1,11 @@
-import type { GetVariableDefsResult } from '@figwright/shared';
+import type { GetStylesResult, GetVariableDefsResult } from '@figwright/shared';
 import { z } from 'zod';
 
 import { joinTokens, type TokenMapping } from '../join/token-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
-import { resolveFigmaTokens } from '../tokens/figma-tokens.js';
+import { resolveFigmaTokens, resolvePaintStyleTokens } from '../tokens/figma-tokens.js';
 import { loadProjectTokens } from '../tokens/load.js';
+import { GET_STYLES_TOOL_NAME } from './get-styles.js';
 import { GET_VARIABLE_DEFS_TOOL_NAME } from './get-variable-defs.js';
 import type { ToolSpec } from './spec.js';
 
@@ -47,8 +48,10 @@ export interface TokenMapResult {
 export const tokenMapTool: ToolSpec = {
   name: TOKEN_MAP_TOOL_NAME,
   description:
-    "Map the document's Figma variables to the project's design tokens, so generated code references " +
-    'existing tokens instead of hard-coded values. Joins the grounded Figma variable names + values ' +
+    "Map the document's Figma variables — and its shared paint styles (single solid color styles, " +
+    "the design-token mechanism of pre-variables files; such rows carry source: 'style') — to the " +
+    "project's design tokens, so generated code references " +
+    'existing tokens instead of hard-coded values. Joins the grounded Figma names + values ' +
     'against tokens parsed from the project CSS (Tailwind v4 @theme or :root custom properties); the ' +
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
@@ -85,14 +88,17 @@ export const handleTokenMap = async (
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 
-  const [defs, profile] = await Promise.all([
+  const [defs, styles, profile] = await Promise.all([
     dispatch(GET_VARIABLE_DEFS_TOOL_NAME, {}) as Promise<GetVariableDefsResult>,
+    dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>,
     analyzeProject(rootDir),
   ]);
 
   const loaded = await loadProjectTokens(rootDir, profile, args.tokenSource);
 
-  const figmaTokens = resolveFigmaTokens(defs);
+  // Variables first, then paint-style pseudo-tokens: a pre-variables file (palette carried as
+  // shared paint styles, zero variables) joins too instead of coming back empty.
+  const figmaTokens = [...resolveFigmaTokens(defs), ...resolvePaintStyleTokens(styles.paints)];
   const mappings = joinTokens(figmaTokens, loaded.tokens, {
     threshold,
     tailwind: profile.styling.system === 'tailwind',

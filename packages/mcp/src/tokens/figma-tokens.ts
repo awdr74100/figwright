@@ -1,4 +1,5 @@
 import {
+  type GetStylesResult,
   type GetVariableDefsResult,
   type SerializedVariable,
   type SerializedVariableCollection,
@@ -37,6 +38,11 @@ export interface FigmaToken {
    * mode; a consumer must not emit it as the token's sole literal when `modes` is set.
    */
   modes?: Record<string, FigmaTokenValue>;
+  /**
+   * Set to 'style' when this token was derived from a shared paint style rather than a variable —
+   * the design-token mechanism of pre-variables Figma files. Absent for variables.
+   */
+  source?: 'style';
 }
 
 const isAlias = (val: SerializedVariableValue): val is { type: 'VARIABLE_ALIAS'; id: string } =>
@@ -142,4 +148,27 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
       ...(modes === undefined ? {} : { modes }),
     };
   });
+};
+
+/**
+ * Pseudo-tokens from shared paint styles — the design-token mechanism of pre-variables Figma files
+ * (a document can carry a full palette as paint styles and zero variables, leaving the variable
+ * join empty-handed). Only a style that is exactly one visible SOLID paint converts: that is the
+ * shape that IS a color token by another name. Multi-paint, gradient, and image styles are looks,
+ * not tokens, and are skipped. Pure.
+ */
+export const resolvePaintStyleTokens = (paints: GetStylesResult['paints']): FigmaToken[] => {
+  const out: FigmaToken[] = [];
+  for (const style of paints) {
+    const visible = style.paints.filter(p => p.visible !== false);
+    const only = visible.length === 1 ? visible[0] : undefined;
+    if (only === undefined || only.type !== 'SOLID' || !('color' in only)) continue;
+    out.push({
+      name: style.name,
+      value: toHex(only.color, only.opacity),
+      type: 'COLOR',
+      source: 'style',
+    });
+  }
+  return out;
 };
