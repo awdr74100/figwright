@@ -88,9 +88,13 @@ export const handleTokenMap = async (
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 
+  // Styles are an additive source, not a requirement: a get_styles failure must not take down the
+  // variable join that succeeded before styles existed — degrade to variables-only instead.
   const [defs, styles, profile] = await Promise.all([
     dispatch(GET_VARIABLE_DEFS_TOOL_NAME, {}) as Promise<GetVariableDefsResult>,
-    dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>,
+    (dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>).catch(
+      (): GetStylesResult => ({ paints: [], texts: [], effects: [], grids: [] }),
+    ),
     analyzeProject(rootDir),
   ]);
 
