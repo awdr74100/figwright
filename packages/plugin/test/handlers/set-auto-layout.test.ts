@@ -19,6 +19,8 @@ const makeFrame = () => ({
   layoutWrap: 'NO_WRAP',
   counterAxisSpacing: null as number | null,
   counterAxisAlignContent: 'AUTO',
+  itemReverseZIndex: false,
+  strokesIncludedInLayout: false,
   gridRowCount: 0,
   gridColumnCount: 0,
   gridRowGap: 0,
@@ -136,5 +138,20 @@ describe('set_auto_layout handler', () => {
     const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': makeFrame() }));
     await expect(handler({ nodeId: '1:1', layoutMode: 'DIAGONAL' })).rejects.toThrow(/layoutMode/);
     await expect(handler({ nodeId: '9:9', layoutMode: 'VERTICAL' })).rejects.toThrow(/not found/);
+  });
+
+  it('sets reversed paint order and stroke-in-layout on a flex frame', async () => {
+    const node = makeFrame();
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      layoutMode: 'HORIZONTAL',
+      itemSpacing: -8,
+      itemReverseZIndex: true,
+      strokesIncludedInLayout: true,
+    });
+    expect(node.itemReverseZIndex).toBe(true);
+    expect(node.strokesIncludedInLayout).toBe(true);
+    expect(node.itemSpacing).toBe(-8);
   });
 });

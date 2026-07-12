@@ -17,8 +17,9 @@ cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render.
   rasterizes at display size and ships blurry on dense screens) **only** when you specifically need
   the **composited** look — a `CROP` region, a mask, a gradient overlay you can't reproduce in CSS, or Figma image
   adjustments (exposure / contrast / tint tuned on the fill itself; the original bytes don't carry
-  them, so a colour-graded photo shipped from the original looks wrong — the render-verify diff is
-  where this shows up).
+  them, so a colour-graded photo shipped from the original looks wrong). Grounding flags that last
+  case for you: an `IMAGE` fill with **`filtersApplied: true`** has in-fill adjustments the original
+  can't reproduce → export the composited render instead of `save_image_fills`.
 - A **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
   small square instance) → **`icon_map` first, `get_screenshot` `SVG` only as the fallback** (below).
 - **Logos / brand marks are always exported**, never typed by hand.

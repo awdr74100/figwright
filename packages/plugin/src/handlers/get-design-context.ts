@@ -120,6 +120,13 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   // truth for breakpoints that codegen otherwise infers from geometry.
   if (flat.layoutGrids !== undefined) out.layoutGrids = flat.layoutGrids;
   if (flat.overflowDirection !== undefined) out.overflowDirection = flat.overflowDirection;
+  if (flat.numberOfFixedChildren !== undefined) {
+    out.numberOfFixedChildren = flat.numberOfFixedChildren;
+  }
+  if (flat.targetAspectRatio !== undefined) out.targetAspectRatio = flat.targetAspectRatio;
+  // Dev Mode annotations: the designer's notes written FOR the developer — ground truth that
+  // outranks inference, embedded so grounding carries them without a second tool call.
+  if (flat.annotations !== undefined) out.annotations = flat.annotations;
   if (flat.characters !== undefined) out.characters = flat.characters;
   if (flat.fontSize !== undefined) out.fontSize = flat.fontSize;
   if (flat.fontName !== undefined) out.fontName = flat.fontName;

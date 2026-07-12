@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { SimplifiedPaint } from './design-context-dedupe.js';
 import {
   MIXED,
+  SerializedAnnotationSchema,
   SerializedAutoLayoutSchema,
   SerializedComponentPropertySchema,
   SerializedConstraintsSchema,
@@ -18,6 +19,7 @@ import {
   SerializedStyleIdsSchema,
 } from './serialized-node.js';
 import type {
+  SerializedAnnotation,
   SerializedAutoLayout,
   SerializedComponentProperty,
   SerializedConstraints,
@@ -167,6 +169,15 @@ export interface DesignContextNode {
    * NONE.
    */
   overflowDirection?: string;
+  /** Leading children pinned while the rest scroll → `position: sticky`; omitted at 0. */
+  numberOfFixedChildren?: number;
+  /** Locked width:height resize ratio → CSS `aspect-ratio: x / y`; omitted when unlocked. */
+  targetAspectRatio?: { x: number; y: number };
+  /**
+   * Dev Mode annotations pinned to this node — designer notes written FOR the developer; ground
+   * truth that outranks any inference. Omitted when none.
+   */
+  annotations?: readonly SerializedAnnotation[];
   characters?: string;
   fontSize?: number | typeof MIXED;
   fontName?: z.infer<typeof SerializedFontNameSchema> | typeof MIXED;
@@ -318,6 +329,9 @@ export const DesignContextNodeSchema = z.lazy(() =>
     clipsContent: z.boolean().optional(),
     layoutGrids: z.array(SerializedLayoutGridSchema).optional(),
     overflowDirection: z.string().optional(),
+    numberOfFixedChildren: z.number().optional(),
+    targetAspectRatio: z.object({ x: z.number(), y: z.number() }).optional(),
+    annotations: z.array(SerializedAnnotationSchema).optional(),
     characters: z.string().optional(),
     fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
     fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),

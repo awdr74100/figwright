@@ -167,6 +167,26 @@ gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering 
 - **Scroll overflow.** A clipping frame may carry `overflowDirection` (`HORIZONTAL` / `VERTICAL` /
   `BOTH`) — the axis the content scrolls on. Emit `overflow-x-auto` / `overflow-y-auto` / `overflow-auto`
   (a horizontal card carousel, a scrollable panel), don't just clip it. Omitted (`NONE`) means no scroll.
+  It may also carry `numberOfFixedChildren`: that many **leading** children stay pinned while the rest
+  scroll — a `position: sticky` header/toolbar inside the scroll container, not an ordinary child.
+- **Aspect ratio — a locked resize contract, not a one-off size.** A node may carry
+  `targetAspectRatio` (`{ x, y }`): the width:height ratio it resizes toward (a 16:9 video box, a
+  square avatar, a hero that must keep its shape across breakpoints). Emit `aspect-[x/y]` and let one
+  dimension stay fluid, instead of freezing both `w` and `h` to the measured pixels.
+- **Stacking & stroke space — non-default auto-layout painting.** An auto-layout frame may carry
+  `itemReverseZIndex: true` (later children paint _under_ earlier ones — the overlapping-avatars /
+  fanned-cards stack, usually with a negative `itemSpacing`): CSS paints later DOM nodes on top, so
+  reverse it (`flex-direction: row-reverse` with reversed DOM, or explicit `z-index`) or the stack
+  overlaps the wrong way. `strokesIncludedInLayout: true` means borders occupy layout space (Figma
+  excludes them by default) — account for the stroke width in the gap/padding math (it's the
+  `box-sizing: border-box` case). Both omitted = the defaults; nothing to do.
+- **Dev Mode annotations — the designer's notes to _you_, ground truth over inference.** A node may
+  carry `annotations` (`{ label, labelMarkdown, categoryId, properties }[]`): explicit developer
+  instructions pinned in Dev Mode ("use the brand token here", "only visible on hover", "this is the
+  live region"). Treat them as authoritative — they outrank anything you'd infer from geometry or a
+  screenshot, and `properties` names the fields the note is about (e.g. `["fills"]`). Reflect the
+  intent in the code (the right token, the right state, the right ARIA) and surface anything you
+  can't express as a TODO rather than dropping it.
 - **Absolute positioning & constraints — a node placed by coordinates, not flow.** Two
   mutually-exclusive signals say "this isn't in an auto-layout flow"; read the anchor so it survives a
   resize instead of being hardcoded to a corner.

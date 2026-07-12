@@ -113,6 +113,16 @@ const frameInGrid = base({
     { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 16, alignment: 'MIN', offset: 24 },
   ],
   overflowDirection: 'VERTICAL',
+  numberOfFixedChildren: 2,
+  targetAspectRatio: { x: 16, y: 9 },
+  annotations: [
+    {
+      label: 'Use brand colour',
+      labelMarkdown: '**brand**',
+      categoryId: 'c1',
+      properties: [{ type: 'fills' }],
+    },
+  ],
   fillStyleId: 'S:fill',
   strokeStyleId: 'S:stroke',
   effectStyleId: 'S:effect',

@@ -16,6 +16,8 @@ type AutoLayoutTarget = {
   layoutWrap: string;
   counterAxisSpacing: number | null;
   counterAxisAlignContent: string;
+  itemReverseZIndex: boolean;
+  strokesIncludedInLayout: boolean;
   gridRowCount: number;
   gridColumnCount: number;
   gridRowGap: number;
@@ -86,6 +88,11 @@ export const createSetAutoLayoutHandler =
           target.counterAxisSpacing = p.counterAxisSpacing;
         if (typeof p.counterAxisAlignContent === 'string')
           target.counterAxisAlignContent = p.counterAxisAlignContent;
+        // Paint order / stroke-in-layout — the write mirrors of the serializer's new reads.
+        if (typeof p.itemReverseZIndex === 'boolean')
+          target.itemReverseZIndex = p.itemReverseZIndex;
+        if (typeof p.strokesIncludedInLayout === 'boolean')
+          target.strokesIncludedInLayout = p.strokesIncludedInLayout;
       }
     }
 

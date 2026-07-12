@@ -61,6 +61,8 @@ export interface SimplifiedPaint {
   gradientTransform?: number[][];
   /** IMAGE/VIDEO object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat. */
   scaleMode?: string;
+  /** In-fill colour grading (exposure/contrast/…): export the composited render, not the original. */
+  filtersApplied?: true;
   /** PATTERN tiling: the source tile node + how it repeats. See grounding.md "Pattern fills". */
   sourceNodeId?: string;
   tileType?: string;
@@ -85,6 +87,7 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     out.gradientTransform = paint.gradientTransform;
   } else if ('scaleMode' in paint && paint.scaleMode !== undefined) {
     out.scaleMode = paint.scaleMode;
+    if ('filtersApplied' in paint && paint.filtersApplied === true) out.filtersApplied = true;
   } else if (paint.type === 'PATTERN') {
     // The source tile + its repeat geometry — without it a pattern fill is just `{ type: 'PATTERN' }`
     // and the LLM can only flatten it to a colour. The serializer already omits no-op defaults.

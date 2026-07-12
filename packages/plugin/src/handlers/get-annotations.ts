@@ -1,20 +1,8 @@
-import type {
-  GetAnnotationsResult,
-  NodeAnnotations,
-  SerializedAnnotation,
-} from '@figwright/shared';
+import type { GetAnnotationsResult, NodeAnnotations } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { serializeAnnotation } from '../serializer.js';
 import { walk } from '../traverse.js';
-
-const serializeAnnotation = (a: Annotation): SerializedAnnotation => {
-  const out: SerializedAnnotation = {};
-  if (a.label !== undefined) out.label = a.label;
-  if (a.labelMarkdown !== undefined) out.labelMarkdown = a.labelMarkdown;
-  if (a.categoryId !== undefined) out.categoryId = a.categoryId;
-  if (a.properties !== undefined) out.properties = a.properties.map(p => p.type);
-  return out;
-};
 
 const hasAnnotations = (
   node: BaseNode,

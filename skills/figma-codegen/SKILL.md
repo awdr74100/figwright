@@ -24,8 +24,9 @@ Run the grounded tools against the selection, then generate — **trust them ove
    instance's `mainComponent` / `componentProperties`. This is the layout + binding source of truth.
    Keep `dedupeComponents: true` and don't depth-limit a subtree you'll build from.
    → **How to read the tree, the per-node fidelity catalog (effects, per-side borders, stroke align,
-   per-corner radius, blend, masks, gradients, image-fit, auto-layout/grid), and grounding a page too
-   big for one call: [`references/grounding.md`](./references/grounding.md).**
+   per-corner radius, blend, masks, gradients, image-fit, auto-layout/grid, aspect-ratio,
+   scroll/sticky, stack & stroke-space), Dev Mode annotations as ground truth, and grounding a page
+   too big for one call: [`references/grounding.md`](./references/grounding.md).**
 
 2. **`component_map`** → every Figma component grouped to a local code component with a `status`
    (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.

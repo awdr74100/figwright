@@ -62,7 +62,7 @@ describe('handleDesignDiff', () => {
 
     // The file exists, is format-tagged, and stores the raw context.
     const saved = JSON.parse(await readFile(join(dir, SNAP_REL), 'utf8'));
-    expect(saved.figwrightSnapshot).toBe(1);
+    expect(saved.figwrightSnapshot).toBe(2);
     expect(saved.nodeId).toBe('1:1');
     expect(saved.context.nodes[0].id).toBe('1:1');
   });
@@ -119,7 +119,7 @@ describe('handleDesignDiff', () => {
     const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
     expect(r.status).toBe('baseline-created');
     const saved = JSON.parse(await readFile(join(dir, SNAP_REL), 'utf8'));
-    expect(saved.figwrightSnapshot).toBe(1); // rewritten to the current format
+    expect(saved.figwrightSnapshot).toBe(2); // rewritten to the current format
   });
 
   it('warns (but still diffs) when the baseline root looks like a different node', async () => {

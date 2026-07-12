@@ -58,6 +58,13 @@ const OtherPaintSchema = z.object({
   visible: z.boolean(),
   opacity: z.number(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
+  /**
+   * True when the fill carries non-zero image adjustments (exposure / contrast / saturation /
+   * temperature / tint / highlights / shadows). The original bytes (save_image_fills) do NOT
+   * include them, so an adjusted image must ship as the composited render (get_screenshot), or the
+   * colour grading is silently lost. Omitted when untouched.
+   */
+  filtersApplied: z.boolean().optional(),
 });
 
 /**
@@ -107,6 +114,20 @@ export const SerializedEffectSchema = z.object({
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
 /**
+ * One Dev Mode annotation: the designer's note written for the developer. Lives here (not in
+ * queries.ts, which imports from this module) so node serialization can embed annotations on
+ * SerializedNode while get_annotations keeps returning the same shape.
+ */
+export const SerializedAnnotationSchema = z.object({
+  label: z.string().optional(),
+  labelMarkdown: z.string().optional(),
+  categoryId: z.string().optional(),
+  /** The annotation's pinned property names, e.g. ["fills", "cornerRadius"]. */
+  properties: z.array(z.string()).optional(),
+});
+export type SerializedAnnotation = z.infer<typeof SerializedAnnotationSchema>;
+
+/**
  * `pattern` is ROWS / COLUMNS / GRID; column/row grids add count / gutterSize / alignment / offset.
  * `offset` is the margin between the grid and the frame edge — the responsive container's
  * horizontal page margin (→ container padding); omitted when 0 or when alignment is CENTER (which
@@ -152,6 +173,19 @@ export const SerializedAutoLayoutSchema = z.object({
   // the value is non-default.
   counterAxisSpacing: z.number().optional(),
   counterAxisAlignContent: z.string().optional(),
+  /**
+   * True when later siblings paint UNDER earlier ones (Figma's canvas order reversed) — the stacked
+   * avatars / overlapping cards pattern (usually with negative itemSpacing). CSS paints later DOM
+   * elements on top, so codegen must reverse z-index (or reverse the DOM + flex-direction), or the
+   * stack overlaps the wrong way. Omitted when false (the default painting order).
+   */
+  itemReverseZIndex: z.boolean().optional(),
+  /**
+   * True when strokes take up layout space (Figma's default excludes them): every gap/padding
+   * around a bordered child effectively grows by the stroke weight — the CSS analogue of a border
+   * inside box-sizing. Omitted when false (the default).
+   */
+  strokesIncludedInLayout: z.boolean().optional(),
   // GRID only
   gridRowCount: z.number().optional(),
   gridColumnCount: z.number().optional(),
@@ -355,6 +389,22 @@ export interface SerializedNode {
    * NONE.
    */
   overflowDirection?: string;
+  /**
+   * How many of a scrolling frame's leading children stay pinned while the rest scroll — the
+   * `position: sticky` half of overflowDirection (a table header, a pinned toolbar). Omitted at 0.
+   */
+  numberOfFixedChildren?: number;
+  /**
+   * The locked width:height ratio the node resizes toward (→ CSS `aspect-ratio: x / y`) — the
+   * responsive contract of media boxes and hero images. Omitted when no ratio is locked.
+   */
+  targetAspectRatio?: { x: number; y: number };
+  /**
+   * Dev Mode annotations pinned to this node — the designer's notes written FOR the developer ("use
+   * brand colour here", "hover only"). Ground truth that outranks any inference; omitted when the
+   * node has none.
+   */
+  annotations?: readonly SerializedAnnotation[];
   // design-system links (→ tokens / shared styles for codegen)
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
@@ -453,6 +503,9 @@ export const SerializedNodeSchema = z.lazy(() =>
     clipsContent: z.boolean().optional(),
     layoutGrids: z.array(SerializedLayoutGridSchema).optional(),
     overflowDirection: z.string().optional(),
+    numberOfFixedChildren: z.number().optional(),
+    targetAspectRatio: z.object({ x: z.number(), y: z.number() }).optional(),
+    annotations: z.array(SerializedAnnotationSchema).optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),

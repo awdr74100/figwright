@@ -9,7 +9,8 @@ export const setAutoLayoutTool: ToolSpec = {
   description:
     "Configure a frame's auto layout. layoutMode NONE disables it; HORIZONTAL/VERTICAL enable flex " +
     '(padding / itemSpacing / alignment / wrap, plus counterAxisSpacing / counterAxisAlignContent ' +
-    'for the wrapped cross axis — the CSS row-gap / align-content); GRID enables CSS-Grid-style ' +
+    'for the wrapped cross axis — the CSS row-gap / align-content — and itemReverseZIndex / ' +
+    'strokesIncludedInLayout for paint order and stroke-in-layout); GRID enables CSS-Grid-style ' +
     'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). ' +
     'Returns { ok, nodeId }.',
   inputShape: {
@@ -38,6 +39,20 @@ export const setAutoLayoutTool: ToolSpec = {
       .describe(
         'How wrapped rows distribute along the cross axis: AUTO packs them at counterAxisSpacing, ' +
           'SPACE_BETWEEN spreads them (align-content). Requires layoutWrap WRAP',
+      ),
+    itemReverseZIndex: z
+      .boolean()
+      .optional()
+      .describe(
+        'Paint later siblings UNDER earlier ones (reversed canvas order) — the stacked-avatars / ' +
+          'overlapping-cards pattern, usually with negative itemSpacing. HORIZONTAL/VERTICAL only',
+      ),
+    strokesIncludedInLayout: z
+      .boolean()
+      .optional()
+      .describe(
+        'Make strokes take up layout space (gaps/padding grow by the stroke weight); Figma ' +
+          'defaults to excluding them. HORIZONTAL/VERTICAL only',
       ),
     // GRID
     gridRowCount: z.number().int().positive().optional(),

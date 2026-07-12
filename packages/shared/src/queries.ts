@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { PageRefSchema, SerializedFontNameSchema } from './serialized-node.js';
+import {
+  PageRefSchema,
+  SerializedAnnotationSchema,
+  SerializedFontNameSchema,
+} from './serialized-node.js';
 
 // ── list_files ───────────────────────────────────────────────────────────────
 /**
@@ -172,15 +176,8 @@ export const GetFontsResultSchema = z.object({ fonts: z.array(FontUsageSchema) }
 export type GetFontsResult = z.infer<typeof GetFontsResultSchema>;
 
 // ── get_annotations ──────────────────────────────────────────────────────────
-export const SerializedAnnotationSchema = z.object({
-  label: z.string().optional(),
-  labelMarkdown: z.string().optional(),
-  categoryId: z.string().optional(),
-  /** The annotation's pinned property names, e.g. ["fills", "cornerRadius"]. */
-  properties: z.array(z.string()).optional(),
-});
-export type SerializedAnnotation = z.infer<typeof SerializedAnnotationSchema>;
-
+// SerializedAnnotationSchema lives in serialized-node.ts (this module imports from it), shared by
+// the standalone tool result here and the per-node embedding on SerializedNode.
 export const NodeAnnotationsSchema = z.object({
   nodeId: z.string(),
   nodeName: z.string(),

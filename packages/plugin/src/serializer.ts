@@ -1,5 +1,6 @@
 import {
   MIXED,
+  type SerializedAnnotation,
   type SerializedAutoLayout,
   type SerializedComponentProperty,
   type SerializedEffect,
@@ -20,6 +21,25 @@ const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_RADIAL' ||
   paint.type === 'GRADIENT_ANGULAR' ||
   paint.type === 'GRADIENT_DIAMOND';
+
+/**
+ * One Dev Mode annotation — shared by the get_annotations tool and the per-node embedding in
+ * serializeFlatSync, so both surfaces return the same shape.
+ */
+export const serializeAnnotation = (a: Annotation): SerializedAnnotation => {
+  const out: SerializedAnnotation = {};
+  if (a.label !== undefined) out.label = a.label;
+  if (a.labelMarkdown !== undefined) out.labelMarkdown = a.labelMarkdown;
+  if (a.categoryId !== undefined) out.categoryId = a.categoryId;
+  if (a.properties !== undefined) out.properties = a.properties.map(p => p.type);
+  return out;
+};
+
+/** Non-zero image adjustments (exposure / contrast / …) — the original bytes don't carry them. */
+const hasImageAdjustments = (filters: unknown): boolean =>
+  typeof filters === 'object' &&
+  filters !== null &&
+  Object.values(filters).some(v => typeof v === 'number' && v !== 0);
 
 export const serializePaint = (paint: Paint): SerializedPaint => {
   const visible = paint.visible ?? true;
@@ -75,16 +95,21 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
     };
   }
   // IMAGE / VIDEO paints carry a scaleMode (FILL/FIT/CROP/TILE) — the object-fit equivalent, needed
-  // so exported images get the right fit instead of being stretched. SHADER has none.
+  // so exported images get the right fit instead of being stretched. SHADER has none. filtersApplied
+  // flags in-fill colour grading, which the original bytes (save_image_fills) do NOT include — the
+  // signal to export the composited render instead.
   const scaleMode = 'scaleMode' in paint ? (paint as { scaleMode?: string }).scaleMode : undefined;
-  return scaleMode === undefined
-    ? { type: paint.type, visible, opacity }
-    : {
-        type: paint.type,
-        visible,
-        opacity,
-        scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE',
-      };
+  const filtered =
+    'filters' in paint && hasImageAdjustments((paint as { filters?: unknown }).filters);
+  return {
+    type: paint.type,
+    visible,
+    opacity,
+    ...(scaleMode === undefined
+      ? {}
+      : { scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE' }),
+    ...(filtered ? { filtersApplied: true } : {}),
+  };
 };
 
 /** GridTrackSize[] (gridRow/ColumnSizes) → `{ type, value }[]` (FLEX = fr fraction, FIXED = px). */
@@ -111,6 +136,8 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     layoutWrap?: string;
     counterAxisSpacing?: number | null;
     counterAxisAlignContent?: string;
+    itemReverseZIndex?: boolean;
+    strokesIncludedInLayout?: boolean;
     gridRowCount?: number;
     gridColumnCount?: number;
     gridRowGap?: number;
@@ -157,6 +184,10 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
       out.counterAxisAlignContent = n.counterAxisAlignContent;
     }
   }
+  // Non-default paint order / stroke-in-layout: later children normally paint on top (CSS agrees),
+  // and strokes normally take no layout space — only the reversed/inclusive cases carry signal.
+  if (n.itemReverseZIndex === true) out.itemReverseZIndex = true;
+  if (n.strokesIncludedInLayout === true) out.strokesIncludedInLayout = true;
   return out;
 };
 
@@ -544,6 +575,31 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
   if ('overflowDirection' in node) {
     const dir = (node as { overflowDirection?: unknown }).overflowDirection;
     if (typeof dir === 'string' && dir !== 'NONE') out.overflowDirection = dir;
+  }
+  // The sticky half of scrolling: how many leading children stay pinned (→ position: sticky).
+  if ('numberOfFixedChildren' in node) {
+    const fixed = (node as { numberOfFixedChildren?: unknown }).numberOfFixedChildren;
+    if (typeof fixed === 'number' && fixed > 0) out.numberOfFixedChildren = fixed;
+  }
+  // A locked resize ratio (→ CSS aspect-ratio) — the responsive contract of media boxes.
+  if ('targetAspectRatio' in node) {
+    const ratio = (node as { targetAspectRatio?: { x?: unknown; y?: unknown } | null })
+      .targetAspectRatio;
+    if (
+      ratio != null &&
+      typeof ratio.x === 'number' &&
+      typeof ratio.y === 'number' &&
+      ratio.y > 0
+    ) {
+      out.targetAspectRatio = { x: ratio.x, y: ratio.y };
+    }
+  }
+  // Dev Mode annotations — the designer's notes written FOR the developer; ground truth.
+  if ('annotations' in node) {
+    const anns = (node as { annotations?: unknown }).annotations;
+    if (Array.isArray(anns) && anns.length > 0) {
+      out.annotations = (anns as Annotation[]).map(serializeAnnotation);
+    }
   }
 
   collectStyleLinks(node, out);

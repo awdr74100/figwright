@@ -18,9 +18,11 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
 
 /**
  * Bumped only when the on-disk snapshot shape changes; an older file is re-baselined, never
- * mis-diffed.
+ * mis-diffed. v2: the read-dimension batch (itemReverseZIndex / strokesIncludedInLayout /
+ * targetAspectRatio / numberOfFixedChildren / annotations / filtersApplied) — a v1 baseline lacking
+ * those fields would report them as spurious "changes" against a fresh capture.
  */
-const SNAPSHOT_FORMAT_VERSION = 1;
+const SNAPSHOT_FORMAT_VERSION = 2;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputShape = {

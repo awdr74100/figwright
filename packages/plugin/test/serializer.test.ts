@@ -165,6 +165,62 @@ describe('serializeFlat', () => {
     expect(out.fills).toEqual([{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }]);
   });
 
+  it('flags an IMAGE fill with non-zero adjustments; untouched filters stay clean', () => {
+    // Adjusted: the original bytes don't carry the grading → export the composited render instead.
+    const graded = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'IMAGE',
+            visible: true,
+            opacity: 1,
+            scaleMode: 'FILL',
+            filters: { exposure: 0.3, contrast: 0, saturation: 0 },
+          },
+        ],
+      }),
+    );
+    expect(graded.fills?.[0]).toMatchObject({ filtersApplied: true });
+
+    // All-zero filters (Figma's default object) must NOT flag.
+    const untouched = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'IMAGE',
+            visible: true,
+            opacity: 1,
+            scaleMode: 'FILL',
+            filters: { exposure: 0, contrast: 0 },
+          },
+        ],
+      }),
+    );
+    expect(untouched.fills?.[0]).not.toHaveProperty('filtersApplied');
+  });
+
+  it('embeds Dev Mode annotations and the sticky/aspect dimensions only when meaningful', () => {
+    const out = serializeFlatSync(
+      fake({
+        overflowDirection: 'VERTICAL',
+        numberOfFixedChildren: 2,
+        targetAspectRatio: { x: 16, y: 9 },
+        annotations: [{ label: 'brand colour', properties: [{ type: 'fills' }] }],
+      }),
+    );
+    expect(out.numberOfFixedChildren).toBe(2);
+    expect(out.targetAspectRatio).toEqual({ x: 16, y: 9 });
+    expect(out.annotations).toEqual([{ label: 'brand colour', properties: ['fills'] }]);
+
+    // Defaults stay omitted: 0 fixed children, no locked ratio, empty annotations.
+    const defaults = serializeFlatSync(
+      fake({ numberOfFixedChildren: 0, targetAspectRatio: null, annotations: [] }),
+    );
+    expect(defaults.numberOfFixedChildren).toBeUndefined();
+    expect(defaults.targetAspectRatio).toBeUndefined();
+    expect(defaults.annotations).toBeUndefined();
+  });
+
   it('serializes a PATTERN paint with its tiling geometry (source node + repeat)', () => {
     const out = serializeFlatSync(
       fake({
@@ -414,6 +470,35 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
       counterAxisAlignItems: 'MIN',
       layoutWrap: 'NO_WRAP',
     });
+  });
+
+  it('carries reversed paint order and stroke-in-layout only when non-default', () => {
+    const base = {
+      type: 'FRAME',
+      layoutMode: 'VERTICAL',
+      paddingTop: 0,
+      paddingRight: 0,
+      paddingBottom: 0,
+      paddingLeft: 0,
+      itemSpacing: -8,
+      primaryAxisAlignItems: 'MIN',
+      counterAxisAlignItems: 'MIN',
+    };
+    // The stacked-avatars shape: negative spacing + reversed z-order; strokes take layout space.
+    const reversed = serializeFlatSync(
+      fake({ ...base, itemReverseZIndex: true, strokesIncludedInLayout: true }),
+    );
+    expect(reversed.layout).toMatchObject({
+      itemReverseZIndex: true,
+      strokesIncludedInLayout: true,
+    });
+
+    // Defaults (false) stay omitted so an ordinary flex row stays clean.
+    const plain = serializeFlatSync(
+      fake({ ...base, itemReverseZIndex: false, strokesIncludedInLayout: false }),
+    );
+    expect(plain.layout).not.toHaveProperty('itemReverseZIndex');
+    expect(plain.layout).not.toHaveProperty('strokesIncludedInLayout');
   });
 
   it('serializes WRAP cross-axis spacing + alignment (non-default only), skips them when not wrapping', () => {
