@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  extractAngularComponents,
   extractReactComponents,
   extractSfcComponent,
   nameFromFile,
@@ -120,6 +121,88 @@ describe('extractSfcComponent (Vue / Svelte props)', () => {
   });
 });
 
+describe('extractAngularComponents (pure)', () => {
+  it('extracts classic @Input() props and strips the Component name suffix for matching', () => {
+    const code = `
+      import { Component, Input } from '@angular/core';
+      @Component({ selector: 'app-button', standalone: true, template: '' })
+      export class ButtonComponent {
+        @Input() size = 'md';
+        @Input() disabled = false;
+      }
+    `;
+    const [c] = extractAngularComponents('src/app/button/button.component.ts', code);
+    expect(c?.name).toBe('Button'); // ButtonComponent → Button, so it matches a Figma "Button"
+    expect(c?.framework).toBe('angular');
+    expect(c?.exportKind).toBe('named');
+    expect(c?.propNames).toEqual(['size', 'disabled']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('extracts signal inputs (input / input.required / model) alongside decorator inputs', () => {
+    const code = `
+      import { Component, Input, input, model } from '@angular/core';
+      @Component({ selector: 'app-card', template: '' })
+      export class CardComponent {
+        @Input() elevated = false;
+        title = input.required<string>();
+        count = input(0);
+        selected = model(false);
+      }
+    `;
+    const [c] = extractAngularComponents('card.component.ts', code);
+    expect(c?.propNames).toEqual(['elevated', 'title', 'count', 'selected']);
+  });
+
+  it('does not mistake internal signals / queries / outputs for inputs', () => {
+    // Only input()/model() (and @Input) are public inputs. signal()/computed() are internal state,
+    // viewChild()/contentChild() are queries, output() is an event — none is a component prop.
+    const code = `
+      import { Component, signal, computed, input, output, viewChild } from '@angular/core';
+      @Component({ selector: 'app-widget', template: '' })
+      export class WidgetComponent {
+        label = input('');
+        count = signal(0);
+        doubled = computed(() => this.count() * 2);
+        changed = output<number>();
+        ref = viewChild('el');
+      }
+    `;
+    const [c] = extractAngularComponents('widget.component.ts', code);
+    expect(c?.propNames).toEqual(['label']); // not count / doubled / changed / ref
+  });
+
+  it('uses the @Input alias (string and object form) as the public prop name', () => {
+    const code = `
+      import { Component, Input } from '@angular/core';
+      @Component({ template: '' })
+      export class FieldComponent {
+        @Input('variant') kind = 'primary';
+        @Input({ alias: 'isBusy', required: true }) busy!: boolean;
+        @Input() set active(v: boolean) {}
+      }
+    `;
+    const [c] = extractAngularComponents('field.component.ts', code);
+    // The alias is the template-binding name (what a Figma axis lines up against); set-accessor
+    // inputs are captured too.
+    expect(c?.propNames).toEqual(['variant', 'isBusy', 'active']);
+  });
+
+  it('skips non-component classes (@Injectable / @Directive / plain) and anonymous classes', () => {
+    const code = `
+      import { Injectable, Directive } from '@angular/core';
+      @Injectable() export class DataService {}
+      @Directive({ selector: '[appHi]' }) export class HiDirective {}
+      export class PlainThing {}
+    `;
+    expect(extractAngularComponents('x.ts', code)).toEqual([]);
+  });
+
+  it('does not crash on unparseable source', () => {
+    expect(extractAngularComponents('x.ts', 'export class = = =')).toEqual([]);
+  });
+});
+
 describe('nameFromFile', () => {
   it('PascalCases kebab and uses parent dir for index files', () => {
     expect(nameFromFile('ui/user-card.tsx')).toBe('UserCard');
@@ -181,6 +264,32 @@ describe('scanComponents (real fs)', () => {
       expect(comps[0]?.propsExtracted).toBe(true);
     } finally {
       await rm(vueDir, { recursive: true, force: true });
+    }
+  });
+
+  // An Angular profile globs .ts: only @Component classes are kept, and a service .ts in the same
+  // sweep contributes nothing (so the scan isn't polluted by every .ts in the repo).
+  it('scans an Angular .ts profile, keeping @Component classes and skipping services', async () => {
+    const ngDir = await mkdtemp(join(tmpdir(), 'scan-ng-'));
+    try {
+      await mkdir(join(ngDir, 'src', 'app', 'button'), { recursive: true });
+      await writeFile(
+        join(ngDir, 'src', 'app', 'button', 'button.component.ts'),
+        `import { Component, input } from '@angular/core';
+         @Component({ selector: 'app-button', template: '' })
+         export class ButtonComponent { size = input('md'); }`,
+      );
+      await writeFile(
+        join(ngDir, 'src', 'app', 'data.service.ts'),
+        `import { Injectable } from '@angular/core';
+         @Injectable() export class DataService {}`,
+      );
+      const comps = await scanComponents(ngDir, ['.ts']);
+      expect(comps.map(c => c.name)).toEqual(['Button']); // not DataService
+      expect(comps[0]?.framework).toBe('angular');
+      expect(comps[0]?.propNames).toEqual(['size']);
+    } finally {
+      await rm(ngDir, { recursive: true, force: true });
     }
   });
 });

@@ -10,7 +10,16 @@ import { walkRepoFiles } from '../repo-walk.js';
 // This first cut covers the JS/TS ecosystem; the framework/styling detectors are an ordered cascade so
 // a PHP (composer.json) or .NET (*.csproj) detector is just another entry appended later.
 
-export const FRAMEWORKS = ['next', 'nuxt', 'react', 'vue', 'svelte', 'solid', 'unknown'] as const;
+export const FRAMEWORKS = [
+  'next',
+  'nuxt',
+  'react',
+  'vue',
+  'svelte',
+  'solid',
+  'angular',
+  'unknown',
+] as const;
 export type Framework = (typeof FRAMEWORKS)[number];
 
 export const STYLING_SYSTEMS = [
@@ -187,6 +196,10 @@ const COMPONENT_EXTENSIONS: Record<Framework, string[]> = {
   // emitted conventions differ (`class` not `className`, `createSignal`), which the framework label
   // steers.
   solid: ['.tsx', '.jsx'],
+  // Angular components are @Component-decorated classes in .ts (conventionally *.component.ts). The
+  // scanner reads every .ts but only keeps classes carrying @Component, so a service/pipe/guard .ts
+  // contributes nothing. .ts is Angular-exclusive here — no other framework globs it.
+  angular: ['.ts'],
   unknown: ['.tsx', '.jsx', '.vue', '.svelte'],
 };
 
@@ -204,6 +217,9 @@ const detectFramework = (
   if ('svelte' in deps) return { framework: 'svelte', reason: 'svelte in dependencies' };
   // solid-js is the base dep of both plain Solid and SolidStart, so one check covers both.
   if ('solid-js' in deps) return { framework: 'solid', reason: 'solid-js in dependencies' };
+  // @angular/core is the base dep of every Angular app (incl. AnalogJS / Angular Universal).
+  if ('@angular/core' in deps)
+    return { framework: 'angular', reason: '@angular/core in dependencies' };
   return { framework: 'unknown', reason: 'no known framework dependency' };
 };
 

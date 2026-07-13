@@ -56,6 +56,15 @@ describe('detectProfile (pure)', () => {
     expect(p.svg.importHint).toBe("import Icon from './icon.svg?component-solid'");
   });
 
+  it('detects Angular from @angular/core and scans .ts components', () => {
+    const p = detectProfile(
+      baseInput({ packageJson: { dependencies: { '@angular/core': '^19.0.0' } } }),
+    );
+    expect(p.framework).toBe('angular');
+    // Angular components are @Component classes in .ts (the scanner filters to @Component classes).
+    expect(p.componentExtensions).toEqual(['.ts']);
+  });
+
   it('flags ts when tsconfig present, js otherwise', () => {
     expect(detectProfile(baseInput({ hasTsconfig: true })).language).toBe('ts');
     expect(

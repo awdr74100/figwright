@@ -9,10 +9,11 @@ import { walkRepoFiles } from '../repo-walk.js';
 // against them. The guiding principle: never pattern-match the directory layout (feature-based, atomic,
 // flat all differ); identify a component by its *AST signature* (a PascalCase, exported, function-ish
 // binding) and take its name from the export/filename. Folder is only a confidence hint, applied later
-// in the join. React (.tsx/.jsx) is parsed with oxc; Vue/Svelte fall back to filename-derived names
-// (their SFC name is the file by convention) as a baseline until a dedicated pass is added.
+// in the join. React (.tsx/.jsx) and Angular (.ts, an @Component-decorated class) are parsed with oxc;
+// Vue/Svelte fall back to filename-derived names (their SFC name is the file by convention) as a
+// baseline until a dedicated pass is added.
 
-export type ComponentFramework = 'react' | 'vue' | 'svelte';
+export type ComponentFramework = 'react' | 'vue' | 'svelte' | 'angular';
 
 export interface ScannedComponent {
   name: string;
@@ -121,6 +122,94 @@ export const extractReactComponents = (filePath: string, code: string): ScannedC
       propNames: propNamesOf(cand.fn),
       propsExtracted: true,
       framework: 'react',
+    });
+  }
+  return out;
+};
+
+/** Whether an oxc class/member node carries a decorator called `name` (e.g. Component, Input). */
+const hasDecorator = (node: any, name: string): boolean =>
+  (node.decorators ?? []).some(
+    (d: any) => (d.expression?.callee?.name ?? d.expression?.name) === name,
+  );
+
+/**
+ * The public input name for an @Input()-decorated member: the alias when one is given
+ * (`@Input('foo')` / `@Input({ alias: 'foo' })`), else the property/accessor name. The alias is the
+ * template-binding name, so it's what a Figma property axis should line up against.
+ */
+const angularInputName = (member: any, keyName: string): string => {
+  const arg0 = (member.decorators ?? []).find(
+    (d: any) => (d.expression?.callee?.name ?? d.expression?.name) === 'Input',
+  )?.expression?.arguments?.[0];
+  if (arg0?.type === 'Literal' && typeof arg0.value === 'string') return arg0.value;
+  if (arg0?.type === 'ObjectExpression') {
+    const alias = (arg0.properties ?? []).find(
+      (p: any) => (p?.key?.name ?? p?.key?.value) === 'alias',
+    )?.value;
+    if (alias?.type === 'Literal' && typeof alias.value === 'string') return alias.value;
+  }
+  return keyName;
+};
+
+/** True for a signal-input field initializer: input(), input.required(), model(), model.required(). */
+const isSignalInput = (value: any): boolean => {
+  if (value?.type !== 'CallExpression') return false;
+  const callee = value.callee;
+  const base = callee?.type === 'MemberExpression' ? callee.object?.name : callee?.name;
+  return base === 'input' || base === 'model';
+};
+
+/** Public input names of an @Component class — both classic @Input() and signal input()/model(). */
+const angularInputs = (cls: any): string[] => {
+  const names = new Set<string>();
+  for (const member of cls.body?.body ?? []) {
+    const keyName = member?.key?.name;
+    if (typeof keyName !== 'string') continue;
+    if (hasDecorator(member, 'Input')) names.add(angularInputName(member, keyName));
+    else if (member.type === 'PropertyDefinition' && isSignalInput(member.value))
+      names.add(keyName);
+  }
+  return [...names];
+};
+
+/** Strip Angular's conventional `Component` class-name suffix so it matches suffix-free Figma names. */
+const angularLogicalName = (className: string): string =>
+  className.endsWith('Component') && className.length > 'Component'.length
+    ? className.slice(0, -'Component'.length)
+    : className;
+
+/**
+ * Extract Angular components from one file's source. A component is an exported class carrying the
+ * `@Component` decorator (`@Injectable` / `@Directive` / `@Pipe` and plain classes are skipped).
+ * Inputs come from both eras: classic `@Input()` (incl. aliases and `set` accessor inputs) and
+ * signal inputs (`input()` / `input.required()` / `model()`). Standalone vs NgModule doesn't change
+ * detection — both declare the component with `@Component`, it only changes how codegen imports it.
+ * The class name's conventional `Component` suffix is stripped for the join (so `ButtonComponent`
+ * matches a Figma `Button`); the importable class symbol is that name + `Component`.
+ */
+export const extractAngularComponents = (filePath: string, code: string): ScannedComponent[] => {
+  let program: any;
+  try {
+    program = parseSync(filePath, code).program;
+  } catch {
+    return [];
+  }
+  const out: ScannedComponent[] = [];
+  for (const node of program.body ?? []) {
+    if (node.type !== 'ExportNamedDeclaration' && node.type !== 'ExportDefaultDeclaration')
+      continue;
+    const cls = node.declaration;
+    if (cls?.type !== 'ClassDeclaration' || !hasDecorator(cls, 'Component')) continue;
+    const className = cls.id?.name;
+    if (typeof className !== 'string') continue;
+    out.push({
+      name: angularLogicalName(className),
+      filePath,
+      exportKind: node.type === 'ExportDefaultDeclaration' ? 'default' : 'named',
+      propNames: angularInputs(cls),
+      propsExtracted: true,
+      framework: 'angular',
     });
   }
   return out;
@@ -306,6 +395,9 @@ const frameworkForExt = (ext: string): ComponentFramework | null => {
   if (REACT_EXTS.has(ext)) return 'react';
   if (ext === '.vue') return 'vue';
   if (ext === '.svelte') return 'svelte';
+  // .ts is only globbed for an Angular project (its componentExtensions), so it never collides with
+  // the React/Vue/Svelte extensions above; a non-component .ts simply yields no @Component classes.
+  if (ext === '.ts') return 'angular';
   return null;
 };
 
@@ -330,6 +422,7 @@ export const scanComponents = async (
       continue;
     }
     if (framework === 'react') out.push(...extractReactComponents(rel, code));
+    else if (framework === 'angular') out.push(...extractAngularComponents(rel, code));
     else out.push(...extractSfcComponent(rel, code, framework));
   }
   return out;
