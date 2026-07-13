@@ -33,8 +33,11 @@ export interface TokenMapping {
     cssVar: string;
     utility?: string;
     confidence: number;
-    /** Which signals agreed: name similarity and/or exact color value. */
-    matchedBy: ('name' | 'value')[];
+    /**
+     * Which signal produced the match: name similarity and/or exact color value, or 'map-file' for
+     * an explicit recorded override (authoritative — the opposite of a weak ['value'] hypothesis).
+     */
+    matchedBy: ('name' | 'value' | 'map-file')[];
     /**
      * Other project tokens sharing the exact same color value, present only when the value alone
      * had to pick among them (no name signal split the tie). The candidate is then a capped,
@@ -55,6 +58,13 @@ export interface TokenMapping {
    * mechanism of pre-variables files). Absent for variables.
    */
   source?: 'style';
+  /**
+   * Set when the map file had a row for this Figma token but its recorded target no longer resolves
+   * to any project token (renamed/removed since it was recorded). The mapping degrades to the
+   * normal join rather than referencing a token that doesn't exist; this carries the dead ref so
+   * the caller can re-record or remove the row. Absent on a healthy override.
+   */
+  staleOverride?: { ref: string };
   status: MappingStatus;
 }
 
@@ -201,7 +211,7 @@ const refOf = (token: ProjectToken, tailwind: boolean): string =>
 const candidateFrom = (
   token: ProjectToken,
   confidence: number,
-  matchedBy: ('name' | 'value')[],
+  matchedBy: ('name' | 'value' | 'map-file')[],
   tailwind: boolean,
   ambiguousWith?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
@@ -227,7 +237,69 @@ export interface TokenJoinOptions {
   threshold: number;
   /** The project is a Tailwind project — enables the framework built-in scale fallback below. */
   tailwind?: boolean;
+  /**
+   * Explicit figmaName → project-token ref overrides from docs/figma-token-map.md (raw + normalized
+   * keys, like the component map). Highest authority when the ref still resolves to a project
+   * token; a ref that no longer resolves is reported stale and degrades to the normal join.
+   */
+  overrides?: ReadonlyMap<string, string>;
 }
+
+const normKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Resolve a recorded override ref to a project token. The ref is whatever the map file author wrote
+ * — a utility (bg-primary-500), a var() reference, a bare custom-property name (--color-primary-500
+ * or color-primary-500) — so match it against every identity a token exposes (name / cssVar /
+ * utility), normalized. Returns undefined when nothing matches (a stale row).
+ */
+// var(--x) → --x, then the normalized alnum form, so a ref written as var(--color-x) / --color-x /
+// color-x / colorX all compare equal against a token's name / cssVar / utility.
+const stripVar = (s: string): string => normKey(s.replace(/^var\(\s*|\s*\)$/g, ''));
+
+const resolveOverrideToken = (
+  ref: string,
+  projectTokens: readonly ProjectToken[],
+): ProjectToken | undefined => {
+  const wanted = stripVar(ref);
+  return projectTokens.find(t =>
+    [t.name, t.cssVar, t.utility].some(id => id !== undefined && stripVar(id) === wanted),
+  );
+};
+
+/**
+ * Parse docs/figma-token-map.md — two-column markdown table rows (`| FigmaName | ref |`) or arrow
+ * lines (`FigmaName -> ref`), skipping the header/separator. Mirrors component-map's parseMapFile
+ * shape (raw + normalized keys) but the target is a token ref string, not a file path.
+ */
+export const parseTokenMapFile = (markdown: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const add = (figma: string, ref: string): void => {
+    const f = figma.trim();
+    const r = ref.trim();
+    if (!f || !r || /^-+$/.test(r)) return;
+    out.set(f, r);
+    out.set(normKey(f), r);
+  };
+  for (const line of markdown.split('\n')) {
+    const arrow = line.split('->');
+    if (arrow.length === 2 && arrow[0] !== undefined && arrow[1] !== undefined) {
+      add(arrow[0], arrow[1]);
+      continue;
+    }
+    if (line.trim().startsWith('|')) {
+      const cells = line
+        .split('|')
+        .map(c => c.trim())
+        .filter(Boolean);
+      if (cells.length >= 2 && cells[0] !== undefined && cells[1] !== undefined) {
+        if (/figma/i.test(cells[0]) && /token|ref|code|value/i.test(cells[1])) continue; // header
+        add(cells[0], cells[1]);
+      }
+    }
+  }
+  return out;
+};
 
 // Tailwind ships open-ended numeric built-in scales that real projects don't redeclare in @theme — so
 // the project CSS has no token to join against and a perfectly usable variable reads as a false gap.
@@ -315,6 +387,32 @@ const joinOne = (
     status: 'unmapped',
   };
 
+  const override = opts.overrides?.get(figma.name) ?? opts.overrides?.get(normKey(figma.name));
+  if (override !== undefined) {
+    // An explicit recorded mapping wins when its ref still resolves to a project token. A ref that no
+    // longer resolves (the token was renamed/removed) would reference a nonexistent token — worse
+    // than the fuzzy fallback — so it degrades to the normal join, tagged stale for cleanup.
+    const token = resolveOverrideToken(override, projectTokens);
+    if (token !== undefined) {
+      return {
+        ...base,
+        candidate: candidateFrom(token, 1, ['map-file'], opts.tailwind === true),
+        status: 'high',
+      };
+    }
+    return { ...joinTokenScan(figma, projectTokens, opts, base), staleOverride: { ref: override } };
+  }
+
+  return joinTokenScan(figma, projectTokens, opts, base);
+};
+
+/** The name/value/builtin join (no override) — also the fallback when an override is stale. */
+const joinTokenScan = (
+  figma: FigmaToken,
+  projectTokens: readonly ProjectToken[],
+  opts: TokenJoinOptions,
+  base: TokenMapping,
+): TokenMapping => {
   const typography = isTypographyCollection(figma.collection);
   const nameMatch = bestNameMatch(figma.name, projectTokens, typography);
 

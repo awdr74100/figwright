@@ -104,6 +104,29 @@ instead of a regeneration:
 - Scope it by the same `nodeId` unit you coded from. `no-changes` means the design is untouched since
   the baseline — nothing to do.
 
+## Record verified mappings (so the next run reuses, not re-guesses)
+
+The joins re-derive from scratch every run. A mapping you **confirmed** — reused a component and it
+rendered right, resolved an ambiguous colour to the semantically correct token — is worth recording
+so the next run treats it as ground truth instead of re-guessing. Two append-only map files, each read
+back by its join as highest authority:
+
+- **`docs/figma-component-map.md`** — rows `| FigmaName | code/path |` (or `FigmaName -> path`).
+  `component_map` then returns that component as `source: 'map-file'`, confidence 1.
+- **`docs/figma-token-map.md`** — rows `| FigmaName | ref |`. `token_map` returns it as
+  `matchedBy: ['map-file']`, confidence 1. The `ref` is what you'd emit — a utility (`bg-primary-500`),
+  a `var(--color-primary-500)`, or the bare token name.
+
+- **Record only what you VERIFIED, and only the mappings the join was unsure of** — a `low`/`medium`
+  component match you confirmed, an `unmapped` component you built (record its new file), or a token
+  that came back `ambiguousWith` / `matchedBy: ['value']` / `unmapped` and you resolved by meaning. A
+  recorded row is **authoritative** next run, so a wrong row silently mis-maps every future generation
+  — never record a guess. Skip the already-`high` deterministic matches; they re-derive correctly and
+  a row for them is just noise.
+- **Keep the files healthy.** When `component_map` / `token_map` report `staleOverrides` (a recorded
+  target that no longer resolves — the file/token was renamed or deleted), the join has already
+  degraded to the fuzzy result; fix that row to the new target or delete it.
+
 ## Responsive & verify
 
 - **Responsive by default** — root is `w-full`, never the artboard's fixed width; ground breakpoints

@@ -266,4 +266,55 @@ describe('handleTokenMap', () => {
     expect(result.mappings.find(m => m.figmaName === 'Primary/500')?.status).toBe('high');
     expect(result.mappings.every(m => m.source === undefined)).toBe(true);
   });
+
+  describe('map-file overrides (docs/figma-token-map.md)', () => {
+    let odir: string;
+    beforeAll(async () => {
+      odir = await mkdtemp(join(tmpdir(), 'tokenmap-ovr-'));
+      await writeFile(
+        join(odir, 'package.json'),
+        JSON.stringify({
+          devDependencies: { tailwindcss: '^4.0.0', '@tailwindcss/vite': '^4.0.0' },
+        }),
+      );
+      await mkdir(join(odir, 'src'), { recursive: true });
+      await writeFile(
+        join(odir, 'src', 'app.css'),
+        '@import "tailwindcss";\n@theme {\n  --color-primary-500: #6266F0;\n}\n',
+      );
+      await mkdir(join(odir, 'docs'), { recursive: true });
+    });
+    afterAll(async () => {
+      await rm(odir, { recursive: true, force: true });
+    });
+
+    it('lets a docs/figma-token-map.md row override an unmapped token as map-file', async () => {
+      // Accent/Teal has no project token of its own; the recorded row points it at an existing one.
+      await writeFile(
+        join(odir, 'docs', 'figma-token-map.md'),
+        '| Figma | Token |\n| --- | --- |\n| Accent/Teal | primary-500 |\n',
+      );
+      const result = await handleTokenMap(dispatch, { rootDir: odir });
+      const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
+      expect(teal?.candidate?.token).toBe('color-primary-500');
+      expect(teal?.candidate?.matchedBy).toEqual(['map-file']);
+      expect(teal?.status).toBe('high');
+      expect(result.unmapped).not.toContain('Accent/Teal');
+      expect(result.staleOverrides).toBeUndefined();
+    });
+
+    it('reports a stale token override (ref gone) and degrades to the normal join', async () => {
+      await writeFile(
+        join(odir, 'docs', 'figma-token-map.md'),
+        '| Accent/Teal | color-deleted-500 |\n',
+      );
+      const result = await handleTokenMap(dispatch, { rootDir: odir });
+      const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
+      expect(teal?.candidate).toBeUndefined(); // ref didn't resolve → not honoured
+      expect(teal?.status).toBe('unmapped'); // degraded (Accent/Teal has no real match)
+      expect(result.staleOverrides).toEqual([
+        { figmaName: 'Accent/Teal', ref: 'color-deleted-500' },
+      ]);
+    });
+  });
 });

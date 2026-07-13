@@ -81,12 +81,35 @@ describe('handleComponentMap', () => {
 
   it('honors a docs/figma-component-map.md override for the otherwise-unmapped component', async () => {
     await mkdir(join(dir, 'docs'), { recursive: true });
+    // The override wins — but only because its target is a real file. The tool confirms it on disk
+    // (or via the scan) so it isn't treated as stale.
+    await mkdir(join(dir, 'src', 'ui'), { recursive: true });
+    await writeFile(join(dir, 'src', 'ui', 'Tip.tsx'), 'export function Tip() { return <div/>; }');
     await writeFile(join(dir, 'docs', 'figma-component-map.md'), 'Tooltip -> src/ui/Tip.tsx\n');
     const result = await handleComponentMap(dispatch, { rootDir: dir });
     const tooltip = result.mappings.find(m => m.figmaComponentName === 'Tooltip');
     expect(tooltip?.candidate?.name).toBe('Tip');
     expect(tooltip?.source).toBe('map-file');
+    expect(tooltip?.staleOverride).toBeUndefined();
     expect(result.unmapped).not.toContain('Tooltip');
+    expect(result.staleOverrides).toBeUndefined();
+  });
+
+  it('reports a stale override (target gone from disk) and degrades instead of a phantom import', async () => {
+    // Row points at a file that neither the scan parsed nor exists on disk — a recorded mapping whose
+    // file was deleted/renamed. Honouring it would import a dead module, so it degrades (here to
+    // unmapped) and surfaces the dead row for cleanup.
+    await mkdir(join(dir, 'docs'), { recursive: true });
+    await writeFile(join(dir, 'docs', 'figma-component-map.md'), 'Tooltip -> src/ui/Gone.tsx\n');
+    const result = await handleComponentMap(dispatch, { rootDir: dir });
+    const tooltip = result.mappings.find(m => m.figmaComponentName === 'Tooltip');
+    // Degraded to the fuzzy scan, never the dead target — and the row is reported for cleanup.
+    expect(tooltip?.source).toBe('scan');
+    expect(tooltip?.candidate?.filePath).not.toBe('src/ui/Gone.tsx');
+    expect(tooltip?.staleOverride).toEqual({ name: 'Gone', filePath: 'src/ui/Gone.tsx' });
+    expect(result.staleOverrides).toEqual([
+      { figmaComponentName: 'Tooltip', name: 'Gone', filePath: 'src/ui/Gone.tsx' },
+    ]);
   });
 
   it('groups variant instances by their component set, not the variant name', async () => {

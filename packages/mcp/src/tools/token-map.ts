@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import type { GetStylesResult, GetVariableDefsResult } from '@figwright/shared';
 import { z } from 'zod';
 
-import { joinTokens, type TokenMapping } from '../join/token-map.js';
+import { joinTokens, parseTokenMapFile, type TokenMapping } from '../join/token-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
 import { resolveFigmaTokens, resolvePaintStyleTokens } from '../tokens/figma-tokens.js';
 import { loadProjectTokens } from '../tokens/load.js';
@@ -12,6 +15,15 @@ import type { ToolSpec } from './spec.js';
 export const TOKEN_MAP_TOOL_NAME = 'token_map';
 
 const DEFAULT_THRESHOLD = 0.7;
+const MAP_FILE = 'docs/figma-token-map.md';
+
+const readOverrides = async (rootDir: string): Promise<ReturnType<typeof parseTokenMapFile>> => {
+  try {
+    return parseTokenMapFile(await readFile(join(rootDir, MAP_FILE), 'utf8'));
+  } catch {
+    return new Map();
+  }
+};
 
 const inputShape = {
   rootDir: z.string().describe('Project root; defaults to the server cwd').optional(),
@@ -41,6 +53,12 @@ export interface TokenMapResult {
   /** Repo-relative token source that was parsed, or null when none was usable. */
   tokenSource: string | null;
   projectTokenCount: number;
+  /**
+   * Docs/figma-token-map.md rows whose recorded ref no longer resolves to a project token
+   * (renamed/removed). The mapping degraded to the normal join; re-record or remove the row.
+   * Present only when at least one row is stale.
+   */
+  staleOverrides?: { figmaName: string; ref: string }[];
   /** Set when the token source couldn't be used (e.g. a Tailwind v3 JS config). */
   note?: string;
 }
@@ -67,8 +85,13 @@ export const tokenMapTool: ToolSpec = {
     'default-mode literal. tokenSource ' +
     'overrides the ' +
     'detected styling config; rootDir defaults to the server cwd. Tailwind v3 JS configs are not yet ' +
-    'parsed (pass tokenSource to a CSS file). Returns { mappings (candidate + confidence + status + ' +
-    'matchedBy + builtin), unmapped, tokenSource, profile }.',
+    'parsed (pass tokenSource to a CSS file). An explicit docs/figma-token-map.md row ' +
+    '(FigmaName | ref) overrides the fuzzy join with matchedBy ["map-file"] — this file is the ' +
+    'durable record a verified token mapping is written back to, so the next run reuses it instead ' +
+    'of re-guessing an ambiguous or value-only match. A row whose ref no longer resolves to a ' +
+    'project token is reported in staleOverrides and degrades to the normal join. Returns { mappings ' +
+    '(candidate + confidence + status + matchedBy + builtin), unmapped, staleOverrides, tokenSource, ' +
+    'profile }.',
   inputShape,
   kind: 'local',
 };
@@ -90,12 +113,13 @@ export const handleTokenMap = async (
 
   // Styles are an additive source, not a requirement: a get_styles failure must not take down the
   // variable join that succeeded before styles existed — degrade to variables-only instead.
-  const [defs, styles, profile] = await Promise.all([
+  const [defs, styles, profile, overrides] = await Promise.all([
     dispatch(GET_VARIABLE_DEFS_TOOL_NAME, {}) as Promise<GetVariableDefsResult>,
     (dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>).catch(
       (): GetStylesResult => ({ paints: [], texts: [], effects: [], grids: [] }),
     ),
     analyzeProject(rootDir),
+    readOverrides(rootDir),
   ]);
 
   const loaded = await loadProjectTokens(rootDir, profile, args.tokenSource);
@@ -106,8 +130,14 @@ export const handleTokenMap = async (
   const mappings = joinTokens(figmaTokens, loaded.tokens, {
     threshold,
     tailwind: profile.styling.system === 'tailwind',
+    ...(overrides.size > 0 ? { overrides } : {}),
   });
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.figmaName);
+  // Stale rows (recorded ref no longer resolves) that degraded to the normal join — surfaced so the
+  // caller can re-record or delete them, keeping the map file self-healing.
+  const staleOverrides = mappings.flatMap(m =>
+    m.staleOverride === undefined ? [] : [{ figmaName: m.figmaName, ref: m.staleOverride.ref }],
+  );
   const themedCollections = defs.collections
     .filter(c => c.modes.length > 1)
     .map(c => ({
@@ -123,6 +153,7 @@ export const handleTokenMap = async (
     profile,
     tokenSource: loaded.source,
     projectTokenCount: loaded.tokens.length,
+    ...(staleOverrides.length > 0 ? { staleOverrides } : {}),
     ...(loaded.note === undefined ? {} : { note: loaded.note }),
   };
 };

@@ -113,15 +113,43 @@ describe('joinComponents', () => {
     expect(m?.candidate).toBeUndefined();
   });
 
-  it('lets a map-file override win with full confidence', () => {
+  it('trusts an override whose file is on disk even when the scan did not parse it', () => {
+    // The scanner can miss a real component (an unusual export). The override still wins at full
+    // confidence — but only because the tool confirmed the file is on disk (overridesOnDisk).
+    const overrides = new Map([['Tooltip', { name: 'Tip', filePath: 'src/ui/Tip.tsx' }]]);
+    const [m] = joinComponents([usage({ name: 'Tooltip' })], scanned, {
+      threshold: 0.7,
+      overrides,
+      overridesOnDisk: new Set(['Tooltip']),
+    });
+    expect(m?.candidate?.name).toBe('Tip');
+    expect(m?.candidate?.confidence).toBe(1);
+    expect(m?.source).toBe('map-file');
+    expect(m?.staleOverride).toBeUndefined();
+  });
+
+  it('degrades a stale override (target neither scanned nor on disk) and flags it', () => {
+    // The recorded file was deleted/renamed. Honouring it would emit an import of a dead module —
+    // strictly worse than the fuzzy fallback — so it degrades (here to unmapped) and reports the
+    // dead row for cleanup instead of asserting a phantom high-confidence reuse.
     const overrides = new Map([['Tooltip', { name: 'Tip', filePath: 'src/ui/Tip.tsx' }]]);
     const [m] = joinComponents([usage({ name: 'Tooltip' })], scanned, {
       threshold: 0.7,
       overrides,
     });
-    expect(m?.candidate?.name).toBe('Tip');
-    expect(m?.candidate?.confidence).toBe(1);
-    expect(m?.source).toBe('map-file');
+    expect(m?.status).toBe('unmapped');
+    expect(m?.source).toBe('scan');
+    expect(m?.staleOverride).toEqual({ name: 'Tip', filePath: 'src/ui/Tip.tsx' });
+  });
+
+  it('a stale override still recovers the fuzzy match when one exists (better than a phantom)', () => {
+    // Button IS in the scan; the stale row pointed elsewhere. Degrading recovers the real Button
+    // instead of importing the dead target — the whole point of not blindly trusting the row.
+    const overrides = new Map([['Button', { name: 'Gone', filePath: 'src/ui/Gone.tsx' }]]);
+    const [m] = joinComponents([usage({ name: 'Button' })], scanned, { threshold: 0.7, overrides });
+    expect(m?.candidate?.name).toBe('Button');
+    expect(m?.source).toBe('scan');
+    expect(m?.staleOverride).toEqual({ name: 'Gone', filePath: 'src/ui/Gone.tsx' });
   });
 });
 

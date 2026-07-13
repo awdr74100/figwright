@@ -63,6 +63,14 @@ export interface ComponentMapping {
   status: MappingStatus;
   /** Which path produced the mapping. */
   source: 'map-file' | 'scan';
+  /**
+   * Set when the map file had a row for this component but its target neither parsed in the scan
+   * nor exists on disk — a stale recorded mapping (the file was deleted/renamed after it was
+   * recorded). The mapping degrades to the fuzzy/unmapped result rather than asserting a phantom
+   * import; this carries the dead row so the caller can re-record or remove it. Absent on a healthy
+   * override.
+   */
+  staleOverride?: { name: string; filePath: string };
 }
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -171,6 +179,12 @@ export interface JoinOptions {
   threshold: number;
   /** Explicit figmaName → code target overrides (highest authority). */
   overrides?: ReadonlyMap<string, { name: string; filePath: string }>;
+  /**
+   * The override keys (raw and normalized, mirroring `overrides`) whose target file exists on disk.
+   * The tool computes this (fs lives there, not in this pure join). An override is trusted when the
+   * scan resolves it OR its file is on disk; only one that is neither is treated as stale.
+   */
+  overridesOnDisk?: ReadonlySet<string>;
 }
 
 /** Join one Figma component usage against the scanned components + any explicit override. */
@@ -190,23 +204,44 @@ const joinOne = (
   const override = opts.overrides?.get(usage.name) ?? opts.overrides?.get(norm(usage.name));
   if (override !== undefined) {
     const component = resolveOverrideComponent(override, scanned);
-    const { matchedProps, unmatchedProps } = component
-      ? partitionAxes(usage.variantAxes, component)
-      : { matchedProps: [], unmatchedProps: [] };
-    return {
-      ...shared,
-      candidate: {
-        name: override.name,
-        filePath: override.filePath,
-        confidence: 1,
-        matchedProps,
-        unmatchedProps,
-      },
-      status: 'high',
-      source: 'map-file',
-    };
+    // Trust the override when the scan resolved it (a parsed component) OR its file is on disk (the
+    // scanner missed a real file — an unusual export the human/LLM knew about). Only an override that
+    // is neither is stale: honouring it would ship an import of a deleted/renamed module, strictly
+    // worse than falling back to the fuzzy guess. So a stale one falls through, tagged for cleanup.
+    const onDisk =
+      opts.overridesOnDisk?.has(usage.name) === true ||
+      opts.overridesOnDisk?.has(norm(usage.name)) === true;
+    if (component !== undefined || onDisk) {
+      const { matchedProps, unmatchedProps } = component
+        ? partitionAxes(usage.variantAxes, component)
+        : { matchedProps: [], unmatchedProps: [] };
+      return {
+        ...shared,
+        candidate: {
+          name: override.name,
+          filePath: override.filePath,
+          confidence: 1,
+          matchedProps,
+          unmatchedProps,
+        },
+        status: 'high',
+        source: 'map-file',
+      };
+    }
+    // Stale: degrade to the normal join below, but carry the dead row so the caller can fix it.
+    return { ...joinScan(usage, scanned, opts, shared), staleOverride: override };
   }
 
+  return joinScan(usage, scanned, opts, shared);
+};
+
+/** The fuzzy-scan half of the join (no override) — also the fallback when an override is stale. */
+const joinScan = (
+  usage: FigmaComponentUsage,
+  scanned: readonly ScannedComponent[],
+  opts: JoinOptions,
+  shared: Omit<ComponentMapping, 'candidate' | 'status' | 'source' | 'staleOverride'>,
+): ComponentMapping => {
   const match = bestNameMatch(usage.name, scanned);
   if (match === null || match.score < 0.5) {
     return { ...shared, status: 'unmapped', source: 'scan' };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { joinTokens } from '../../src/join/token-map.js';
+import { joinTokens, parseTokenMapFile } from '../../src/join/token-map.js';
 import type { FigmaToken } from '../../src/tokens/figma-tokens.js';
 import type { ProjectToken } from '../../src/tokens/tokens.js';
 
@@ -331,5 +331,59 @@ describe('joinTokens — same-value siblings (value-match ambiguity)', () => {
     expect(m?.candidate?.confidence).toBe(0.9);
     expect(m?.candidate?.ambiguousWith).toBeUndefined();
     expect(m?.status).toBe('high');
+  });
+});
+
+describe('joinTokens — map-file overrides (write-back loop)', () => {
+  it('an override wins as high with matchedBy map-file when its ref resolves', () => {
+    // A recorded mapping for an otherwise-ambiguous / value-only Figma token: authoritative, not a
+    // weak ['value'] hypothesis. The ref may be written as a utility, a var() reference, or a bare
+    // custom-property name — all resolve to the same project token.
+    const overrides = new Map([['Brand/Accent', 'primary-500']]);
+    for (const ref of ['primary-500', 'var(--color-primary-500)', 'color-primary-500']) {
+      const [m] = joinTokens([fig('Brand/Accent', '#123456')], tokens, {
+        threshold: 0.7,
+        tailwind: true,
+        overrides: new Map([...overrides, ['Brand/Accent', ref]]),
+      });
+      expect(m?.candidate?.token).toBe('color-primary-500');
+      expect(m?.candidate?.confidence).toBe(1);
+      expect(m?.candidate?.matchedBy).toEqual(['map-file']);
+      expect(m?.status).toBe('high');
+      expect(m?.staleOverride).toBeUndefined();
+    }
+  });
+
+  it('degrades a stale override (ref no longer resolves) to the normal join and flags it', () => {
+    // The recorded token was renamed/removed. Referencing a nonexistent token is worse than the
+    // fuzzy fallback, so it degrades — here Primary/500 still name+value matches its real token —
+    // and reports the dead ref for cleanup.
+    const overrides = new Map([['Primary/500', 'color-deleted-500']]);
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, {
+      threshold: 0.7,
+      tailwind: true,
+      overrides,
+    });
+    expect(m?.candidate?.token).toBe('color-primary-500'); // recovered the real match
+    expect(m?.candidate?.matchedBy).not.toContain('map-file');
+    expect(m?.staleOverride).toEqual({ ref: 'color-deleted-500' });
+    expect(m?.status).toBe('high');
+  });
+});
+
+describe('parseTokenMapFile', () => {
+  it('parses table rows and arrow lines, skipping the header, keying raw + normalized', () => {
+    const map = parseTokenMapFile(
+      [
+        '| Figma | Token |',
+        '| --- | --- |',
+        '| Brand/Primary | bg-primary-500 |',
+        'Accent/Teal -> var(--color-teal)',
+      ].join('\n'),
+    );
+    expect(map.get('Brand/Primary')).toBe('bg-primary-500');
+    expect(map.get('brandprimary')).toBe('bg-primary-500'); // normalized key
+    expect(map.get('Accent/Teal')).toBe('var(--color-teal)');
+    expect(map.has('Figma')).toBe(false); // header skipped
   });
 });
