@@ -20,6 +20,7 @@ const promptText = (nodeId: string | undefined): string => {
 
 2. component_map — every Figma component grouped to a local code component with a status.
    - high / medium: import and reuse candidate.filePath; do not regenerate it.
+   - candidate.ambiguousWith (a list of { name, filePath }): the name matched two+ code components nearly equally and the join could not confidently pick — a verify-me pick, not a confident reuse. Check which of the winner + these runner-ups is the right component for THIS context before importing (a wrong reuse is a silent visual bug), then record the confirmed one in docs/figma-component-map.md so next run is certain.
    - Wire each entry's instances[].props (resolved variant / boolean / text values) onto the reused component — one element per instance, each with its own props.
    - candidate.unmatchedProps are props the design needs but the component lacks → surface them as component-extension TODOs, never fake them with ad-hoc markup.
    - unmapped: build it new in the project's style. For a repeated unmapped component (instanceCount > 1, e.g. a table row), build from its first instance's subtree; drill instances[0].nodeId if it was scoped away.

@@ -10,7 +10,7 @@ import { walkRepoFiles } from '../repo-walk.js';
 // This first cut covers the JS/TS ecosystem; the framework/styling detectors are an ordered cascade so
 // a PHP (composer.json) or .NET (*.csproj) detector is just another entry appended later.
 
-export const FRAMEWORKS = ['next', 'nuxt', 'react', 'vue', 'svelte', 'unknown'] as const;
+export const FRAMEWORKS = ['next', 'nuxt', 'react', 'vue', 'svelte', 'solid', 'unknown'] as const;
 export type Framework = (typeof FRAMEWORKS)[number];
 
 export const STYLING_SYSTEMS = [
@@ -183,6 +183,10 @@ const COMPONENT_EXTENSIONS: Record<Framework, string[]> = {
   nuxt: ['.vue'],
   vue: ['.vue'],
   svelte: ['.svelte'],
+  // Solid authors components as JSX in .tsx/.jsx, parsed by the same (react) extractor — only the
+  // emitted conventions differ (`class` not `className`, `createSignal`), which the framework label
+  // steers.
+  solid: ['.tsx', '.jsx'],
   unknown: ['.tsx', '.jsx', '.vue', '.svelte'],
 };
 
@@ -198,6 +202,8 @@ const detectFramework = (
   if ('react' in deps) return { framework: 'react', reason: 'react in dependencies' };
   if ('vue' in deps) return { framework: 'vue', reason: 'vue in dependencies' };
   if ('svelte' in deps) return { framework: 'svelte', reason: 'svelte in dependencies' };
+  // solid-js is the base dep of both plain Solid and SolidStart, so one check covers both.
+  if ('solid-js' in deps) return { framework: 'solid', reason: 'solid-js in dependencies' };
   return { framework: 'unknown', reason: 'no known framework dependency' };
 };
 
@@ -272,6 +278,11 @@ const SVG_LOADERS: { dep: string; loader: string; hint: string }[] = [
     dep: 'vite-svg-loader',
     loader: 'vite-svg-loader',
     hint: "import Icon from './icon.svg?component'",
+  },
+  {
+    dep: 'vite-plugin-solid-svg',
+    loader: 'vite-plugin-solid-svg',
+    hint: "import Icon from './icon.svg?component-solid'",
   },
   {
     dep: '@svgr/webpack',

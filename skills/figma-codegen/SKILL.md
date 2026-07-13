@@ -32,6 +32,12 @@ Run the grounded tools against the selection, then generate — **trust them ove
    (high / medium / low / unmapped), `candidate.filePath`, and `matchedProps`.
    - `high` / `medium`: **reuse that component** (import from `candidate.filePath`), don't regenerate.
      Never invent a component name `component_map` didn't report.
+   - `candidate.ambiguousWith` (a capped list of `{ name, filePath }`): the Figma name matched two or
+     more code components nearly equally and the join couldn't confidently pick — a **verify-me** pick,
+     not a confident reuse (the analogue of `token_map`'s `ambiguousWith`). Check which of the winning
+     `candidate` + these runner-ups is the right component for _this_ context before importing (a wrong
+     reuse is a silent visual bug), then record the confirmed one in the map file so the next run is
+     certain. Absent when the pick was unambiguous.
    - Wire each entry's `instances[].props` (resolved variant / boolean / text values) onto the reused
      component — one element per instance, with its own props.
    - `candidate.unmatchedProps`: Figma axes the component has no prop for (a leading icon, a `required`

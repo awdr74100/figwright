@@ -36,6 +36,26 @@ describe('detectProfile (pure)', () => {
     expect(p.componentExtensions).toEqual(['.vue']);
   });
 
+  it('detects Solid from solid-js and scans its JSX extensions', () => {
+    const p = detectProfile(baseInput({ packageJson: { dependencies: { 'solid-js': '^1.8.0' } } }));
+    expect(p.framework).toBe('solid');
+    // Solid JSX lives in .tsx/.jsx, parsed by the same extractor as React.
+    expect(p.componentExtensions).toEqual(['.tsx', '.jsx']);
+  });
+
+  it('resolves the Solid svg loader to its component-solid import form', () => {
+    const p = detectProfile(
+      baseInput({
+        packageJson: {
+          dependencies: { 'solid-js': '^1.8.0' },
+          devDependencies: { 'vite-plugin-solid-svg': '^0.8.0' },
+        },
+      }),
+    );
+    expect(p.svg.mode).toBe('component');
+    expect(p.svg.importHint).toBe("import Icon from './icon.svg?component-solid'");
+  });
+
   it('flags ts when tsconfig present, js otherwise', () => {
     expect(detectProfile(baseInput({ hasTsconfig: true })).language).toBe('ts');
     expect(

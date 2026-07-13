@@ -59,6 +59,15 @@ export interface ComponentMapping {
      * surfaces these as component-extension TODOs instead of silently dropping the design intent.
      */
     unmatchedProps: string[];
+    /**
+     * Runner-up components whose name scored within a tie epsilon of the winner — the fuzzy match
+     * couldn't confidently pick one. Present only on a `scan` mapping (a `map-file` override is
+     * authoritative, never ambiguous) and only when the pick was a near-tie. Treat the winning
+     * `candidate` as a verify-me pick: check which of these is the right reuse for this context (or
+     * record the confirmed one in the map file), don't import the winner blindly — a wrong reuse is
+     * a silent visual bug. Mirrors token_map's `ambiguousWith`. Absent when unambiguous.
+     */
+    ambiguousWith?: { name: string; filePath: string }[];
   };
   status: MappingStatus;
   /** Which path produced the mapping. */
@@ -109,29 +118,30 @@ const nameCandidates = (figmaName: string): string[] => {
   return [...new Set([figmaName, base, ...slashParts])];
 };
 
-interface NameMatch {
+interface NameScore {
   component: ScannedComponent;
   score: number;
 }
 
-/** Best name-only match for a Figma component across the scanned set (max Dice over name variants). */
-const bestNameMatch = (
-  figmaName: string,
-  scanned: readonly ScannedComponent[],
-): NameMatch | null => {
+/** Name-only Dice score of every scanned component against the Figma name (max over name variants). */
+const scoreNames = (figmaName: string, scanned: readonly ScannedComponent[]): NameScore[] => {
   const candidates = nameCandidates(figmaName).map(norm);
-  let best: NameMatch | null = null;
-  for (const component of scanned) {
+  return scanned.map(component => {
     const target = norm(component.name);
     let score = 0;
     for (const candidate of candidates) score = Math.max(score, diceSimilarity(candidate, target));
-    if (best === null || score > best.score) best = { component, score };
-  }
-  return best;
+    return { component, score };
+  });
 };
 
 const VARIANT_BONUS_PER_PROP = 0.05;
 const MAX_VARIANT_BONUS = 0.1;
+// A runner-up whose name scores within this of the winner is a near-tie: the name match couldn't
+// confidently pick between them, so it's surfaced on `ambiguousWith` for codegen to verify. Kept
+// tight (a genuine ambiguity, not a distant second) to avoid noisy verify prompts.
+const TIE_EPSILON = 0.05;
+// Cap the surfaced runner-ups so a scan with many similar names doesn't dump a long list.
+const MAX_AMBIGUOUS = 3;
 
 const statusFor = (confidence: number, threshold: number): MappingStatus => {
   if (confidence >= 0.85) return 'high';
@@ -242,27 +252,46 @@ const joinScan = (
   opts: JoinOptions,
   shared: Omit<ComponentMapping, 'candidate' | 'status' | 'source' | 'staleOverride'>,
 ): ComponentMapping => {
-  const match = bestNameMatch(usage.name, scanned);
-  if (match === null || match.score < 0.5) {
+  const scores = scoreNames(usage.name, scanned);
+  // Winner: highest name score, first-wins on an exact tie (strict `>`, preserving the prior pick).
+  let winner: NameScore | null = null;
+  for (const s of scores) if (winner === null || s.score > winner.score) winner = s;
+  if (winner === null || winner.score < 0.5) {
     return { ...shared, status: 'unmapped', source: 'scan' };
   }
+  const best = winner;
 
   // Variant bonus: reward code props that cover the instance's variant axes, but only once the name
   // already plausibly matches, so an unrelated component can't be promoted on prop overlap alone.
-  const { matchedProps, unmatchedProps } = partitionAxes(usage.variantAxes, match.component);
+  const { matchedProps, unmatchedProps } = partitionAxes(usage.variantAxes, best.component);
   const bonus = Math.min(MAX_VARIANT_BONUS, matchedProps.length * VARIANT_BONUS_PER_PROP);
-  const confidence = Math.min(1, Number((match.score + bonus).toFixed(3)));
+  const confidence = Math.min(1, Number((best.score + bonus).toFixed(3)));
+
+  // Near-ties: other plausible components (name ≥ 0.5) whose score is within TIE_EPSILON of the
+  // winner. A near-tie means the name couldn't confidently pick one — surface the runner-up(s) so
+  // codegen verifies the reuse instead of silently importing the winner. The winner itself is
+  // unchanged; this only adds a caution signal (and never presents a tie as a confident 'high').
+  const ambiguousWith = scores
+    .filter(
+      s => s.component !== best.component && s.score >= 0.5 && best.score - s.score <= TIE_EPSILON,
+    )
+    .toSorted((a, b) => b.score - a.score)
+    .slice(0, MAX_AMBIGUOUS)
+    .map(s => ({ name: s.component.name, filePath: s.component.filePath }));
+  const baseStatus = statusFor(confidence, opts.threshold);
+  const status = ambiguousWith.length > 0 && baseStatus === 'high' ? 'medium' : baseStatus;
 
   return {
     ...shared,
     candidate: {
-      name: match.component.name,
-      filePath: match.component.filePath,
+      name: best.component.name,
+      filePath: best.component.filePath,
       confidence,
       matchedProps,
       unmatchedProps,
+      ...(ambiguousWith.length > 0 ? { ambiguousWith } : {}),
     },
-    status: statusFor(confidence, opts.threshold),
+    status,
     source: 'scan',
   };
 };

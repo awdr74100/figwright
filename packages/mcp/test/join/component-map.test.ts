@@ -113,6 +113,34 @@ describe('joinComponents', () => {
     expect(m?.candidate).toBeUndefined();
   });
 
+  it('surfaces a near-tie runner-up on ambiguousWith and never presents it as a confident high', () => {
+    // A real casing split: NavBar.tsx + Navbar.tsx both normalize to "navbar", so both match a Figma
+    // "NavBar" identically — the fuzzy join can't confidently pick one.
+    const twins = [comp('NavBar'), comp('Navbar')]; // distinct files, same normalized name
+    const [m] = joinComponents([usage({ name: 'NavBar' })], twins, { threshold: 0.7 });
+    // The winning pick is unchanged (first scanned), but the runner-up is surfaced for verification.
+    expect(m?.candidate?.name).toBe('NavBar');
+    expect(m?.candidate?.ambiguousWith).toEqual([
+      { name: 'Navbar', filePath: 'src/components/Navbar.tsx' },
+    ]);
+    // Score 1 would be 'high' — the tie caps it to 'medium' so codegen treats it as verify-me.
+    expect(m?.status).toBe('medium');
+  });
+
+  it('does not flag a distant runner-up (below the tie epsilon)', () => {
+    // Card matches cleanly; Avatar/Button are far off → not ambiguous, so full high, no ambiguousWith.
+    const [m] = joinComponents([usage({ name: 'Card' })], scanned, { threshold: 0.7 });
+    expect(m?.status).toBe('high');
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+  });
+
+  it('caps the surfaced runner-ups instead of dumping a long list', () => {
+    // Five identically-normalized siblings → only the top MAX_AMBIGUOUS (3) runner-ups are surfaced.
+    const sibs = ['NavBar', 'Navbar', 'NAVBAR', 'Nav_Bar', 'Nav-Bar'].map(n => comp(n));
+    const [m] = joinComponents([usage({ name: 'NavBar' })], sibs, { threshold: 0.7 });
+    expect(m?.candidate?.ambiguousWith).toHaveLength(3);
+  });
+
   it('trusts an override whose file is on disk even when the scan did not parse it', () => {
     // The scanner can miss a real component (an unusual export). The override still wins at full
     // confidence — but only because the tool confirmed the file is on disk (overridesOnDisk).
