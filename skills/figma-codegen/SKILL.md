@@ -117,12 +117,18 @@ back by its join as highest authority:
   `matchedBy: ['map-file']`, confidence 1. The `ref` is what you'd emit — a utility (`bg-primary-500`),
   a `var(--color-primary-500)`, or the bare token name.
 
-- **Record only what you VERIFIED, and only the mappings the join was unsure of** — a `low`/`medium`
-  component match you confirmed, an `unmapped` component you built (record its new file), or a token
-  that came back `ambiguousWith` / `matchedBy: ['value']` / `unmapped` and you resolved by meaning. A
-  recorded row is **authoritative** next run, so a wrong row silently mis-maps every future generation
-  — never record a guess. Skip the already-`high` deterministic matches; they re-derive correctly and
-  a row for them is just noise.
+- **A recorded row OVERRIDES the fuzzy join on every future run — so record proof, not a pick.** The
+  gate is your own verify step (§ Responsive & verify): only after you rendered the result and it
+  matched the Figma node do you record the mapping you _proved_. A wrong row doesn't fail loudly — it
+  silently mis-maps that component/token in every future generation until a human notices, which is
+  worse than no record at all. If you're not certain, don't record it; a re-guess next run is
+  recoverable, a confidently-wrong recorded row is not.
+- **Record only the mappings the join was unsure of** — a `low`/`medium` component match you
+  confirmed, an `unmapped` component you built (record its new file), or a token that came back
+  `ambiguousWith` / `matchedBy: ['value']` / `unmapped` and you resolved by meaning. Skip the
+  already-`high` deterministic matches; they re-derive correctly and a row for them is just noise.
+- **These files are committed project docs — treat a row like a line of code you're asserting is
+  correct**, not a scratch note. One figma name → one target per row; keep them reviewable.
 - **Keep the files healthy.** When `component_map` / `token_map` report `staleOverrides` (a recorded
   target that no longer resolves — the file/token was renamed or deleted), the join has already
   degraded to the fuzzy result; fix that row to the new target or delete it.

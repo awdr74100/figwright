@@ -1,7 +1,7 @@
 import type { FigmaToken } from '../tokens/figma-tokens.js';
 import { normHex } from '../tokens/hex.js';
 import type { ProjectToken } from '../tokens/tokens.js';
-import { diceSimilarity, type MappingStatus } from './component-map.js';
+import { diceSimilarity, type MappingStatus, parseMapLine } from './component-map.js';
 
 // The token join: Figma variable → project design token. Name-match is the primary, framework-agnostic
 // signal (normalized Figma "Primary/500" vs project "color-primary-500" / utility "primary-500"); an
@@ -269,34 +269,18 @@ const resolveOverrideToken = (
 
 /**
  * Parse docs/figma-token-map.md — two-column markdown table rows (`| FigmaName | ref |`) or arrow
- * lines (`FigmaName -> ref`), skipping the header/separator. Mirrors component-map's parseMapFile
- * shape (raw + normalized keys) but the target is a token ref string, not a file path.
+ * lines (`FigmaName -> ref`), skipping the header/separator (via the shared parseMapLine, so both
+ * map parsers treat headers identically). Mirrors component-map's parseMapFile shape (raw +
+ * normalized keys) but the target is a token ref string, not a file path.
  */
 export const parseTokenMapFile = (markdown: string): Map<string, string> => {
   const out = new Map<string, string>();
-  const add = (figma: string, ref: string): void => {
-    const f = figma.trim();
-    const r = ref.trim();
-    if (!f || !r || /^-+$/.test(r)) return;
+  for (const line of markdown.split('\n')) {
+    const row = parseMapLine(line);
+    if (row === null) continue;
+    const [f, r] = row;
     out.set(f, r);
     out.set(normKey(f), r);
-  };
-  for (const line of markdown.split('\n')) {
-    const arrow = line.split('->');
-    if (arrow.length === 2 && arrow[0] !== undefined && arrow[1] !== undefined) {
-      add(arrow[0], arrow[1]);
-      continue;
-    }
-    if (line.trim().startsWith('|')) {
-      const cells = line
-        .split('|')
-        .map(c => c.trim())
-        .filter(Boolean);
-      if (cells.length >= 2 && cells[0] !== undefined && cells[1] !== undefined) {
-        if (/figma/i.test(cells[0]) && /token|ref|code|value/i.test(cells[1])) continue; // header
-        add(cells[0], cells[1]);
-      }
-    }
   }
   return out;
 };

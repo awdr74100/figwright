@@ -386,4 +386,19 @@ describe('parseTokenMapFile', () => {
     expect(map.get('Accent/Teal')).toBe('var(--color-teal)');
     expect(map.has('Figma')).toBe(false); // header skipped
   });
+
+  it('does not mistake a data row for the header (whole-cell header match)', () => {
+    // A figma name containing "figma" mapped to a ref containing "value" must NOT be dropped as a
+    // header — the earlier substring check silently swallowed exactly this row.
+    const map = parseTokenMapFile(
+      [
+        '| Figma | Ref |', // real header — skipped
+        '| :--- | ---: |', // aligned separator — skipped
+        '| Figma/Brand | brand-value |', // data row that trips a substring check
+      ].join('\n'),
+    );
+    expect(map.get('Figma/Brand')).toBe('brand-value');
+    expect(map.has('Figma')).toBe(false);
+    expect([...map.keys()].some(k => k.startsWith(':'))).toBe(false);
+  });
 });

@@ -277,4 +277,18 @@ describe('parseMapFile', () => {
     expect(map.get('Badge')?.name).toBe('Badge');
     expect(map.has('Figma')).toBe(false);
   });
+
+  it('does not mistake a data row for the header (whole-cell header match)', () => {
+    // A figma name that merely contains "figma", pointed at a path with a header-ish word, must NOT
+    // be dropped as a header — the earlier substring check silently swallowed exactly this row.
+    const md = [
+      '| Figma | Code |', // real header — skipped
+      '| :---: | :--- |', // aligned separator — skipped
+      '| Figma/Logo | src/brand/Component.tsx |', // data row that trips a substring check
+    ].join('\n');
+    const map = parseMapFile(md);
+    expect(map.get('Figma/Logo')?.filePath).toBe('src/brand/Component.tsx');
+    expect(map.has('Figma')).toBe(false); // the actual header still skipped
+    expect([...map.keys()].some(k => k.startsWith(':'))).toBe(false); // separator skipped
+  });
 });
