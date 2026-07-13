@@ -105,7 +105,9 @@ import { swapComponentTool } from './swap-component.js';
 import { tokenMapTool } from './token-map.js';
 import { ungroupNodesTool } from './ungroup-nodes.js';
 import { unlockNodesTool } from './unlock-nodes.js';
+import { updateEffectStyleTool } from './update-effect-style.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
+import { updateTextStyleTool } from './update-text-style.js';
 
 /** Every tool the MCP server registers, in ListTools order. */
 export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
@@ -176,6 +178,8 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   createEffectStyleTool,
   createGridStyleTool,
   updatePaintStyleTool,
+  updateTextStyleTool,
+  updateEffectStyleTool,
   applyStyleToNodeTool,
   deleteStyleTool,
   createVariableCollectionTool,

@@ -93,7 +93,9 @@ import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
 import { createUngroupNodesHandler } from './ungroup-nodes.js';
+import { createUpdateEffectStyleHandler } from './update-effect-style.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
+import { createUpdateTextStyleHandler } from './update-text-style.js';
 
 /**
  * Build the full sandbox handler map. Read handlers run as-is; write handlers are wrapped with
@@ -141,6 +143,8 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     create_effect_style: createCreateEffectStyleHandler(figmaCtx),
     create_grid_style: createCreateGridStyleHandler(figmaCtx),
     update_paint_style: createUpdatePaintStyleHandler(figmaCtx),
+    update_text_style: createUpdateTextStyleHandler(figmaCtx),
+    update_effect_style: createUpdateEffectStyleHandler(figmaCtx),
     apply_style_to_node: createApplyStyleToNodeHandler(figmaCtx),
     delete_style: createDeleteStyleHandler(figmaCtx),
     // Variables

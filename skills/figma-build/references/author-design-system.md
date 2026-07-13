@@ -52,6 +52,11 @@ an orphan collection behind.
   is loaded before assignment; `lineHeight.unit` is `AUTO` / `PIXELS` / `PERCENT` (AUTO omits the
   value).
 - Effect / grid styles have their own create tools.
+- **Editing an existing style** (the design system already has it, and code changed its value): use
+  `update_paint_style` / `update_text_style` / `update_effect_style` (`styleId` + only the fields that
+  changed; omitted fields stay as-is) — **don't** `create_*` a second style with the same name, which
+  leaves a duplicate. Re-syncing a style ramp from code is the common case; `get_styles` gives you the
+  `styleId`s to target.
 
 Apply a style to a node with `apply_style_to_node` (`field`: fill / stroke / effect / grid / text).
 Prefer a **variable** for a single colour/scalar token and a **style** for a reusable multi-property
