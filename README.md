@@ -17,7 +17,7 @@ Where Playwright drives the browser, Figwright drives Figma.
 
 ## What is Figwright?
 
-Figwright connects an **MCP server** to a **Figma plugin** over a local WebSocket relay, so an AI agent — Claude Code, Cursor, or any other MCP client — can work _with_ Figma instead of just looking at it.
+Figwright connects an **MCP server** to a **Figma plugin** over a local WebSocket relay, so an AI agent — Claude Code, Cursor, Codex, or any other MCP client — can work _with_ Figma instead of just looking at it.
 
 It works in both directions:
 

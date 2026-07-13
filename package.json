@@ -2,7 +2,7 @@
   "name": "figwright",
   "version": "0.0.0",
   "private": true,
-  "description": "Free, bidirectional Figma MCP server — turn designs into framework-aware code and write back to the canvas, for Claude Code, Cursor, and any MCP client.",
+  "description": "Free, two-way Figma MCP server. Turn designs into framework-aware code, and push code back to the canvas. Works with Claude Code, Cursor, Codex, and any MCP client.",
   "homepage": "https://github.com/awdr74100/figwright",
   "bugs": {
     "url": "https://github.com/awdr74100/figwright/issues"
