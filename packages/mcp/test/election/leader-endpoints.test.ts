@@ -19,7 +19,13 @@ import { decode, encode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import { attachLeaderEndpoints, PING_PATH, RPC_PATH } from '../../src/election/leader-endpoints.js';
+import {
+  ABDICATE_PATH,
+  attachLeaderEndpoints,
+  type LeaderEndpointDeps,
+  PING_PATH,
+  RPC_PATH,
+} from '../../src/election/leader-endpoints.js';
 import { Relay } from '../../src/relay/relay.js';
 
 interface Bound {
@@ -44,7 +50,10 @@ afterEach(async () => {
   all.length = 0;
 });
 
-const startLeader = async (rpcTimeoutMs = 5_000): Promise<Bound> => {
+const startLeader = async (
+  rpcTimeoutMs = 5_000,
+  extraDeps: Partial<LeaderEndpointDeps> = {},
+): Promise<Bound> => {
   const http = createServer();
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
   const port = (http.address() as AddressInfo).port;
@@ -53,10 +62,23 @@ const startLeader = async (rpcTimeoutMs = 5_000): Promise<Bound> => {
     relay,
     serverVersion: 'test-1.0.0',
     rpcTimeoutMs,
+    ...extraDeps,
   });
   const b: Bound = { http, relay, port, detach, plugins: [] };
   all.push(b);
   return b;
+};
+
+const postAbdicate = async (
+  port: number,
+  body: unknown,
+): Promise<{ status: number; body: { ok: boolean; reason?: string } }> => {
+  const res = await fetch(`http://127.0.0.1:${port}${ABDICATE_PATH}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  return { status: res.status, body: (await res.json()) as { ok: boolean; reason?: string } };
 };
 
 const attachFakePlugin = async (
@@ -271,5 +293,116 @@ describe('leader endpoints', () => {
     const b = await startLeader();
     const res = await fetch(`http://127.0.0.1:${b.port}/nope`);
     expect(res.status).toBe(404);
+  });
+
+  it('GET /ping advertises the buildId (0 when unset)', async () => {
+    const bare = await startLeader();
+    const bareBody = (await (await fetch(`http://127.0.0.1:${bare.port}${PING_PATH}`)).json()) as {
+      buildId: number;
+    };
+    expect(bareBody.buildId).toBe(0);
+
+    const stamped = await startLeader(5_000, { buildId: 1234 });
+    const stampedBody = (await (
+      await fetch(`http://127.0.0.1:${stamped.port}${PING_PATH}`)
+    ).json()) as { buildId: number };
+    expect(stampedBody.buildId).toBe(1234);
+  });
+});
+
+describe('POST /abdicate', () => {
+  it('accepts a strictly newer build and releases after the response flushes', async () => {
+    let released = 0;
+    const b = await startLeader(5_000, {
+      buildId: 100,
+      onAbdicate: () => {
+        released += 1;
+      },
+      abdicateQuietWindowMs: 0,
+    });
+    const { status, body } = await postAbdicate(b.port, { buildId: 200 });
+    expect(status).toBe(200);
+    expect(body).toEqual({ ok: true });
+    // onAbdicate fires on the response's 'finish' — by the time fetch resolved, it flushed.
+    await new Promise(r => setTimeout(r, 20));
+    expect(released).toBe(1);
+  });
+
+  it('refuses an equal or older build', async () => {
+    let released = 0;
+    const b = await startLeader(5_000, {
+      buildId: 100,
+      onAbdicate: () => {
+        released += 1;
+      },
+      abdicateQuietWindowMs: 0,
+    });
+    expect((await postAbdicate(b.port, { buildId: 100 })).body).toEqual({
+      ok: false,
+      reason: 'stale',
+    });
+    expect((await postAbdicate(b.port, { buildId: 50 })).body).toEqual({
+      ok: false,
+      reason: 'stale',
+    });
+    expect(released).toBe(0);
+  });
+
+  it('answers unsupported when no release hook is wired', async () => {
+    const b = await startLeader(5_000, { buildId: 100, abdicateQuietWindowMs: 0 });
+    expect((await postAbdicate(b.port, { buildId: 200 })).body).toEqual({
+      ok: false,
+      reason: 'unsupported',
+    });
+  });
+
+  it('defers while a relay request is in flight', async () => {
+    let released = 0;
+    const b = await startLeader(5_000, {
+      buildId: 100,
+      onAbdicate: () => {
+        released += 1;
+      },
+      abdicateQuietWindowMs: 0,
+    });
+    // No plugin connected → the request queues as pending until its own timeout.
+    const pending = b.relay.sendRequest('slow_tool', {}, 1_000).catch(() => {});
+    await new Promise(r => setTimeout(r, 20));
+    expect((await postAbdicate(b.port, { buildId: 200 })).body).toEqual({
+      ok: false,
+      reason: 'busy',
+    });
+    expect(released).toBe(0);
+    await pending;
+  });
+
+  it('defers inside the quiet window after recent traffic, then accepts once it elapses', async () => {
+    let released = 0;
+    const b = await startLeader(5_000, {
+      buildId: 100,
+      onAbdicate: () => {
+        released += 1;
+      },
+      abdicateQuietWindowMs: 150,
+    });
+    // A completed (timed-out) request leaves no pending entry but stamps lastRequestAt.
+    await b.relay.sendRequest('quick_tool', {}, 10).catch(() => {});
+    expect((await postAbdicate(b.port, { buildId: 200 })).body).toEqual({
+      ok: false,
+      reason: 'busy',
+    });
+    expect(released).toBe(0);
+
+    await new Promise(r => setTimeout(r, 160));
+    expect((await postAbdicate(b.port, { buildId: 200 })).body).toEqual({ ok: true });
+    await new Promise(r => setTimeout(r, 20));
+    expect(released).toBe(1);
+  });
+
+  it('rejects malformed bodies', async () => {
+    const b = await startLeader(5_000, { buildId: 100, abdicateQuietWindowMs: 0 });
+    expect((await postAbdicate(b.port, 'not json{{')).status).toBe(400);
+    expect((await postAbdicate(b.port, {})).status).toBe(400);
+    expect((await postAbdicate(b.port, { buildId: 'newest' })).status).toBe(400);
   });
 });

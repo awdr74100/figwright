@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
+import { BUILD_ID } from './build-id.js';
 import { dispatchTool, resolveRoutingSession } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
@@ -35,9 +36,15 @@ const log = (msg: string): void => {
   process.stderr.write(`${msg}\n`);
 };
 
-const node = new Node({ serverVersion: SERVER_VERSION, port: DEFAULT_PORT, log });
+// FIGWRIGHT_PORT is a test/debug seam (the process-lifecycle e2e spawns real servers on a random
+// port). The plugin always connects to DEFAULT_PORT, so overriding this in normal use just makes
+// the server unreachable — hence undocumented.
+const envPort = Number(process.env.FIGWRIGHT_PORT);
+const PORT = Number.isInteger(envPort) && envPort > 0 && envPort < 65_536 ? envPort : DEFAULT_PORT;
+
+const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, log });
 const follower = new Follower({ leaderUrl: node.leaderUrl, log });
-const election = new Election({ node, follower, log });
+const election = new Election({ node, follower, buildId: BUILD_ID, log });
 
 let currentDetach: (() => void) | null = null;
 node.onRoleChange(role => {
@@ -51,6 +58,10 @@ node.onRoleChange(role => {
       currentDetach = attachLeaderEndpoints(res.http, {
         relay: res.relay,
         serverVersion: SERVER_VERSION,
+        buildId: BUILD_ID,
+        // Newest build wins: a follower on a newer build asks us to step down; the port frees for
+        // it within ms and the plugin reconnects to the new leader on its next retry (~250ms).
+        onAbdicate: () => election.yieldLeadership(),
         log,
       });
     }
@@ -88,7 +99,13 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
       {
         type: 'text',
         text: formatPingResult(
-          await handlePing({ node, follower, serverVersion: SERVER_VERSION, log }),
+          await handlePing({
+            node,
+            follower,
+            serverVersion: SERVER_VERSION,
+            buildId: BUILD_ID,
+            log,
+          }),
         ),
       },
     ],
@@ -160,9 +177,9 @@ const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
 const roleDetail = node.isLeader()
-  ? `relay on :${node.getLeader()?.port ?? DEFAULT_PORT}`
+  ? `relay on :${node.getLeader()?.port ?? PORT}`
   : node.isConflicted()
-    ? `:${DEFAULT_PORT} held by a non-Figwright process — contending for it`
+    ? `:${PORT} held by a non-Figwright process — contending for it`
     : `follower → ${node.leaderUrl}`;
 log(
   `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ${roleDetail}`,
@@ -176,4 +193,14 @@ const shutdown = async (): Promise<void> => {
 // Exit on SIGINT/SIGTERM and on stdin EOF. stdin closes when the client that spawned us goes away
 // (including a crash that sends no signal); without this the process would linger holding the relay
 // port as a stale "zombie" leader serving an old build. wireShutdown runs shutdown at most once.
-wireShutdown({ proc: process, stdin: process.stdin, shutdown });
+// hardExit is the backstop for the graceful path itself stalling (e.g. a close waiting on
+// connections that never drain) — exit code 1 marks the forced, non-clean variant.
+wireShutdown({
+  proc: process,
+  stdin: process.stdin,
+  shutdown,
+  hardExit: () => {
+    log('[figwright] graceful shutdown stalled — forcing exit');
+    process.exit(1);
+  },
+});

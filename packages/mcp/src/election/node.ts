@@ -111,14 +111,7 @@ export class Node {
 
   becomeFollower(): void {
     if (this.currentRole === NodeRole.Follower) return;
-    if (this.leader !== null) {
-      const { http, relay } = this.leader;
-      this.leader = null;
-      void relay.stop().catch(() => {
-        /* ignore */
-      });
-      http.close();
-    }
+    this.releaseLeader();
     this.setRole(NodeRole.Follower);
     this.opts.log(`[node] became FOLLOWER (leader @ ${this.leaderUrl})`);
   }
@@ -131,14 +124,7 @@ export class Node {
    */
   becomeConflicted(): void {
     if (this.currentRole === NodeRole.Conflicted) return;
-    if (this.leader !== null) {
-      const { http, relay } = this.leader;
-      this.leader = null;
-      void relay.stop().catch(() => {
-        /* ignore */
-      });
-      http.close();
-    }
+    this.releaseLeader();
     this.setRole(NodeRole.Conflicted);
     this.opts.log(`[node] PORT CONFLICT — :${this.opts.port} is held by a non-Figwright process`);
   }
@@ -159,10 +145,36 @@ export class Node {
       const { http, relay } = this.leader;
       this.leader = null;
       await relay.stop();
-      await new Promise<void>(resolve => http.close(() => resolve()));
+      await new Promise<void>(resolve => {
+        http.close(() => resolve());
+        // close() waits for in-flight requests to finish before its callback fires (idle keep-alive
+        // connections it closes itself on Node ≥19). A follower /rpc landing in this shutdown window
+        // sits on the now-stopped relay until its tool budget (up to minutes) expires — during which
+        // this stop() hasn't resolved, process.exit is never reached, and the process lingers as a
+        // zombie leader still answering /ping on live connections (so no follower takes over).
+        // Sever everything so stop completes and takeover is immediate.
+        http.closeAllConnections();
+      });
     }
     this.currentRole = NodeRole.Unknown;
     this.listeners.clear();
+  }
+
+  /**
+   * Tear down leader resources on demotion (follower/conflicted). Fire-and-forget by design — the
+   * demoted role must not wait on the old relay draining. closeAllConnections severs in-flight
+   * connections for the same reason as stop(): close() alone would keep serving them off a server
+   * that no longer leads until their (possibly minutes-long) tool budgets expire.
+   */
+  private releaseLeader(): void {
+    if (this.leader === null) return;
+    const { http, relay } = this.leader;
+    this.leader = null;
+    void relay.stop().catch(() => {
+      /* ignore */
+    });
+    http.close();
+    http.closeAllConnections();
   }
 
   private setRole(role: NodeRole): void {

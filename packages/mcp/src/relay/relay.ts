@@ -54,6 +54,7 @@ export class Relay {
   private readonly opts: Required<Omit<RelayOptions, 'server'>>;
   private readonly pending = new Map<string, Pending>();
   private heartbeatDeferrals = 0;
+  private lastRequestAtMs = 0;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -87,6 +88,7 @@ export class Relay {
     sessionId?: string,
   ): Promise<unknown> {
     const id = newId();
+    this.lastRequestAtMs = Date.now();
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
@@ -148,6 +150,16 @@ export class Relay {
   /** How many heartbeat timeouts were deferred because the session was mid-request (busy ≠ dead). */
   heartbeatDeferralCount(): number {
     return this.heartbeatDeferrals;
+  }
+
+  /**
+   * Epoch ms of the most recent sendRequest, 0 if none yet. The abdication handler uses it as a
+   * quiet-window signal: a multi-call tool has idle moments _between_ sub-calls where pendingCount
+   * is 0, and abdicating in one of those gaps would strand the tool's remaining pinned sub-calls on
+   * the takeover window. Recent traffic means "probably mid-sequence — not now".
+   */
+  lastRequestAt(): number {
+    return this.lastRequestAtMs;
   }
 
   /**

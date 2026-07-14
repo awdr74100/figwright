@@ -9,8 +9,8 @@ export const pingTool: ToolSpec = {
   name: PING_TOOL_NAME,
   description:
     'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the ' +
-    'Figma sandbox. On a follower it also reports the leader’s version and warns (versionSkew) ' +
-    'when a stale older server still owns the plugin.',
+    'Figma sandbox. On a follower it also reports the leader’s version and build, and warns ' +
+    '(versionSkew / buildSkew) when a stale older server still owns the plugin.',
   inputShape: {},
   kind: 'read',
 };
@@ -21,11 +21,22 @@ export interface PingServerInfo {
   role: NodeRole;
   port: number | null;
   ts: number;
+  /** This process's build stamp (epoch ms; 0 when running unbundled). See build-id.ts. */
+  buildId: number;
   /**
    * Follower path only: the version of the leader process that actually owns the plugin and runs
    * the work. Usually equal to `version`; differs when a stale older server still holds the port.
    */
   leaderVersion?: string;
+  /** Follower path only: the leader's build stamp (0 for pre-buildId leaders). */
+  leaderBuildId?: number;
+  /**
+   * Present when the leader runs an older build than this client (same or different version).
+   * Normally transient — the election challenges stale leaders automatically (newest build wins) —
+   * so a persistent warning means the leader predates abdication support and must be killed by
+   * hand.
+   */
+  buildSkew?: string;
   /**
    * Present only when `leaderVersion` differs from `version` — a human-readable warning that a
    * stale server process is serving the plugin, so this client's newer build isn't actually in
@@ -75,6 +86,8 @@ export interface PingContext {
   node: Node;
   follower: Follower;
   serverVersion: string;
+  /** This process's build stamp (see build-id.ts); defaults to 0 (unbundled). */
+  buildId?: number;
   log?: (msg: string) => void;
 }
 
@@ -83,6 +96,7 @@ const serverInfo = (ctx: PingContext): PingServerInfo => ({
   role: ctx.node.role,
   port: ctx.node.isLeader() ? (ctx.node.getLeader()?.port ?? null) : null,
   ts: Date.now(),
+  buildId: ctx.buildId ?? 0,
 });
 
 export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
@@ -159,23 +173,32 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
     }
   }
 
-  // Follower path — no direct relay visibility, so no sessions info. Surface the leader's version so
-  // a stale older leader still owning the plugin (this client's new build never took effect) is
-  // visible instead of silent — the zombie-leader trap. Best-effort, never gates routing.
-  const leaderVersion = await ctx.follower.resolveLeaderVersion();
+  // Follower path — no direct relay visibility, so no sessions info. Surface the leader's version
+  // and build so a stale leader still owning the plugin (this client's new build never took effect)
+  // is visible instead of silent — the zombie-leader trap. Best-effort, never gates routing.
+  const leader = await ctx.follower.leaderInfo();
+  const buildSkew =
+    leader !== undefined && server.buildId > (leader.buildId ?? 0)
+      ? `leader runs an older build than this client (leader ${leader.buildId ?? 0} < ours ` +
+        `${server.buildId}). The election challenges stale leaders automatically, so this normally ` +
+        `clears within seconds; if it persists, the leader predates abdication support — kill it ` +
+        `(lsof -iTCP:${ctx.node.port} -sTCP:LISTEN) so election promotes this build.`
+      : undefined;
   const followerServer: PingServerInfo =
-    leaderVersion === undefined
+    leader === undefined
       ? server
       : {
           ...server,
-          leaderVersion,
-          ...(leaderVersion === server.version
+          leaderVersion: leader.serverVersion,
+          leaderBuildId: leader.buildId ?? 0,
+          ...(buildSkew === undefined ? {} : { buildSkew }),
+          ...(leader.serverVersion === server.version
             ? {}
             : {
                 versionSkew:
-                  `leader is v${leaderVersion} but this client's server is v${server.version} — a ` +
+                  `leader is v${leader.serverVersion} but this client's server is v${server.version} — a ` +
                   `stale server process still owns the plugin, so your newer build isn't in effect. ` +
-                  `Kill the leader (lsof -iTCP:3055 -sTCP:LISTEN) so election promotes this version.`,
+                  `Kill the leader (lsof -iTCP:${ctx.node.port} -sTCP:LISTEN) so election promotes this version.`,
               }),
         };
 

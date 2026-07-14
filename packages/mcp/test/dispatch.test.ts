@@ -106,6 +106,30 @@ describe('dispatchTool', () => {
     expect(attempts).toBe(2);
   });
 
+  it('retries a "relay stopping" rejection (leader shutting down / abdicating) and recovers', async () => {
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    let attempts = 0;
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => {
+        attempts += 1;
+        if (attempts < 2) {
+          return {
+            kind: 'err',
+            requestId: 'r',
+            code: ErrorCode.Internal,
+            message: 'relay stopping (pending get_document)',
+          };
+        }
+        // By the retry the new leader owns the port and serves the call.
+        return { kind: 'ok', requestId: 'r', result: { from: 'new-leader' } };
+      },
+    });
+
+    const result = await dispatchTool({ node, follower }, 'get_document', {}, { retryDelayMs: 5 });
+    expect(result).toEqual({ from: 'new-leader' });
+    expect(attempts).toBe(2);
+  });
+
   it('switches from follower to leader path when role changes mid-retry', async () => {
     let attempts = 0;
     const leaderResult = { from: 'new-leader' };

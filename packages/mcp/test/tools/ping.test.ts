@@ -110,7 +110,7 @@ describe('ping tool', () => {
       getLeader: () => null,
     });
     const follower = makeFollower({
-      resolveLeaderVersion: async () => '1.0.0',
+      leaderInfo: async () => ({ serverVersion: '1.0.0', buildId: 0 }),
       sendRpc: async () => ({
         kind: 'err' as const,
         requestId: 'r',
@@ -138,18 +138,57 @@ describe('ping tool', () => {
       getLeader: () => null,
     });
     const follower = makeFollower({
-      resolveLeaderVersion: async () => '0.1.0', // stale older leader still owns the plugin
+      // stale older leader still owns the plugin
+      leaderInfo: async () => ({ serverVersion: '0.1.0', buildId: 100 }),
       sendRpc: async () => ({
         kind: 'ok' as const,
         requestId: 'r',
         result: { apiVersion: '1.0.0' },
       }),
     });
-    const result = await handlePing({ node, follower, serverVersion: '0.2.0', log: () => {} });
+    const result = await handlePing({
+      node,
+      follower,
+      serverVersion: '0.2.0',
+      buildId: 200,
+      log: () => {},
+    });
 
     expect(result.server.version).toBe('0.2.0');
     expect(result.server.leaderVersion).toBe('0.1.0');
     expect(result.server.versionSkew).toMatch(/leader is v0\.1\.0.*v0\.2\.0/);
+    // An older version implies an older build, so both warnings fire; buildSkew explains the
+    // auto-heal (abdication) and the manual fallback.
+    expect(result.server.leaderBuildId).toBe(100);
+    expect(result.server.buildSkew).toMatch(/older build/);
+  });
+
+  it('flags a build skew alone when versions match but the leader build is older', async () => {
+    const node = makeNode({
+      role: NodeRole.Follower,
+      isLeader: () => false,
+      getLeader: () => null,
+    });
+    const follower = makeFollower({
+      // Same released version, older local build — the dev-iteration zombie ping must expose.
+      leaderInfo: async () => ({ serverVersion: '0.2.0', buildId: 100 }),
+      sendRpc: async () => ({
+        kind: 'ok' as const,
+        requestId: 'r',
+        result: { apiVersion: '1.0.0' },
+      }),
+    });
+    const result = await handlePing({
+      node,
+      follower,
+      serverVersion: '0.2.0',
+      buildId: 200,
+      log: () => {},
+    });
+
+    expect(result.server.versionSkew).toBeUndefined();
+    expect(result.server.buildSkew).toMatch(/older build/);
+    expect(result.server.buildSkew).toMatch(/lsof -iTCP:3055/);
   });
 
   it('reports leaderVersion with no skew warning when versions match', async () => {
@@ -159,17 +198,24 @@ describe('ping tool', () => {
       getLeader: () => null,
     });
     const follower = makeFollower({
-      resolveLeaderVersion: async () => '0.2.0',
+      leaderInfo: async () => ({ serverVersion: '0.2.0', buildId: 200 }),
       sendRpc: async () => ({
         kind: 'ok' as const,
         requestId: 'r',
         result: { apiVersion: '1.0.0' },
       }),
     });
-    const result = await handlePing({ node, follower, serverVersion: '0.2.0', log: () => {} });
+    const result = await handlePing({
+      node,
+      follower,
+      serverVersion: '0.2.0',
+      buildId: 200,
+      log: () => {},
+    });
 
     expect(result.server.leaderVersion).toBe('0.2.0');
     expect(result.server.versionSkew).toBeUndefined();
+    expect(result.server.buildSkew).toBeUndefined();
   });
 
   it('omits leaderVersion when the leader version is unreachable', async () => {
@@ -179,7 +225,7 @@ describe('ping tool', () => {
       getLeader: () => null,
     });
     const follower = makeFollower({
-      resolveLeaderVersion: async () => undefined,
+      leaderInfo: async () => undefined,
       sendRpc: async () => ({
         kind: 'ok' as const,
         requestId: 'r',
@@ -190,5 +236,6 @@ describe('ping tool', () => {
 
     expect(result.server.leaderVersion).toBeUndefined();
     expect(result.server.versionSkew).toBeUndefined();
+    expect(result.server.buildSkew).toBeUndefined();
   });
 });

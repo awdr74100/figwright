@@ -91,8 +91,12 @@ export const dispatchTool = async (
     );
     if (resp.kind === 'ok') return resp.result;
 
+    // 'relay stopping' is the leader rejecting the call because it's shutting down or abdicating —
+    // by the retry delay a new leader (possibly this very node) has the port, so it's as transient
+    // as a dropped connection. Safe to replay: writes carry a stable requestId the plugin dedupes.
     const isTransient =
-      resp.code === ErrorCode.Internal && /transport|fetch failed|ECONNREFUSED/i.test(resp.message);
+      resp.code === ErrorCode.Internal &&
+      /transport|fetch failed|ECONNREFUSED|relay stopping/i.test(resp.message);
     if (!isTransient || attempt === maxAttempts - 1) {
       throw new DispatchError(resp.code, resp.message);
     }

@@ -1,5 +1,5 @@
 import { createServer, type Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { type AddressInfo, connect as netConnect, type Socket } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -7,6 +7,24 @@ import { isAddressInUse, Node, NodeRole } from '../../src/election/node.js';
 
 const blockers: HttpServer[] = [];
 const nodes: Node[] = [];
+const sockets: Socket[] = [];
+
+// Open a connection to the leader with an HTTP request in flight that nothing will ever answer
+// (the bare leader http server has no request listener in these tests). Node ≥19's server.close()
+// closes *idle* connections itself, so only an in-flight request reproduces the hang these
+// regression tests pin down.
+const connectWithInflightRequest = async (port: number): Promise<Socket> => {
+  const sock = netConnect(port, '127.0.0.1');
+  sockets.push(sock);
+  await new Promise<void>((resolve, reject) => {
+    sock.once('connect', resolve);
+    sock.once('error', reject);
+  });
+  sock.write('GET /never-answered HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
+  // Give the server a beat to parse the request so the connection counts as in-flight.
+  await new Promise<void>(resolve => setTimeout(resolve, 30));
+  return sock;
+};
 
 const blockPort = async (port: number): Promise<void> => {
   const s = createServer();
@@ -23,6 +41,8 @@ const freePort = async (): Promise<number> => {
 };
 
 afterEach(async () => {
+  for (const s of sockets) s.destroy();
+  sockets.length = 0;
   await Promise.all(nodes.map(n => n.stop()));
   nodes.length = 0;
   await Promise.all(blockers.map(s => new Promise<void>(r => s.close(() => r()))));
@@ -105,6 +125,31 @@ describe('Node role state machine', () => {
     await n.becomeLeader();
     n.becomeFollower();
     expect(seen).toEqual([NodeRole.Leader, NodeRole.Follower]);
+  });
+
+  // Regression: http.close() waits for in-flight requests to finish before its callback fires. A
+  // follower /rpc that lands in the shutdown window sits on a stopped relay until its tool budget
+  // (up to minutes) expires, so a shutting-down leader lingers that whole time as a zombie — still
+  // answering /ping on live connections, so no follower takes over. stop must sever connections,
+  // not wait them out.
+  it('stop resolves even while a connection has a request in flight', async () => {
+    const port = await freePort();
+    const n = makeNode(port);
+    await n.becomeLeader();
+    await connectWithInflightRequest(port);
+    await n.stop();
+    expect(n.role).toBe(NodeRole.Unknown);
+  });
+
+  it('becomeFollower severs in-flight connections to the demoted leader', async () => {
+    const port = await freePort();
+    const n = makeNode(port);
+    await n.becomeLeader();
+    const sock = await connectWithInflightRequest(port);
+    const closed = new Promise<void>(resolve => sock.once('close', () => resolve()));
+    n.becomeFollower();
+    await closed;
+    expect(n.role).toBe(NodeRole.Follower);
   });
 
   it('stop releases the bound port so it can be re-bound', async () => {

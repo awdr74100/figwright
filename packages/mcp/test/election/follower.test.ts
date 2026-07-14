@@ -194,15 +194,58 @@ describe('Follower HTTP client', () => {
     expect(await f.resolveActiveSession()).toBeUndefined();
   });
 
-  it('resolveLeaderVersion reads the leader-reported serverVersion', async () => {
-    const b = await startLeader();
-    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
-    expect(await f.resolveLeaderVersion()).toBe('test-1.0.0');
+  it('leaderInfo reports version and buildId of a confirmed leader', async () => {
+    const http = createServer();
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    const relay = new Relay({ serverVersion: 'test-2.0.0', server: http });
+    const detach = attachLeaderEndpoints(http, {
+      relay,
+      serverVersion: 'test-2.0.0',
+      buildId: 777,
+    });
+    all.push({ http, relay, port, detach, plugins: [] });
+
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${port}` });
+    expect(await f.leaderInfo()).toEqual({ serverVersion: 'test-2.0.0', buildId: 777 });
   });
 
-  it('resolveLeaderVersion returns undefined when the leader is unreachable', async () => {
+  it('leaderInfo is undefined for a non-figwright responder and an unreachable leader', async () => {
+    const http = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ hello: 'world' }));
+    });
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    try {
+      const f = new Follower({ leaderUrl: `http://127.0.0.1:${port}` });
+      expect(await f.leaderInfo()).toBeUndefined();
+    } finally {
+      await new Promise<void>(resolve => http.close(() => resolve()));
+    }
+
+    const dead = new Follower({ leaderUrl: 'http://127.0.0.1:1', pingTimeoutMs: 200 });
+    expect(await dead.leaderInfo()).toBeUndefined();
+  });
+
+  it('requestAbdication maps a 404 (pre-abdication leader) to unsupported', async () => {
+    const http = createServer((_req, res) => {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+    });
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    try {
+      const f = new Follower({ leaderUrl: `http://127.0.0.1:${port}` });
+      expect(await f.requestAbdication(200)).toBe('unsupported');
+    } finally {
+      await new Promise<void>(resolve => http.close(() => resolve()));
+    }
+  });
+
+  it('requestAbdication maps transport failure to error', async () => {
     const f = new Follower({ leaderUrl: 'http://127.0.0.1:1', pingTimeoutMs: 200 });
-    expect(await f.resolveLeaderVersion()).toBeUndefined();
+    expect(await f.requestAbdication(200)).toBe('error');
   });
 
   it('sendRpc threads sessionId so the leader pins the call', async () => {

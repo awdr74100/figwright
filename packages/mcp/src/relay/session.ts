@@ -110,6 +110,12 @@ export class SessionManager {
   clear(): void {
     for (const s of this.sessions.values()) {
       if (s.disconnectTimer !== null) clearTimeout(s.disconnectTimer);
+      // Stop heartbeats here, not via the socket-close path: Relay.stop() clears sessions before
+      // terminating sockets, so markDisconnected (which normally stops the heartbeat) early-returns
+      // for a session that's no longer in the map — leaking a live setInterval that pins the event
+      // loop open and keeps a shutting-down process alive as a zombie.
+      s.heartbeat?.stop();
+      s.heartbeat = null;
     }
     this.sessions.clear();
   }
