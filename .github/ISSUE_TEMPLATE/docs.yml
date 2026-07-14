@@ -1,0 +1,27 @@
+name: '📖 Documentation'
+description: Report missing, unclear, or incorrect documentation
+labels: ['documentation']
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Which document or section is affected (README, CONTRIBUTING, AGENTS.md, a tool description, …)?
+      placeholder: README.md — Quick start
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the problem
+      description: What is missing, unclear, or incorrect — and what would you expect to find instead?
+    validations:
+      required: true
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure you do the following
+      options:
+        - label: Check that there isn't [already an issue](https://github.com/awdr74100/figwright/issues?q=is%3Aissue) that reports the same problem to avoid creating a duplicate.
+          required: true

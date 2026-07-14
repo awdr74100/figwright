@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & setup help
+    url: https://github.com/awdr74100/figwright#readme
+    about: Check the README first — it covers installation, quick start, and supported MCP clients.
+  - name: 📚 Model Context Protocol docs
+    url: https://modelcontextprotocol.io
+    about: For general questions about MCP itself (not Figwright-specific).

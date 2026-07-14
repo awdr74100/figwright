@@ -1,0 +1,45 @@
+name: '🚀 Feature request'
+description: Propose a new feature or improvement for Figwright
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in the project!
+
+        Figwright is **provider-first** and aims for **generality** — proposals that make a wide range of real designs work better are prioritized over narrow, one-off additions.
+  - type: textarea
+    id: problem-description
+    attributes:
+      label: Problem description
+      description: Describe the problem you're trying to solve, not just the solution. What are you doing, and where does Figwright fall short? If you intend to submit a PR for this feature, tell us in the description.
+      placeholder: As a developer using Figwright I want [goal] so that [benefit].
+    validations:
+      required: true
+  - type: textarea
+    id: suggested-solution
+    attributes:
+      label: Suggested solution
+      description: How you imagine this working — a new tool, a change to an existing tool's output, a plugin capability, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions or workarounds you've considered.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Any other context, examples, or screenshots — e.g. a real design or codebase pattern this would help with.
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure you do the following
+      options:
+        - label: Check that there isn't [already an issue](https://github.com/awdr74100/figwright/issues?q=is%3Aissue) that requests the same feature to avoid creating a duplicate.
+          required: true
+        - label: Read the [Contributing Guidelines](https://github.com/awdr74100/figwright/blob/main/CONTRIBUTING.md).
+          required: true

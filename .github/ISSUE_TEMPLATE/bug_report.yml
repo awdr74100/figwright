@@ -1,0 +1,99 @@
+name: '🐛 Bug report'
+description: Report a problem with Figwright
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+        Before submitting, please check the [README](https://github.com/awdr74100/figwright#readme) and [existing issues](https://github.com/awdr74100/figwright/issues?q=is%3Aissue) to avoid duplicates.
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is — what you expected to happen and what actually happened. If you intend to submit a PR for this issue, tell us in the description.
+      placeholder: I am doing ... I expect ... but what actually happens is ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Step-by-step instructions to reproduce the behavior, including the prompt / tool call you used. For design-related bugs (wrong grounding output, broken canvas writes), describe the Figma structure involved — or better, share a link to a minimal Figma file or a screenshot of the layer tree.
+      placeholder: |
+        1. Connect the plugin to file ...
+        2. Ask the agent to ...
+        3. The `get_design_context` output is missing ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected part
+      description: Which part of Figwright does this seem to affect?
+      options:
+        - MCP server (@figwright/mcp)
+        - Figma plugin
+        - Grounding maps (component / token / icon map)
+        - Codegen (figma-codegen skill / figma_to_code prompt)
+        - Relay / connection (WebSocket, election, reconnects)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: mcp-client
+    attributes:
+      label: MCP client
+      description: The client you run the server from
+      options:
+        - Claude Code
+        - Claude Desktop
+        - Codex
+        - Cursor
+        - VS Code (Copilot)
+        - Other (specify in Environment)
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Figwright version (`npm ls @figwright/mcp` or the version shown in the plugin), Node version (`node -v`), OS, and whether you use the Figma desktop app or browser.
+      render: shell
+      placeholder: |
+        Figwright: 0.3.0
+        Node: 24.x
+        OS: macOS 15
+        Figma: desktop app
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant output from your MCP client and/or the plugin's Debug tab. Please copy-paste text instead of screenshots where possible.
+
+        ````
+        <details>
+        <summary>Click to expand</summary>
+
+        ```shell
+        // paste the log text here
+        ```
+        </details>
+        ````
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Validations
+      description: Before submitting the issue, please make sure you do the following
+      options:
+        - label: Check that there isn't [already an issue](https://github.com/awdr74100/figwright/issues?q=is%3Aissue) that reports the same bug to avoid creating a duplicate.
+          required: true
+        - label: Check that the bug still reproduces on the latest version of `@figwright/mcp` and the matching plugin build.
+          required: true
+        - label: Read the [Contributing Guidelines](https://github.com/awdr74100/figwright/blob/main/CONTRIBUTING.md).
+          required: true
