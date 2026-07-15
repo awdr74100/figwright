@@ -53,14 +53,14 @@
     "fdir": "^6.5.0",
     "ignore": "^7.0.6",
     "oxc-parser": "^0.140.0",
-    "ws": "^8.21.0",
+    "ws": "^8.21.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@figwright/shared": "workspace:*",
     "@types/ws": "^8.18.1",
     "publint": "^0.3.21",
-    "tsdown": "^0.22.7"
+    "tsdown": "^0.22.8"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
