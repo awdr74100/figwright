@@ -21,16 +21,20 @@ jobs:
       contents: write # GitHub Release + plugin asset upload
       id-token: write # OIDC: npm trusted publishing + provenance
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0 # full history so changelogen can diff from the last tag
+          # Release steps talk to GitHub via the API tokens below, never git push.
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v4
+      # No pnpm cache here: this workflow publishes to npm, and restoring a
+      # shared cache into a publish job is a cache-poisoning vector.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
-          cache: pnpm
+          package-manager-cache: false
           registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
