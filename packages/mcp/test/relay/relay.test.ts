@@ -180,21 +180,47 @@ describe('Relay hello loop', () => {
     );
     await nextMessage(ws);
 
-    const pings: Envelope[] = [];
-    ws.on('message', d => {
-      try {
-        const env = decodeEnvelope(d as ArrayBuffer);
-        if (env.kind === 'req' && env.method === SystemMethod.Ping) pings.push(env);
-      } catch {
-        /* ignore */
-      }
-    });
-
+    // Assert only the contract: a plugin that misses maxMisses heartbeats gets closed with 1001.
+    // We deliberately do NOT assert "a ping was sent first" — HeartbeatMonitor.tick() closes
+    // straight away when the first timer callback already spans >= maxMisses intervals (real under
+    // CI timer jitter), so a preceding ping is not a guarantee the implementation makes. Asserting
+    // it made this test flaky; the ping-is-sent behaviour is covered deterministically below.
     const closeCode = await new Promise<number>(resolve => {
       ws.once('close', code => resolve(code));
     });
     expect(closeCode).toBe(1001);
-    expect(pings.length).toBeGreaterThan(0);
+  });
+
+  it('sends heartbeat pings to an idle plugin', async () => {
+    // maxMisses is high so the socket never closes during the test — this isolates "the server pings
+    // an idle plugin" from the close-timing race above. The collector is registered before the first
+    // await after hello, so no ping can slip through an unlistened gap.
+    const { port } = await startRelay({ heartbeatIntervalMs: 20, heartbeatMaxMisses: 1000 });
+    const ws = await connect(port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({ id: 'h', sessionId, method: SystemMethod.Hello, params: helloParams() }),
+      ),
+    );
+    await nextMessage(ws);
+
+    const firstPing = await new Promise<Envelope>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('no heartbeat ping within 2s')), 2000);
+      ws.on('message', d => {
+        try {
+          const env = decodeEnvelope(d as ArrayBuffer);
+          if (env.kind === 'req' && env.method === SystemMethod.Ping) {
+            clearTimeout(timer);
+            resolve(env);
+          }
+        } catch {
+          /* ignore non-ping frames */
+        }
+      });
+    });
+    expect(firstPing).toMatchObject({ kind: 'req', method: SystemMethod.Ping });
+    ws.close();
   });
 
   it('plugin responding to $ping keeps connection alive past timeout window', async () => {
