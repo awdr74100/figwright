@@ -17,7 +17,7 @@
     "vue": "^3.5.39"
   },
   "devDependencies": {
-    "@figma/plugin-typings": "^1.130.0",
+    "@figma/plugin-typings": "^1.131.0",
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
     "@vitejs/plugin-vue": "^6.0.8",

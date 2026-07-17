@@ -1,6 +1,7 @@
 import type { BatchResult } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
+import { assertFigmaEditor, isMotionNode, toPlainJson } from './motion-shared.js';
 
 /**
  * Atomic batch: apply several invertible write ops as a unit. Two phases —
@@ -214,6 +215,113 @@ const setTextInverse: BatchInverse = {
   },
 };
 
+// ── Motion (beta) inverses ───────────────────────────────────────────────────
+// Motion authoring joins the batch only where the pre-op state snapshots faithfully — the stagger
+// hot-path. apply_animation_style undoes via the appliedStyleId the apply returns; a PROPERTY
+// keyframe track round-trips through a deep-cloned snapshot. Indexed fills/strokes/effects tracks
+// have no faithful snapshot yet, so they're rejected up front (same honesty stance as
+// create_component's fromNodeId) to keep all-or-nothing real. All three gate on the Figma editor.
+
+const applyAnimationStyleInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    assertFigmaEditor(figmaCtx, 'batch/apply_animation_style');
+    const id = (params as { nodeId?: unknown } | null)?.nodeId;
+    if (typeof id !== 'string') {
+      throw new TypeError('batch/apply_animation_style: nodeId must be a string');
+    }
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    if (node === null || !isMotionNode(node)) {
+      throw new Error(
+        `batch/apply_animation_style: node ${id} not found or does not support Motion`,
+      );
+    }
+    return null; // undo relies on the appliedStyleId in the apply result
+  },
+  async undo(figmaCtx, _params, _captured, result) {
+    const r = result as { nodeId?: unknown; appliedStyleId?: unknown } | null;
+    if (typeof r?.nodeId !== 'string' || typeof r.appliedStyleId !== 'string') return;
+    const node = await figmaCtx.getNodeByIdAsync(r.nodeId);
+    if (node !== null && isMotionNode(node)) node.removeAnimationStyle(r.appliedStyleId);
+  },
+};
+
+const applyManualKeyframeTrackInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    assertFigmaEditor(figmaCtx, 'batch/apply_manual_keyframe_track');
+    const p = (params ?? {}) as { nodeId?: unknown; field?: unknown };
+    if (typeof p.nodeId !== 'string') {
+      throw new TypeError('batch/apply_manual_keyframe_track: nodeId must be a string');
+    }
+    const field = p.field as { type?: unknown; name?: unknown } | null;
+    if (field?.type !== 'PROPERTY' || typeof field.name !== 'string') {
+      throw new Error(
+        'batch/apply_manual_keyframe_track: only PROPERTY fields are batchable — indexed fills/strokes/effects tracks have no faithful snapshot',
+      );
+    }
+    const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
+    if (node === null || !isMotionNode(node)) {
+      throw new Error(
+        `batch/apply_manual_keyframe_track: node ${p.nodeId} not found or does not support Motion`,
+      );
+    }
+    const tracks = node.manualKeyframeTracks as Record<string, unknown>;
+    const previous = tracks[field.name];
+    // Deep-clone so the snapshot can't be mutated by the apply that follows.
+    return {
+      id: p.nodeId,
+      field: p.field,
+      previous: previous === undefined ? null : toPlainJson(previous),
+    };
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, field, previous } = captured as {
+      id: string;
+      field: KeyframeField;
+      previous: ManualKeyframeTrackInput | null;
+    };
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    if (node === null || !isMotionNode(node)) return;
+    if (previous === null) node.removeManualKeyframeTrack(field);
+    else node.applyManualKeyframeTrack(field, previous);
+  },
+};
+
+const setTimelineDurationInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    assertFigmaEditor(figmaCtx, 'batch/set_timeline_duration');
+    const p = (params ?? {}) as { nodeId?: unknown; timelineId?: unknown };
+    if (typeof p.nodeId !== 'string') {
+      throw new TypeError('batch/set_timeline_duration: nodeId must be a string');
+    }
+    if (typeof p.timelineId !== 'string') {
+      throw new TypeError('batch/set_timeline_duration: timelineId must be a string');
+    }
+    const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
+    if (node === null || !isMotionNode(node)) {
+      throw new Error(
+        `batch/set_timeline_duration: node ${p.nodeId} not found or does not support Motion`,
+      );
+    }
+    const timeline = node.timelines.find(t => t.id === p.timelineId);
+    if (timeline === undefined) {
+      throw new Error(
+        `batch/set_timeline_duration: timeline ${p.timelineId} not found on node ${p.nodeId}`,
+      );
+    }
+    return { id: p.nodeId, timelineId: p.timelineId, duration: timeline.duration };
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, timelineId, duration } = captured as {
+      id: string;
+      timelineId: string;
+      duration: number;
+    };
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    if (node === null || !isMotionNode(node)) return;
+    node.setTimelineDuration(timelineId, duration);
+  },
+};
+
 /** Tool name → inverse. Membership here is the allowlist: only these ops may appear in a batch. */
 const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Single-node property mutations.
@@ -300,6 +408,10 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   import_svg: createInverse('import_svg'),
   create_instance: createInverse('create_instance'),
   clone_node: createInverse('clone_node', false),
+  // Motion (beta) — staggered authoring in one atomic, undoable call.
+  apply_animation_style: applyAnimationStyleInverse,
+  apply_manual_keyframe_track: applyManualKeyframeTrackInverse,
+  set_timeline_duration: setTimelineDurationInverse,
 };
 
 interface ParsedOp {

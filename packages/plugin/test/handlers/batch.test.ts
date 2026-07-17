@@ -2,6 +2,8 @@ import type { BatchResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxHandlers } from '../../src/dispatcher.js';
+import { createApplyAnimationStyleHandler } from '../../src/handlers/apply-animation-style.js';
+import { createApplyManualKeyframeTrackHandler } from '../../src/handlers/apply-manual-keyframe-track.js';
 import { createBatchHandler } from '../../src/handlers/batch.js';
 import { createCreateComponentHandler } from '../../src/handlers/create-component.js';
 import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
@@ -13,6 +15,7 @@ import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
 import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
 import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
+import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
@@ -373,5 +376,210 @@ describe('batch handler', () => {
     await expect(handler({})).rejects.toThrow(/ops must be an array/);
     await expect(handler({ ops: [] })).rejects.toThrow(/must not be empty/);
     await expect(handler({ ops: [{ params: {} }] })).rejects.toThrow(/tool must be a string/);
+  });
+});
+
+// ── Motion (beta) batch inverses ─────────────────────────────────────────────
+
+const makeMotionFigma = (editorType = 'figma') => {
+  const store = new Map<string, Record<string, unknown>>();
+
+  const addMotionNode = (
+    id: string,
+    init: { tracks?: Record<string, unknown>; timelines?: { id: string; duration: number }[] } = {},
+  ) => {
+    const applied: { id: string; styleId: string }[] = [];
+    const tracks: Record<string, unknown> = { ...init.tracks };
+    const timelines = init.timelines ?? [];
+    let seq = 0;
+    const node = {
+      id,
+      get animationStyles() {
+        return applied.slice();
+      },
+      get manualKeyframeTracks() {
+        return tracks;
+      },
+      get timelines() {
+        return timelines;
+      },
+      applyAnimationStyle: vi.fn<(styleId: string) => string>((styleId: string) => {
+        const appliedId = `${id}:as:${(seq += 1)}`;
+        applied.push({ id: appliedId, styleId });
+        return appliedId;
+      }),
+      removeAnimationStyle: vi.fn<(appliedId: string) => void>((appliedId: string) => {
+        const i = applied.findIndex(a => a.id === appliedId);
+        if (i >= 0) applied.splice(i, 1);
+      }),
+      applyManualKeyframeTrack: vi.fn<
+        (field: { type: string; name?: string }, track: unknown) => void
+      >((field: { type: string; name?: string }, track: unknown) => {
+        if (field.type === 'PROPERTY' && field.name !== undefined) tracks[field.name] = track;
+      }),
+      removeManualKeyframeTrack: vi.fn<(field: { type: string; name?: string }) => void>(
+        (field: { type: string; name?: string }) => {
+          if (field.type === 'PROPERTY' && field.name !== undefined) delete tracks[field.name];
+        },
+      ),
+      setTimelineDuration: vi.fn<(tid: string, d: number) => void>((tid: string, d: number) => {
+        const t = timelines.find(x => x.id === tid);
+        if (t !== undefined) t.duration = d;
+      }),
+    };
+    store.set(id, node as unknown as Record<string, unknown>);
+    return node;
+  };
+
+  const figmaCtx = {
+    editorType,
+    getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
+  } as unknown as typeof figma;
+
+  return { figmaCtx, store, addMotionNode };
+};
+
+const motionWrites = (figmaCtx: typeof figma): SandboxHandlers => ({
+  apply_animation_style: createApplyAnimationStyleHandler(figmaCtx),
+  apply_manual_keyframe_track: createApplyManualKeyframeTrackHandler(figmaCtx),
+  set_timeline_duration: createSetTimelineDurationHandler(figmaCtx),
+  set_fills: createSetFillsHandler(figmaCtx),
+});
+
+/** A trailing op that always fails at apply time, forcing rollback of the preceding Motion op. */
+const FAILING_FILL = {
+  tool: 'set_fills',
+  params: { nodeId: 'F', fills: [{ type: 'GRADIENT_LINEAR' }] },
+};
+
+describe('batch Motion inverses', () => {
+  it('rolls back apply_animation_style by removing the applied style instance', async () => {
+    const { figmaCtx, store, addMotionNode } = makeMotionFigma();
+    const a = addMotionNode('1:1');
+    store.set('F', { id: 'F', fills: [] });
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'apply_animation_style', params: { nodeId: '1:1', styleId: 's1' } },
+          FAILING_FILL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(a.removeAnimationStyle).toHaveBeenCalledWith('1:1:as:1');
+    expect(a.animationStyles).toHaveLength(0);
+  });
+
+  it('restores a prior PROPERTY keyframe track on rollback', async () => {
+    const OLD = {
+      baseValue: { type: 'FLOAT', value: 0 },
+      keyframes: [{ timelinePosition: 0, value: { type: 'FLOAT', value: 0 } }],
+    };
+    const { figmaCtx, store, addMotionNode } = makeMotionFigma();
+    const a = addMotionNode('1:1', { tracks: { TRANSLATION_X: OLD } });
+    store.set('F', { id: 'F', fills: [] });
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'apply_manual_keyframe_track',
+            params: {
+              nodeId: '1:1',
+              field: { type: 'PROPERTY', name: 'TRANSLATION_X' },
+              track: {
+                keyframes: [{ timelinePosition: 0.3, value: { type: 'FLOAT', value: 120 } }],
+              },
+            },
+          },
+          FAILING_FILL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(a.manualKeyframeTracks.TRANSLATION_X).toEqual(OLD); // deep-equal, from the cloned snapshot
+  });
+
+  it('removes a PROPERTY keyframe track on rollback when there was none before', async () => {
+    const { figmaCtx, store, addMotionNode } = makeMotionFigma();
+    const a = addMotionNode('1:1');
+    store.set('F', { id: 'F', fills: [] });
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'apply_manual_keyframe_track',
+            params: {
+              nodeId: '1:1',
+              field: { type: 'PROPERTY', name: 'OPACITY' },
+              track: { keyframes: [{ timelinePosition: 0, value: { type: 'FLOAT', value: 1 } }] },
+            },
+          },
+          FAILING_FILL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(a.removeManualKeyframeTrack).toHaveBeenCalledWith({ type: 'PROPERTY', name: 'OPACITY' });
+    expect(a.manualKeyframeTracks.OPACITY).toBeUndefined();
+  });
+
+  it('rejects an indexed (effects) keyframe track as not batchable, before any op runs', async () => {
+    const { figmaCtx, addMotionNode } = makeMotionFigma();
+    addMotionNode('1:1');
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'apply_manual_keyframe_track',
+            params: {
+              nodeId: '1:1',
+              field: { type: 'INDEXED_ITEM', collection: 'effects', index: 0, field: 'RADIUS' },
+              track: { keyframes: [{ timelinePosition: 0, value: { type: 'FLOAT', value: 1 } }] },
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/only PROPERTY fields are batchable/);
+  });
+
+  it('restores a timeline duration on rollback', async () => {
+    const { figmaCtx, store, addMotionNode } = makeMotionFigma();
+    const a = addMotionNode('1:1', { timelines: [{ id: 't1', duration: 1 }] });
+    store.set('F', { id: 'F', fills: [] });
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_timeline_duration',
+            params: { nodeId: '1:1', timelineId: 't1', duration: 5 },
+          },
+          FAILING_FILL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(a.timelines[0]!.duration).toBe(1);
+  });
+
+  it('rejects Motion ops outside the Figma Design editor at capture time', async () => {
+    const { figmaCtx, addMotionNode } = makeMotionFigma('figjam');
+    addMotionNode('1:1');
+    const handler = createBatchHandler(figmaCtx, motionWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [{ tool: 'apply_animation_style', params: { nodeId: '1:1', styleId: 's1' } }],
+      }),
+    ).rejects.toThrow(/Figma Design editor/);
   });
 });

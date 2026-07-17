@@ -10,6 +10,18 @@ export const MutateResultSchema = z.object({
 });
 export type MutateResult = z.infer<typeof MutateResultSchema>;
 
+/**
+ * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
+ * applyAnimationStyle. batch's inverse uses it to removeAnimationStyle on undo, so it must
+ * round-trip.
+ */
+export const ApplyAnimationStyleResultSchema = z.object({
+  ok: z.literal(true),
+  nodeId: z.string(),
+  appliedStyleId: z.string(),
+});
+export type ApplyAnimationStyleResult = z.infer<typeof ApplyAnimationStyleResultSchema>;
+
 /** Result of a node-creation write (create_frame / …): the new node's id + identity. */
 export const CreateResultSchema = z.object({
   ok: z.literal(true),

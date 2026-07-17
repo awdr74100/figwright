@@ -7,6 +7,8 @@ import { addComponentPropertyTool } from './add-component-property.js';
 import { addPageTool } from './add-page.js';
 import { addVariableModeTool } from './add-variable-mode.js';
 import { analyzeProjectTool } from './analyze-project.js';
+import { applyAnimationStyleTool } from './apply-animation-style.js';
+import { applyManualKeyframeTrackTool } from './apply-manual-keyframe-track.js';
 import { applyStyleToNodeTool } from './apply-style-to-node.js';
 import { batchRenameNodesTool } from './batch-rename-nodes.js';
 import { batchTool } from './batch.js';
@@ -39,6 +41,7 @@ import { designDiffTool } from './design-diff.js';
 import { detachInstanceTool } from './detach-instance.js';
 import { editComponentPropertyTool } from './edit-component-property.js';
 import { exportPdfTool } from './export-pdf.js';
+import { exportVideoTool } from './export-video.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { getAnnotationsTool } from './get-annotations.js';
 import { getComponentApiTool } from './get-component-api.js';
@@ -47,6 +50,8 @@ import { getDocumentTool } from './get-document.js';
 import { getFontsTool } from './get-fonts.js';
 import { getLocalComponentsTool } from './get-local-components.js';
 import { getMetadataTool } from './get-metadata.js';
+import { getMotionStylesTool } from './get-motion-styles.js';
+import { getNodeMotionTool } from './get-node-motion.js';
 import { getNodeTool } from './get-node.js';
 import { getNodesInfoTool } from './get-nodes-info.js';
 import { getPagesTool } from './get-pages.js';
@@ -65,6 +70,8 @@ import { lockNodesTool } from './lock-nodes.js';
 import { moveNodesTool } from './move-nodes.js';
 import { navigateToPageTool } from './navigate-to-page.js';
 import { pingTool } from './ping.js';
+import { removeAnimationStyleTool } from './remove-animation-style.js';
+import { removeManualKeyframeTrackTool } from './remove-manual-keyframe-track.js';
 import { removeReactionsTool } from './remove-reactions.js';
 import { renameNodeTool } from './rename-node.js';
 import { renamePageTool } from './rename-page.js';
@@ -97,6 +104,7 @@ import { setStrokesTool } from './set-strokes.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
 import { setTextRangeTool } from './set-text-range.js';
 import { setTextTool } from './set-text.js';
+import { setTimelineDurationTool } from './set-timeline-duration.js';
 import { setVariableCodeSyntaxTool } from './set-variable-code-syntax.js';
 import { setVariableValueTool } from './set-variable-value.js';
 import { setVisibleTool } from './set-visible.js';
@@ -130,12 +138,15 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   getFontsTool,
   getAnnotationsTool,
   getReactionsTool,
+  getMotionStylesTool,
+  getNodeMotionTool,
   listFilesTool,
   getDesignContextTool,
   getScreenshotTool,
   saveScreenshotsTool,
   saveImageFillsTool,
   exportPdfTool,
+  exportVideoTool,
   // Server-local (filesystem; no plugin handler — like save_screenshots). analyze_project is an
   // optional standalone probe; scan_components / component_map also run detection internally.
   analyzeProjectTool,
@@ -218,6 +229,12 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   createSectionTool,
   createInstanceTool,
   combineAsVariantsTool,
+  // Motion (beta) — Figma Design only
+  applyAnimationStyleTool,
+  removeAnimationStyleTool,
+  applyManualKeyframeTrackTool,
+  removeManualKeyframeTrackTool,
+  setTimelineDurationTool,
   batchTool,
 ];
 

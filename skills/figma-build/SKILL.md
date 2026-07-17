@@ -60,6 +60,16 @@ hardcode width/height), and real fonts (a new TEXT node defaults to Inter). →
   variables/collections, paint/text styles, or components + variant sets, then switch back to the
   reuse path. → **[`references/author-design-system.md`](./references/author-design-system.md).**
 
+## Motion (animation)
+
+When the source carries animation — CSS `@keyframes` / `transition`, Framer Motion, GSAP, a Vue/Svelte
+transition — author it as Figma **Motion (beta)** on the frame you built rather than dropping it:
+`apply_animation_style` (presets from `get_motion_styles`) or `apply_manual_keyframe_track` per
+property, `set_timeline_duration` for length. A staggered row is **one atomic `batch`** of
+`apply_animation_style` ops with increasing `config.timelineOffset` — not N calls. Motion is
+Figma-Design-only and keyframes attach to a top-level frame's layers, so build the frame first.
+→ **[`references/motion.md`](./references/motion.md).**
+
 ## Verify visually (close the loop)
 
 `get_screenshot` the built node, fix discrepancies, and re-screenshot — the same render-and-diff

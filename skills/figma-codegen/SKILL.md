@@ -147,6 +147,15 @@ back by its join as highest authority:
   design's viewport, diff against the Figma node, fix at the source.
   → [`references/verify.md`](./references/verify.md).
 
+## Motion (animation)
+
+When `get_design_context` (full detail) tags a node with a `motion` summary — applied
+animation-style presets, animated property fields, a timeline duration — carry it into the project's
+animation mechanism (CSS `@keyframes` / `transition`, Framer Motion, GSAP, Vue `<transition>`) instead
+of emitting a static component. `get_node_motion` returns the full keyframe detail when the summary
+isn't enough. Dropping a frame's animation is a fidelity miss, the same class as dropping a shadow.
+→ [`references/motion.md`](./references/motion.md).
+
 ## Rules
 
 - **Ground every section — never eyeball a value off the screenshot.** Every px size, colour,

@@ -3,6 +3,8 @@ import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
+import { createApplyAnimationStyleHandler } from './apply-animation-style.js';
+import { createApplyManualKeyframeTrackHandler } from './apply-manual-keyframe-track.js';
 import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
 import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
 import { createBatchHandler } from './batch.js';
@@ -33,6 +35,7 @@ import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
 import { createEditComponentPropertyHandler } from './edit-component-property.js';
 import { createExportPdfHandler } from './export-pdf.js';
+import { createExportVideoHandler } from './export-video.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
 import { createGetComponentApiHandler } from './get-component-api.js';
@@ -41,6 +44,8 @@ import { createGetDocumentHandler } from './get-document.js';
 import { createGetFontsHandler } from './get-fonts.js';
 import { createGetLocalComponentsHandler } from './get-local-components.js';
 import { createGetMetadataHandler } from './get-metadata.js';
+import { createGetMotionStylesHandler } from './get-motion-styles.js';
+import { createGetNodeMotionHandler } from './get-node-motion.js';
 import { createGetNodeHandler } from './get-node.js';
 import { createGetNodesInfoHandler } from './get-nodes-info.js';
 import { createGetPagesHandler } from './get-pages.js';
@@ -58,6 +63,8 @@ import { createSetLockedHandler } from './lock-nodes.js';
 import { createMoveNodesHandler } from './move-nodes.js';
 import { createNavigateToPageHandler } from './navigate-to-page.js';
 import { createPingHandler } from './ping.js';
+import { createRemoveAnimationStyleHandler } from './remove-animation-style.js';
+import { createRemoveManualKeyframeTrackHandler } from './remove-manual-keyframe-track.js';
 import { createRemoveReactionsHandler } from './remove-reactions.js';
 import { createRenameNodeHandler } from './rename-node.js';
 import { createRenamePageHandler } from './rename-page.js';
@@ -88,6 +95,7 @@ import { createSetStrokesHandler } from './set-strokes.js';
 import { createSetTextPropertiesHandler } from './set-text-properties.js';
 import { createSetTextRangeHandler } from './set-text-range.js';
 import { createSetTextHandler } from './set-text.js';
+import { createSetTimelineDurationHandler } from './set-timeline-duration.js';
 import { createSetVariableCodeSyntaxHandler } from './set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
@@ -187,6 +195,12 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     create_section: createCreateSectionHandler(figmaCtx),
     create_instance: createCreateInstanceHandler(figmaCtx),
     combine_as_variants: createCombineAsVariantsHandler(figmaCtx),
+    // Motion (beta) — Figma Design only
+    apply_animation_style: createApplyAnimationStyleHandler(figmaCtx),
+    remove_animation_style: createRemoveAnimationStyleHandler(figmaCtx),
+    apply_manual_keyframe_track: createApplyManualKeyframeTrackHandler(figmaCtx),
+    remove_manual_keyframe_track: createRemoveManualKeyframeTrackHandler(figmaCtx),
+    set_timeline_duration: createSetTimelineDurationHandler(figmaCtx),
   };
 
   const handlers: SandboxHandlers = {
@@ -208,11 +222,14 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     get_fonts: createGetFontsHandler(figmaCtx),
     get_annotations: createGetAnnotationsHandler(figmaCtx),
     get_reactions: createGetReactionsHandler(figmaCtx),
+    get_motion_styles: createGetMotionStylesHandler(figmaCtx),
+    get_node_motion: createGetNodeMotionHandler(figmaCtx),
     list_files: createListFilesHandler(figmaCtx),
     get_design_context: createGetDesignContextHandler(figmaCtx),
     get_screenshot: createGetScreenshotHandler(figmaCtx),
     save_image_fills: createSaveImageFillsHandler(figmaCtx),
     export_pdf: createExportPdfHandler(figmaCtx),
+    export_video: createExportVideoHandler(figmaCtx),
   };
 
   for (const name of Object.keys(rawWrites)) {

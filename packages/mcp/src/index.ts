@@ -18,6 +18,7 @@ import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-m
 import { handleDesignContext } from './tools/design-context-guard.js';
 import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
 import { EXPORT_PDF_TOOL_NAME, handleExportPdf } from './tools/export-pdf.js';
+import { EXPORT_VIDEO_TOOL_NAME, handleExportVideo } from './tools/export-video.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
@@ -115,6 +116,7 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
   [SAVE_IMAGE_FILLS_TOOL_NAME]: async args =>
     textResult(await handleSaveImageFills(dispatch, args)),
   [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(dispatch, args)),
+  [EXPORT_VIDEO_TOOL_NAME]: async args => textResult(await handleExportVideo(dispatch, args)),
   [GET_SCREENSHOT_TOOL_NAME]: async args => ({
     content: screenshotContent(
       (await dispatch(GET_SCREENSHOT_TOOL_NAME, args)) as GetScreenshotResult,

@@ -222,6 +222,13 @@ export interface DesignContextNode {
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
+  /**
+   * Motion (beta) summary — attached at full detail to nodes that carry animation, so codegen sees
+   * that a layer animates (and how) without a separate get_node_motion call. Compact by design: the
+   * applied preset names, the animated property fields, and the containing timeline's duration —
+   * never the full keyframe data (get_node_motion has that).
+   */
+  motion?: MotionSummary;
   mainComponent?: SerializedMainComponent;
   mainComponentId?: string;
   /**
@@ -268,6 +275,19 @@ export interface DesignContextNode {
   }[];
   truncated?: boolean;
   children?: readonly DesignContextNode[];
+}
+
+/** Compact Motion (beta) summary for a node — see {@link DesignContextNode.motion}. */
+export interface MotionSummary {
+  /** Applied animation-style preset names. */
+  animationStyles?: readonly string[];
+  /**
+   * Field names that carry keyframes (PROPERTY names like TRANSLATION_X, plus
+   * fills/strokes/effects).
+   */
+  animatedProperties?: readonly string[];
+  /** Duration in seconds of the timeline this node participates in. */
+  timelineDuration?: number;
 }
 
 // Cast through unknown: zod's .optional() outputs `T | undefined`, while DesignContextNode uses
@@ -372,6 +392,13 @@ export const DesignContextNodeSchema = z.lazy(() =>
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
+    motion: z
+      .object({
+        animationStyles: z.array(z.string()).optional(),
+        animatedProperties: z.array(z.string()).optional(),
+        timelineDuration: z.number().optional(),
+      })
+      .optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
     mainComponentId: z.string().optional(),
     fill: z.string().optional(),

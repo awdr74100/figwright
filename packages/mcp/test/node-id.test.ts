@@ -117,6 +117,8 @@ describe('normalizeIdArgs', () => {
       'collectionId', // variable-collection ids
       'propertyId', // component-property handles (name#id)
       'modeId', // variable-mode ids
+      'animationStyleId', // Motion applied-style instance ids
+      'timelineId', // Motion timeline ids
     ]);
     const covered = new Set<string>([...STRING_ID_FIELDS, 'nodeIds']);
     const offenders: string[] = [];

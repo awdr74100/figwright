@@ -97,6 +97,46 @@ export const ExportPdfResultSchema = z.object({
 });
 export type ExportPdfResult = z.infer<typeof ExportPdfResultSchema>;
 
+// ── export_video (an animated top-level frame → MP4 / GIF / WebM) ────────────
+export const VIDEO_FORMATS = ['MP4', 'GIF', 'WEBM'] as const;
+export type VideoFormat = (typeof VIDEO_FORMATS)[number];
+
+/**
+ * Why a video export produced no bytes. The first three are cheap pre-checks: `wrong-editor` (not
+ * the Figma Design editor), `not-found` (missing node), `no-top-level-frame` (nothing resolves to a
+ * top-level frame). `failed` is any exportAsync rejection — Figma's own message rides in `error`,
+ * so the caller sees the real cause (a static frame with no animation, an unsupported setting, or
+ * an export that raced another plugin call) instead of a single guessed label.
+ */
+export const VIDEO_EXPORT_MISS_REASONS = [
+  'not-found',
+  'no-top-level-frame',
+  'wrong-editor',
+  'failed',
+] as const;
+export type VideoExportMissReason = (typeof VIDEO_EXPORT_MISS_REASONS)[number];
+
+/** Plugin-side video export: base64 bytes of the encoded frame, or null + a reason when it couldn't. */
+export const VideoExportSchema = z.object({
+  nodeId: z.string(),
+  format: z.enum(VIDEO_FORMATS),
+  base64: z.string().nullable(),
+  reason: z.enum(VIDEO_EXPORT_MISS_REASONS).optional(),
+  /** Figma's own rejection message, present when reason is `failed`. */
+  error: z.string().optional(),
+});
+export type VideoExport = z.infer<typeof VideoExportSchema>;
+
+/** Result of export_video: the written file path (null + reason when nothing was exported). */
+export const ExportVideoResultSchema = z.object({
+  nodeId: z.string(),
+  format: z.enum(VIDEO_FORMATS),
+  path: z.string().nullable(),
+  reason: z.enum(VIDEO_EXPORT_MISS_REASONS).optional(),
+  error: z.string().optional(),
+});
+export type ExportVideoResult = z.infer<typeof ExportVideoResultSchema>;
+
 // ── save_image_fills ─────────────────────────────────────────────────────────
 /**
  * One IMAGE fill's ORIGINAL bytes, as uploaded — no mask, clip, crop, scale, or effects applied
@@ -222,3 +262,38 @@ export const GetReactionsResultSchema = z.object({
   reactions: z.array(SerializedReactionSchema),
 });
 export type GetReactionsResult = z.infer<typeof GetReactionsResultSchema>;
+
+// ── Motion (beta): get_motion_styles / get_node_motion ───────────────────────
+export const MotionStyleSchema = z.object({
+  styleId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  props: z.record(z.string(), z.string()).optional(),
+});
+export type MotionStyle = z.infer<typeof MotionStyleSchema>;
+
+export const GetMotionStylesResultSchema = z.object({ styles: z.array(MotionStyleSchema) });
+export type GetMotionStylesResult = z.infer<typeof GetMotionStylesResultSchema>;
+
+export const TimelineSchema = z.object({ id: z.string(), duration: z.number() });
+export type Timeline = z.infer<typeof TimelineSchema>;
+
+/**
+ * A node's Motion state, mirrored from the plugin API. The keyframe structures (`animations`,
+ * `manualKeyframeTracks`) are deep but plain JSON keyed by field name, so they pass through as
+ * `unknown` rather than re-modeling every KeyframeBinding — the grounded write schema
+ * (motion-schemas) is where authoring shape is enforced. `null` when the node supports no Motion.
+ */
+export const NodeMotionSchema = z.object({
+  animationStyles: z.array(z.unknown()),
+  animations: z.record(z.string(), z.unknown()),
+  manualKeyframeTracks: z.record(z.string(), z.unknown()),
+  timelines: z.array(TimelineSchema),
+});
+export type NodeMotion = z.infer<typeof NodeMotionSchema>;
+
+export const GetNodeMotionResultSchema = z.object({
+  nodeId: z.string(),
+  motion: NodeMotionSchema.nullable(),
+});
+export type GetNodeMotionResult = z.infer<typeof GetNodeMotionResultSchema>;

@@ -8,6 +8,7 @@ import {
   type DetailLevel,
   type GetDesignContextResult,
   MIXED,
+  type MotionSummary,
   type ResolvedToken,
   type SerializedPaint,
   simplifyPaint,
@@ -441,6 +442,34 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
   return out;
 };
 
+/**
+ * Compact Motion (beta) summary for a node that actually animates — applied preset names, the
+ * animated field names, and the containing timeline's duration. Read straight off the Motion mixin
+ * (sync); a node without the mixin, or a non-Figma editor where the read throws, yields undefined.
+ * Only produced when the node carries its own animation, so plain layers stay clean. Surfaced by
+ * buildNode (not project) at full detail — Motion is a Motion-API dimension, not a serializer one.
+ */
+export const motionSummary = (node: SceneNode): MotionSummary | undefined => {
+  if (!('animationStyles' in node)) return undefined;
+  const mn = node as SceneNode & MotionNodeMixin;
+  let styles: string[];
+  let props: string[];
+  let duration: number | undefined;
+  try {
+    styles = mn.animationStyles.map(s => s.name);
+    props = Object.keys(mn.animations);
+    duration = mn.timelines.length > 0 ? mn.timelines[0]!.duration : undefined;
+  } catch {
+    return undefined; // Motion unavailable in this editor — stay silent
+  }
+  if (styles.length === 0 && props.length === 0) return undefined;
+  const out: MotionSummary = {};
+  if (styles.length > 0) out.animationStyles = styles;
+  if (props.length > 0) out.animatedProperties = props;
+  if (duration !== undefined) out.timelineDuration = duration;
+  return out;
+};
+
 /** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
 const buildNode = async (
   node: SceneNode,
@@ -448,6 +477,13 @@ const buildNode = async (
   ctx: BuildCtx,
 ): Promise<DesignContextNode> => {
   const out = project(node, ctx.detail);
+
+  // Motion is a Motion-API dimension (not a serializer field), so it's attached here rather than in
+  // project(). Full detail only — the compact hot path stays untouched.
+  if (ctx.detail === 'full') {
+    const motion = motionSummary(node);
+    if (motion !== undefined) out.motion = motion;
+  }
 
   let expandChildren = true;
   // Resolve the main component when deduping (needs the id) or at full detail (needs name/key for
