@@ -10,6 +10,7 @@ What to expect:
 
 - **Acknowledgement within 3 days.** Figwright is maintained by one person, so please allow a little slack across time zones and weekends.
 - An assessment of impact and affected versions, and a fix timeline proportional to severity.
+- **Coordinated disclosure.** Please keep the report private until a fix is released. We will agree on a publication date with you and aim to publish an advisory within 90 days of triage, sooner for severe issues.
 - Credit in the published advisory and release notes, unless you prefer to stay anonymous.
 
 Please include reproduction steps, the affected tool or component, and your Figwright version (the `@figwright/mcp` version from your MCP client config, plus the plugin build if relevant).
@@ -27,6 +28,16 @@ Figwright runs **entirely on your machine**; there is no Figwright cloud service
 - **What leaves your machine.** Nothing. Figwright sends no telemetry and phones home to no one. Design data flows only between the plugin, the local relay, and your MCP client.
 - **File writes.** Export tools (screenshots, PDF, video, image fills) write only to the paths your agent explicitly passes in the tool call — the server never writes anywhere it wasn't asked to.
 
-Reports are in scope even when the trigger is a malicious Figma document or prompt-injected tool input: if Figwright's handling of untrusted input lets an attacker escalate beyond the boundaries above, we want to know.
+## Scope
+
+**In scope:** anything that lets an attacker cross the boundaries above — including when the trigger is a malicious Figma document or prompt-injected tool input. If Figwright's handling of untrusted input lets an attacker escalate beyond what this document describes, we want to know.
+
+**Out of scope — please report these where they belong:**
+
+- **Vulnerabilities in dependencies.** Report them to the upstream maintainers (or via the [npm contact form](https://www.npmjs.com/support)); open a regular issue here if Figwright needs to bump a patched release.
+- **Bugs in Figma itself** (the desktop app, the Plugin API sandbox) — report to [Figma](https://www.figma.com/security/).
+- **Bugs in your MCP client** (Claude Code, Cursor, etc.) — report to that project.
+- **Prompt injection against the AI agent itself.** An agent following bad instructions embedded in a design file is a limitation of LLM-based tooling, not a Figwright vulnerability — unless Figwright's handling of that input breaks the boundaries above, which _is_ in scope.
+- **An already-compromised machine.** Malware running with your user privileges can do everything Figwright can and more; that is not a boundary Figwright can defend.
 
 Thanks for helping keep Figwright and its users safe.
