@@ -8,7 +8,7 @@ This file is the canonical guide for AI agents and contributors working in this 
 
 Two halves talk over a local WebSocket relay:
 
-- **MCP server** (`packages/mcp`, published as `@figwright/mcp`) — the Node process an MCP client launches. It exposes 80+ read/write tools, plus higher-level **grounding** tools that join Figma data with the user's codebase (component / token / icon maps) and a codegen prompt. It owns the relay, leader/follower **election** (multiple MCP servers can share one plugin; **newest build wins** — a leader on an older build abdicates to a newer one at the next idle moment), and request **idempotency**.
+- **MCP server** (`packages/mcp`, published as `@figwright/mcp`) — the Node process an MCP client launches. It exposes 112 tools — reads, writes, and higher-level **grounding** tools that join Figma data with the user's codebase (component / token / icon maps) — plus a codegen prompt. It owns the relay, leader/follower **election** (multiple MCP servers can share one plugin; **newest build wins** — a leader on an older build abdicates to a newer one at the next idle moment), and request **idempotency**.
 - **Figma plugin** (`packages/plugin`) — a Vue 3 + Vite UI plus a sandbox that runs inside Figma and performs the actual Figma API calls. It connects out to the server's WebSocket.
 - **Shared** (`packages/shared`) — types, Zod schemas, the msgpack wire codec, and the plugin↔server protocol. It is **bundled into the server at build time** (not published on its own).
 
@@ -21,11 +21,11 @@ packages/
   shared/   # types, Zod schemas, msgpack codec, plugin↔server protocol (bundled into mcp)
   mcp/      # the MCP server — @figwright/mcp (Node, ESM): relay, election, tools, joins
   plugin/   # Figma plugin — Vue 3 + Vite + Tailwind v4 (UI) + sandbox (Figma API)
-skills/     # agent skills that orchestrate the tools (figma-codegen) — installable via `npx skills add`
+skills/     # agent skills that orchestrate the tools (figma-codegen, figma-build) — installable via `npx skills add`
 test/       # cross-package integration tests (e.g. server tool registry ↔ plugin handlers)
 ```
 
-`packages/mcp/src` is organized by concern: `tools/`, `relay/`, `election/`, `join/` (component/token/icon maps), `tokens/`, `profile/` (stack detection), `scan/`, `icons/`, `prompts/`.
+`packages/mcp/src` is organized by concern: `tools/`, `relay/`, `election/`, `join/` (component/token/icon maps), `tokens/`, `profile/` (stack detection), `scan/`, `icons/`, `diff/` (design_diff baselines), `prompts/`.
 
 ## Tech stack
 
