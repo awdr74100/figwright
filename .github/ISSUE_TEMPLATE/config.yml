@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/awdr74100/figwright/security/advisories/new
+    about: Never report security vulnerabilities in public issues — use private reporting instead. See SECURITY.md.
   - name: 💬 Questions & setup help
     url: https://github.com/awdr74100/figwright#readme
     about: Check the README first — it covers installation, quick start, and supported MCP clients.
