@@ -2,8 +2,9 @@ name: Release
 
 # Triggered by the tag that `pnpm release` (changelogen --release) creates and
 # you push. Builds, gates, publishes @figwright/mcp to npm with provenance via
-# OIDC trusted publishing, creates the GitHub Release from the changelog, and
-# attaches the Figma plugin as a downloadable asset.
+# OIDC trusted publishing, creates the GitHub Release from the changelog,
+# attaches the Figma plugin as a downloadable asset, and bumps the Homebrew
+# tap formula to the released version.
 on:
   push:
     tags: ['v*']
@@ -63,3 +64,33 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/figwright-plugin-${GITHUB_REF_NAME}.zip" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Point the Homebrew tap (awdr74100/homebrew-tap) at the version npm just
+  # accepted. Needs TAP_GITHUB_TOKEN — a fine-grained PAT with contents:write
+  # on homebrew-tap only — and skips quietly when it isn't configured (forks).
+  homebrew-tap:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+    steps:
+      - name: Bump formula version and sha256
+        if: env.TAP_TOKEN != ''
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          url="https://registry.npmjs.org/@figwright/mcp/-/mcp-${version}.tgz"
+          # The registry can lag a few seconds behind a successful publish.
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsSL "$url" -o mcp.tgz && break
+            sleep 15
+          done
+          sha="$(sha256sum mcp.tgz | cut -d' ' -f1)"
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/awdr74100/homebrew-tap.git" tap
+          cd tap
+          sed -i -E "s|mcp-[0-9][0-9A-Za-z.+-]*\.tgz|mcp-${version}.tgz|" Formula/figwright.rb
+          sed -i -E "s|sha256 \"[0-9a-f]{64}\"|sha256 \"${sha}\"|" Formula/figwright.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "figwright ${version}"
+          git push

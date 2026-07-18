@@ -132,6 +132,26 @@ For Claude Code, add this to your `.mcp.json` (other clients use the same shape)
 
 `npx` fetches and runs the published server — no global install needed.
 
+Prefer Homebrew? Install once and point `command` at a fixed binary — no Node setup, no per-launch registry fetch, immune to version-manager `PATH` surprises:
+
+```bash
+brew install awdr74100/tap/figwright
+```
+
+```json
+{
+  "mcpServers": {
+    "figwright": {
+      "command": "/opt/homebrew/bin/figwright-mcp"
+    }
+  }
+}
+```
+
+(`/opt/homebrew/bin` on Apple Silicon — `which figwright-mcp` prints the exact path on any machine.)
+
+> ⭐ **Like it? [Star the repo](https://github.com/awdr74100/figwright/stargazers)** — stars are Homebrew's notability bar, and enough of them turn this into an official `brew install figwright`.
+
 ### 2. Install the Figma plugin
 
 The plugin isn't on the Figma Community marketplace yet, so install it from the latest release:
@@ -194,7 +214,7 @@ Figwright exposes **112 MCP tools** in three groups:
 ## Requirements
 
 - An **MCP client** (Claude Code, Cursor, …).
-- **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported.)
+- **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported. The Homebrew install brings its own Node — skip this entirely.)
 - **Figma** — the free tier is enough; the desktop app is needed to import the plugin in development.
 
 ## FAQ
@@ -202,7 +222,7 @@ Figwright exposes **112 MCP tools** in three groups:
 <details>
 <summary><strong>The server won't start — <code>command not found</code>, or it fails / disconnects with <code>-32000</code> ("Connection closed").</strong></summary>
 
-Both come down to how your MCP client launches the server: it spawns the `command` directly, **not** through your interactive shell, so it inherits none of what your shell sets up. That bites hardest when Node is managed by a version manager (**fnm, nvm, asdf, volta, mise**), since those configure `PATH` and npm from shell hooks that only run in a real terminal. It isn't specific to Figwright — it affects any `npx`-launched MCP server. There are two symptoms, with two different fixes.
+Both come down to how your MCP client launches the server: it spawns the `command` directly, **not** through your interactive shell, so it inherits none of what your shell sets up. That bites hardest when Node is managed by a version manager (**fnm, nvm, asdf, volta, mise**), since those configure `PATH` and npm from shell hooks that only run in a real terminal. It isn't specific to Figwright — it affects any `npx`-launched MCP server. The [Homebrew install](#1-add-the-server-to-your-mcp-client) sidesteps this whole class of problem (fixed absolute path, its own Node pinned); otherwise there are two symptoms, with two different fixes.
 
 **`command not found` — the client can't find `npx` / `node` on its `PATH`.**
 
