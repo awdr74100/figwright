@@ -9,5 +9,6 @@
   ],
   "rangeStrategy": "bump",
   "minimumReleaseAge": "1 day",
-  "postUpdateOptions": ["pnpmDedupe"]
+  "postUpdateOptions": ["pnpmDedupe"],
+  "ignoreDeps": ["node"]
 }
