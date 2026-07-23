@@ -6,7 +6,10 @@ export default defineConfig({
   format: 'esm',
   target: 'node24',
   platform: 'node',
-  dts: true,
+  // Bin-only package: the entry is a stdio CLI with top-level side effects (it starts the election
+  // and binds stdio on import), not a library. Emitting a `.d.mts` would only advertise an import
+  // surface that must not be used — a stray `import '@figwright/mcp'` would seize the relay port.
+  dts: false,
   sourcemap: true,
   clean: true,
   shims: false,
