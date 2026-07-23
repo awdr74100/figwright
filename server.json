@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.awdr74100/figwright",
+  "description": "Free, two-way Figma MCP server: designs to code and code to canvas, via a Figma plugin.",
+  "version": "0.3.0",
+  "websiteUrl": "https://github.com/awdr74100/figwright",
+  "repository": {
+    "url": "https://github.com/awdr74100/figwright",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@figwright/mcp",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
