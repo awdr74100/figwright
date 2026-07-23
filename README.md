@@ -197,6 +197,14 @@ Figwright exposes **112 MCP tools** in three groups:
 - **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported.)
 - **Figma** — the free tier is enough; the desktop app is needed to import the plugin in development.
 
+## Security
+
+Figwright runs entirely on your machine: your client launches the server over stdio, the server relays to the plugin over a WebSocket on `127.0.0.1:3055`, and nothing is sent anywhere else. The plugin uses only Figma's public Plugin API, so it reaches the file you have open and nothing beyond it.
+
+Loopback is not on its own a boundary — a web page you visit can still reach a local port — so the relay gates every request on two headers a page cannot forge: **`Host`**, which must name loopback (this is what stops DNS rebinding), and **`Origin`**, which admits the plugin's sandboxed handshake and refuses browsers everywhere else. The leader's HTTP endpoints additionally require a media type that cannot be sent without a CORS preflight. See [MCP Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) for the wider picture, and [SECURITY.md](./SECURITY.md) for Figwright's threat model, what is in and out of scope, and how to report a vulnerability privately.
+
+**Figwright is not a substitute for reviewing what your agent does.** Its write tools change your Figma file and its export tools write files to paths the agent chooses; an agent acting on a malicious design or a prompt-injected instruction can misuse both. Your MCP client's tool-approval controls are the boundary that matters.
+
 ## FAQ
 
 <details>

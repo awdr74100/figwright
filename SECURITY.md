@@ -23,7 +23,13 @@ Only the **latest release** of `@figwright/mcp` and the bundled Figma plugin rec
 
 Figwright runs **entirely on your machine**; there is no Figwright cloud service.
 
-- **Where it runs.** Your MCP client launches the `@figwright/mcp` server locally and talks to it over stdio. The server relays to the Figma plugin over a WebSocket bound to `127.0.0.1` (port 3055) — it is never exposed to the network.
+- **Where it runs.** Your MCP client launches the `@figwright/mcp` server locally and talks to it over stdio. The server relays to the Figma plugin over a WebSocket bound to `127.0.0.1` (port 3055), so it is not reachable from your network.
+- **Who can talk to it.** Binding to loopback is not by itself a boundary: a web page you visit can open a WebSocket to a local port or send it a form-style POST without any same-origin check, and DNS rebinding can make a page's own domain resolve to `127.0.0.1`. Figwright gates every request — WebSocket upgrades included — on the two headers a page cannot forge:
+  - **`Host`** must name loopback (`localhost`, `127.0.0.1`, `[::1]`). A rebound request still carries the attacker's domain here, which is what makes this the check that stops rebinding — including on `GET`, where the browser considers itself same-origin, sends no `Origin`, and would otherwise be able to read the reply.
+  - **`Origin`** must be absent (a follower process or the plugin host, neither of which is a browser) or the plugin's sandboxed origin. The leader's HTTP endpoints (`/rpc`, `/ping`, `/abdicate`) are stricter still — they refuse **any** request carrying an `Origin` — and require a media type outside the set a page can send without a CORS preflight.
+
+  If some environment's plugin host is ever refused, `FIGWRIGHT_ALLOW_ANY_ORIGIN=1` lifts the origin gate — please report it rather than leaving it set. It deliberately does not lift the host gate. What none of this defends against is another program already running as you on the same machine; see the note on a compromised machine below.
+
 - **What it can access.** The plugin runs in Figma's plugin sandbox and uses the official public Plugin API — the same API every Community plugin uses. It can only touch the Figma file you have open; it cannot reach your other files, your account, or your org's data, because the Plugin API doesn't expose them.
 - **What leaves your machine.** Nothing. Figwright sends no telemetry and phones home to no one. Design data flows only between the plugin, the local relay, and your MCP client.
 - **File writes.** Export tools (screenshots, PDF, video, image fills) write only to the paths your agent explicitly passes in the tool call — the server never writes anywhere it wasn't asked to.

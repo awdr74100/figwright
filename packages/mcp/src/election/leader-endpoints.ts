@@ -3,6 +3,7 @@ import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node
 import { ErrorCode, getRelayBudget, RpcRequestSchema, type RpcResponse } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
+import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
 import type { Relay } from '../relay/relay.js';
 
 export const PING_PATH = '/ping';
@@ -66,6 +67,26 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
   const log = deps.log ?? ((): void => {});
 
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
+    // Addressed by a name that isn't ours: DNS rebinding, where the browser thinks it is talking to
+    // the attacker's domain and so both omits Origin and gets to read the reply.
+    if (!isAllowedHost(req.headers.host)) {
+      log(
+        `[leader] refused ${req.method ?? '?'} ${req.url ?? '?'} for host ${req.headers.host ?? ''}`,
+      );
+      writeJson(res, 403, { error: 'forbidden host' });
+      return;
+    }
+
+    // Followers reach these endpoints over Node's fetch, which sets no Origin. A request that does
+    // carry one came from a page in the user's browser, which has no legitimate reason to be here.
+    if (!isAllowedHttpOrigin(req.headers.origin)) {
+      log(
+        `[leader] refused ${req.method ?? '?'} ${req.url ?? '?'} from origin ${req.headers.origin ?? ''}`,
+      );
+      writeJson(res, 403, { error: 'forbidden origin' });
+      return;
+    }
+
     if (req.method === 'GET' && req.url === PING_PATH) {
       writeJson(res, 200, {
         ok: true,
@@ -82,6 +103,10 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'POST' && req.url === ABDICATE_PATH) {
+      if (!hasContentType(req.headers['content-type'], 'application/json')) {
+        writeJson(res, 415, { ok: false, reason: 'unsupported media type' });
+        return;
+      }
       void (async (): Promise<void> => {
         let requesterBuildId: unknown;
         try {
@@ -132,6 +157,17 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'POST' && req.url === RPC_PATH) {
+      // A media type outside the CORS simple-request set, so a cross-origin POST has to preflight —
+      // and the preflight fails, because we answer no CORS headers.
+      if (!hasContentType(req.headers['content-type'], 'application/msgpack')) {
+        writeMsgpack(res, 415, {
+          kind: 'err',
+          requestId: '',
+          code: ErrorCode.InvalidRequest,
+          message: 'expected content-type application/msgpack',
+        });
+        return;
+      }
       void (async (): Promise<void> => {
         let body: Buffer;
         try {

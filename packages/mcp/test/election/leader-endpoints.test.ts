@@ -1,4 +1,4 @@
-import { createServer, type Server as HttpServer } from 'node:http';
+import { createServer, type Server as HttpServer, request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import {
@@ -293,6 +293,78 @@ describe('leader endpoints', () => {
     const b = await startLeader();
     const res = await fetch(`http://127.0.0.1:${b.port}/nope`);
     expect(res.status).toBe(404);
+  });
+
+  it('refuses any request carrying an Origin, since only browsers send one', async () => {
+    const b = await startLeader();
+    const attach = await attachFakePlugin(b, () => Promise.resolve({ pong: true }));
+    expect(attach).toBeDefined();
+
+    // The CSRF shape: a simple request needs no preflight, so the page's POST would land and its
+    // side effect would happen even though the reply is unreadable.
+    const rpc = await fetch(`http://127.0.0.1:${b.port}${RPC_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain', origin: 'https://evil.example' },
+      body: Buffer.from(encode({ requestId: 'r-csrf', toolName: 'ping' })),
+    });
+    expect(rpc.status).toBe(403);
+
+    const ping = await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`, {
+      headers: { origin: 'https://evil.example' },
+    });
+    expect(ping.status).toBe(403);
+
+    const abdicate = await fetch(`http://127.0.0.1:${b.port}${ABDICATE_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: JSON.stringify({ buildId: 999_999 }),
+    });
+    expect(abdicate.status).toBe(403);
+  });
+
+  it('refuses a request addressed to a rebound domain, on the readable GET path too', async () => {
+    const b = await startLeader();
+
+    // What DNS rebinding looks like on the wire: the page believes it is same-origin with
+    // attacker.com, so it sends no Origin and *can* read the reply — but Host gives it away.
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: b.port,
+          path: PING_PATH,
+          method: 'GET',
+          headers: { host: 'evil.example:' + String(b.port) },
+        },
+        res => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    expect(status).toBe(403);
+  });
+
+  it('POST /rpc refuses a media type that would skip the CORS preflight', async () => {
+    const b = await startLeader();
+    const res = await fetch(`http://127.0.0.1:${b.port}${RPC_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: Buffer.from(encode({ requestId: 'r-ct', toolName: 'ping' })),
+    });
+    expect(res.status).toBe(415);
+  });
+
+  it('POST /abdicate refuses a non-JSON media type', async () => {
+    const b = await startLeader();
+    const res = await fetch(`http://127.0.0.1:${b.port}${ABDICATE_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: JSON.stringify({ buildId: 999_999 }),
+    });
+    expect(res.status).toBe(415);
   });
 
   it('GET /ping advertises the buildId (0 when unset)', async () => {

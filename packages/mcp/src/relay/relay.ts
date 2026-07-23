@@ -20,6 +20,7 @@ import {
 } from '@figwright/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 
+import { isAllowedHost, isAllowedWsOrigin } from '../local-access.js';
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
 
 export interface RelayOptions {
@@ -64,7 +65,28 @@ export class Relay {
       heartbeatMaxMisses: opts.heartbeatMaxMisses ?? HEARTBEAT_MAX_MISSES,
       disconnectGraceMs: opts.disconnectGraceMs ?? DEFAULT_DISCONNECT_GRACE_MS,
     };
-    this.wss = new WebSocketServer({ server: opts.server });
+    this.wss = new WebSocketServer({
+      server: opts.server,
+      // Refuse the upgrade before it becomes a session: an accepted socket can claim a plugin
+      // identity via $hello and then win routing via $activity, which would put a web page between
+      // the agent and the real file.
+      verifyClient: ({ req }, done) => {
+        if (!isAllowedHost(req.headers.host)) {
+          this.opts.log(
+            `[relay] refused WebSocket upgrade for host ${req.headers.host ?? '(none)'}`,
+          );
+          done(false, 403, 'Forbidden');
+          return;
+        }
+        const origin = req.headers.origin;
+        if (isAllowedWsOrigin(origin)) {
+          done(true);
+          return;
+        }
+        this.opts.log(`[relay] refused WebSocket upgrade from origin ${origin ?? '(none)'}`);
+        done(false, 403, 'Forbidden');
+      },
+    });
     this.wss.on('connection', socket => this.handleConnection(socket));
   }
 

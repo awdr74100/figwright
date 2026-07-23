@@ -83,6 +83,48 @@ const helloParams = (overrides: Partial<HelloParams> = {}): HelloParams => ({
   ...overrides,
 });
 
+describe('Relay upgrade gating', () => {
+  it('refuses a WebSocket upgrade from a web page', async () => {
+    const b = await startRelay();
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+      headers: { origin: 'https://evil.example' },
+    });
+
+    const status = await new Promise<number>((resolve, reject) => {
+      ws.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+      ws.once('open', () => reject(new Error('upgrade should have been refused')));
+      ws.once('error', () => resolve(0));
+    });
+    expect(status).toBe(403);
+    expect(b.relay.sessions.connected()).toHaveLength(0);
+  });
+
+  it('refuses an upgrade addressed to a rebound domain', async () => {
+    const b = await startRelay();
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+      headers: { host: `evil.example:${b.port}` },
+    });
+
+    const status = await new Promise<number>((resolve, reject) => {
+      ws.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+      ws.once('open', () => reject(new Error('upgrade should have been refused')));
+      ws.once('error', () => resolve(0));
+    });
+    expect(status).toBe(403);
+  });
+
+  it('admits the plugin, whose sandboxed origin is the literal "null"', async () => {
+    const b = await startRelay();
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, { headers: { origin: 'null' } });
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', () => resolve());
+      ws.once('error', reject);
+    });
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    ws.close();
+  });
+});
+
 describe('Relay hello loop', () => {
   it('accepts a $hello request and returns server info', async () => {
     const { port } = await startRelay();
