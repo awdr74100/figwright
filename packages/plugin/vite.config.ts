@@ -1,14 +1,12 @@
-import { readFileSync } from 'node:fs';
-
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
+import pkg from '../mcp/package.json' with { type: 'json' };
+
 // Single product version, sourced from the published package (@figwright/mcp).
-const { version } = JSON.parse(
-  readFileSync(new URL('../mcp/package.json', import.meta.url), 'utf8'),
-) as { version: string };
+const { version } = pkg;
 
 export default defineConfig({
   root: 'ui',
