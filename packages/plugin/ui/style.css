@@ -1,11 +1,103 @@
 @import 'tailwindcss';
 
+/*
+ * Figma injects the --figma-color-* token set into this iframe because code.ts opens the UI with
+ * `themeColors: true`, and swaps a `figma-light` / `figma-dark` class on <html> whenever the user
+ * changes theme. Mapping our palette onto those tokens is what makes the panel follow Figma instead
+ * of staying a hardcoded dark rectangle in a light workspace.
+ *
+ * Every token keeps a literal fallback (the palette this file used before) so the panel still
+ * renders if Figma ever stops providing one.
+ */
 @theme {
-  --color-fig-bg: #2c2c2c;
-  --color-fig-fg: #ffffff;
-  --color-fig-muted: #a0a0a0;
-  --color-fig-accent: #18a0fb;
-  --color-fig-danger: #f24822;
+  --color-surface: var(--figma-color-bg, #2c2c2c);
+  --color-raised: var(--figma-color-bg-secondary, #3b3b3b);
+  /* Falls through to the raised surface when Figma has no dedicated hover token: rows sit on
+     --color-surface, so raised still reads as a hover state in both themes. */
+  --color-hover: var(--figma-color-bg-hover, var(--figma-color-bg-secondary, #3b3b3b));
+  --color-line: var(--figma-color-border, rgb(255 255 255 / 0.13));
+  --color-line-strong: var(--figma-color-border-strong, rgb(255 255 255 / 0.25));
+
+  --color-fg: var(--figma-color-text, #ffffff);
+  --color-dim: var(--figma-color-text-secondary, #a0a0a0);
+  --color-faint: var(--figma-color-text-tertiary, #7d7d7d);
+  --color-brand: var(--figma-color-text-brand, #18a0fb);
+  --color-danger: var(--figma-color-text-danger, #f24822);
+  --color-success: var(--figma-color-text-success, #14ae5c);
+  --color-warning: var(--figma-color-text-warning, #e5a400);
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Ring expanding out of the status dot while a connection is in flight. */
+  --animate-ping-ring: ping-ring 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  /* Indeterminate sweep along the panel's top edge while tool calls are running. */
+  --animate-sweep: sweep 1.15s ease-in-out infinite;
+  /* Pending rows breathe so an in-flight call is distinguishable from a settled one. */
+  --animate-breathe: breathe 1.4s ease-in-out infinite;
+
+  @keyframes ping-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    100% {
+      transform: scale(2.75);
+      opacity: 0;
+    }
+  }
+
+  @keyframes sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
+  }
+
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+}
+
+/*
+ * Activity rows (<TransitionGroup name="row">). Only *newly arrived* calls animate — a
+ * TransitionGroup skips enter transitions on initial render, so switching back to the Activity tab
+ * doesn't replay the whole list. `row-move` is what makes the existing rows glide down as a new
+ * call lands on top instead of the list jumping.
+ */
+.row-enter-active,
+.row-move {
+  transition:
+    opacity 260ms var(--ease-out-expo),
+    transform 260ms var(--ease-out-expo);
+}
+
+.row-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/*
+ * Tab panels (<Transition name="tab">). Leaving is instant and entering fades, so a switch reads as
+ * responsive rather than as a cross-fade the user has to wait out.
+ */
+.tab-enter-active {
+  transition:
+    opacity 150ms var(--ease-standard),
+    transform 150ms var(--ease-standard);
+}
+
+.tab-enter-from {
+  opacity: 0;
+  transform: translateY(3px);
 }
 
 html,
@@ -18,4 +110,32 @@ body,
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
+}
+
+body {
+  background: var(--color-surface);
+}
+
+/* Tell the engine which theme is active so native UI — scrollbars, text selection, focus rings —
+   follows Figma too. Without this a light panel still gets dark scrollbars. */
+html.figma-light {
+  color-scheme: light;
+}
+
+html.figma-dark {
+  color-scheme: dark;
+}
+
+/* The thin, tinted scrollbar is applied once on <main> with Tailwind's `scrollbar-*` utilities;
+   `scrollbar-width` / `scrollbar-color` inherit, so the section and the payload <pre> blocks pick it
+   up too. That matches Figma UI3's own thin native scrollbars better than a heavy default one. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
