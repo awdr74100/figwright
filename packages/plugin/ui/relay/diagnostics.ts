@@ -8,8 +8,8 @@
 
 import type { PluginContextEvent } from '@figwright/shared';
 
-import type { RelayClientState } from './client.js';
 import type { ActivityPayload } from './payload.js';
+import type { RelayClientState } from './state.js';
 
 export const DIAGNOSTIC_SCHEMA = 'figwright-diagnostic@1';
 

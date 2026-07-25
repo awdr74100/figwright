@@ -11,6 +11,13 @@
     "types": ["@figma/plugin-typings", "vite/client"],
     "composite": false
   },
-  "include": ["src/**/*.ts", "ui/**/*.ts", "ui/**/*.vue", "test/**/*.ts", "*.config.ts"],
+  "include": [
+    "protocol/**/*.ts",
+    "src/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.vue",
+    "test/**/*.ts",
+    "*.config.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }

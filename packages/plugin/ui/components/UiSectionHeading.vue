@@ -4,7 +4,7 @@
   own rule order rather than by the caller.
 -->
 <template>
-  <p class="text-[10px] font-medium tracking-wide text-dim uppercase">
+  <p class="text-meta font-medium tracking-wide text-dim uppercase">
     <slot />
   </p>
 </template>

@@ -27,7 +27,7 @@ const activeIndex = computed(() => TABS.findIndex(([id]) => id === active.value)
     <button
       v-for="[id, label] in TABS"
       :key="id"
-      class="relative rounded-md py-1 text-[11px] transition-colors duration-150"
+      class="relative rounded-md py-1 text-panel transition-colors duration-150"
       :class="active === id ? 'font-medium text-fg' : 'text-dim hover:text-fg'"
       @click="active = id"
     >

@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  createPanelHide,
+  createPanelResize,
+  PANEL_MIN_SIZE,
+} from '../../protocol/panel-control.js';
 import { usePanelWindow } from '../../ui/composables/usePanelWindow.js';
-import { GRIP_OFFSET, MIN_UI_HEIGHT, MIN_UI_WIDTH } from '../../ui/lib/panel-window.js';
+import { GRIP_OFFSET } from '../../ui/sandbox/commands.js';
 
 const postMessage = vi.fn<(message: unknown, targetOrigin: string) => void>();
 
@@ -33,7 +38,7 @@ describe('usePanelWindow', () => {
     usePanelWindow().runInBackground();
 
     // Closing would drop the relay socket that lives in this iframe.
-    expect(sentMessages()).toEqual([{ type: 'ui:minimize' }]);
+    expect(sentMessages()).toEqual([createPanelHide()]);
   });
 
   describe('drag-to-resize', () => {
@@ -64,12 +69,7 @@ describe('usePanelWindow', () => {
       onResizeMove(pointerAt(520, 620));
 
       expect(sentMessages()).toEqual([
-        {
-          type: 'ui:resize',
-          width: 520 + GRIP_OFFSET,
-          height: 620 + GRIP_OFFSET,
-          persist: false,
-        },
+        createPanelResize({ width: 520 + GRIP_OFFSET, height: 620 + GRIP_OFFSET }, false),
       ]);
     });
 
@@ -83,12 +83,7 @@ describe('usePanelWindow', () => {
 
       const persisted = sentMessages().filter(m => (m as { persist: boolean }).persist);
       expect(persisted).toEqual([
-        {
-          type: 'ui:resize',
-          width: 530 + GRIP_OFFSET,
-          height: 630 + GRIP_OFFSET,
-          persist: true,
-        },
+        createPanelResize({ width: 530 + GRIP_OFFSET, height: 630 + GRIP_OFFSET }, true),
       ]);
     });
 
@@ -118,7 +113,7 @@ describe('usePanelWindow', () => {
       onResizeMove(pointerAt(10, 10));
 
       expect(sentMessages()).toEqual([
-        { type: 'ui:resize', width: MIN_UI_WIDTH, height: MIN_UI_HEIGHT, persist: false },
+        createPanelResize({ width: PANEL_MIN_SIZE.width, height: PANEL_MIN_SIZE.height }, false),
       ]);
     });
   });

@@ -19,58 +19,15 @@ import {
 } from '@figwright/shared';
 
 import { extractNodeIds } from './node-ids.js';
-import { type ActivityPayload, summarizePayload } from './payload.js';
-
-export type RelayStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
-
-export type ToolHandler = (method: string, params: unknown) => Promise<unknown>;
-
-/** Most-recent tool calls kept in memory for the UI Activity tab. */
-export const ACTIVITY_LIMIT = 30;
-
-export type ActivityStatus = 'pending' | 'ok' | 'error';
-
-export interface ActivityEntry {
-  /** Request id of the originating tool call. */
-  id: string;
-  method: string;
-  startedAt: number;
-  status: ActivityStatus;
-  durationMs?: number;
-  error?: string;
-  /** Snapshot of the call's request params (see payload.ts) — what we were asked to do. */
-  request?: ActivityPayload;
-  /** For a successful call, a snapshot of the result sent back to the LLM (see payload.ts). */
-  payload?: ActivityPayload;
-  /**
-   * Nodes this call touched (see node-ids.ts) — collected from the params it was given and the
-   * result it produced, so the panel can offer to reveal them on canvas. Absent when the call
-   * referenced none.
-   */
-  nodeIds?: readonly string[];
-}
-
-export interface RelayClientState {
-  status: RelayStatus;
-  port: number | null;
-  sessionResumed: boolean;
-  /** Server version from the hello handshake, or null until connected (for diagnostics). */
-  serverVersion: string | null;
-  lastError: string | null;
-  /** Epoch ms of the current connection, or null while not connected (for uptime). */
-  connectedAt: number | null;
-  /** How many times the live socket dropped and was re-established. */
-  reconnectCount: number;
-  /** Total tool calls received this session (not capped by ACTIVITY_LIMIT). */
-  totalCalls: number;
-  /**
-   * How many of those calls failed. Counted alongside `totalCalls` rather than derived from
-   * `activity`, so the two stay comparable once the recent list is capped.
-   */
-  failedCalls: number;
-  /** Recent tool calls, most-recent-first, capped at ACTIVITY_LIMIT. */
-  activity: readonly ActivityEntry[];
-}
+import { summarizePayload } from './payload.js';
+import {
+  type ActivityStatus,
+  initialRelayState,
+  recordCallEnd,
+  recordCallStart,
+  type RelayClientState,
+  type ToolHandler,
+} from './state.js';
 
 export type WebSocketCtor = new (url: string) => WebSocket;
 
@@ -113,18 +70,7 @@ const COLD_START_MAX_DELAY_MS = 150;
 export class RelayClient {
   readonly sessionId: string;
   private readonly opts: Required<Omit<RelayClientOptions, 'sessionId'>>;
-  private state: RelayClientState = {
-    status: 'idle',
-    port: null,
-    sessionResumed: false,
-    serverVersion: null,
-    lastError: null,
-    connectedAt: null,
-    reconnectCount: 0,
-    totalCalls: 0,
-    failedCalls: 0,
-    activity: [],
-  };
+  private state: RelayClientState = initialRelayState();
   private socket: WebSocket | null = null;
   private heartbeat: HeartbeatMonitor | null = null;
   private listeners = new Set<(s: RelayClientState) => void>();
@@ -421,12 +367,20 @@ export class RelayClient {
     method: string,
     params: unknown,
   ): Promise<void> {
-    this.recordActivityStart(id, method, summarizePayload(params), extractNodeIds(params));
+    this.update(
+      recordCallStart(this.state, {
+        id,
+        method,
+        startedAt: Date.now(),
+        request: summarizePayload(params),
+        nodeIds: extractNodeIds(params),
+      }),
+    );
     const handler = this.toolHandler;
     if (handler === null) {
       const message = `no tool handler registered (method=${method})`;
       this.opts.log(`[relay-client] ${message}`);
-      this.recordActivityEnd(id, 'error', message);
+      this.settle(id, 'error', { error: message });
       ws.send(
         encodeEnvelope(createError({ id, sessionId, code: ErrorCode.MethodNotFound, message })),
       );
@@ -435,7 +389,10 @@ export class RelayClient {
     try {
       const result = await handler(method, params);
       // A create call only names the node it made in its result, so fold those ids in too.
-      this.recordActivityEnd(id, 'ok', undefined, summarizePayload(result), extractNodeIds(result));
+      this.settle(id, 'ok', {
+        payload: summarizePayload(result),
+        nodeIds: extractNodeIds(result),
+      });
       ws.send(encodeEnvelope(createResponse({ id, sessionId, result })));
       // Sending the reply proves we're alive. Encoding a huge result blocks this single thread, so the
       // heartbeat's setInterval couldn't fire meanwhile; that coalesced tick runs right after this
@@ -445,56 +402,19 @@ export class RelayClient {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.opts.log(`[relay-client] tool handler threw for ${method}: ${message}`);
-      this.recordActivityEnd(id, 'error', message);
+      this.settle(id, 'error', { error: message });
       ws.send(encodeEnvelope(createError({ id, sessionId, code: ErrorCode.Internal, message })));
       this.heartbeat?.notifyReceived();
     }
   }
 
-  private recordActivityStart(
-    id: string,
-    method: string,
-    request?: ActivityPayload,
-    nodeIds: readonly string[] = [],
-  ): void {
-    const entry: ActivityEntry = {
-      id,
-      method,
-      startedAt: Date.now(),
-      status: 'pending',
-      ...(request === undefined ? {} : { request }),
-      ...(nodeIds.length === 0 ? {} : { nodeIds }),
-    };
-    this.update({
-      totalCalls: this.state.totalCalls + 1,
-      activity: [entry, ...this.state.activity].slice(0, ACTIVITY_LIMIT),
-    });
-  }
-
-  private recordActivityEnd(
+  /** Stamp a settled call with the wall clock and fold its outcome into the recent list. */
+  private settle(
     id: string,
     status: ActivityStatus,
-    error?: string,
-    payload?: ActivityPayload,
-    resultNodeIds: readonly string[] = [],
+    outcome: Omit<Parameters<typeof recordCallEnd>[1], 'id' | 'status' | 'settledAt'>,
   ): void {
-    this.update({
-      ...(status === 'error' ? { failedCalls: this.state.failedCalls + 1 } : {}),
-      activity: this.state.activity.map(e => {
-        if (e.id !== id) return e;
-        // Params first, then anything new the result named — de-duped, so a call that both targets
-        // and returns the same node lists it once.
-        const nodeIds = [...new Set([...(e.nodeIds ?? []), ...resultNodeIds])];
-        return {
-          ...e,
-          status,
-          durationMs: Date.now() - e.startedAt,
-          ...(error === undefined ? {} : { error }),
-          ...(payload === undefined ? {} : { payload }),
-          ...(nodeIds.length === 0 ? {} : { nodeIds }),
-        };
-      }),
-    });
+    this.update(recordCallEnd(this.state, { id, status, settledAt: Date.now(), ...outcome }));
   }
 
   private async runReconnectLoop(): Promise<void> {

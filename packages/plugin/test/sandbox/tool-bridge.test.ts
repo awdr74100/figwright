@@ -7,13 +7,13 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  createSandboxBridge,
+  createToolBridge,
   type PostMessageFn,
   type SubscribeFn,
-} from '../../ui/bridge/sandbox.js';
+} from '../../ui/sandbox/tool-bridge.js';
 
 interface Harness {
-  bridge: ReturnType<typeof createSandboxBridge>;
+  bridge: ReturnType<typeof createToolBridge>;
   sent: PluginBridgeMessage[];
   emit: (raw: unknown) => void;
 }
@@ -28,7 +28,7 @@ const setup = (timeoutMs?: number): Harness => {
       emitter.current = null;
     };
   };
-  const bridge = createSandboxBridge({
+  const bridge = createToolBridge({
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
     postMessage,
     subscribe,
@@ -40,7 +40,7 @@ const setup = (timeoutMs?: number): Harness => {
   };
 };
 
-describe('createSandboxBridge', () => {
+describe('createToolBridge', () => {
   it('posts a tagged tool-call when handler is invoked', async () => {
     const { bridge, sent, emit } = setup();
     const promise = bridge.handler('ping', { foo: 1 });
@@ -72,7 +72,7 @@ describe('createSandboxBridge', () => {
   it('ignores orphan replies for unknown ids', async () => {
     const log = vi.fn<(msg: string) => void>();
     const emitter: { current: ((raw: unknown) => void) | null } = { current: null };
-    const bridge = createSandboxBridge({
+    const bridge = createToolBridge({
       log,
       postMessage: () => {},
       subscribe: cb => {

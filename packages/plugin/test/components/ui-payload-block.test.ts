@@ -28,12 +28,12 @@ vi.mock('@vueuse/core', async importOriginal => {
   };
 });
 
-const { default: PayloadPreview } = await import('../../ui/components/PayloadPreview.vue');
+const { default: UiPayloadBlock } = await import('../../ui/components/UiPayloadBlock.vue');
 
 const mountPreview = (props: Record<string, unknown> = {}) =>
-  mount(PayloadPreview, { props: { label: 'Payload → LLM', preview: '{"ok":true}', ...props } });
+  mount(UiPayloadBlock, { props: { label: 'Payload → LLM', preview: '{"ok":true}', ...props } });
 
-describe('PayloadPreview', () => {
+describe('UiPayloadBlock', () => {
   beforeEach(() => {
     clipboard.copy.mockClear();
   });
@@ -91,9 +91,9 @@ describe('PayloadPreview', () => {
   it('does not let the copy click bubble to the row toggle', async () => {
     const onClick = vi.fn<() => void>();
     const wrapper = mount({
-      components: { PayloadPreview },
+      components: { UiPayloadBlock },
       setup: () => ({ onClick }),
-      template: `<div @click="onClick"><PayloadPreview label="L" preview="p" /></div>`,
+      template: `<div @click="onClick"><UiPayloadBlock label="L" preview="p" /></div>`,
     });
 
     await wrapper.find('button').trigger('click');

@@ -26,6 +26,16 @@
   --color-success: var(--figma-color-text-success, #14ae5c);
   --color-warning: var(--figma-color-text-warning, #e5a400);
 
+  /*
+   * Type scale. The panel is a dense status surface living inside Figma's own chrome, so it runs
+   * well below web defaults — which is why these are named for what they carry rather than
+   * borrowed from Tailwind's `xs`/`sm`, whose sizes would be wrong here. No paired line-height:
+   * these replace bare `text-[11px]` utilities, which set font-size alone.
+   */
+  --text-panel: 0.6875rem; /* 11px — row labels and body copy */
+  --text-meta: 0.625rem; /* 10px — durations, counts, versions, section headings */
+  --text-chip: 0.5625rem; /* 9px — the node-type chip; the smallest that stays legible */
+
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 

@@ -12,7 +12,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/plugin": {
-      "project": ["src/**/*.ts", "ui/**/*.{ts,vue,css}"]
+      "project": ["protocol/**/*.ts", "src/**/*.ts", "ui/**/*.{ts,vue,css}"]
     }
   }
 }

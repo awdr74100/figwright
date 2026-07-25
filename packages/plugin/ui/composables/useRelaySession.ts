@@ -1,21 +1,20 @@
-import {
-  DEFAULT_PORT,
-  isPluginContextEvent,
-  type PluginContextEvent,
-  PROTOCOL_VERSION,
-} from '@figwright/shared';
-import { tryOnScopeDispose, useDocumentVisibility, useEventListener } from '@vueuse/core';
-import { onMounted, type Ref, ref, watch } from 'vue';
+import { DEFAULT_PORT, type PluginContextEvent, PROTOCOL_VERSION } from '@figwright/shared';
+import { tryOnScopeDispose, useDocumentVisibility } from '@vueuse/core';
+import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from 'vue';
 
-import { createSandboxBridge } from '../bridge/sandbox.js';
-import { RelayClient, type RelayClientState } from '../relay/client.js';
+import { RelayClient } from '../relay/client.js';
 import { buildDiagnosticBundle } from '../relay/diagnostics.js';
+import type { RelayClientState } from '../relay/state.js';
+import { onSandboxContext } from '../sandbox/messaging.js';
+import { createToolBridge } from '../sandbox/tool-bridge.js';
 
 export interface RelaySession {
   /** Live mirror of the relay client's state. */
   state: Ref<RelayClientState>;
   /** Latest context pushed up from the sandbox, or null before the first push. */
   context: Ref<PluginContextEvent | null>;
+  /** True while at least one tool call is in flight. */
+  busy: ComputedRef<boolean>;
   sessionId: string;
   /** Serialized bundle (versions + context + calls) for pasting into a bug report. */
   buildDiagnostics: () => string;
@@ -36,7 +35,7 @@ export const useRelaySession = (appVersion: string): RelaySession => {
     clientVersion: appVersion,
     log: msg => console.log(msg),
   });
-  const bridge = createSandboxBridge({ log: msg => console.log(msg) });
+  const bridge = createToolBridge({ log: msg => console.log(msg) });
   client.setToolHandler(bridge.handler);
 
   const state = ref<RelayClientState>(client.getState());
@@ -58,19 +57,16 @@ export const useRelaySession = (appVersion: string): RelaySession => {
     client.notifyActivity({ fileName: c.fileName, pageId: c.pageId, pageName: c.pageName });
   };
 
-  useEventListener(globalThis, 'message', (event: MessageEvent) => {
-    const msg = (event.data as { pluginMessage?: unknown } | null)?.pluginMessage;
-    if (isPluginContextEvent(msg)) {
-      context.value = msg;
-      // A context push is proof the user is active here right now — a throttle-immune signal (postMessage
-      // isn't clamped like background-tab timers). Nudge the relay to probe now in case a reconnect
-      // stalled while backgrounded; wake() no-ops when already connected.
-      client.wake();
-      // Each context push from sandbox means the user just interacted (open / selection-change /
-      // page-change). Tell the leader — params carry file/page identity so ping can report which
-      // file is being routed instead of an opaque session id.
-      emitActivity();
-    }
+  const stopContext = onSandboxContext(event => {
+    context.value = event;
+    // A context push is proof the user is active here right now — a throttle-immune signal (postMessage
+    // isn't clamped like background-tab timers). Nudge the relay to probe now in case a reconnect
+    // stalled while backgrounded; wake() no-ops when already connected.
+    client.wake();
+    // Each context push from sandbox means the user just interacted (open / selection-change /
+    // page-change). Tell the leader — params carry file/page identity so ping can report which
+    // file is being routed instead of an opaque session id.
+    emitActivity();
   });
 
   // When this tab becomes the foreground (visibility → 'visible'), re-assert activity so routing follows
@@ -96,6 +92,7 @@ export const useRelaySession = (appVersion: string): RelaySession => {
   });
   tryOnScopeDispose(() => {
     stopSubscribe();
+    stopContext();
     bridge.dispose();
     client.disconnect().catch(() => {});
   });
@@ -107,6 +104,9 @@ export const useRelaySession = (appVersion: string): RelaySession => {
   return {
     state,
     context,
+    // Derived here rather than in the panel: "the agent is working" is a fact about the session, and
+    // more than one piece of chrome reads it.
+    busy: computed(() => state.value.activity.some(e => e.status === 'pending')),
     sessionId: client.sessionId,
     buildDiagnostics: () =>
       buildDiagnosticBundle(state.value, context.value, {

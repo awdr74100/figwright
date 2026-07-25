@@ -27,6 +27,8 @@ test/       # cross-package integration tests (e.g. server tool registry ↔ plu
 
 `packages/mcp/src` is organized by concern: `tools/`, `relay/`, `election/`, `join/` (component/token/icon maps), `tokens/`, `profile/` (stack detection), `scan/`, `icons/`, `diff/` (design_diff baselines), `prompts/`.
 
+`packages/plugin` has three top-level source trees, one per execution context: `ui/` is the Vue panel (`components/` — flat, prefixed `Panel*` for the window's chrome, `Tab*` for a tab's contents, `Ui*` for reusable primitives — plus `composables/`, `relay/` for the socket and session state, and `sandbox/` for the iframe↔sandbox channel); `src/` is the Figma-API sandbox (`handlers/`, one per tool, plus `panel.ts` for the window itself); and `protocol/` holds the panel-control contract **both** ends import, kept out of `shared` so the window's geometry never ships to the server.
+
 ## Tech stack
 
 - **Node 24** (see `.node-version`), **pnpm 11** workspace (pinned via `packageManager`), ESM throughout.

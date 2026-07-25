@@ -1,43 +1,14 @@
 import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figwright/shared';
 
+import { parsePanelControl } from '../protocol/panel-control.js';
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';
-import { revealNodes } from './reveal.js';
-
-// The window opens at this size and never shrinks below the floor (keeps the header/footer layout
-// intact). There's no max — Figma clamps the window to the canvas viewport.
-const UI_SIZE_KEY = 'ui-size';
-const DEFAULT_UI_SIZE = { width: 292, height: 312 };
-const MIN_UI_SIZE = { width: 280, height: 300 };
-
-const clampUiSize = (width: number, height: number): { width: number; height: number } => ({
-  width: Math.max(MIN_UI_SIZE.width, Math.round(width)),
-  height: Math.max(MIN_UI_SIZE.height, Math.round(height)),
-});
-
-figma.showUI(__html__, { ...DEFAULT_UI_SIZE, themeColors: true });
-
-// Restore the last user-chosen size. clientStorage is async, so the window opens at the default and
-// then snaps to the saved size; clamp defensively in case a stored value predates the current floor.
-void (async (): Promise<void> => {
-  try {
-    const saved: unknown = await figma.clientStorage.getAsync(UI_SIZE_KEY);
-    if (typeof saved !== 'object' || saved === null) return;
-    const { width, height } = saved as { width?: unknown; height?: unknown };
-    if (typeof width === 'number' && typeof height === 'number') {
-      const size = clampUiSize(width, height);
-      figma.ui.resize(size.width, size.height);
-    }
-  } catch {
-    // No saved size (or storage unavailable) — keep the default.
-  }
-})();
-
-// "Run in background" hides the panel (figma.ui.hide keeps this iframe + the relay socket alive, so
-// the connection survives). Running the plugin again from the Plugins menu re-reveals it.
-figma.on('run', () => figma.ui.show());
+import { createPanelController } from './panel.js';
 
 const log = (msg: string): void => console.log(msg);
+
+const panel = createPanelController(figma);
+panel.open(__html__);
 
 // Push the current Figma context to the UI so its Context tab reflects what the plugin sees.
 const emitContext = (): void => {
@@ -66,47 +37,11 @@ const emitContext = (): void => {
 const handlers = createSandboxHandlers(figma);
 
 figma.ui.onmessage = (raw: unknown) => {
-  // UI control: hide the panel into the background (relay stays connected). Handled locally, not
-  // routed to tool dispatch.
-  if (
-    typeof raw === 'object' &&
-    raw !== null &&
-    (raw as { type?: unknown }).type === 'ui:minimize'
-  ) {
-    figma.ui.hide();
-    return;
-  }
-  // UI control: live window resize from the drag handle. `persist` (sent on drag-release) saves the
-  // final size so the next open restores it. Handled locally, not routed to tool dispatch.
-  if (typeof raw === 'object' && raw !== null && (raw as { type?: unknown }).type === 'ui:resize') {
-    const { width, height, persist } = raw as {
-      width?: unknown;
-      height?: unknown;
-      persist?: unknown;
-    };
-    if (typeof width === 'number' && typeof height === 'number') {
-      const size = clampUiSize(width, height);
-      figma.ui.resize(size.width, size.height);
-      if (persist === true) figma.clientStorage.setAsync(UI_SIZE_KEY, size).catch(() => {});
-    }
-    return;
-  }
-  // UI control: jump the canvas to the nodes a recorded tool call touched. Driven by the panel, not
-  // the agent, so it's handled here and never produces a relay reply.
-  if (typeof raw === 'object' && raw !== null && (raw as { type?: unknown }).type === 'ui:reveal') {
-    const { nodeIds } = raw as { nodeIds?: unknown };
-    if (Array.isArray(nodeIds)) {
-      const ids = nodeIds.filter((id): id is string => typeof id === 'string');
-      // Nothing asked for is not the same as nothing found — reporting a miss here would be a lie.
-      if (ids.length === 0) return;
-      void (async (): Promise<void> => {
-        const { revealed } = await revealNodes(figma, ids);
-        // Only speak up on a miss: a successful reveal shows itself through the selection, so a
-        // toast on top of that is just noise. Silence on a miss, though, would read as a broken
-        // button — the usual cause is the call being undone, or the agent deleting what it made.
-        if (revealed === 0) figma.notify('Figwright: those nodes are no longer in this file');
-      })();
-    }
+  // Panel control (resize / hide / reveal) is driven by the user's own clicks, not the agent, so
+  // it's carried out here and never produces a relay reply. Anything else is tool traffic.
+  const control = parsePanelControl(raw);
+  if (control !== null) {
+    panel.apply(control);
     return;
   }
   void (async (): Promise<void> => {

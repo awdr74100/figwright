@@ -1,4 +1,4 @@
-import { postToSandbox, sizeFromPointer } from '../lib/panel-window.js';
+import { hidePanel, resizePanel, sizeFromPointer } from '../sandbox/commands.js';
 
 export interface PanelWindow {
   /** Hide the panel; the iframe (and with it the relay socket) stays alive. */
@@ -8,10 +8,8 @@ export interface PanelWindow {
   onResizeEnd: (e: PointerEvent) => void;
 }
 
-const postResize = (clientX: number, clientY: number, persist: boolean): void => {
-  const { width, height } = sizeFromPointer(clientX, clientY);
-  postToSandbox({ type: 'ui:resize', width, height, persist });
-};
+const sendSize = (e: PointerEvent, persist: boolean): void =>
+  resizePanel(sizeFromPointer(e.clientX, e.clientY), persist);
 
 /**
  * Drag-to-resize and run-in-background, as the small state machine they are.
@@ -24,22 +22,20 @@ export const usePanelWindow = (): PanelWindow => {
   let resizing = false;
 
   return {
-    // The relay socket lives in this iframe, so ask the sandbox to figma.ui.hide() rather than
-    // closing the plugin, which would drop the connection.
-    runInBackground: () => postToSandbox({ type: 'ui:minimize' }),
+    runInBackground: hidePanel,
 
     onResizeStart: (e: PointerEvent) => {
       resizing = true;
-      // Capture keeps the drag alive when the pointer leaves the 14px grip.
+      // Capture keeps the drag alive when the pointer leaves the 16px grip.
       (e.target as Element).setPointerCapture(e.pointerId);
     },
     onResizeMove: (e: PointerEvent) => {
-      if (resizing) postResize(e.clientX, e.clientY, false);
+      if (resizing) sendSize(e, false);
     },
     onResizeEnd: (e: PointerEvent) => {
       if (!resizing) return;
       resizing = false;
-      postResize(e.clientX, e.clientY, true);
+      sendSize(e, true);
     },
   };
 };

@@ -2,14 +2,14 @@
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ActivityEntry } from '../../ui/relay/client.js';
+import type { ActivityEntry } from '../../ui/relay/state.js';
 
 // The row's job is to hand the right ids to the canvas; posting them to the sandbox is that
 // module's concern, so it's stubbed at the boundary.
 const reveal = vi.hoisted(() => vi.fn<(ids: readonly string[]) => void>());
-vi.mock('../../ui/lib/canvas.js', () => ({ revealOnCanvas: reveal }));
+vi.mock('../../ui/sandbox/commands.js', () => ({ revealOnCanvas: reveal }));
 
-const { default: ActivityRow } = await import('../../ui/components/ActivityRow.vue');
+const { default: TabActivityRow } = await import('../../ui/components/TabActivityRow.vue');
 
 const payload = (over: Partial<ActivityEntry['payload']> = {}) => ({
   preview: '{"node":"ok"}',
@@ -27,7 +27,7 @@ const entry = (over: Partial<ActivityEntry> = {}): ActivityEntry => ({
 });
 
 const mountRow = (over: Partial<ActivityEntry> = {}) =>
-  mount(ActivityRow, { props: { entry: entry(over) } });
+  mount(TabActivityRow, { props: { entry: entry(over) } });
 
 /** The expand container is the grid whose rows animate between 0fr and 1fr. */
 const isExpanded = (wrapper: ReturnType<typeof mountRow>): boolean =>
@@ -37,7 +37,7 @@ const isExpanded = (wrapper: ReturnType<typeof mountRow>): boolean =>
 const revealButton = (wrapper: ReturnType<typeof mountRow>) =>
   wrapper.find('button:has(.lucide-crosshair)');
 
-describe('ActivityRow', () => {
+describe('TabActivityRow', () => {
   beforeEach(() => {
     reveal.mockClear();
   });

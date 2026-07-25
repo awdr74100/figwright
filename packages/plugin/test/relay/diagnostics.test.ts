@@ -1,9 +1,9 @@
 import type { PluginContextEvent } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
-import type { ActivityEntry, RelayClientState } from '../../ui/relay/client.js';
 import { buildDiagnosticBundle, DIAGNOSTIC_SCHEMA } from '../../ui/relay/diagnostics.js';
 import { summarizePayload } from '../../ui/relay/payload.js';
+import type { ActivityEntry, RelayClientState } from '../../ui/relay/state.js';
 
 const baseState = (activity: ActivityEntry[]): RelayClientState => ({
   status: 'connected',

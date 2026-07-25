@@ -10,7 +10,7 @@ const { runInBackground } = usePanelWindow();
 
 <template>
   <footer
-    class="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-[10px] text-faint"
+    class="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-meta text-faint"
   >
     <!-- No product name: Figma's own plugin window titles this panel "Figwright" already, and the
          footer is the tightest row in the UI. -->

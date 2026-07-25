@@ -2,20 +2,20 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import ConnectionStatus from '../../ui/components/ConnectionStatus.vue';
-import type { RelayStatus } from '../../ui/relay/client.js';
+import PanelStatus from '../../ui/components/PanelStatus.vue';
+import type { RelayStatus } from '../../ui/relay/state.js';
 
 const mountStatus = (props: {
   status: RelayStatus;
   port?: number | null;
   connectedAt?: number | null;
-}) => mount(ConnectionStatus, { props: { port: null, connectedAt: null, ...props } });
+}) => mount(PanelStatus, { props: { port: null, connectedAt: null, ...props } });
 
 /** The pulsing ring is the absolutely-positioned span inside the dot. */
 const hasPingRing = (wrapper: ReturnType<typeof mountStatus>): boolean =>
   wrapper.find('span.animate-ping-ring').exists();
 
-describe('ConnectionStatus', () => {
+describe('PanelStatus', () => {
   it('labels every relay status', () => {
     const cases: Array<[RelayStatus, string]> = [
       ['idle', 'Idle'],

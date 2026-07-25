@@ -3,7 +3,7 @@ import { createPluginContextEvent, type PluginContextEvent } from '@figwright/sh
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, nextTick } from 'vue';
 
-import type { RelayClientState } from '../../ui/relay/client.js';
+import type { ActivityEntry, RelayClientState } from '../../ui/relay/state.js';
 
 /**
  * The composable constructs its own RelayClient and sandbox bridge, so both are mocked at the
@@ -67,8 +67,8 @@ vi.mock('../../ui/relay/client.js', () => ({
   },
 }));
 
-vi.mock('../../ui/bridge/sandbox.js', () => ({
-  createSandboxBridge: () => ({ handler: mocks.bridgeHandler, dispose: mocks.bridgeDispose }),
+vi.mock('../../ui/sandbox/tool-bridge.js', () => ({
+  createToolBridge: () => ({ handler: mocks.bridgeHandler, dispose: mocks.bridgeDispose }),
 }));
 
 const { useRelaySession } = await import('../../ui/composables/useRelaySession.js');
@@ -261,6 +261,61 @@ describe('useRelaySession', () => {
       pushContext();
 
       expect(session.context.value?.fileName).toBe('Design File');
+    });
+
+    it('stops listening for context once unmounted', () => {
+      const session = withSession();
+      mounted.pop()?.unmount();
+
+      pushContext();
+
+      expect(session.context.value).toBeNull();
+    });
+  });
+
+  // Derived here rather than in the panel: "the agent is working" is a fact about the session, and
+  // more than one piece of chrome reads it.
+  describe('busy', () => {
+    const entry = (id: string, status: ActivityEntry['status']): ActivityEntry => ({
+      id,
+      method: 'get_node',
+      startedAt: 1000,
+      status,
+    });
+
+    const withActivity = (activity: ActivityEntry[]): void => {
+      mocks.getEmitState()?.({ ...mocks.baseState, activity });
+    };
+
+    it('is quiet before anything has happened', () => {
+      expect(withSession().busy.value).toBe(false);
+    });
+
+    it('stays quiet once every call has settled', () => {
+      const session = withSession();
+
+      withActivity([entry('a', 'ok'), entry('b', 'error')]);
+
+      expect(session.busy.value).toBe(false);
+    });
+
+    // The sweep has to appear even when the pending row itself is scrolled out of view.
+    it('reports a call in flight wherever it sits in the list', () => {
+      const session = withSession();
+
+      withActivity([entry('a', 'ok'), entry('b', 'pending')]);
+
+      expect(session.busy.value).toBe(true);
+    });
+
+    it('goes quiet again when the last call settles', () => {
+      const session = withSession();
+      withActivity([entry('a', 'pending')]);
+      expect(session.busy.value).toBe(true);
+
+      withActivity([entry('a', 'ok')]);
+
+      expect(session.busy.value).toBe(false);
     });
   });
 

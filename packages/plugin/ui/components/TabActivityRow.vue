@@ -3,10 +3,10 @@ import { Check, ChevronRight, Crosshair, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 import { useSharedNow } from '../composables/useSharedNow.js';
-import { revealOnCanvas } from '../lib/canvas.js';
 import { formatClockTime, formatRelativeTime } from '../lib/format.js';
-import type { ActivityEntry, ActivityStatus } from '../relay/client.js';
-import PayloadPreview from './PayloadPreview.vue';
+import type { ActivityEntry, ActivityStatus } from '../relay/state.js';
+import { revealOnCanvas } from '../sandbox/commands.js';
+import UiPayloadBlock from './UiPayloadBlock.vue';
 
 const props = defineProps<{ entry: ActivityEntry }>();
 
@@ -66,13 +66,13 @@ const durationTone = computed(() =>
           {{ entry.method }}
         </span>
 
-        <span class="shrink-0 tabular-nums text-[10px]" :class="durationTone">
+        <span class="shrink-0 text-meta tabular-nums" :class="durationTone">
           {{ entry.durationMs === undefined ? '' : `${entry.durationMs}ms` }}
         </span>
         <!-- Relative age reads best at a glance; the exact clock time is there on hover for when
              you're lining the panel up against a log or a recording. -->
         <span
-          class="w-7 shrink-0 text-right tabular-nums text-[10px] text-faint"
+          class="w-7 shrink-0 text-right text-meta tabular-nums text-faint"
           :title="formatClockTime(entry.startedAt)"
         >
           {{ formatRelativeTime(entry.startedAt, now.getTime()) }}
@@ -113,17 +113,17 @@ const durationTone = computed(() =>
           <!-- The row shows a relative age because that reads best at a glance; the wall clock
                belongs here, where you've opened a specific call to reconcile it against a log or a
                recording. -->
-          <p class="font-mono text-[10px] text-faint">
+          <p class="font-mono text-meta text-faint">
             Started {{ formatClockTime(entry.startedAt) }}
           </p>
 
-          <PayloadPreview
+          <UiPayloadBlock
             v-if="entry.request"
             label="Request"
             :preview="entry.request.preview"
             max-height="max-h-40"
           />
-          <PayloadPreview
+          <UiPayloadBlock
             label="Payload → LLM"
             :preview="entry.payload.preview"
             :bytes="entry.payload.bytes"

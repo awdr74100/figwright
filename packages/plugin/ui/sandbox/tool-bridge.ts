@@ -1,3 +1,8 @@
+/**
+ * Tool RPC across the iframe boundary: the relay hands a tool call to `handler`, this turns it into
+ * a bridge message the sandbox can execute, and resolves once the matching reply comes back.
+ */
+
 import {
   createToolCall,
   getToolBudget,
@@ -6,44 +11,24 @@ import {
   type PluginBridgeMessage,
 } from '@figwright/shared';
 
-import type { ToolHandler } from '../relay/client.js';
+import type { ToolHandler } from '../relay/state.js';
+import { onSandboxMessage, postToSandbox } from './messaging.js';
 
 export type PostMessageFn = (msg: PluginBridgeMessage) => void;
 export type SubscribeFn = (cb: (raw: unknown) => void) => () => void;
 
-export interface SandboxBridgeOptions {
+export interface ToolBridgeOptions {
   timeoutMs?: number;
   log?: (msg: string) => void;
   postMessage?: PostMessageFn;
   subscribe?: SubscribeFn;
 }
 
-export interface SandboxBridge {
+export interface ToolBridge {
   handler: ToolHandler;
   pendingCount: () => number;
   dispose: () => void;
 }
-
-const defaultPostMessage: PostMessageFn = msg => {
-  (globalThis as { parent?: { postMessage: (m: unknown, t: string) => void } }).parent?.postMessage(
-    { pluginMessage: msg },
-    '*',
-  );
-};
-
-const defaultSubscribe: SubscribeFn = cb => {
-  const target = globalThis as {
-    addEventListener?: (ev: string, fn: (e: MessageEvent) => void) => void;
-    removeEventListener?: (ev: string, fn: (e: MessageEvent) => void) => void;
-  };
-  const listener = (event: MessageEvent): void => {
-    const data = event.data as { pluginMessage?: unknown } | null;
-    if (data === null || typeof data !== 'object') return;
-    if ('pluginMessage' in data) cb(data.pluginMessage);
-  };
-  target.addEventListener?.('message', listener);
-  return () => target.removeEventListener?.('message', listener);
-};
 
 interface Pending {
   resolve: (value: unknown) => void;
@@ -52,10 +37,10 @@ interface Pending {
   method: string;
 }
 
-export const createSandboxBridge = (opts: SandboxBridgeOptions = {}): SandboxBridge => {
+export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
   const log = opts.log ?? ((): void => {});
-  const post = opts.postMessage ?? defaultPostMessage;
-  const subscribe = opts.subscribe ?? defaultSubscribe;
+  const post = opts.postMessage ?? postToSandbox;
+  const subscribe = opts.subscribe ?? onSandboxMessage;
 
   const pending = new Map<string, Pending>();
 
@@ -64,7 +49,7 @@ export const createSandboxBridge = (opts: SandboxBridgeOptions = {}): SandboxBri
     if (raw.kind === 'tool-call') return;
     const entry = pending.get(raw.id);
     if (entry === undefined) {
-      log(`[sandbox-bridge] orphan ${raw.kind} for id=${raw.id}`);
+      log(`[tool-bridge] orphan ${raw.kind} for id=${raw.id}`);
       return;
     }
     clearTimeout(entry.timer);
@@ -94,7 +79,7 @@ export const createSandboxBridge = (opts: SandboxBridgeOptions = {}): SandboxBri
     unsubscribe();
     for (const [, entry] of pending) {
       clearTimeout(entry.timer);
-      entry.reject(new Error('sandbox bridge disposed'));
+      entry.reject(new Error('tool bridge disposed'));
     }
     pending.clear();
   };

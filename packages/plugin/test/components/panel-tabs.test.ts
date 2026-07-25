@@ -2,19 +2,19 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
-import TabBar from '../../ui/components/TabBar.vue';
+import PanelTabs from '../../ui/components/PanelTabs.vue';
 import { TABS } from '../../ui/lib/tabs.js';
 
-const mountTabBar = (modelValue: 'activity' | 'context' | 'debug' = 'activity') =>
-  mount(TabBar, { props: { modelValue } });
+const mountTabs = (modelValue: 'activity' | 'context' | 'debug' = 'activity') =>
+  mount(PanelTabs, { props: { modelValue } });
 
 /** The sliding pill is the only absolutely-positioned span in the nav. */
-const indicatorTransform = (wrapper: ReturnType<typeof mountTabBar>): string =>
+const indicatorTransform = (wrapper: ReturnType<typeof mountTabs>): string =>
   wrapper.find('span.absolute').attributes('style') ?? '';
 
-describe('TabBar', () => {
+describe('PanelTabs', () => {
   it('renders every tab in order', () => {
-    const labels = mountTabBar()
+    const labels = mountTabs()
       .findAll('button')
       .map(b => b.text());
 
@@ -22,7 +22,7 @@ describe('TabBar', () => {
   });
 
   it('emits the tab id through v-model when a tab is clicked', async () => {
-    const wrapper = mountTabBar();
+    const wrapper = mountTabs();
 
     await wrapper.findAll('button')[1]?.trigger('click');
 
@@ -30,7 +30,7 @@ describe('TabBar', () => {
   });
 
   it('marks only the active tab as emphasized', () => {
-    const buttons = mountTabBar('context').findAll('button');
+    const buttons = mountTabs('context').findAll('button');
 
     expect(buttons[0]?.classes()).toContain('text-dim');
     expect(buttons[1]?.classes()).toContain('font-medium');
@@ -39,8 +39,8 @@ describe('TabBar', () => {
 
   // The indicator animates via transform rather than re-layout, so its offset must track the index.
   it('parks the indicator at the active tab index', () => {
-    expect(indicatorTransform(mountTabBar('activity'))).toContain('translateX(calc(0 *');
-    expect(indicatorTransform(mountTabBar('context'))).toContain('translateX(calc(1 *');
-    expect(indicatorTransform(mountTabBar('debug'))).toContain('translateX(calc(2 *');
+    expect(indicatorTransform(mountTabs('activity'))).toContain('translateX(calc(0 *');
+    expect(indicatorTransform(mountTabs('context'))).toContain('translateX(calc(1 *');
+    expect(indicatorTransform(mountTabs('debug'))).toContain('translateX(calc(2 *');
   });
 });

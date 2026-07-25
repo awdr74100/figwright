@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Radio } from '@lucide/vue';
 
-import type { ActivityEntry } from '../relay/client.js';
-import ActivityRow from './ActivityRow.vue';
+import type { ActivityEntry } from '../relay/state.js';
+import TabActivityRow from './TabActivityRow.vue';
 
 defineProps<{
   activity: readonly ActivityEntry[];
@@ -13,7 +13,7 @@ defineProps<{
 
 <template>
   <TransitionGroup v-if="activity.length > 0" tag="ul" name="row" class="flex flex-col gap-px">
-    <ActivityRow v-for="entry in activity" :key="entry.id" :entry="entry" />
+    <TabActivityRow v-for="entry in activity" :key="entry.id" :entry="entry" />
   </TransitionGroup>
 
   <div v-else class="flex h-full flex-col items-center justify-center gap-1.5 px-6 text-center">
@@ -21,7 +21,7 @@ defineProps<{
     <p class="font-medium text-dim">
       {{ connected ? 'Connected and idle' : 'Waiting for the MCP client' }}
     </p>
-    <p class="text-[10px] leading-relaxed text-dim">
+    <p class="text-meta leading-relaxed text-dim">
       {{
         connected
           ? 'Tool calls from your agent will show up here.'

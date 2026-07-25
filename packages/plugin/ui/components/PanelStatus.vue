@@ -3,7 +3,7 @@ import { computed } from 'vue';
 
 import { useSharedNow } from '../composables/useSharedNow.js';
 import { formatRelativeTime } from '../lib/format.js';
-import type { RelayStatus } from '../relay/client.js';
+import type { RelayStatus } from '../relay/state.js';
 
 const props = defineProps<{
   status: RelayStatus;
@@ -54,6 +54,6 @@ const meta = computed(() => {
       />
     </span>
     <span class="font-medium tracking-tight text-fg">{{ STATUS_LABEL[status] }}</span>
-    <span class="ml-auto min-w-0 truncate tabular-nums text-[10px] text-faint">{{ meta }}</span>
+    <span class="ml-auto min-w-0 truncate text-meta tabular-nums text-faint">{{ meta }}</span>
   </div>
 </template>

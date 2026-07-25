@@ -16,7 +16,8 @@ import {
 } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ACTIVITY_LIMIT, RelayClient, type WebSocketCtor } from '../../ui/relay/client.js';
+import { RelayClient, type WebSocketCtor } from '../../ui/relay/client.js';
+import { ACTIVITY_LIMIT } from '../../ui/relay/state.js';
 
 interface FakeSocket {
   url: string;
