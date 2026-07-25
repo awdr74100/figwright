@@ -24,7 +24,15 @@ const now = useSharedNow();
 // Expansion is per-row state: the list keys rows by request id, so Vue reuses this component across
 // updates and the open/closed state survives new calls arriving above it.
 const expanded = ref(false);
-const expandable = computed(() => props.entry.payload !== undefined);
+/**
+ * Openable as soon as there is anything to show — which is at dispatch, since the request snapshot
+ * is recorded before the call is sent. Waiting for the result would withhold the arguments exactly
+ * when they matter most: while a call is still running and you want to know what it was asked to
+ * do.
+ */
+const expandable = computed(
+  () => props.entry.request !== undefined || props.entry.payload !== undefined,
+);
 
 // Calls that named a node can jump the canvas to it; read-only queries usually can't.
 const revealable = computed(() => (props.entry.nodeIds?.length ?? 0) > 0);
@@ -102,9 +110,10 @@ const durationTone = computed(() =>
       </span>
     </div>
 
-    <!-- 0fr → 1fr animates to the content's natural height without measuring it in JS. -->
+    <!-- 0fr → 1fr animates to the content's natural height without measuring it in JS — which is
+         also what lets the result block slide in later, under an already-open row. -->
     <div
-      v-if="entry.payload"
+      v-if="expandable"
       class="grid transition-[grid-template-rows] duration-240 ease-out-expo"
       :class="expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
     >
@@ -123,7 +132,11 @@ const durationTone = computed(() =>
             :preview="entry.request.preview"
             max-height="max-h-40"
           />
+          <!-- Absent while the call is in flight. Its absence is the signal — the row's breathing
+               dot and empty duration already say "running", so a placeholder here would only add a
+               second layout shift when the real block arrives. -->
           <UiPayloadBlock
+            v-if="entry.payload"
             label="Payload → LLM"
             :preview="entry.payload.preview"
             :bytes="entry.payload.bytes"

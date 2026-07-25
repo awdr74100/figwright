@@ -109,7 +109,7 @@ describe('TabActivityRow', () => {
   });
 
   describe('expansion', () => {
-    it('is not interactive when there is no payload to show', () => {
+    it('is not interactive when there is nothing to show', () => {
       const wrapper = mountRow();
 
       expect(wrapper.find('button').exists()).toBe(false);
@@ -121,6 +121,54 @@ describe('TabActivityRow', () => {
       const wrapper = mountRow({ payload: payload() });
       expect(wrapper.find('button').exists()).toBe(true);
       expect(wrapper.find('.lucide-chevron-right').exists()).toBe(true);
+    });
+
+    /**
+     * The request snapshot is recorded at dispatch, so it is readable while the call is still
+     * running — which is when it matters most, since a call that is taking too long is the one
+     * whose arguments you want to see.
+     */
+    describe('while the call is still in flight', () => {
+      const inFlight = {
+        status: 'pending' as const,
+        request: payload({ preview: '{"nodeId":"1:2"}' }),
+      };
+
+      it('opens on a pending call that has recorded its params', async () => {
+        const wrapper = mountRow(inFlight);
+        expect(wrapper.find('button').exists()).toBe(true);
+
+        await wrapper.find('button').trigger('click');
+
+        expect(isExpanded(wrapper)).toBe(true);
+        expect(wrapper.text()).toContain('Request');
+        expect(wrapper.text()).toContain('nodeId');
+      });
+
+      // Absence is the signal: the breathing dot and empty duration already say "running", and a
+      // placeholder would only add a second layout shift when the real block lands.
+      it('shows no result block until there is a result', async () => {
+        const wrapper = mountRow(inFlight);
+
+        await wrapper.find('button').trigger('click');
+
+        expect(wrapper.text()).not.toContain('Payload → LLM');
+      });
+
+      it('slides the result in under a row the user already opened', async () => {
+        const wrapper = mountRow(inFlight);
+        await wrapper.find('button').trigger('click');
+        expect(isExpanded(wrapper)).toBe(true);
+
+        await wrapper.setProps({
+          entry: entry({ ...inFlight, status: 'ok', durationMs: 42, payload: payload() }),
+        });
+
+        // Still open — settling a call must not collapse what the user was reading.
+        expect(isExpanded(wrapper)).toBe(true);
+        expect(wrapper.text()).toContain('Payload → LLM');
+        expect(wrapper.text()).toContain('Request');
+      });
     });
 
     it('starts collapsed and toggles open and shut on click', async () => {
