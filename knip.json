@@ -12,8 +12,7 @@
       "project": ["src/**/*.ts"]
     },
     "packages/plugin": {
-      "project": ["src/**/*.ts", "ui/**/*.{ts,vue}"],
-      "ignoreDependencies": ["tailwindcss"]
+      "project": ["src/**/*.ts", "ui/**/*.{ts,vue,css}"]
     }
   }
 }

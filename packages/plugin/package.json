@@ -13,6 +13,7 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@lucide/vue": "^1.26.0",
     "@vueuse/core": "^14.3.0",
     "vue": "^3.5.40"
   },
@@ -21,6 +22,8 @@
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/test-utils": "^2.4.11",
+    "happy-dom": "^20.11.1",
     "tailwindcss": "^4.3.3",
     "vite": "^8.1.5",
     "vite-plugin-singlefile": "^2.3.3",
