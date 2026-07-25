@@ -90,28 +90,19 @@ By design Figwright is **provider-first**: rather than a fixed compiler pipeline
 
 The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
 
-<table>
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <img alt="Activity tab — every tool call with timing" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-activity.png" width="400"><br>
-      <sub><b>Activity</b> — every tool call, with timing</sub>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <img alt="Payload inspector — the exact data sent to the model" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-payload.png" width="400"><br>
-      <sub><b>Payload inspector</b> — the exact data sent to the model</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <img alt="Context tab — file, page, and current selection" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-context.png" width="400"><br>
-      <sub><b>Context</b> — file, page, and current selection</sub>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <img alt="Debug tab — connection health and a one-click diagnostic bundle" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-debug.png" width="400"><br>
-      <sub><b>Debug</b> — connection health and a one-click diagnostic bundle</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-panel.png" width="820">
+</p>
+
+<p align="center">
+  <sub><b>Activity</b> — every call, with timing and a jump to the nodes it touched · <b>Payload</b> — exactly what the model received · <b>Debug</b> — health, versions, and a one-click diagnostic bundle</sub>
+</p>
+
+And it follows your Figma theme, light or dark.
+
+<p align="center">
+  <img alt="The same panel side by side in Figma's light and dark themes" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-theme.png" width="616">
+</p>
 
 ## Quick start
 
