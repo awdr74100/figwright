@@ -14,6 +14,7 @@ const baseState = (activity: ActivityEntry[]): RelayClientState => ({
   connectedAt: 1_000,
   reconnectCount: 2,
   totalCalls: activity.length,
+  failedCalls: activity.filter(e => e.status === 'error').length,
   activity,
 });
 

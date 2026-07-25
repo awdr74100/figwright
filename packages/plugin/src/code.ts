@@ -2,6 +2,7 @@ import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figwright/sha
 
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';
+import { revealNodes } from './reveal.js';
 
 // The window opens at this size and never shrinks below the floor (keeps the header/footer layout
 // intact). There's no max — Figma clamps the window to the canvas viewport.
@@ -87,6 +88,24 @@ figma.ui.onmessage = (raw: unknown) => {
       const size = clampUiSize(width, height);
       figma.ui.resize(size.width, size.height);
       if (persist === true) figma.clientStorage.setAsync(UI_SIZE_KEY, size).catch(() => {});
+    }
+    return;
+  }
+  // UI control: jump the canvas to the nodes a recorded tool call touched. Driven by the panel, not
+  // the agent, so it's handled here and never produces a relay reply.
+  if (typeof raw === 'object' && raw !== null && (raw as { type?: unknown }).type === 'ui:reveal') {
+    const { nodeIds } = raw as { nodeIds?: unknown };
+    if (Array.isArray(nodeIds)) {
+      const ids = nodeIds.filter((id): id is string => typeof id === 'string');
+      // Nothing asked for is not the same as nothing found — reporting a miss here would be a lie.
+      if (ids.length === 0) return;
+      void (async (): Promise<void> => {
+        const { revealed } = await revealNodes(figma, ids);
+        // Only speak up on a miss: a successful reveal shows itself through the selection, so a
+        // toast on top of that is just noise. Silence on a miss, though, would read as a broken
+        // button — the usual cause is the call being undone, or the agent deleting what it made.
+        if (revealed === 0) figma.notify('Figwright: those nodes are no longer in this file');
+      })();
     }
     return;
   }

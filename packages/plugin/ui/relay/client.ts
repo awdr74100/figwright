@@ -18,6 +18,7 @@ import {
   SystemMethod,
 } from '@figwright/shared';
 
+import { extractNodeIds } from './node-ids.js';
 import { type ActivityPayload, summarizePayload } from './payload.js';
 
 export type RelayStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -41,6 +42,12 @@ export interface ActivityEntry {
   request?: ActivityPayload;
   /** For a successful call, a snapshot of the result sent back to the LLM (see payload.ts). */
   payload?: ActivityPayload;
+  /**
+   * Nodes this call touched (see node-ids.ts) — collected from the params it was given and the
+   * result it produced, so the panel can offer to reveal them on canvas. Absent when the call
+   * referenced none.
+   */
+  nodeIds?: readonly string[];
 }
 
 export interface RelayClientState {
@@ -56,6 +63,11 @@ export interface RelayClientState {
   reconnectCount: number;
   /** Total tool calls received this session (not capped by ACTIVITY_LIMIT). */
   totalCalls: number;
+  /**
+   * How many of those calls failed. Counted alongside `totalCalls` rather than derived from
+   * `activity`, so the two stay comparable once the recent list is capped.
+   */
+  failedCalls: number;
   /** Recent tool calls, most-recent-first, capped at ACTIVITY_LIMIT. */
   activity: readonly ActivityEntry[];
 }
@@ -110,6 +122,7 @@ export class RelayClient {
     connectedAt: null,
     reconnectCount: 0,
     totalCalls: 0,
+    failedCalls: 0,
     activity: [],
   };
   private socket: WebSocket | null = null;
@@ -408,7 +421,7 @@ export class RelayClient {
     method: string,
     params: unknown,
   ): Promise<void> {
-    this.recordActivityStart(id, method, summarizePayload(params));
+    this.recordActivityStart(id, method, summarizePayload(params), extractNodeIds(params));
     const handler = this.toolHandler;
     if (handler === null) {
       const message = `no tool handler registered (method=${method})`;
@@ -421,7 +434,8 @@ export class RelayClient {
     }
     try {
       const result = await handler(method, params);
-      this.recordActivityEnd(id, 'ok', undefined, summarizePayload(result));
+      // A create call only names the node it made in its result, so fold those ids in too.
+      this.recordActivityEnd(id, 'ok', undefined, summarizePayload(result), extractNodeIds(result));
       ws.send(encodeEnvelope(createResponse({ id, sessionId, result })));
       // Sending the reply proves we're alive. Encoding a huge result blocks this single thread, so the
       // heartbeat's setInterval couldn't fire meanwhile; that coalesced tick runs right after this
@@ -437,13 +451,19 @@ export class RelayClient {
     }
   }
 
-  private recordActivityStart(id: string, method: string, request?: ActivityPayload): void {
+  private recordActivityStart(
+    id: string,
+    method: string,
+    request?: ActivityPayload,
+    nodeIds: readonly string[] = [],
+  ): void {
     const entry: ActivityEntry = {
       id,
       method,
       startedAt: Date.now(),
       status: 'pending',
       ...(request === undefined ? {} : { request }),
+      ...(nodeIds.length === 0 ? {} : { nodeIds }),
     };
     this.update({
       totalCalls: this.state.totalCalls + 1,
@@ -456,19 +476,24 @@ export class RelayClient {
     status: ActivityStatus,
     error?: string,
     payload?: ActivityPayload,
+    resultNodeIds: readonly string[] = [],
   ): void {
     this.update({
-      activity: this.state.activity.map(e =>
-        e.id === id
-          ? {
-              ...e,
-              status,
-              durationMs: Date.now() - e.startedAt,
-              ...(error === undefined ? {} : { error }),
-              ...(payload === undefined ? {} : { payload }),
-            }
-          : e,
-      ),
+      ...(status === 'error' ? { failedCalls: this.state.failedCalls + 1 } : {}),
+      activity: this.state.activity.map(e => {
+        if (e.id !== id) return e;
+        // Params first, then anything new the result named — de-duped, so a call that both targets
+        // and returns the same node lists it once.
+        const nodeIds = [...new Set([...(e.nodeIds ?? []), ...resultNodeIds])];
+        return {
+          ...e,
+          status,
+          durationMs: Date.now() - e.startedAt,
+          ...(error === undefined ? {} : { error }),
+          ...(payload === undefined ? {} : { payload }),
+          ...(nodeIds.length === 0 ? {} : { nodeIds }),
+        };
+      }),
     });
   }
 
