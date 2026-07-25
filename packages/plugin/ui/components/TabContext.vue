@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { PluginContextEvent } from '@figwright/shared';
 import { computed } from 'vue';
 
+import type { PluginContextEvent } from '../../protocol/bridge.js';
 import UiMetaRow from './UiMetaRow.vue';
 import UiSection from './UiSection.vue';
 

@@ -3,14 +3,13 @@
  * a bridge message the sandbox can execute, and resolves once the matching reply comes back.
  */
 
+import { getToolBudget, newId } from '@figwright/shared';
+
 import {
   createToolCall,
-  getToolBudget,
   isPluginBridgeMessage,
-  newId,
   type PluginBridgeMessage,
-} from '@figwright/shared';
-
+} from '../../protocol/bridge.js';
 import type { ToolHandler } from '../relay/state.js';
 import { onSandboxMessage, postToSandbox } from './messaging.js';
 

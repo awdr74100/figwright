@@ -6,8 +6,7 @@
 // elided, huge trees capped). The bundle therefore contains the user's design content + file/page
 // names — the caller surfaces that before copying.
 
-import type { PluginContextEvent } from '@figwright/shared';
-
+import type { PluginContextEvent } from '../../protocol/bridge.js';
 import type { ActivityPayload } from './payload.js';
 import type { RelayClientState } from './state.js';
 

@@ -1,5 +1,4 @@
-import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '@figwright/shared';
-
+import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '../protocol/bridge.js';
 import { parsePanelControl } from '../protocol/panel-control.js';
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';

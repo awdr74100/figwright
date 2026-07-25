@@ -1,6 +1,7 @@
-import { createToolCall, ErrorCode, isPluginBridgeMessage } from '@figwright/shared';
+import { ErrorCode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createToolCall, isPluginBridgeMessage } from '../protocol/bridge.js';
 import { dispatchSandboxMessage, type SandboxHandlers } from '../src/dispatcher.js';
 
 describe('dispatchSandboxMessage', () => {

@@ -1,7 +1,8 @@
-import { DEFAULT_PORT, type PluginContextEvent, PROTOCOL_VERSION } from '@figwright/shared';
+import { DEFAULT_PORT, PROTOCOL_VERSION } from '@figwright/shared';
 import { tryOnScopeDispose, useDocumentVisibility } from '@vueuse/core';
 import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from 'vue';
 
+import { type PluginContextEvent } from '../../protocol/bridge.js';
 import { RelayClient } from '../relay/client.js';
 import { buildDiagnosticBundle } from '../relay/diagnostics.js';
 import type { RelayClientState } from '../relay/state.js';

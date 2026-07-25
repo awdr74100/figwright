@@ -1,7 +1,7 @@
-// @vitest-environment happy-dom
-import { createPluginContextEvent, createToolResult } from '@figwright/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// @vitest-environment happy-dom
+import { createPluginContextEvent, createToolResult } from '../../protocol/bridge.js';
 import { createPanelHide } from '../../protocol/panel-control.js';
 import { onSandboxContext, onSandboxMessage, postToSandbox } from '../../ui/sandbox/messaging.js';
 

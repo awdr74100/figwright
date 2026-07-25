@@ -1,8 +1,8 @@
-// @vitest-environment happy-dom
-import { createPluginContextEvent, type PluginContextEvent } from '@figwright/shared';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
+// @vitest-environment happy-dom
+import { createPluginContextEvent, type PluginContextEvent } from '../../protocol/bridge.js';
 import TabActivity from '../../ui/components/TabActivity.vue';
 import TabContext from '../../ui/components/TabContext.vue';
 import TabDebug from '../../ui/components/TabDebug.vue';

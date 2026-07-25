@@ -1,11 +1,11 @@
+import { describe, expect, it, vi } from 'vitest';
+
 import {
   createToolError,
   createToolResult,
   isPluginBridgeMessage,
   type PluginBridgeMessage,
-} from '@figwright/shared';
-import { describe, expect, it, vi } from 'vitest';
-
+} from '../../protocol/bridge.js';
 import {
   createToolBridge,
   type PostMessageFn,

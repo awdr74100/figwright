@@ -4,7 +4,6 @@ export * from './design-context.js';
 export * from './design-context-dedupe.js';
 export * from './envelope.js';
 export * from './heartbeat.js';
-export * from './plugin-bridge.js';
 export * from './protocol.js';
 export * from './queries.js';
 export * from './rpc.js';

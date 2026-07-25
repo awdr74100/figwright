@@ -1,3 +1,19 @@
+/**
+ * Tool RPC across the plugin's own iframe boundary: the panel hands a tool call down to the
+ * sandbox, which executes it against the Figma API and answers with a result or an error. Plus the
+ * one-way context event the sandbox pushes back up so the panel can show what the plugin sees.
+ *
+ * This binds the panel and the sandbox — the same two parties as `panel-control.ts`, which is why
+ * both live here rather than in `@figwright/shared`. The relay carries these calls, but the MCP
+ * server never constructs or reads one: it addresses tools by name over the wire protocol in
+ * `shared`, and what crosses this boundary afterwards is the plugin's own business.
+ *
+ * Zod, unlike the panel-control channel next door, is warranted here: `params` and `result` are
+ * `unknown` by construction — they carry whatever the agent asked for and whatever the Figma API
+ * returned — so the tag and envelope are the only things a receiver can check before trusting the
+ * message at all.
+ */
+
 import { z } from 'zod';
 
 export const PLUGIN_BRIDGE_TAG = '@figwright/bridge';
@@ -92,7 +108,6 @@ export const SelectionItemSchema = z.object({
   width: z.number(),
   height: z.number(),
 });
-export type SelectionItem = z.infer<typeof SelectionItemSchema>;
 
 export const PluginContextEventSchema = z.object({
   tag: z.literal(PLUGIN_BRIDGE_TAG),

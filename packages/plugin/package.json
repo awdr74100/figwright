@@ -15,7 +15,8 @@
   "dependencies": {
     "@lucide/vue": "^1.26.0",
     "@vueuse/core": "^14.3.0",
-    "vue": "^3.5.40"
+    "vue": "^3.5.40",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.131.0",

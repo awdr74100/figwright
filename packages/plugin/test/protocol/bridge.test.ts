@@ -10,7 +10,7 @@ import {
   PLUGIN_BRIDGE_TAG,
   PluginBridgeMessageSchema,
   PluginContextEventSchema,
-} from '../src/plugin-bridge.js';
+} from '../../protocol/bridge.js';
 
 describe('plugin-bridge envelope factories', () => {
   it('createToolCall tags and round-trips through schema', () => {

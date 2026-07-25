@@ -1,11 +1,12 @@
+import { ErrorCode } from '@figwright/shared';
+
 import {
   createToolError,
   createToolResult,
-  ErrorCode,
   isPluginBridgeMessage,
   type PluginToolError,
   type PluginToolResult,
-} from '@figwright/shared';
+} from '../protocol/bridge.js';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
 export type SandboxHandlers = Record<string, SandboxToolHandler>;

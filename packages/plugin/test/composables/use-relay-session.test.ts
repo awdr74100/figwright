@@ -1,8 +1,8 @@
-// @vitest-environment happy-dom
-import { createPluginContextEvent, type PluginContextEvent } from '@figwright/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, nextTick } from 'vue';
 
+// @vitest-environment happy-dom
+import { createPluginContextEvent, type PluginContextEvent } from '../../protocol/bridge.js';
 import type { ActivityEntry, RelayClientState } from '../../ui/relay/state.js';
 
 /**

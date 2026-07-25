@@ -13,8 +13,7 @@ import {
   isPluginContextEvent,
   type PluginBridgeMessage,
   type PluginContextEvent,
-} from '@figwright/shared';
-
+} from '../../protocol/bridge.js';
 import type { PanelControlMessage } from '../../protocol/panel-control.js';
 
 /** Everything the panel is allowed to send up to the sandbox. */
