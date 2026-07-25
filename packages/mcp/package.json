@@ -52,8 +52,8 @@
   "devDependencies": {
     "@figwright/shared": "workspace:*",
     "@types/ws": "^8.18.1",
-    "publint": "^0.3.21",
-    "tsdown": "^0.22.13"
+    "publint": "^0.3.22",
+    "tsdown": "^0.22.14"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
