@@ -4,7 +4,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: false,
-    target: 'es2017',
+    target: 'baseline-widely-available',
     lib: {
       entry: 'src/code.ts',
       formats: ['iife'],

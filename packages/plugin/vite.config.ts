@@ -15,7 +15,7 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: false,
-    target: 'es2017',
+    target: 'baseline-widely-available',
     rollupOptions: {
       input: 'ui/index.html',
     },
