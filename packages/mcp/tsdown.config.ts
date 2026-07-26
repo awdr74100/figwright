@@ -10,7 +10,6 @@ export default defineConfig({
   // and binds stdio on import), not a library. Emitting a `.d.mts` would only advertise an import
   // surface that must not be used — a stray `import '@figwright/mcp'` would seize the relay port.
   dts: false,
-  sourcemap: true,
   clean: true,
   shims: false,
   // Build stamp for newest-build-wins election (src/build-id.ts). Epoch ms of this build; absent
