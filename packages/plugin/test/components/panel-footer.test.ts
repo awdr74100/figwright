@@ -1,19 +1,8 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-// Minimising is the panel-window module's job; the footer only has to ask for it.
-const runInBackground = vi.hoisted(() => vi.fn<() => void>());
-vi.mock('../../ui/composables/usePanelWindow.js', () => ({
-  usePanelWindow: () => ({
-    runInBackground,
-    onResizeStart: vi.fn<() => void>(),
-    onResizeMove: vi.fn<() => void>(),
-    onResizeEnd: vi.fn<() => void>(),
-  }),
-}));
-
-const { default: PanelFooter } = await import('../../ui/components/PanelFooter.vue');
+import PanelFooter from '../../ui/components/PanelFooter.vue';
 
 const mountFooter = (over: { totalCalls?: number; failedCalls?: number } = {}) =>
   mount(PanelFooter, {
@@ -21,10 +10,6 @@ const mountFooter = (over: { totalCalls?: number; failedCalls?: number } = {}) =
   });
 
 describe('PanelFooter', () => {
-  beforeEach(() => {
-    runInBackground.mockClear();
-  });
-
   it('shows the product version and how many calls have run', () => {
     const wrapper = mountFooter({ totalCalls: 24 });
 
@@ -45,9 +30,9 @@ describe('PanelFooter', () => {
     expect(wrapper.find('.text-danger').exists()).toBe(true);
   });
 
-  it('asks the sandbox to hide the panel', async () => {
-    await mountFooter().find('button').trigger('click');
-
-    expect(runInBackground).toHaveBeenCalled();
+  // The run-in-background control moved to the header, next to Figma's own window controls; the
+  // footer is a read-only status row again.
+  it('holds no controls', () => {
+    expect(mountFooter().find('button').exists()).toBe(false);
   });
 });

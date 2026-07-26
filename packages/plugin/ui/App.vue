@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import PanelBackgroundButton from './components/PanelBackgroundButton.vue';
 import PanelFooter from './components/PanelFooter.vue';
 import PanelGrip from './components/PanelGrip.vue';
 import PanelStatus from './components/PanelStatus.vue';
@@ -30,7 +31,15 @@ const tab = ref<Tab>('activity');
     </span>
 
     <header class="relative shrink-0 border-b border-line px-3 pt-2.5 pb-2">
-      <PanelStatus :status="state.status" :port="state.port" :connected-at="state.connectedAt" />
+      <div class="flex items-center gap-1.5">
+        <PanelStatus
+          class="min-w-0 flex-1"
+          :status="state.status"
+          :port="state.port"
+          :connected-at="state.connectedAt"
+        />
+        <PanelBackgroundButton />
+      </div>
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>
 
