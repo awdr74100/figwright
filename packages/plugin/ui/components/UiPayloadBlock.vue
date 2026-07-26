@@ -20,7 +20,7 @@ defineProps<{
   <div>
     <div class="mb-1 flex items-center gap-2">
       <UiSectionHeading class="min-w-0 truncate">{{ label }}</UiSectionHeading>
-      <span v-if="bytes !== undefined" class="shrink-0 text-meta tabular-nums text-faint">
+      <span v-if="bytes !== undefined" class="shrink-0 text-meta text-faint tabular-nums">
         {{ formatSize(bytes) }}
       </span>
       <UiCopyButton class="ml-auto" label="Copy" :value="preview" compact />

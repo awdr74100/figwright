@@ -47,13 +47,13 @@ const meta = computed(() => {
 <template>
   <div class="flex items-center gap-2.5">
     <span class="relative flex size-2 shrink-0" :class="STATUS_TONE[status]">
-      <span v-if="settling" class="absolute inset-0 rounded-full bg-current animate-ping-ring" />
+      <span v-if="settling" class="absolute inset-0 animate-ping-ring rounded-full bg-current" />
       <span
         class="relative size-2 rounded-full bg-current"
         :class="status === 'connected' ? 'shadow-[0_0_7px_currentColor]' : ''"
       />
     </span>
     <span class="font-medium tracking-tight text-fg">{{ STATUS_LABEL[status] }}</span>
-    <span class="ml-auto min-w-0 truncate text-meta tabular-nums text-faint">{{ meta }}</span>
+    <span class="ml-auto min-w-0 truncate text-meta text-faint tabular-nums">{{ meta }}</span>
   </div>
 </template>

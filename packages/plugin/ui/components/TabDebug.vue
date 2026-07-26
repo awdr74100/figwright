@@ -71,7 +71,7 @@ const averageMs = computed(() => {
           <div class="flex items-baseline justify-between gap-2">
             <span class="min-w-0 truncate font-medium text-danger">{{ entry.method }}</span>
             <span
-              class="shrink-0 text-meta tabular-nums text-faint"
+              class="shrink-0 text-meta text-faint tabular-nums"
               :title="formatClockTime(entry.startedAt)"
             >
               {{ formatRelativeTime(entry.startedAt, now.getTime()) }}

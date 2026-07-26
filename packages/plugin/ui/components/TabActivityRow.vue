@@ -80,7 +80,7 @@ const durationTone = computed(() =>
         <!-- Relative age reads best at a glance; the exact clock time is there on hover for when
              you're lining the panel up against a log or a recording. -->
         <span
-          class="w-7 shrink-0 text-right text-meta tabular-nums text-faint"
+          class="w-7 shrink-0 text-right text-meta text-faint tabular-nums"
           :title="formatClockTime(entry.startedAt)"
         >
           {{ formatRelativeTime(entry.startedAt, now.getTime()) }}

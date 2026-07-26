@@ -9,6 +9,9 @@
     "pnpm-lock.yaml",
     ".claude/skills/**"
   ],
+  "sortTailwindcss": {
+    "stylesheet": "packages/plugin/ui/style.css"
+  },
   "arrowParens": "avoid",
   "singleQuote": true,
   "printWidth": 100,

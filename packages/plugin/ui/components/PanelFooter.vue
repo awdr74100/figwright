@@ -15,7 +15,7 @@ defineProps<{ version: string; totalCalls: number; failedCalls: number }>();
          healthy session, and the point of the number is to catch your eye when it isn't zero. -->
     <template v-if="failedCalls > 0">
       <span aria-hidden="true" class="opacity-50">·</span>
-      <span class="shrink-0 tabular-nums text-danger">{{ failedCalls }} failed</span>
+      <span class="shrink-0 text-danger tabular-nums">{{ failedCalls }} failed</span>
     </template>
   </footer>
 </template>

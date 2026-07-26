@@ -40,7 +40,7 @@ const hiddenCount = computed(() =>
           <span class="shrink-0 rounded bg-raised px-1 py-px font-mono text-chip text-dim">
             {{ node.type }}
           </span>
-          <span class="shrink-0 text-meta tabular-nums text-faint">
+          <span class="shrink-0 text-meta text-faint tabular-nums">
             {{ node.width }}×{{ node.height }}
           </span>
         </li>

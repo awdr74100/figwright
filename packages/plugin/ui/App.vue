@@ -21,13 +21,13 @@ const tab = ref<Tab>('activity');
 
 <template>
   <main
-    class="relative flex h-full flex-col bg-surface text-panel text-fg scrollbar-thin scrollbar-track-transparent scrollbar-thumb-line-strong"
+    class="relative flex h-full scrollbar-thin scrollbar-thumb-line-strong scrollbar-track-transparent flex-col bg-surface text-panel text-fg"
   >
     <!-- Indeterminate sweep along the panel's top edge — the one ambient signal that the agent is
          mid-call. It sits above the header rather than under the tabs, where a moving line would
          read as a tab underline and fight the selected-tab pill. -->
     <span v-if="busy" class="absolute inset-x-0 top-0 z-10 block h-0.5 overflow-hidden">
-      <span class="block h-full w-1/4 bg-brand animate-sweep" />
+      <span class="block h-full w-1/4 animate-sweep bg-brand" />
     </span>
 
     <header class="relative shrink-0 border-b border-line px-3 pt-2.5 pb-2">
