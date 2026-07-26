@@ -104,6 +104,16 @@ And it follows your Figma theme, light or dark.
   <img alt="The same panel side by side in Figma's light and dark themes" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-theme.png" width="616">
 </p>
 
+The window is yours to arrange. Drag the bottom-right corner to resize it — a taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
+
+<p align="center">
+  <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-window.png" width="602">
+</p>
+
+<p align="center">
+  <sub><b>Resize</b> — drag the corner, the size sticks · <b>Background</b> — the panel hides, the relay stays connected</sub>
+</p>
+
 ## Quick start
 
 ### 1. Add the server to your MCP client
