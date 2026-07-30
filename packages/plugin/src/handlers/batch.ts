@@ -40,7 +40,8 @@ const nodeProps = (tool: string, props: readonly string[]): BatchInverse => ({
     if (typeof id !== 'string') throw new TypeError(`batch/${tool}: nodeId must be a string`);
     const node = await figmaCtx.getNodeByIdAsync(id);
     if (node === null) throw new Error(`batch/${tool}: node ${id} not found`);
-    if (!(props[0]! in node)) throw new Error(`batch/${tool}: node ${id} has no ${props[0]}`);
+    const required = props[0]!;
+    if (!(required in node)) throw new Error(`batch/${tool}: node ${id} has no ${required}`);
     const bag = node as unknown as Record<string, unknown>;
     const snapshot: Record<string, unknown> = {};
     for (const k of props) if (k in node) snapshot[k] = bag[k];
