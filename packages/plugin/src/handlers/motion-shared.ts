@@ -22,6 +22,15 @@ export const assertFigmaEditor = (figmaCtx: typeof figma, tool: string): void =>
 };
 
 /**
+ * The Motion timeline playhead in seconds, or `undefined` when there's nothing to report — no
+ * active timeline, or an editor with no animation engine at all. Gated on `editorType` rather than
+ * try/catch so reads that deliberately don't assert the editor (get_node_motion) stay non-throwing
+ * in FigJam / Dev Mode without swallowing a real error.
+ */
+export const readPlayheadPosition = (figmaCtx: typeof figma): number | undefined =>
+  figmaCtx.editorType === 'figma' ? figmaCtx.motion.playheadPosition : undefined;
+
+/**
  * Light semantic check the grounded MCP schema can't express: an effects INDEXED_ITEM must carry a
  * `field` or a `propertyId`. Keeps the common PROPERTY / fills / strokes paths untouched.
  */

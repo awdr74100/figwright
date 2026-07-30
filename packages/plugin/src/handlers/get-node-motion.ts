@@ -1,7 +1,7 @@
 import type { GetNodeMotionResult, NodeMotion } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { isMotionNode, toPlainJson } from './motion-shared.js';
+import { isMotionNode, readPlayheadPosition, toPlainJson } from './motion-shared.js';
 
 /**
  * Read a node's Motion state (applied styles, animations, manual keyframe tracks, timelines). Reads
@@ -15,9 +15,12 @@ export const createGetNodeMotionHandler =
     if (typeof nodeId !== 'string') {
       throw new TypeError('get_node_motion: nodeId must be a string');
     }
+    // Editor-wide, so it's reported even when this node has no Motion of its own.
+    const playheadPosition = readPlayheadPosition(figmaCtx);
     const node = await figmaCtx.getNodeByIdAsync(nodeId);
     if (node === null || !isMotionNode(node)) {
       const miss: GetNodeMotionResult = { nodeId, motion: null };
+      if (playheadPosition !== undefined) miss.playheadPosition = playheadPosition;
       return miss;
     }
     const motion: NodeMotion = {
@@ -27,5 +30,6 @@ export const createGetNodeMotionHandler =
       timelines: node.timelines.map(t => ({ id: t.id, duration: t.duration })),
     };
     const result: GetNodeMotionResult = { nodeId: node.id, motion };
+    if (playheadPosition !== undefined) result.playheadPosition = playheadPosition;
     return result;
   };

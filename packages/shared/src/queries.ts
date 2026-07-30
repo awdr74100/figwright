@@ -295,5 +295,12 @@ export type NodeMotion = z.infer<typeof NodeMotionSchema>;
 export const GetNodeMotionResultSchema = z.object({
   nodeId: z.string(),
   motion: NodeMotionSchema.nullable(),
+  /**
+   * The Motion timeline playhead, in seconds — editor-wide state, not a property of this node,
+   * hence a sibling of `motion` rather than a field inside it. Absent outside the Figma Design
+   * editor, or when no Motion timeline is active. Useful as the `timelinePosition` for a keyframe
+   * the user means to land "here".
+   */
+  playheadPosition: z.number().optional(),
 });
 export type GetNodeMotionResult = z.infer<typeof GetNodeMotionResultSchema>;
