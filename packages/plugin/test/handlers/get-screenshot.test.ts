@@ -165,11 +165,11 @@ describe('get_screenshot handler', () => {
     expect(calls[0]?.useAbsoluteBounds).toBeUndefined();
   });
 
-  it('auto-fits an oversized frame down (long edge → 1536) and reports the raster size', async () => {
+  it('auto-fits an oversized frame down (long edge → 2576) and reports the raster size', async () => {
     const calls: ExportCall[] = [];
     const big = {
       id: '2:1',
-      absoluteRenderBounds: { x: 0, y: 0, width: 3072, height: 2000 },
+      absoluteRenderBounds: { x: 0, y: 0, width: 4000, height: 2000 },
       exportAsync: async (settings: ExportCall) => {
         calls.push(settings);
         return new Uint8Array([7]);
@@ -177,14 +177,15 @@ describe('get_screenshot handler', () => {
     } as unknown as BaseNode;
     const handler = createGetScreenshotHandler(fakeFigma({ '2:1': big }, calls));
     const result = (await handler({ nodeIds: ['2:1'] })) as GetScreenshotResult;
-    expect(calls[0]).toEqual({ format: 'PNG', constraint: { type: 'SCALE', value: 0.5 } });
+    // 2576/4000 = 0.644 → 0.64 at two decimals
+    expect(calls[0]).toEqual({ format: 'PNG', constraint: { type: 'SCALE', value: 0.64 } });
     expect(result.images[0]).toEqual({
       nodeId: '2:1',
       format: 'PNG',
       base64: 'b64(1)',
-      width: 1536,
-      height: 1000,
-      scale: 0.5,
+      width: 2560,
+      height: 1280,
+      scale: 0.64,
     });
   });
 
@@ -201,7 +202,7 @@ describe('get_screenshot handler', () => {
       }) as unknown as BaseNode;
     const lookup = { '3:1': mkNode('3:1', 800, 600), '3:2': mkNode('3:2', 3072, 2000) };
 
-    // 800×600 sits inside the [512, 1536] window → no fitting
+    // 800×600 sits inside the [512, 2576] window → no fitting
     const handler = createGetScreenshotHandler(fakeFigma(lookup, calls));
     const mid = (await handler({ nodeIds: ['3:1'] })) as GetScreenshotResult;
     expect(calls[0]?.constraint).toEqual({ type: 'SCALE', value: 1 });
@@ -211,6 +212,75 @@ describe('get_screenshot handler', () => {
     const forced = (await handler({ nodeIds: ['3:2'], scale: 1 })) as GetScreenshotResult;
     expect(calls[1]?.constraint).toEqual({ type: 'SCALE', value: 1 });
     expect(forced.images[0]).toMatchObject({ width: 3072, height: 2000, scale: 1 });
+  });
+
+  it('caps an explicit scale to the vision ceiling only when forVision is set', async () => {
+    const calls: ExportCall[] = [];
+    const node = {
+      id: '4:1',
+      absoluteRenderBounds: { x: 0, y: 0, width: 1440, height: 5056 },
+      exportAsync: async (settings: ExportCall) => {
+        calls.push(settings);
+        return new Uint8Array([1]);
+      },
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(fakeFigma({ '4:1': node }, calls));
+
+    // Headed for a model: 4x on a 5056px-long frame would ship a 20224px raster the model
+    // downsamples to 2576 anyway → capped to 2576/5056 = 0.509… → 0.51.
+    const capped = (await handler({
+      nodeIds: ['4:1'],
+      scale: 4,
+      forVision: true,
+    })) as GetScreenshotResult;
+    expect(calls[0]?.constraint).toEqual({ type: 'SCALE', value: 0.51 });
+    expect(capped.images[0]).toMatchObject({ scale: 0.51, height: 2579 });
+
+    // Same request headed for disk (save_screenshots omits forVision) keeps the caller's 4x.
+    const full = (await handler({ nodeIds: ['4:1'], scale: 4 })) as GetScreenshotResult;
+    expect(calls[1]?.constraint).toEqual({ type: 'SCALE', value: 4 });
+    expect(full.images[0]).toMatchObject({ scale: 4, height: 20224 });
+
+    // A scale already under the ceiling is untouched even with forVision on.
+    await handler({ nodeIds: ['4:1'], scale: 0.25, forVision: true });
+    expect(calls[2]?.constraint).toEqual({ type: 'SCALE', value: 0.25 });
+  });
+
+  it('drops the whole batch to the many-image ceiling past 20 nodes', async () => {
+    const calls: ExportCall[] = [];
+    const mk = (id: string): BaseNode =>
+      ({
+        id,
+        absoluteRenderBounds: { x: 0, y: 0, width: 3000, height: 2000 },
+        exportAsync: async (settings: ExportCall) => {
+          calls.push(settings);
+          return new Uint8Array([1]);
+        },
+      }) as unknown as BaseNode;
+    const ids = Array.from({ length: 21 }, (_, i) => `5:${i}`);
+    const lookup = Object.fromEntries(ids.map(id => [id, mk(id)]));
+    const handler = createGetScreenshotHandler(fakeFigma(lookup, calls));
+
+    // 20 nodes stay on the full ceiling: 2576/3000 → 0.86
+    await handler({ nodeIds: ids.slice(0, 20), forVision: true });
+    expect(calls.every(c => c.constraint?.value === 0.86)).toBe(true);
+
+    // 21 crosses the threshold — every node in the batch drops to 2000/3000 → 0.67, or the
+    // provider rejects the entire request.
+    calls.length = 0;
+    await handler({ nodeIds: ids, forVision: true });
+    expect(calls).toHaveLength(21);
+    expect(calls.every(c => c.constraint?.value === 0.67)).toBe(true);
+
+    // An explicit scale in a big batch is capped to the same stricter ceiling.
+    calls.length = 0;
+    await handler({ nodeIds: ids, scale: 4, forVision: true });
+    expect(calls.every(c => c.constraint?.value === 0.67)).toBe(true);
+
+    // Disk exports never reach a provider, so the batch size is irrelevant there.
+    calls.length = 0;
+    await handler({ nodeIds: ids, scale: 4 });
+    expect(calls.every(c => c.constraint?.value === 4)).toBe(true);
   });
 
   it('throws on empty/invalid nodeIds, bad format, or non-positive scale', async () => {

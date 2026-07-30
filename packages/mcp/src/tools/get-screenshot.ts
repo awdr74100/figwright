@@ -11,8 +11,13 @@ export const getScreenshotTool: ToolSpec = {
     'Export nodes as images the model can see, one image block per node: { images: [{ nodeId, format, ' +
     'base64, width?, height?, scale?, recovered?, empty? }] }. format is PNG (default) / JPG / SVG. ' +
     'scale applies to raster formats; when omitted, each node is auto-fitted to a legible size ' +
-    '(long edge into ~512–1536px: oversized frames scale down, tiny icons scale up ≤4x) — pass an ' +
-    'explicit scale to force one. Each raster label reports the exported width×height px and the ' +
+    '(long edge into ~512–2576px: oversized frames scale down, tiny icons scale up ≤4x) — pass an ' +
+    'explicit scale to force one. An explicit scale is capped so the long edge stays within 2576px, ' +
+    'the most a vision model resolves: past that the model sees the identical pixels, so the extra ' +
+    'bytes buy no detail — use save_screenshots when you need a full-res file on disk. Past 20 ' +
+    'nodes in one call the whole batch drops to a 2000px long edge, which is what providers require ' +
+    'of many-image requests; ask for fewer nodes when you need the detail. ' +
+    'Each raster label reports the exported width×height px and the ' +
     'scale, the anchor for mapping raster px back to design px. base64 is null for missing or ' +
     'non-exportable nodes. Nodes that are fully clipped or off-canvas (carousels, masks, off-screen ' +
     'states) are auto-recovered at their intrinsic bounds and flagged recovered:true. empty:true ' +

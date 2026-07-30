@@ -117,9 +117,15 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
     textResult(await handleSaveImageFills(dispatch, args)),
   [EXPORT_PDF_TOOL_NAME]: async args => textResult(await handleExportPdf(dispatch, args)),
   [EXPORT_VIDEO_TOOL_NAME]: async args => textResult(await handleExportVideo(dispatch, args)),
+  // forVision marks this as the path whose rasters are inlined into the model's context, so the
+  // sandbox caps an oversized scale to what a vision model can actually resolve. save_screenshots
+  // dispatches the same tool without it — those bytes go to disk and keep the caller's scale.
   [GET_SCREENSHOT_TOOL_NAME]: async args => ({
     content: screenshotContent(
-      (await dispatch(GET_SCREENSHOT_TOOL_NAME, args)) as GetScreenshotResult,
+      (await dispatch(GET_SCREENSHOT_TOOL_NAME, {
+        ...args,
+        forVision: true,
+      })) as GetScreenshotResult,
     ),
   }),
   [ANALYZE_PROJECT_TOOL_NAME]: async args => textResult(await handleAnalyzeProject(args)),
