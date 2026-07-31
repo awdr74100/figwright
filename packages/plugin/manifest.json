@@ -9,5 +9,6 @@
   "networkAccess": {
     "allowedDomains": ["*"],
     "reasoning": "The core connection is a local WebSocket relay on 127.0.0.1:3055 (the Figwright MCP server on this machine). Open domains are required because the import_image tool can additionally fetch an image from a user-supplied URL."
-  }
+  },
+  "capabilities": ["inspect"]
 }
