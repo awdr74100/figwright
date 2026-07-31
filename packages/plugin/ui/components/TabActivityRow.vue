@@ -7,6 +7,7 @@ import { formatClockTime, formatRelativeTime } from '../lib/format.js';
 import type { ActivityEntry, ActivityStatus } from '../relay/state.js';
 import { revealOnCanvas } from '../sandbox/commands.js';
 import UiPayloadBlock from './UiPayloadBlock.vue';
+import UiSectionHeading from './UiSectionHeading.vue';
 
 const props = defineProps<{ entry: ActivityEntry }>();
 
@@ -31,7 +32,10 @@ const expanded = ref(false);
  * do.
  */
 const expandable = computed(
-  () => props.entry.request !== undefined || props.entry.payload !== undefined,
+  () =>
+    props.entry.request !== undefined ||
+    props.entry.payload !== undefined ||
+    props.entry.error !== undefined,
 );
 
 // Calls that named a node can jump the canvas to it; read-only queries usually can't.
@@ -125,6 +129,21 @@ const durationTone = computed(() =>
           <p class="font-mono text-meta text-faint">
             Started {{ formatClockTime(entry.startedAt) }}
           </p>
+
+          <!-- Why it failed, first — before the arguments, which are context for the reason rather
+               than the other way round. The row's red X says something went wrong and the request
+               says what was asked; without this the two never meet, and a failure caused by the
+               editor (FigJam has no styles, Dev Mode is read-only) reads as an unexplained red
+               line. The message can be long, so it wraps and scrolls rather than stretching the
+               panel. -->
+          <div v-if="entry.error">
+            <UiSectionHeading class="mb-1">Error</UiSectionHeading>
+            <p
+              class="max-h-40 overflow-auto rounded-md bg-raised p-2 font-mono text-meta leading-snug wrap-break-word text-danger"
+            >
+              {{ entry.error }}
+            </p>
+          </div>
 
           <UiPayloadBlock
             v-if="entry.request"

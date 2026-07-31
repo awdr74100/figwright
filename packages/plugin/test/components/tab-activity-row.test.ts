@@ -59,6 +59,28 @@ describe('TabActivityRow', () => {
       expect(wrapper.find('.lucide-x').exists()).toBe(true);
     });
 
+    // The reason a call failed used to exist only in the diagnostic bundle: the row rendered a red
+    // X, and expanding it showed the request and nothing else — so an editor-caused failure (FigJam
+    // has no styles, Dev Mode is read-only) read as an unexplained red line to the person watching
+    // the panel. Found live in FigJam.
+    it('shows why a call failed when the row is expanded', async () => {
+      const message = 'not a function (editor: figjam — FigJam has no components…)';
+      const wrapper = mountRow({ status: 'error', error: message });
+
+      await wrapper.find('button').trigger('click');
+
+      expect(wrapper.text()).toContain('Error');
+      expect(wrapper.text()).toContain(message);
+    });
+
+    // The base entry carries neither request nor payload, so this is a failure whose only content
+    // is the error — it still has to open, or the reason stays unreachable.
+    it('opens a failed call that carries nothing but the error', () => {
+      const wrapper = mountRow({ status: 'error', error: 'boom' });
+
+      expect(wrapper.find('button').exists()).toBe(true);
+    });
+
     // A pending call has no glyph yet — just a dot that breathes so it reads as in-flight.
     it('shows no status glyph while pending, and breathes', () => {
       const wrapper = mountRow({ status: 'pending' });
