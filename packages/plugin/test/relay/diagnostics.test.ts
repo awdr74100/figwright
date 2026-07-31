@@ -22,6 +22,7 @@ const context = {
   fileName: 'My File',
   pageName: 'Page 1',
   editorType: 'figma',
+  mode: 'default',
   apiVersion: '1.0.0',
   selectionCount: 1,
   selection: [{ id: '1:2', name: 'Card', type: 'FRAME', width: 100, height: 50 }],
@@ -39,6 +40,7 @@ describe('buildDiagnosticBundle', () => {
       protocol: '0.1.0',
       server: '0.1.0',
       editorType: 'figma',
+      mode: 'default',
       apiVersion: '1.0.0',
     });
     expect(bundle.context).toMatchObject({ fileName: 'My File', pageName: 'Page 1' });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
+import { isEmbeddedInPanel } from '../protocol/editor-context.js';
 import PanelBackgroundButton from './components/PanelBackgroundButton.vue';
 import PanelFooter from './components/PanelFooter.vue';
 import PanelGrip from './components/PanelGrip.vue';
@@ -17,6 +18,25 @@ const appVersion = __APP_VERSION__;
 const { state, context, busy, sessionId, buildDiagnostics } = useRelaySession(appVersion);
 
 const tab = ref<Tab>('activity');
+
+/**
+ * In Dev Mode's Inspect panel our UI is an iframe filling a panel Figma sizes, so neither piece of
+ * window chrome the panel draws for itself survives the move. Both were exercised live there, with
+ * the guard deliberately disabled:
+ *
+ * - The resize grip does nothing at all — `figma.ui.resize` has no window to move.
+ * - "run in background" is worse than inert. `figma.ui.hide()` empties the panel and leaves a
+ *   "running Figwright" strip behind with no way back: the `run` listener that re-shows a hidden
+ *   window is a plugin-window mechanism, so the only exit is closing the plugin — which drops the
+ *   relay socket, the exact thing this button exists to preserve.
+ *
+ * So this is not tidying away two no-ops; one of them is a trap.
+ *
+ * Defaults to showing them while `context` is still null: the sandbox pushes context on startup, so
+ * the gap is a frame or two, and a floating window — the overwhelmingly common case — must not
+ * flash its own chrome in.
+ */
+const embedded = computed(() => context.value !== null && isEmbeddedInPanel(context.value.mode));
 </script>
 
 <template>
@@ -38,7 +58,7 @@ const tab = ref<Tab>('activity');
           :port="state.port"
           :connected-at="state.connectedAt"
         />
-        <PanelBackgroundButton />
+        <PanelBackgroundButton v-if="!embedded" />
       </div>
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>
@@ -69,6 +89,6 @@ const tab = ref<Tab>('activity');
       :total-calls="state.totalCalls"
       :failed-calls="state.failedCalls"
     />
-    <PanelGrip />
+    <PanelGrip v-if="!embedded" />
   </main>
 </template>

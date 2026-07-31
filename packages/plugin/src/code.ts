@@ -26,6 +26,12 @@ const emitContext = (): void => {
     selectionCount: page.selection.length,
     selection,
     editorType: figma.editorType,
+    // The typings declare `mode` as always present, but it is Figma's value to supply, not ours —
+    // and a declaration is not a guarantee, which is the whole lesson of this file's editor
+    // handling. The context event is schema-validated on arrival, so an absent `mode` would fail
+    // the parse and strand the panel on "Waiting for plugin context…" — a far worse failure than
+    // not knowing how the plugin was launched. `default` is the assumption that degrades safely.
+    mode: figma.mode ?? 'default',
     apiVersion: figma.apiVersion,
   });
   // figma.ui.postMessage is the Figma plugin API — there is no targetOrigin parameter
@@ -44,7 +50,12 @@ figma.ui.onmessage = (raw: unknown) => {
     return;
   }
   void (async (): Promise<void> => {
-    const outcome = await dispatchSandboxMessage({ raw, handlers, log });
+    const outcome = await dispatchSandboxMessage({
+      raw,
+      handlers,
+      editorType: figma.editorType,
+      log,
+    });
     if (outcome.kind === 'reply') {
       // figma.ui.postMessage is the Figma plugin API — there is no targetOrigin parameter
       // eslint-disable-next-line unicorn/require-post-message-target-origin

@@ -10,6 +10,8 @@ export const createGetMetadataHandler =
       fileName: root.name,
       currentPage: { id: figmaCtx.currentPage.id, name: figmaCtx.currentPage.name },
       pages: root.children.map(p => ({ id: p.id, name: p.name })),
+      editorType: figmaCtx.editorType,
+      mode: figmaCtx.mode ?? 'default',
     };
     return result;
   };

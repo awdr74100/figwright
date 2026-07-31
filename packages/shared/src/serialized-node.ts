@@ -590,6 +590,16 @@ export const GetMetadataResultSchema = z.object({
   fileName: z.string(),
   currentPage: PageRefSchema,
   pages: z.array(PageRefSchema),
+  /**
+   * `figma.editorType` — which editor the connected file is open in. Reported here because this is
+   * the call an agent already makes to orient itself, and the editor decides which half of the
+   * toolset is even available: FigJam has no components/variables/styles, and Dev Mode rejects
+   * every write. Previously it was reachable only through `ping`, a health check nothing calls on
+   * the way into a task.
+   */
+  editorType: z.string(),
+  /** `figma.mode` — `default` for a normal run, `inspect` inside Dev Mode's Inspect panel. */
+  mode: z.string(),
 });
 export type GetMetadataResult = z.infer<typeof GetMetadataResultSchema>;
 

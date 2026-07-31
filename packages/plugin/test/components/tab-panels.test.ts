@@ -70,6 +70,7 @@ describe('TabContext', () => {
       selectionCount: 0,
       selection: [],
       editorType: 'figma',
+      mode: 'default',
       apiVersion: '1.0.0',
     }),
     ...over,

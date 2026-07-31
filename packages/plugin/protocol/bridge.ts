@@ -119,6 +119,13 @@ export const PluginContextEventSchema = z.object({
   /** Per-node detail for the first SELECTION_DETAIL_LIMIT selected nodes. */
   selection: z.array(SelectionItemSchema),
   editorType: z.string(),
+  /**
+   * `figma.mode` — how the plugin was launched, not which editor it is in. The two are independent
+   * and the panel needs both: `editorType` says what the document allows, while `mode` says whether
+   * our UI is a floating window (`default`) or an iframe filling Dev Mode's Inspect panel
+   * (`inspect`), where the window chrome we draw ourselves has nothing to act on.
+   */
+  mode: z.string(),
   apiVersion: z.string(),
 });
 export type PluginContextEvent = z.infer<typeof PluginContextEventSchema>;

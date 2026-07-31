@@ -20,13 +20,14 @@ interface FakeNode {
  * A figma stub with just the surface the panel controller touches. `stored` seeds what
  * `clientStorage` already holds; `nodes` seeds what a reveal can find.
  */
-const fakeFigma = (opts: { stored?: unknown; nodes?: FakeNode[] } = {}) => {
+const fakeFigma = (opts: { stored?: unknown; nodes?: FakeNode[]; mode?: string } = {}) => {
   const storage = new Map<string, unknown>();
   if (opts.stored !== undefined) storage.set(STORED_SIZE_KEY, opts.stored);
   const byId = new Map((opts.nodes ?? []).map(n => [n.id, n]));
   const page: FakeNode = { id: 'p1', type: 'PAGE', removed: false, parent: null };
 
   return {
+    mode: opts.mode ?? 'default',
     showUI: vi.fn<(html: string, options: unknown) => void>(),
     notify: vi.fn<(message: string) => void>(),
     on: vi.fn<(event: string, fn: () => void) => void>(),
@@ -73,6 +74,21 @@ describe('createPanelController', () => {
         ...PANEL_DEFAULT_SIZE,
         themeColors: true,
       });
+    });
+
+    // In Dev Mode's Inspect panel the UI is an iframe Figma sizes and keeps visible. Restoring a
+    // stored size would push a window size at a panel that has none, and the run listener exists to
+    // re-show a window that "run in background" hid — a control the panel withdraws there. Both are
+    // skipped so the sandbox's model of the panel matches the UI's.
+    it('does not manage a window that Dev Mode’s Inspect panel owns', async () => {
+      const f = fakeFigma({ stored: { width: 420, height: 560 }, mode: 'inspect' });
+
+      controllerFor(f).open('<html></html>');
+      await settle();
+
+      expect(f.showUI).toHaveBeenCalled();
+      expect(f.ui.resize).not.toHaveBeenCalled();
+      expect(f.on).not.toHaveBeenCalled();
     });
 
     it('snaps to the stored size once storage answers', async () => {

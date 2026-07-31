@@ -140,7 +140,7 @@ describe('e2e get_nodes_info', () => {
 });
 
 describe('e2e get_metadata', () => {
-  it('returns fileName + currentPage + pages', async () => {
+  it('returns fileName + currentPage + pages + the editor it is running in', async () => {
     const h = await startLeader();
     harnesses.push(h);
     const response: GetMetadataResult = {
@@ -150,6 +150,8 @@ describe('e2e get_metadata', () => {
         { id: 'p-1', name: 'Cover' },
         { id: 'p-2', name: 'Details' },
       ],
+      editorType: 'figma',
+      mode: 'default',
     };
     sockets.push(
       await connectFakePlugin({

@@ -291,6 +291,19 @@ No. Figwright talks to Figma through a plugin, so the free tier is enough — no
 </details>
 
 <details>
+<summary><strong>Does it work in Dev Mode and FigJam?</strong></summary>
+
+It runs in both, with less available than in Figma Design — because those editors give plugins less, not because Figwright holds anything back.
+
+- **Figma Design** — everything.
+- **Dev Mode** (Inspect panel) — reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails — nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build.
+- **FigJam** — frames, sections, shapes and text work; components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
+
+`get_metadata` reports the editor (`editorType` / `mode`), and any tool that fails because of the editor says so in its error, so an agent can re-plan rather than retry.
+
+</details>
+
+<details>
 <summary><strong>Can more than one agent use the same plugin at once?</strong></summary>
 
 Yes. Several MCP servers can share a single plugin via leader/follower **election** — one leads, the others follow, with a graceful handoff if the leader goes away.

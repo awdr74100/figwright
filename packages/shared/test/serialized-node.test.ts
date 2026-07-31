@@ -193,7 +193,7 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
     expect(GetNodesInfoResultSchema.parse(payload)).toEqual(payload);
   });
 
-  it('GetMetadataResult validates fileName + pages + currentPage', async () => {
+  it('GetMetadataResult validates fileName + pages + currentPage + editor', async () => {
     const { GetMetadataResultSchema } = await import('../src/serialized-node.js');
     const payload = {
       fileName: 'My File',
@@ -202,6 +202,8 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
         { id: 'p-1', name: 'Cover' },
         { id: 'p-2', name: 'Details' },
       ],
+      editorType: 'dev',
+      mode: 'inspect',
     };
     expect(GetMetadataResultSchema.parse(payload)).toEqual(payload);
   });

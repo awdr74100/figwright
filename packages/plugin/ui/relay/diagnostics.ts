@@ -46,6 +46,10 @@ export const buildDiagnosticBundle = (
       protocol: meta.protocolVersion,
       server: state.serverVersion,
       editorType: context?.editorType ?? null,
+      // Paired with editorType because the two answer different questions in a bug report: which
+      // editor's API the session had, and whether the panel was a floating window or an iframe in
+      // Dev Mode's Inspect panel.
+      mode: context?.mode ?? null,
       apiVersion: context?.apiVersion ?? null,
       ...(meta.userAgent === undefined ? {} : { userAgent: meta.userAgent }),
     },

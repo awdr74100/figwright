@@ -2,10 +2,26 @@
 import { computed } from 'vue';
 
 import type { PluginContextEvent } from '../../protocol/bridge.js';
+import { editorLimitation } from '../../protocol/editor-context.js';
 import UiMetaRow from './UiMetaRow.vue';
 import UiSection from './UiSection.vue';
 
 const props = defineProps<{ context: PluginContextEvent | null }>();
+
+// Why writes will fail here, stated once where the user is already looking at the editor they're
+// in. Without it a Dev Mode session looks identical to a Design one until a tool errors.
+const limitation = computed(() =>
+  props.context === null ? null : editorLimitation(props.context.editorType),
+);
+
+// `mode` only earns a slot when it isn't the ordinary one — in a floating plugin window it would
+// be a constant, and this row is already carrying two other facts.
+const editor = computed(() => {
+  const c = props.context;
+  if (c === null) return '';
+  const launched = c.mode === 'default' ? c.editorType : `${c.editorType} · ${c.mode}`;
+  return `${launched} · API ${c.apiVersion}`;
+});
 
 // Nodes the sandbox didn't serialize (it caps the detail count) — surfaced as an "…and N more" line.
 const hiddenCount = computed(() =>
@@ -24,9 +40,16 @@ const hiddenCount = computed(() =>
           {{ context.pageName }}
         </UiMetaRow>
         <UiMetaRow label="Editor" mono value-class="text-dim">
-          {{ context.editorType }} · API {{ context.apiVersion }}
+          {{ editor }}
         </UiMetaRow>
       </dl>
+
+      <p
+        v-if="limitation !== null"
+        class="mt-1.5 rounded-md bg-raised p-1.5 text-meta wrap-break-word text-warning"
+      >
+        {{ limitation }}
+      </p>
     </UiSection>
 
     <UiSection :title="`Selection (${context.selectionCount})`">

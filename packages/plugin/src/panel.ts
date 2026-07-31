@@ -8,6 +8,7 @@
  * while they were inline message-shape checks.
  */
 
+import { isEmbeddedInPanel } from '../protocol/editor-context.js';
 import {
   clampPanelSize,
   PANEL_DEFAULT_SIZE,
@@ -58,6 +59,13 @@ export const createPanelController = (figmaCtx: typeof figma): PanelController =
   return {
     open: html => {
       figmaCtx.showUI(html, { ...PANEL_DEFAULT_SIZE, themeColors: true });
+      // In Dev Mode's Inspect panel the UI is an iframe Figma sizes, so neither mechanism below has
+      // anything to act on. Verified live there: `figma.ui.resize` moves nothing, and the `run`
+      // listener cannot undo a `hide()` — hiding empties the panel for good, so the control it
+      // serves is withdrawn on the UI side too (see App.vue). Skipping both keeps the sandbox's
+      // model of the panel matching the UI's, and keeps window APIs out of a panel they were never
+      // written for.
+      if (isEmbeddedInPanel(figmaCtx.mode ?? 'default')) return;
       void restoreStoredSize();
       // "Run in background" hides the panel rather than closing the plugin, so running it again
       // from the Plugins menu is what brings it back.

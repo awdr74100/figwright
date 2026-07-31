@@ -83,6 +83,7 @@ describe('plugin context event', () => {
       { id: '1:4', name: 'Label', type: 'TEXT', width: 120, height: 24 },
     ],
     editorType: 'figma',
+    mode: 'default',
     apiVersion: '1.0.0',
   };
 

@@ -7,6 +7,7 @@ import {
   type PluginToolError,
   type PluginToolResult,
 } from '../protocol/bridge.js';
+import { withEditorContext } from '../protocol/editor-context.js';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
 export type SandboxHandlers = Record<string, SandboxToolHandler>;
@@ -14,6 +15,12 @@ export type SandboxHandlers = Record<string, SandboxToolHandler>;
 export interface DispatchInput {
   raw: unknown;
   handlers: SandboxHandlers;
+  /**
+   * `figma.editorType`, so a handler error can name the editor it was raised in. Required rather
+   * than optional on purpose: an optional field is exactly the kind of claim that gets silently
+   * dropped at one call site and never noticed (see `editor-context.ts`).
+   */
+  editorType: string;
   log?: (msg: string) => void;
 }
 
@@ -45,11 +52,18 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
     const result = await handler(params);
     return { kind: 'reply', reply: createToolResult({ id, result }) };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`[sandbox] handler ${method} threw: ${message}`);
+    const raised = err instanceof Error ? err.message : String(err);
+    log(`[sandbox] handler ${method} threw: ${raised}`);
+    // FigJam and Dev Mode reject whole classes of call that Figma Design accepts, and the API's own
+    // error rarely says which editor it came from. Naming it here is what lets an agent re-plan
+    // instead of retrying the same call.
     return {
       kind: 'reply',
-      reply: createToolError({ id, code: ErrorCode.Internal, message }),
+      reply: createToolError({
+        id,
+        code: ErrorCode.Internal,
+        message: withEditorContext(raised, input.editorType),
+      }),
     };
   }
 };

@@ -12,12 +12,15 @@ export const isMotionNode = (node: BaseNode): node is MotionNode => 'applyAnimat
  * Motion authoring and video export only work in the Figma Design editor. Throw a clear, actionable
  * error rather than letting the plugin API reject opaquely (or silently no-op) in FigJam / Dev
  * Mode.
+ *
+ * It deliberately does not name the current editor: every error leaving a handler passes through
+ * the dispatcher, which appends `(editor: X — …)` for exactly the editors this gate fires in.
+ * Naming it here as well produced "figjam" twice in one sentence — seen live before this was
+ * trimmed.
  */
 export const assertFigmaEditor = (figmaCtx: typeof figma, tool: string): void => {
   if (figmaCtx.editorType !== 'figma') {
-    throw new Error(
-      `${tool}: Figma Motion is only available in the Figma Design editor (current editor: ${figmaCtx.editorType}).`,
-    );
+    throw new Error(`${tool}: Figma Motion is only available in the Figma Design editor.`);
   }
 };
 
