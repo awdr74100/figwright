@@ -18,7 +18,7 @@ importers:
         specifier: ^0.6.2
         version: 0.6.2(magicast@0.5.3)
       knip:
-        specifier: ^6.30.0
+        specifier: ^6.31.0
         version: 6.31.0
       oxfmt:
         specifier: ^0.61.0
