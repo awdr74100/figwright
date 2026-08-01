@@ -1,0 +1,6 @@
+# Store every text file with LF in the repo, and check it out as LF on every
+# platform. Attributes outrank the contributor's core.autocrlf, so a Windows
+# clone with the installer default (autocrlf=true) still lands LF instead of
+# CRLF — which oxfmt reports as a format issue on every single line, and which
+# CI (ubuntu-only) would never catch.
+* text=auto eol=lf
