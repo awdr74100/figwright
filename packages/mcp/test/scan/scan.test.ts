@@ -42,10 +42,205 @@ describe('extractReactComponents (pure)', () => {
       export const Icon = forwardRef((props, ref) => <svg ref={ref}/>);
       export const Badge = memo(({ label }) => <span>{label}</span>);
     `;
-    const names = extractReactComponents('x.tsx', code)
-      .map(c => c.name)
-      .toSorted();
-    expect(names).toEqual(['Badge', 'Icon']);
+    const comps = extractReactComponents('x.tsx', code);
+    expect(comps.map(c => c.name).toSorted()).toEqual(['Badge', 'Icon']);
+    // Icon takes an un-annotated `props` param: its prop list is unknowable, and saying so is the
+    // whole point of propsExtracted. Asserting only the names here is what let a false
+    // propsExtracted=true survive — the join then reports every Figma axis as a missing prop.
+    expect(comps.find(c => c.name === 'Icon')?.propsExtracted).toBe(false);
+    expect(comps.find(c => c.name === 'Badge')?.propNames).toEqual(['label']);
+  });
+
+  it('unwraps namespaced and nested HOCs (React.memo, memo(forwardRef(...)))', () => {
+    const code = `
+      export const Icon = React.memo(({ size }) => <svg/>);
+      export const Chip = React.forwardRef(({ tone }, ref) => <span ref={ref}/>);
+      export const Tag = memo(forwardRef(({ label }, ref) => <b ref={ref}/>));
+    `;
+    const comps = extractReactComponents('x.tsx', code);
+    expect(comps.map(c => c.name).toSorted()).toEqual(['Chip', 'Icon', 'Tag']);
+    expect(comps.find(c => c.name === 'Tag')?.propNames).toEqual(['label']);
+  });
+
+  it('resolves components exported by reference, not just inline declarations', () => {
+    // Declaring at the top and exporting at the bottom is a common house style; a scanner that only
+    // reads `export const` reports these as absent and codegen rebuilds components that exist.
+    const code = `
+      interface Props { size?: string }
+      const Button = ({ size }: Props) => <button/>;
+      function Card({ title }: { title: string }) { return <div/>; }
+      const Inner = ({ tone }: { tone: string }) => <i/>;
+      export { Button, Card, Inner as Badge };
+      export default Button;
+    `;
+    const comps = extractReactComponents('ui/Button.tsx', code);
+    expect(comps.map(c => c.name).toSorted()).toEqual(['Badge', 'Button', 'Card']);
+    expect(comps.find(c => c.name === 'Badge')?.propNames).toEqual(['tone']);
+    // Button is exported both ways — it must be reported once, not duplicated.
+    expect(comps.filter(c => c.name === 'Button')).toHaveLength(1);
+  });
+
+  it('names a default-exported binding after the binding, not the file', () => {
+    const code = `const Button = ({ size }: { size?: string }) => <button/>;\nexport default Button;`;
+    const [c] = extractReactComponents('ui/index.tsx', code);
+    expect(c?.name).toBe('Button'); // the author's name beats the filename baseline (`Ui`)
+    expect(c?.exportKind).toBe('default');
+    expect(c?.propNames).toEqual(['size']);
+  });
+
+  it('ignores type-only exports and re-exports from other modules', () => {
+    // `export { Button } from './Button'` is a barrel: that file's own scan reports the component,
+    // so counting it here would attribute it to the wrong path.
+    const code = `
+      interface Props { size?: string }
+      export type { Props };
+      export { Button } from './Button';
+    `;
+    expect(extractReactComponents('index.tsx', code)).toEqual([]);
+  });
+
+  it('extracts class components and their props', () => {
+    const code = `
+      interface Props { size?: string; tone: string }
+      export class Button extends React.Component<Props> { render() { return <button/>; } }
+      export class Chip extends PureComponent<{ label: string }> { render() { return <b/>; } }
+      export class NotAComponent extends Base { }
+    `;
+    const comps = extractReactComponents('x.tsx', code);
+    expect(comps.map(c => c.name).toSorted()).toEqual(['Button', 'Chip']);
+    expect(comps.find(c => c.name === 'Button')?.propNames.toSorted()).toEqual(['size', 'tone']);
+    expect(comps.find(c => c.name === 'Chip')?.propNames).toEqual(['label']);
+  });
+
+  // Only the destructured form was read before, so `(props: Props)` — and any component that
+  // destructures in its body — reported zero props while claiming the list was complete.
+  it.each([
+    ['a plain annotated parameter', `export const Button = (props: Props) => <button/>;`],
+    [
+      'a body destructure',
+      `export function Button(props: Props) { const { size } = props; return <button/>; }`,
+    ],
+    ['React.FC on the binding', `export const Button: React.FC<Props> = (props) => <button/>;`],
+    ['FC on a binding that ignores them', `export const Button: FC<Props> = () => <button/>;`],
+  ])('reads props declared via %s', (_label, form) => {
+    const code = `interface Props { size?: string; tone: string }\n${form}`;
+    const [c] = extractReactComponents('x.tsx', code);
+    expect(c?.propNames.toSorted()).toEqual(['size', 'tone']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('resolves type aliases, intersections and interface inheritance declared in the file', () => {
+    const code = `
+      interface Base { tone: string }
+      interface Props extends Base { size?: string }
+      type Extra = { id: string };
+      type CardProps = Extra & { title: string };
+      export const Button = (props: Props) => <button/>;
+      export const Card = (props: CardProps) => <div/>;
+    `;
+    const comps = extractReactComponents('x.tsx', code);
+    expect(comps.find(c => c.name === 'Button')?.propNames.toSorted()).toEqual(['size', 'tone']);
+    expect(comps.find(c => c.name === 'Card')?.propNames.toSorted()).toEqual(['id', 'title']);
+  });
+
+  // The honesty invariant: an imported prop type, or an interface extending one, leaves props we
+  // genuinely cannot see. Claiming [] would make the join report every Figma axis as missing.
+  it.each([
+    [
+      'imported prop type',
+      `import type { Props } from './t';\nexport const Button = (props: Props) => <button/>;`,
+    ],
+    [
+      'interface extending an imported one',
+      `import type { Base } from './t';\ninterface Props extends Base { size?: string }\nexport const Button = (props: Props) => <button/>;`,
+    ],
+    [
+      'intersection with an imported type',
+      `import type { Base } from './t';\ntype Props = Base & { size?: string };\nexport const Button = (props: Props) => <button/>;`,
+    ],
+    // A utility generic changes the member set in ways this pass doesn't model.
+    [
+      'a utility generic',
+      `interface Base { size?: string }\nexport const Button = (props: Partial<Base>) => <button/>;`,
+    ],
+    ['an un-annotated parameter', `export const Button = (props) => <button/>;`],
+  ])('reports props as NOT extracted for %s', (_label, code) => {
+    const [c] = extractReactComponents('x.tsx', code);
+    expect(c?.name).toBe('Button');
+    expect(c?.propsExtracted).toBe(false);
+    expect(c?.propNames).toEqual([]);
+  });
+
+  it('resolves a generic component type but not a utility type', () => {
+    // `Props<T>` still declares the same member names — only their types depend on T — so it must
+    // resolve. `Partial<Props>` / `Omit<…>` genuinely reshape the member set and must not.
+    const generic = `interface Props<T> { items: T[]; size?: string }\nexport const List = <T,>({ items }: Props<T>) => <ul/>;`;
+    const [g] = extractReactComponents('x.tsx', generic);
+    expect(g?.propNames.toSorted()).toEqual(['items', 'size']);
+    expect(g?.propsExtracted).toBe(true);
+
+    const utility = `interface Props { size?: string }\nexport const B = (p: Omit<Props, 'size'>) => <i/>;`;
+    expect(extractReactComponents('x.tsx', utility)[0]?.propsExtracted).toBe(false);
+  });
+
+  it('prefers the declared prop type over what the body destructures', () => {
+    // `({ size }: Props)` accepts every member of Props; treating the pattern as the answer would
+    // report the rest as props the component is missing.
+    const code = `interface Props { size?: string; tone?: string }\nexport const B = ({ size }: Props) => <i/>;`;
+    const [c] = extractReactComponents('x.tsx', code);
+    expect(c?.propNames.toSorted()).toEqual(['size', 'tone']);
+  });
+
+  it('treats a rest-only pattern as unknown, not as prop-less', () => {
+    // `({ ...rest })` has real props, just none written down anywhere readable.
+    const [c] = extractReactComponents('x.tsx', 'export const B = ({ ...rest }) => <i/>;');
+    expect(c?.propsExtracted).toBe(false);
+    // …unless the annotation says what they are.
+    const typed = `interface Props { size?: string }\nexport const B = ({ ...rest }: Props) => <i/>;`;
+    expect(extractReactComponents('x.tsx', typed)[0]?.propNames).toEqual(['size']);
+  });
+
+  it('resolves `export { X as default }` as a default export', () => {
+    // Naming it "default" would fail the PascalCase gate and drop the component entirely.
+    const code = `const Button = ({ size }: { size?: string }) => <button/>;\nexport { Button as default };`;
+    const [c] = extractReactComponents('ui/Button.tsx', code);
+    expect(c?.name).toBe('Button');
+    expect(c?.exportKind).toBe('default');
+    expect(c?.propNames).toEqual(['size']);
+  });
+
+  it('reads props of a Solid component, which never destructures them', () => {
+    // Destructuring breaks Solid's reactivity, so idiomatic Solid always takes `props` whole —
+    // exactly the shape that used to report zero props while claiming the list was complete.
+    const P = 'interface Props { size?: string; tone?: string }\n';
+    const [fn] = extractReactComponents(
+      'x.tsx',
+      `${P}export function Button(props: Props) { return <b>{props.size}</b>; }`,
+    );
+    expect(fn?.propNames.toSorted()).toEqual(['size', 'tone']);
+    expect(fn?.propsExtracted).toBe(true);
+    // Solid's own component types are the FC<Props> equivalent.
+    const [typed] = extractReactComponents(
+      'x.tsx',
+      `${P}export const Button: ParentComponent<Props> = (props) => <b/>;`,
+    );
+    expect(typed?.propNames.toSorted()).toEqual(['size', 'tone']);
+  });
+
+  it('treats a component with no parameter as genuinely prop-less', () => {
+    const [c] = extractReactComponents('x.tsx', 'export const Button = () => <button/>;');
+    expect(c?.propNames).toEqual([]);
+    expect(c?.propsExtracted).toBe(true); // [] here means "none", not "unknown"
+  });
+
+  it('does not mistake a cyclic type for an unreadable one', () => {
+    const code = `
+      interface A extends B { a?: string }
+      interface B extends A { b?: string }
+      export const Button = (props: A) => <button/>;
+    `;
+    const [c] = extractReactComponents('x.tsx', code);
+    expect(c?.propNames.toSorted()).toEqual(['a', 'b']);
   });
 
   it('names an anonymous default export from the filename', () => {
@@ -118,6 +313,85 @@ describe('extractSfcComponent (Vue / Svelte props)', () => {
     const [c] = extractSfcComponent('C.vue', '<script setup>const = = =</script>', 'vue');
     expect(c?.propsExtracted).toBe(false);
     expect(c?.propNames).toEqual([]);
+  });
+
+  it('distinguishes a script-less template from a script it could not delimit', () => {
+    // Both yield zero script blocks, but they mean opposite things: one genuinely declares no
+    // props, the other has props we failed to read.
+    const [template] = extractSfcComponent('C.vue', '<template><button/></template>', 'vue');
+    expect(template?.propsExtracted).toBe(true);
+
+    const [unclosed] = extractSfcComponent(
+      'C.vue',
+      '<script setup lang="ts">defineProps<{ size?: string }>()',
+      'vue',
+    );
+    expect(unclosed?.propsExtracted).toBe(false);
+  });
+
+  // `defineProps<Props>()` — with an interface and withDefaults — is the dominant Vue authoring
+  // style. Reading only the inline literal form missed it, leaving prop-less components.
+  it.each([
+    ['an interface', `interface Props { size?: string }\ndefineProps<Props>()`],
+    ['a type alias', `type Props = { size?: string }\ndefineProps<Props>()`],
+    [
+      'withDefaults',
+      `interface Props { size?: string }\nwithDefaults(defineProps<Props>(), { size: 'md' })`,
+    ],
+    ['an assigned result', `interface Props { size?: string }\nconst props = defineProps<Props>()`],
+  ])('resolves defineProps declared with %s', (_label, body) => {
+    const [c] = extractSfcComponent('C.vue', `<script setup lang="ts">${body}</script>`, 'vue');
+    expect(c?.propNames).toEqual(['size']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('folds inherited interface members into Vue props', () => {
+    const code = `<script setup lang="ts">
+      interface Base { tone: string }
+      interface Props extends Base { size?: string }
+      defineProps<Props>()
+    </script>`;
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames.toSorted()).toEqual(['size', 'tone']);
+  });
+
+  it('counts defineModel() as the prop it declares', () => {
+    // v-model bindings are public props (modelValue by default, or the given name) and are exactly
+    // what a Figma variant axis lines up against.
+    const [c] = extractSfcComponent(
+      'C.vue',
+      `<script setup lang="ts">const m = defineModel<string>()\nconst t = defineModel<string>('title')</script>`,
+      'vue',
+    );
+    expect(c?.propNames.toSorted()).toEqual(['modelValue', 'title']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('resolves a type declared in one script block and used in another', () => {
+    const code = `<script lang="ts">export interface Props { size?: string }</script>
+      <script setup lang="ts">defineProps<Props>()</script>`;
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['size']);
+  });
+
+  it.each([
+    ['a type annotation', `interface Props { size?: string }\nlet props: Props = $props();`],
+    ['a generic argument', `interface Props { size?: string }\nlet props = $props<Props>();`],
+  ])('reads Svelte $props() declared with %s', (_label, body) => {
+    const [c] = extractSfcComponent('C.svelte', `<script lang="ts">${body}</script>`, 'svelte');
+    expect(c?.propNames).toEqual(['size']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('marks SFC props NOT extracted when the prop type is imported', () => {
+    const vue = `<script setup lang="ts">import type { Props } from './types'\ndefineProps<Props>()</script>`;
+    const [v] = extractSfcComponent('C.vue', vue, 'vue');
+    expect(v?.propsExtracted).toBe(false);
+    expect(v?.propNames).toEqual([]);
+
+    const svelte = `<script lang="ts">import type { Props } from './types'\nlet props: Props = $props();</script>`;
+    const [s] = extractSfcComponent('C.svelte', svelte, 'svelte');
+    expect(s?.propsExtracted).toBe(false);
   });
 });
 
@@ -196,6 +470,75 @@ describe('extractAngularComponents (pure)', () => {
       export class PlainThing {}
     `;
     expect(extractAngularComponents('x.ts', code)).toEqual([]);
+  });
+
+  it('uses the alias of a signal input as the public prop name', () => {
+    // The options object sits in a different argument slot per form — after the initial value for
+    // input(), first for the required form — so the field name would otherwise leak as the prop.
+    const code = `
+      import { Component, input, model } from '@angular/core';
+      @Component({ template: '' })
+      export class FieldComponent {
+        kind = input('primary', { alias: 'variant' });
+        busy = input.required<boolean>({ alias: 'isBusy' });
+        val = model('x', { alias: 'value' });
+      }
+    `;
+    const [c] = extractAngularComponents('field.component.ts', code);
+    expect(c?.propNames).toEqual(['variant', 'isBusy', 'value']);
+  });
+
+  it('reads inputs declared in the @Component metadata', () => {
+    const code = `
+      import { Component } from '@angular/core';
+      @Component({ selector: 'app-b', template: '', inputs: ['size', 'kind: variant'] })
+      export class ButtonComponent {}
+    `;
+    const [c] = extractAngularComponents('button.component.ts', code);
+    // 'kind: variant' binds as `variant` in the template — that's the name a Figma axis matches.
+    expect(c?.propNames).toEqual(['size', 'variant']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('folds inputs inherited from a base class declared in the same file', () => {
+    const code = `
+      import { Component, Directive, Input } from '@angular/core';
+      @Directive()
+      export class BaseComponent { @Input() tone = 'a'; }
+      @Component({ template: '' })
+      export class ButtonComponent extends BaseComponent { @Input() size = 'md'; }
+    `;
+    const [c] = extractAngularComponents('button.component.ts', code);
+    expect(c?.name).toBe('Button');
+    expect(c?.propNames.toSorted()).toEqual(['size', 'tone']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it.each([
+    [
+      'an imported base',
+      `import { BaseComponent } from './base';\n@Component({ template: '' })\nexport class ButtonComponent extends BaseComponent { @Input() size = 'md'; }`,
+    ],
+    // A namespaced or computed base hides inputs exactly as an imported one does.
+    [
+      'a namespaced base',
+      `@Component({ template: '' })\nexport class ButtonComponent extends NS.BaseComponent { @Input() size = 'md'; }`,
+    ],
+    [
+      'a mixin base',
+      `@Component({ template: '' })\nexport class ButtonComponent extends mixin(Base) { @Input() size = 'md'; }`,
+    ],
+  ])('flags the input list incomplete, keeping its own, for %s', (_label, body) => {
+    const [c] = extractAngularComponents(
+      'button.component.ts',
+      `import { Component, Input } from '@angular/core';\n${body}`,
+    );
+    expect(c?.name).toBe('Button');
+    // The inherited inputs are unreadable, so the list isn't exhaustive…
+    expect(c?.propsExtracted).toBe(false);
+    // …but the class's own input is a read fact and must survive: the join reports it as a proven
+    // match while claiming nothing about the axes it can't account for.
+    expect(c?.propNames).toEqual(['size']);
   });
 
   it('does not crash on unparseable source', () => {
