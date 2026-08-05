@@ -1,6 +1,8 @@
 import type { DesignContextNode } from '@figwright/shared';
 
 import type { ScannedComponent } from '../scan/scan.js';
+import { casefold } from './casefold.js';
+import { CANDIDATE_FLOOR, statusFor } from './status.js';
 
 // The component join: Figma component name → existing code component. Unlike the token half (CSS
 // custom properties are mechanically derivable from the variable name), there is no shortcut here —
@@ -82,7 +84,7 @@ export interface ComponentMapping {
   staleOverride?: { name: string; filePath: string };
 }
 
-const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+const norm = casefold;
 
 const bigramCounts = (s: string): Map<string, number> => {
   const m = new Map<string, number>();
@@ -104,18 +106,34 @@ export const diceSimilarity = (a: string, b: string): number => {
   return (2 * overlap) / (a.length - 1 + (b.length - 1));
 };
 
+// Figma writes a variant's own name as `Prop=Value, Prop=Value` ("Size=Large, State=Hover"). The
+// text before the first `=` is therefore a PROPERTY name, never the component's — and the property
+// names a design system uses (Size, State, Type, Variant, Style, Icon) are exactly the words it
+// also names components after. Treating that text as a logical name is how a usage whose component
+// set couldn't be resolved gets confidently mapped to an unrelated `Size` component at 1.0.
+const VARIANT_NAMED = /=/;
+
 /**
  * Figma names carry decoration the code side won't ("Button/Primary", "Size=Large, State=Hover").
- * Generate the plausible logical names to try so a slash- or variant-suffixed name still matches
- * the bare code component name.
+ * Generate the plausible logical names to try so a slash- or comma-suffixed name still matches the
+ * bare code component name.
+ *
+ * A variant-style segment contributes nothing but noise, so it's dropped rather than mined for a
+ * base: when a usage is named purely by its variant axes there is no component name in the string
+ * to recover, and inventing one is strictly worse than reporting it unmapped. `Button/Size=Large`
+ * still matches, via its `Button` slash part.
  */
 const nameCandidates = (figmaName: string): string[] => {
-  const base = figmaName.split(/[=,]/)[0]?.trim() ?? figmaName;
-  const slashParts = figmaName
+  const parts = figmaName
     .split('/')
     .map(s => s.trim())
-    .filter(Boolean);
-  return [...new Set([figmaName, base, ...slashParts])];
+    .filter(part => part.length > 0 && !VARIANT_NAMED.test(part));
+  // The comma split only applies to a non-variant name ("Card, Elevated" → "Card"); a variant name
+  // has already been excluded above.
+  const base = VARIANT_NAMED.test(figmaName)
+    ? undefined
+    : (figmaName.split(',')[0]?.trim() ?? figmaName);
+  return [...new Set([figmaName, ...(base === undefined ? [] : [base]), ...parts])];
 };
 
 interface NameScore {
@@ -143,33 +161,35 @@ const TIE_EPSILON = 0.05;
 // Cap the surfaced runner-ups so a scan with many similar names doesn't dump a long list.
 const MAX_AMBIGUOUS = 3;
 
-const statusFor = (confidence: number, threshold: number): MappingStatus => {
-  if (confidence >= 0.85) return 'high';
-  if (confidence >= threshold) return 'medium';
-  if (confidence >= 0.5) return 'low';
-  return 'unmapped';
-};
-
 /**
  * Split a usage's Figma axes into those the candidate already has as props (matchedProps) and those
- * it lacks (unmatchedProps — the component-extension TODOs). Same casefold predicate for both, so
- * matched ∪ unmatched == variantAxes.
+ * it lacks (unmatchedProps — the component-extension TODOs). Same predicate for both, so matched ∪
+ * unmatched == variantAxes.
  *
- * When the component's props couldn't be parsed (propsExtracted === false — a baseline scan that
- * didn't read props), we can't tell matched from unmatched: return both empty rather than dumping
- * every axis into unmatchedProps, which would otherwise report a true "extend this component" TODO
- * for props that very likely already exist (the case for an unparsed Vue/Svelte SFC).
+ * Axes and props are compared with the same separator-insensitive fold used for component names,
+ * because the two sides name the same thing under different conventions: Figma property labels are
+ * written as prose ("Show icon", "Full width", "Is Disabled") while the code side is an identifier
+ * (`showIcon`, `fullWidth`, `isDisabled`). A plain lowercase compare only ever matched single-word
+ * axes, so every multi-word property — the common case on a real component — was reported as a
+ * missing prop the component should be extended with.
+ *
+ * When the prop list is incomplete (propsExtracted === false — a prop type we couldn't read, an
+ * imported base class), the two halves are not symmetric. A prop we DID read still matches: that's
+ * a fact about the component, and dropping it loses a real reuse signal. What we must not do is
+ * call the remainder missing, since the props we couldn't see are exactly the ones likely to cover
+ * them — that would be a false "extend this component" TODO. So an incomplete scan reports the
+ * matches it can prove and claims nothing about the rest.
  */
 const partitionAxes = (
   variantAxes: readonly string[],
   component: ScannedComponent,
 ): { matchedProps: string[]; unmatchedProps: string[] } => {
-  if (!component.propsExtracted) return { matchedProps: [], unmatchedProps: [] };
-  const codeProps = new Set(component.propNames.map(p => p.toLowerCase()));
+  const codeProps = new Set(component.propNames.map(p => norm(p)));
   const matchedProps: string[] = [];
   const unmatchedProps: string[] = [];
   for (const axis of variantAxes) {
-    (codeProps.has(axis.toLowerCase()) ? matchedProps : unmatchedProps).push(axis);
+    if (codeProps.has(norm(axis))) matchedProps.push(axis);
+    else if (component.propsExtracted) unmatchedProps.push(axis);
   }
   return { matchedProps, unmatchedProps };
 };
@@ -256,7 +276,7 @@ const joinScan = (
   // Winner: highest name score, first-wins on an exact tie (strict `>`, preserving the prior pick).
   let winner: NameScore | null = null;
   for (const s of scores) if (winner === null || s.score > winner.score) winner = s;
-  if (winner === null || winner.score < 0.5) {
+  if (winner === null || winner.score < CANDIDATE_FLOOR) {
     return { ...shared, status: 'unmapped', source: 'scan' };
   }
   const best = winner;
@@ -267,13 +287,17 @@ const joinScan = (
   const bonus = Math.min(MAX_VARIANT_BONUS, matchedProps.length * VARIANT_BONUS_PER_PROP);
   const confidence = Math.min(1, Number((best.score + bonus).toFixed(3)));
 
-  // Near-ties: other plausible components (name ≥ 0.5) whose score is within TIE_EPSILON of the
-  // winner. A near-tie means the name couldn't confidently pick one — surface the runner-up(s) so
-  // codegen verifies the reuse instead of silently importing the winner. The winner itself is
-  // unchanged; this only adds a caution signal (and never presents a tie as a confident 'high').
+  // Near-ties: other plausible components (name at/above the floor) whose score is within
+  // TIE_EPSILON of the winner. A near-tie means the name couldn't confidently pick one — surface
+  // the runner-up(s) so codegen verifies the reuse instead of silently importing the winner. The
+  // winner itself is unchanged; this only adds a caution signal (and never presents a tie as a
+  // confident 'high').
   const ambiguousWith = scores
     .filter(
-      s => s.component !== best.component && s.score >= 0.5 && best.score - s.score <= TIE_EPSILON,
+      s =>
+        s.component !== best.component &&
+        s.score >= CANDIDATE_FLOOR &&
+        best.score - s.score <= TIE_EPSILON,
     )
     .toSorted((a, b) => b.score - a.score)
     .slice(0, MAX_AMBIGUOUS)

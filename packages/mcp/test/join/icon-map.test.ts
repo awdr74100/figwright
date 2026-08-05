@@ -93,6 +93,21 @@ describe('collectFigmaIcons', () => {
     ]);
     expect(icons[0]?.name).toBe('Bell');
   });
+
+  it('keeps non-Latin icon names distinct', () => {
+    // The grouping key is the casefolded label. An [a-z0-9] fold turns every CJK label into the
+    // empty string, collapsing a whole icon set into one usage with all of their node ids merged.
+    const icons = collectFigmaIcons([
+      node({ id: '1:1', type: 'VECTOR', name: '搜尋' }),
+      node({ id: '1:2', type: 'VECTOR', name: '刪除' }),
+      node({ id: '1:3', type: 'VECTOR', name: '編輯' }),
+      node({ id: '1:4', type: 'VECTOR', name: '搜尋' }),
+    ]);
+    expect(icons.map(i => i.name).toSorted()).toEqual(['刪除', '搜尋', '編輯']);
+    // The repeated one groups; the distinct ones don't merge into it.
+    expect(icons.find(i => i.name === '搜尋')?.nodeIds).toEqual(['1:1', '1:4']);
+    expect(icons.find(i => i.name === '刪除')?.nodeIds).toEqual(['1:2']);
+  });
 });
 
 const opts = (

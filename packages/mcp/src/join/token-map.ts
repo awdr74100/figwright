@@ -1,7 +1,9 @@
 import type { FigmaToken } from '../tokens/figma-tokens.js';
 import { normHex } from '../tokens/hex.js';
 import type { ProjectToken } from '../tokens/tokens.js';
+import { casefold } from './casefold.js';
 import { diceSimilarity, type MappingStatus, parseMapLine } from './component-map.js';
+import { statusFor } from './status.js';
 
 // The token join: Figma variable → project design token. Name-match is the primary, framework-agnostic
 // signal (normalized Figma "Primary/500" vs project "color-primary-500" / utility "primary-500"); an
@@ -226,13 +228,6 @@ const candidateFrom = (
     : {}),
 });
 
-const statusFor = (confidence: number, threshold: number): MappingStatus => {
-  if (confidence >= 0.85) return 'high';
-  if (confidence >= threshold) return 'medium';
-  if (confidence >= 0.5) return 'low';
-  return 'unmapped';
-};
-
 export interface TokenJoinOptions {
   threshold: number;
   /** The project is a Tailwind project — enables the framework built-in scale fallback below. */
@@ -245,7 +240,9 @@ export interface TokenJoinOptions {
   overrides?: ReadonlyMap<string, string>;
 }
 
-const normKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+// Used for override lookups AND as a map key, so a fold that collapsed non-Latin names would make
+// several rows collide on one bucket.
+const normKey = casefold;
 
 /**
  * Resolve a recorded override ref to a project token. The ref is whatever the map file author wrote

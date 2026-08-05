@@ -401,4 +401,24 @@ describe('parseTokenMapFile', () => {
     expect(map.has('Figma')).toBe(false);
     expect([...map.keys()].some(k => k.startsWith(':'))).toBe(false);
   });
+
+  it('keys non-Latin names without collapsing them onto one another', () => {
+    // Every row is stored under a raw AND a normalized key. An [a-z0-9] fold normalizes every CJK
+    // name to '', so all of them collide on a single key and the last row silently wins — a lookup
+    // that missed the raw name would then resolve to the wrong token.
+    const map = parseTokenMapFile(
+      [
+        '| Figma | Token |',
+        '| --- | --- |',
+        '| 顏色/主要 | --color-primary |',
+        '| 顏色/次要 | --color-secondary |',
+        '| 顏色/危險 | --color-danger |',
+      ].join('\n'),
+    );
+    expect(map.get('顏色/主要')).toBe('--color-primary');
+    expect(map.get('顏色主要')).toBe('--color-primary'); // normalized key stays distinct
+    expect(map.get('顏色次要')).toBe('--color-secondary');
+    expect(map.get('顏色危險')).toBe('--color-danger');
+    expect(map.has('')).toBe(false); // no all-rows-collide bucket
+  });
 });

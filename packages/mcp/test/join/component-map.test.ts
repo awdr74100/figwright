@@ -85,6 +85,95 @@ describe('joinComponents', () => {
     expect(m?.candidate?.unmatchedProps).toEqual(['Show icon_L']);
   });
 
+  it('matches multi-word Figma axes against camelCase props', () => {
+    // Figma property labels are prose ("Show icon"); code props are identifiers (`showIcon`). A
+    // plain lowercase compare only ever matched single-word axes, so every multi-word property on a
+    // real component was reported as a missing prop to add.
+    const [m] = joinComponents(
+      [
+        usage({
+          name: 'Button',
+          variantAxes: ['Show icon', 'Is Disabled', 'icon-position', 'Full width', 'State'],
+        }),
+      ],
+      [comp('Button', ['showIcon', 'isDisabled', 'iconPosition', 'fullWidth'])],
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.matchedProps).toEqual([
+      'Show icon',
+      'Is Disabled',
+      'icon-position',
+      'Full width',
+    ]);
+    expect(m?.candidate?.unmatchedProps).toEqual(['State']); // genuinely absent — still reported
+  });
+
+  it('does not match a name to an unrelated one in another script', () => {
+    // Regression: an [a-z0-9] casefold reduced BOTH of these to '', and diceSimilarity('','')
+    // short-circuits to 1 — so a Chinese "按鈕" was a confident, high-status match for a Japanese
+    // "ボタン", or for any other non-Latin component that happened to be scanned.
+    const jp: ScannedComponent = {
+      name: 'ボタン',
+      filePath: 'src/components/ボタン.vue',
+      exportKind: 'default',
+      propNames: [],
+      propsExtracted: true,
+      framework: 'vue',
+    };
+    const [m] = joinComponents([usage({ name: '按鈕' })], [jp], { threshold: 0.7 });
+    expect(m?.status).toBe('unmapped');
+    expect(m?.candidate).toBeUndefined();
+  });
+
+  it('matches an accented Figma name to its ASCII code identifier', () => {
+    const [m] = joinComponents([usage({ name: 'Café' })], [comp('Cafe')], { threshold: 0.7 });
+    expect(m?.candidate?.name).toBe('Cafe');
+    expect(m?.candidate?.confidence).toBe(1);
+  });
+
+  it('matches components and axes named in a non-Latin script', () => {
+    // An [a-z0-9] casefold erases a CJK name entirely, so every such component compared as the
+    // empty string and could only ever match an exact duplicate.
+    const cjk: ScannedComponent = {
+      name: '按鈕',
+      filePath: 'src/components/按鈕.vue',
+      exportKind: 'default',
+      propNames: ['尺寸', '是否停用'],
+      propsExtracted: true,
+      framework: 'vue',
+    };
+    const [m] = joinComponents(
+      [usage({ name: '按鈕/主要', variantAxes: ['尺寸', '是否停用'] })],
+      [cjk],
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.name).toBe('按鈕');
+    expect(m?.status).toBe('high');
+    expect(m?.candidate?.matchedProps).toEqual(['尺寸', '是否停用']);
+  });
+
+  it('reports proven matches off an incomplete prop list, but claims nothing is missing', () => {
+    // A component whose own props parsed but whose base/prop-type is imported has propsExtracted
+    // false with a PARTIAL propNames. The two halves aren't symmetric: a prop we did read still
+    // matches, while the axes we can't account for may well be covered by the props we couldn't
+    // see — calling those missing would be a false extension TODO.
+    const partial: ScannedComponent = {
+      name: 'Button',
+      filePath: 'src/app/button.component.ts',
+      exportKind: 'named',
+      propNames: ['size'],
+      propsExtracted: false,
+      framework: 'angular',
+    };
+    const [m] = joinComponents(
+      [usage({ name: 'Button', variantAxes: ['Size', 'Tone'] })],
+      [partial],
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.matchedProps).toEqual(['Size']);
+    expect(m?.candidate?.unmatchedProps).toEqual([]);
+  });
+
   it('suppresses unmatchedProps when the candidate props were not extracted (SFC baseline)', () => {
     // A Vue/Svelte component whose props couldn't be parsed has propsExtracted=false. The join must
     // not dump every variant axis into unmatchedProps (a false "extend this component" TODO) just
@@ -105,6 +194,40 @@ describe('joinComponents', () => {
     expect(m?.candidate?.name).toBe('Button');
     expect(m?.candidate?.matchedProps).toEqual([]);
     expect(m?.candidate?.unmatchedProps).toEqual([]);
+  });
+
+  // Figma writes a variant's own name as `Prop=Value, …`, so the text before the first `=` is a
+  // PROPERTY name — and Size / State / Type / Variant are exactly what a design system also names
+  // components. Mining it mapped an unresolved variant usage onto an unrelated component at 1.0.
+  it.each(['Size=Large, State=Hover', 'Type=Primary', 'State=Default, Size=Medium'])(
+    'does not mine a component name out of the variant decoration in %s',
+    name => {
+      const ds = [comp('Size'), comp('State'), comp('Type'), comp('Button')];
+      const [m] = joinComponents([usage({ name })], ds, { threshold: 0.7 });
+      expect(m?.status).not.toBe('high');
+      expect(m?.candidate?.confidence ?? 0).toBeLessThan(0.85);
+    },
+  );
+
+  // The slash part carries the real name, and a comma-only name has no variant syntax at all —
+  // neither may be lost to the rule above.
+  it.each(['Button/Size=Large, State=Hover', 'Button/Primary', 'Button, Large'])(
+    'still recovers the component name from %s',
+    name => {
+      const ds = [comp('Button'), comp('Card'), comp('Size')];
+      const [m] = joinComponents([usage({ name })], ds, { threshold: 0.7 });
+      expect(m?.candidate?.name).toBe('Button');
+      expect(m?.status).toBe('high');
+    },
+  );
+
+  it('honours a threshold raised above the absolute high mark', () => {
+    const scanned2 = [comp('Button')];
+    const at = (threshold: number) =>
+      joinComponents([usage({ name: 'Buton' })], scanned2, { threshold })[0];
+    expect(at(0.7)?.status).toBe('high'); // 0.889 — confident by default
+    expect(at(0.95)?.status).toBe('low'); // …but below a caller who asked for 0.95
+    expect(at(0.95)?.candidate?.name).toBe('Button'); // still surfaced, just not reuse-grade
   });
 
   it('flags unmapped when nothing is close', () => {

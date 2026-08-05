@@ -2,7 +2,9 @@ import type { DesignContextNode, SerializedPaint } from '@figwright/shared';
 
 import type { RepoSvg, SvgColorContract } from '../icons/repo-icons.js';
 import type { ProjectProfile } from '../profile/profile.js';
+import { casefold } from './casefold.js';
 import { diceSimilarity, type MappingStatus } from './component-map.js';
+import { statusFor } from './status.js';
 
 // The icon join: a Figma icon node → an existing project `.svg` file, so codegen reuses the designer's
 // curated asset instead of re-exporting a duplicate. Like the component/token joins it's name-based and
@@ -45,7 +47,8 @@ export const iconLabel = (raw: string): string => {
   return last.replace(/^ic(on)?s?[-_]/i, '').trim();
 };
 
-const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+// The grouping key below — so a fold that collapsed non-Latin labels would merge whole icon sets.
+const norm = casefold;
 
 const hex2 = (n: number): string =>
   Math.round(Math.max(0, Math.min(1, n)) * 255)
@@ -163,13 +166,6 @@ const recolorGuidance = (
     case 'unknown':
       return 'color contract unclear (no explicit fill or currentColor found) — inspect the svg before relying on recolor';
   }
-};
-
-const statusFor = (confidence: number, threshold: number): MappingStatus => {
-  if (confidence >= 0.85) return 'high';
-  if (confidence >= threshold) return 'medium';
-  if (confidence >= 0.5) return 'low';
-  return 'unmapped';
 };
 
 export interface IconJoinOptions {
