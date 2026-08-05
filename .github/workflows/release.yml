@@ -27,7 +27,7 @@ jobs:
           # Release steps talk to GitHub via the API tokens below, never git push.
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       # No pnpm cache here: this workflow publishes to npm, and restoring a
       # shared cache into a publish job is a cache-poisoning vector.
