@@ -115,9 +115,12 @@ export const handleTokenMap = async (
   // variable join that succeeded before styles existed — degrade to variables-only instead.
   const [defs, styles, profile, overrides] = await Promise.all([
     dispatch(GET_VARIABLE_DEFS_TOOL_NAME, {}) as Promise<GetVariableDefsResult>,
-    (dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>).catch(
-      (): GetStylesResult => ({ paints: [], texts: [], effects: [], grids: [] }),
-    ),
+    (dispatch(GET_STYLES_TOOL_NAME, {}) as Promise<GetStylesResult>).catch((): GetStylesResult => ({
+      paints: [],
+      texts: [],
+      effects: [],
+      grids: [],
+    })),
     analyzeProject(rootDir),
     readOverrides(rootDir),
   ]);
