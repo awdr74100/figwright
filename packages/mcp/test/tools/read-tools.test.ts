@@ -72,7 +72,7 @@ describe('M1 read tools — definitions', () => {
     expect(getMetadataToolDefinition.name).toBe(GET_METADATA_TOOL_NAME);
     expect(getMetadataToolDefinition.inputSchema).toMatchObject({
       type: 'object',
-      additionalProperties: false,
+      properties: {},
     });
   });
 
@@ -80,7 +80,7 @@ describe('M1 read tools — definitions', () => {
     expect(getPagesToolDefinition.name).toBe(GET_PAGES_TOOL_NAME);
     expect(getPagesToolDefinition.inputSchema).toMatchObject({
       type: 'object',
-      additionalProperties: false,
+      properties: {},
     });
   });
 
@@ -102,7 +102,6 @@ describe('M1 read tools — definitions', () => {
     expect(scanTextNodesToolDefinition.inputSchema).toMatchObject({
       type: 'object',
       properties: { root: { type: 'string' } },
-      additionalProperties: false,
     });
     expect(scanTextNodesToolDefinition.inputSchema.required).toBeUndefined();
   });
@@ -123,7 +122,7 @@ describe('M1 read tools — definitions', () => {
       [GET_LOCAL_COMPONENTS_TOOL_NAME, getLocalComponentsToolDefinition],
     ] as const) {
       expect(def.name).toBe(name);
-      expect(def.inputSchema).toMatchObject({ type: 'object', additionalProperties: false });
+      expect(def.inputSchema).toMatchObject({ type: 'object', properties: {} });
       expect(def.inputSchema.required).toBeUndefined();
     }
   });
@@ -134,7 +133,7 @@ describe('M1 read tools — definitions', () => {
       [GET_FONTS_TOOL_NAME, getFontsToolDefinition],
     ] as const) {
       expect(def.name).toBe(name);
-      expect(def.inputSchema).toMatchObject({ type: 'object', additionalProperties: false });
+      expect(def.inputSchema).toMatchObject({ type: 'object', properties: {} });
       expect(def.inputSchema.required).toBeUndefined();
     }
   });
@@ -159,7 +158,7 @@ describe('M1 read tools — definitions', () => {
     expect(listFilesToolDefinition.name).toBe(LIST_FILES_TOOL_NAME);
     expect(listFilesToolDefinition.inputSchema).toMatchObject({
       type: 'object',
-      additionalProperties: false,
+      properties: {},
     });
     expect(listFilesToolDefinition.inputSchema.required).toBeUndefined();
   });

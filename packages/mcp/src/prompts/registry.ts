@@ -1,4 +1,4 @@
-import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
 import type { ZodRawShape } from 'zod';
 
 import { codeToFigmaPrompt } from './code-to-figma.js';

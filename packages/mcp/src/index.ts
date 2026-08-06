@@ -1,7 +1,8 @@
 import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { z } from 'zod';
 
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_ID } from './build-id.js';
@@ -14,6 +15,7 @@ import { wireShutdown } from './lifecycle.js';
 import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
+import { annotationsFor } from './tools/annotations.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
 import { handleDesignContext } from './tools/design-context-guard.js';
 import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
@@ -27,7 +29,6 @@ import { ALL_TOOL_SPECS } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
-import type { ToolSpec } from './tools/spec.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = 'figwright';
@@ -70,8 +71,6 @@ node.onRoleChange(role => {
 });
 
 await election.start();
-
-const mcp = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
@@ -142,47 +141,55 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
     textResult(await handleDesignContext(dispatch, args)),
 };
 
-// Annotations are derived from each spec, never hand-kept here: `kind` drives readOnlyHint and the
-// spec's own `destructive` flag drives destructiveHint (a registry test asserts every delete_*
-// carries it, so a new destructive tool can't ship silently marked "non-destructive").
-const annotationsFor = (spec: ToolSpec): ToolAnnotations =>
-  spec.kind === 'write'
-    ? { readOnlyHint: false, destructiveHint: spec.destructive === true }
-    : { readOnlyHint: true };
+// serveStdio owns the era decision for the connection: it reads the opening exchange, pins ONE
+// instance from this factory for the connection's lifetime, and passes everything after straight
+// through. A 2025-era client is served exactly as `new StdioServerTransport()` + `connect()` served
+// it; a 2026-07-28 client negotiates the modern revision instead — which a hand-wired transport
+// can't do. On stdio there is exactly one connection per process, so this runs once.
+const createMcpServer = (): McpServer => {
+  const mcp = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
 
-for (const spec of ALL_TOOL_SPECS) {
-  const run: ToolHandler =
-    SPECIAL_HANDLERS[spec.name] ??
-    (async args => {
-      // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
-      const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
-      return textResult(await dispatch(spec.name, dispatchArgs));
-    });
-  // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
-  // every tool — generic or special-cased — accepts them without per-handler conversion.
-  const handler: ToolHandler = async args => run(normalizeIdArgs(args) as Record<string, unknown>);
-  // Cast: registerTool is generic per inputShape; this loop registers heterogeneous specs uniformly.
-  mcp.registerTool(
-    spec.name,
-    {
-      description: spec.description,
-      inputSchema: spec.inputShape,
-      annotations: annotationsFor(spec),
-    },
-    handler as never,
-  );
-}
+  for (const spec of ALL_TOOL_SPECS) {
+    const run: ToolHandler =
+      SPECIAL_HANDLERS[spec.name] ??
+      (async args => {
+        // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
+        const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
+        return textResult(await dispatch(spec.name, dispatchArgs));
+      });
+    // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
+    // every tool — generic or special-cased — accepts them without per-handler conversion.
+    const handler: ToolHandler = async args =>
+      run(normalizeIdArgs(args) as Record<string, unknown>);
+    // Cast: registerTool is generic per inputSchema; this loop registers heterogeneous specs
+    // uniformly. z.object() wraps the raw shape explicitly — v2 takes Standard Schema objects, and
+    // the bare-shape overload it still accepts is @deprecated.
+    mcp.registerTool(
+      spec.name,
+      {
+        description: spec.description,
+        inputSchema: z.object(spec.inputShape),
+        annotations: annotationsFor(spec),
+      },
+      handler as never,
+    );
+  }
 
-for (const prompt of PROMPTS) {
-  mcp.registerPrompt(
-    prompt.definition.name,
-    { description: prompt.definition.description ?? '', argsSchema: prompt.argsSchema },
-    ((args: Record<string, string>) => prompt.build(args)) as never,
-  );
-}
+  for (const prompt of PROMPTS) {
+    mcp.registerPrompt(
+      prompt.definition.name,
+      {
+        description: prompt.definition.description ?? '',
+        argsSchema: z.object(prompt.argsSchema),
+      },
+      ((args: Record<string, string>) => prompt.build(args)) as never,
+    );
+  }
 
-const transport = new StdioServerTransport();
-await mcp.connect(transport);
+  return mcp;
+};
+
+const stdio = serveStdio(createMcpServer);
 
 const roleDetail = node.isLeader()
   ? `relay on :${node.getLeader()?.port ?? PORT}`
@@ -194,13 +201,19 @@ log(
 );
 
 const shutdown = async (): Promise<void> => {
+  // serveStdio owns the transport it started, so it has to be the one to close it — closing the
+  // pinned instance and detaching from stdin. Its own errors must not skip the relay teardown
+  // below: the relay port is the resource a zombie would hold, and stdio is already going away.
+  await stdio.close().catch(() => {});
   election.stop();
   await node.stop();
   process.exit(0);
 };
 // Exit on SIGINT/SIGTERM and on stdin EOF. stdin closes when the client that spawned us goes away
-// (including a crash that sends no signal); without this the process would linger holding the relay
-// port as a stale "zombie" leader serving an old build. wireShutdown runs shutdown at most once.
+// (including a crash that sends no signal); the SDK's stdio transport listens only for 'data' and
+// 'error', never EOF — v2 is unchanged here — so without this the process would linger holding the
+// relay port as a stale "zombie" leader serving an old build. wireShutdown runs shutdown at most
+// once.
 // hardExit is the backstop for the graceful path itself stalling (e.g. a close waiting on
 // connections that never drain) — exit code 1 marks the forced, non-clean variant.
 wireShutdown({

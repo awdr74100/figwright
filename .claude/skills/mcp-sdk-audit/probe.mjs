@@ -1,5 +1,7 @@
-// Wire probe for @modelcontextprotocol/sdk upgrades. Boots the built server over stdio and snapshots
-// everything an MCP client can observe; run it once before the bump and once after, then diff.
+// Wire probe for @modelcontextprotocol/server upgrades. Boots the built server over stdio and
+// snapshots everything an MCP client can observe; run it once before the bump and once after, then
+// diff. `packages/mcp/test/e2e/mcp-wire.test.ts` is the standing gate that says pass/fail against
+// what the specs declare; this says *what moved* between two SDK versions, which a boolean can't.
 //
 // It speaks raw newline-delimited JSON-RPC instead of the SDK's own Client on purpose: a probe built
 // out of the package under test can hide that package's regression, because both ends move together.
@@ -18,7 +20,7 @@ const CALL_TIMEOUT_MS = 20_000;
 /** The installed version, read off the lockfile — the SDK's exports map hides its own package.json. */
 const installedSdkVersion = repo => {
   const lock = readFileSync(`${repo}/pnpm-lock.yaml`, 'utf8');
-  return /@modelcontextprotocol\/sdk@([\d.]+)/.exec(lock)?.[1] ?? 'unknown';
+  return /@modelcontextprotocol\/server@([\d.]+)/.exec(lock)?.[1] ?? 'unknown';
 };
 
 /**

@@ -14,7 +14,7 @@ describe('get_document tool definition', () => {
   it('declares an empty object input schema', () => {
     expect(getDocumentToolDefinition.inputSchema).toMatchObject({
       type: 'object',
-      additionalProperties: false,
+      properties: {},
     });
   });
 

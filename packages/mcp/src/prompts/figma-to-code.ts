@@ -1,4 +1,4 @@
-import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 // The cross-client twin of the figma-codegen Claude Code skill: a distilled, guided workflow any MCP

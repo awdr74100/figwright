@@ -14,7 +14,7 @@ describe('get_selection tool definition', () => {
   it('declares an empty object input schema', () => {
     expect(getSelectionToolDefinition.inputSchema).toMatchObject({
       type: 'object',
-      additionalProperties: false,
+      properties: {},
     });
   });
 

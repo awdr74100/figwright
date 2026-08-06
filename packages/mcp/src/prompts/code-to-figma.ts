@@ -1,4 +1,4 @@
-import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
 
 // The cross-client twin of the figma-build Claude Code skill: a distilled, guided workflow any MCP
 // client (Cursor / Windsurf / Claude Desktop) can surface as a slash command. The deep version lives
