@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@figwright/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/ws": "^8.18.1",
     "publint": "^0.3.23",
     "tsdown": "^0.22.14"

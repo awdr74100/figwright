@@ -10,5 +10,21 @@
   "rangeStrategy": "bump",
   "minimumReleaseAge": "1 day",
   "postUpdateOptions": ["pnpmDedupe"],
-  "ignoreDeps": ["node"]
+  "ignoreDeps": ["node"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["@modelcontextprotocol/**"],
+      "groupName": null,
+      "addLabels": ["mcp-sdk"],
+      "prBodyNotes": [
+        "⚠️ Run the **`mcp-sdk-audit`** skill on this PR. The SDK is a runtime dependency that generates every tool's JSON Schema and negotiates the protocol version, so a release can move what clients see while `tsc` stays green. `test/e2e/mcp-wire.test.ts` gates the contract, but only the skill's `probe.mjs` reports *what moved*."
+      ],
+      "description": "Never fold MCP SDK bumps into the all-non-major group: they need their own PR so the audit skill has something to run against, and so a wire regression isn't buried among ten unrelated updates."
+    },
+    {
+      "matchPackageNames": ["@modelcontextprotocol/sdk"],
+      "allowedVersions": "<2.0.0",
+      "description": "Deliberately pinned to the v1 line. This is a devDependency only — `test/e2e/client-compat.test.ts` uses v1's client as an independent implementation to check the v2 server against the library most MCP clients still embed. Bumping it to the v2 packages would defeat the point. Remove the dependency (and that test) once clients have moved to v2; v1 stops receiving security fixes around 2027-01."
+    }
+  ]
 }
