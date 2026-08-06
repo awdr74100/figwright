@@ -17,7 +17,7 @@ export const getScreenshotTool: ToolSpec = {
     'bytes buy no detail — use save_screenshots when you need a full-res file on disk. Past 20 ' +
     'nodes in one call the whole batch drops to a 2000px long edge, which is what providers require ' +
     'of many-image requests; ask for fewer nodes when you need the detail. A batch is also capped ' +
-    'by total size, not just resolution: a full-page frame is ~2.4MB, so roughly 3 of them fill one ' +
+    'by total size, not just resolution: a full-page frame is ~2.4MB, so 3–4 of them fill one ' +
     'response. Past that the remaining nodes come back labelled but not inlined, with a note naming ' +
     'them — re-request those ids in a follow-up call, or use save_screenshots for many nodes at once. ' +
     'Each raster label reports the exported width×height px and the ' +
@@ -67,6 +67,13 @@ const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'i
  * one, which is a regression, not a safeguard. The margin only has to cover what rides alongside
  * the payloads (labels, the closing note, the JSON-RPC envelope), and that measures under 1 KB;
  * half a megabyte is three orders of magnitude more than it needs.
+ *
+ * This is the batch-level twin of a cap the sandbox already applies per image: `capScaleForVision`
+ * bounds one raster's pixels partly because a single image has its own provider ceiling (10 MB
+ * base64 on the Claude API, 5 MB on Bedrock/Vertex). That cap bounds bytes only indirectly, through
+ * resolution, and it says nothing about how many images ride in one response — which is the gap
+ * this closes. The two ceilings are independent: passing this budget does not make an individual
+ * export acceptable to a provider, and vice versa.
  *
  * Figma's own MCP server sidesteps all of this by taking a single node per call and pointing
  * multi-node work at a separate download tool. Figwright accepts a batch — which is genuinely
@@ -149,8 +156,12 @@ export const screenshotContent = (
   if (deferred.length > 0 || oversized.length > 0) {
     // One instruction per cause, so every named id has a remedy that actually works for it.
     const remedies = [
+      // Two ways out, because the right one depends on why the batch was asked for. Splitting keeps
+      // full resolution per node; a smaller `scale` keeps the whole set in one response, which is
+      // what a side-by-side comparison actually needs. The model knows its own intent — offer both.
       deferred.length > 0
-        ? `Re-request ${deferred.join(', ')} in a follow-up call with fewer ids per call.`
+        ? `Re-request ${deferred.join(', ')} in a follow-up call with fewer ids, or repeat the ` +
+          'whole call with a smaller `scale` to fit every node in one response at lower detail.'
         : '',
       oversized.length > 0
         ? `${oversized.join(', ')} exceeded the whole budget alone, so splitting the call will ` +
@@ -159,11 +170,15 @@ export const screenshotContent = (
         : '',
     ].filter(part => part !== '');
     const missed = deferred.length + oversized.length;
+    // Count against what was actually exported, not what was asked for: a node that produced
+    // nothing is reported on its own line and was never a candidate for inlining, so folding it
+    // into this denominator would overstate how much the budget withheld.
+    const exported = result.images.filter(img => img.base64 !== null).length;
     blocks.push({
       type: 'text',
       text:
-        `⚠ ${missed} of ${result.images.length} export(s) were not inlined. Sending them would ` +
-        'have exceeded what an MCP client can read in one response and closed the connection. ' +
+        `⚠ ${missed} of ${exported} export(s) were not inlined. Sending them would have exceeded ` +
+        'what an MCP client can read in one response and closed the connection. ' +
         remedies.join(' '),
     });
   }

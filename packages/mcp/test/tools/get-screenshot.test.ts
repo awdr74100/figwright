@@ -105,13 +105,15 @@ describe('screenshotContent', () => {
       ).toBe(true);
     });
 
-    it('names the deferred ids and tells the model to split the call', () => {
+    it('names what was withheld and offers both ways to get it', () => {
       const blocks = screenshotContent({ images: [raster(1, 10), raster(2, 10)] }, 15 * 1024);
       const note = noteIn(blocks);
       expect(note).toContain('1 of 2');
       expect(note).toContain('1:2');
-      expect(note).toContain('fewer ids per call');
-      expect(note).not.toContain('smaller `scale`');
+      // Splitting keeps full resolution per node; a smaller scale keeps the whole set in one
+      // response. Which is right depends on why the batch was asked for, so both are offered.
+      expect(note).toContain('fewer ids');
+      expect(note).toContain('smaller `scale`');
     });
 
     it('gives different advice when one export is oversized on its own', () => {
@@ -122,7 +124,9 @@ describe('screenshotContent', () => {
       expect(note).toContain('splitting the call will not help');
       expect(note).toContain('smaller `scale`');
       expect(note).toContain('save_screenshots');
-      expect(note).not.toContain('fewer ids per call');
+      // Suggesting a smaller batch here would send the model round a loop: the export fails
+      // identically on its own, so a call containing only it fails too.
+      expect(note).not.toContain('fewer ids');
     });
 
     it('gives each cause its own remedy when a batch mixes both', () => {
@@ -140,7 +144,7 @@ describe('screenshotContent', () => {
       expect(note).toContain('smaller `scale`');
       // 1:3 merely did not fit → split advice, named against it.
       expect(note).toMatch(/Re-request 1:3/);
-      expect(note).toContain('fewer ids per call');
+      expect(note).toContain('fewer ids');
     });
 
     it('never lets the inlined payload exceed the budget', () => {
@@ -174,6 +178,19 @@ describe('screenshotContent', () => {
       // The unexportable node costs nothing, so the real export still fits.
       expect(imagesIn(blocks)).toHaveLength(1);
       expect(noteIn(blocks)).not.toContain('not inlined');
+    });
+
+    it('counts withheld exports against what was exported, not what was asked for', () => {
+      // A node that produced nothing was never a candidate for inlining and reports itself on its
+      // own line, so counting it here would overstate what the budget withheld.
+      const blocks = screenshotContent(
+        {
+          images: [{ nodeId: '9:9', format: 'PNG', base64: null }, raster(1, 10), raster(2, 10)],
+        },
+        15 * 1024,
+      );
+      expect(noteIn(blocks)).toContain('1 of 2');
+      expect(blocks.some(b => b.type === 'text' && b.text === '9:9: not exportable')).toBe(true);
     });
 
     it('sets a default budget that fits the transport limit without wasting it', () => {
