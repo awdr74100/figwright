@@ -161,9 +161,10 @@ const createMcpServer = (): McpServer => {
     // every tool — generic or special-cased — accepts them without per-handler conversion.
     const handler: ToolHandler = async args =>
       run(normalizeIdArgs(args) as Record<string, unknown>);
-    // Cast: registerTool is generic per inputSchema; this loop registers heterogeneous specs
-    // uniformly. z.object() wraps the raw shape explicitly — v2 takes Standard Schema objects, and
-    // the bare-shape overload it still accepts is @deprecated.
+    // z.object() wraps the raw shape explicitly: v2 takes Standard Schema objects, and the
+    // bare-shape overload it still accepts is @deprecated. Registering heterogeneous specs through
+    // one loop needed a handler cast under v1; v2's typing accepts ToolHandler directly, so the
+    // handler's result stays checked against CallToolResult.
     mcp.registerTool(
       spec.name,
       {
@@ -171,7 +172,7 @@ const createMcpServer = (): McpServer => {
         inputSchema: z.object(spec.inputShape),
         annotations: annotationsFor(spec),
       },
-      handler as never,
+      handler,
     );
   }
 
@@ -182,7 +183,10 @@ const createMcpServer = (): McpServer => {
         description: prompt.definition.description ?? '',
         argsSchema: z.object(prompt.argsSchema),
       },
-      ((args: Record<string, string>) => prompt.build(args)) as never,
+      // Narrow, not `as never`: MCP prompt arguments are strings on the wire, but the shape is
+      // erased to ZodRawShape in the registry so the SDK infers `unknown` values. Casting only the
+      // args keeps the callback's *return* type checked against GetPromptResult.
+      (args: Record<string, unknown>) => prompt.build(args as Record<string, string>),
     );
   }
 
