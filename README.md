@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fawdr74100%2Ffigwright.svg)](https://mcptoplist.com/server/glama%2Fawdr74100%2Ffigwright)
+
 <div align="center">
 
 <picture>
