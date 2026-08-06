@@ -1,6 +1,8 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
+import type { PromptArgs } from './registry.js';
+
 // The cross-client twin of the figma-codegen Claude Code skill: a distilled, guided workflow any MCP
 // client (Cursor / Windsurf / Claude Desktop) can surface as a slash command. The deep version lives
 // in skills/figma-codegen/SKILL.md; this is intentionally the short form — it names the
@@ -41,7 +43,7 @@ Emit code in the detected stack (the profile is returned on component_map / toke
 export const figmaToCodePrompt: {
   definition: Prompt;
   argsSchema: { nodeId: z.ZodOptional<z.ZodString> };
-  build: (args: Record<string, string> | undefined) => GetPromptResult;
+  build: (args: PromptArgs | undefined) => GetPromptResult;
 } = {
   definition: {
     name: FIGMA_TO_CODE_PROMPT_NAME,

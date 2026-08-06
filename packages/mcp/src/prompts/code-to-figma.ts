@@ -1,5 +1,7 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
 
+import type { PromptArgs } from './registry.js';
+
 // The cross-client twin of the figma-build Claude Code skill: a distilled, guided workflow any MCP
 // client (Cursor / Windsurf / Claude Desktop) can surface as a slash command. The deep version lives
 // in skills/figma-build/SKILL.md; this is intentionally the short form — the build order, the
@@ -28,7 +30,7 @@ Rules: reuse beats regenerate (instance existing components, bind existing varia
 export const codeToFigmaPrompt: {
   definition: Prompt;
   argsSchema: Record<string, never>;
-  build: (args: Record<string, string> | undefined) => GetPromptResult;
+  build: (args: PromptArgs | undefined) => GetPromptResult;
 } = {
   definition: {
     name: CODE_TO_FIGMA_PROMPT_NAME,

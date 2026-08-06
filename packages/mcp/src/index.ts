@@ -183,10 +183,7 @@ const createMcpServer = (): McpServer => {
         description: prompt.definition.description ?? '',
         argsSchema: z.object(prompt.argsSchema),
       },
-      // Narrow, not `as never`: MCP prompt arguments are strings on the wire, but the shape is
-      // erased to ZodRawShape in the registry so the SDK infers `unknown` values. Casting only the
-      // args keeps the callback's *return* type checked against GetPromptResult.
-      (args: Record<string, unknown>) => prompt.build(args as Record<string, string>),
+      args => prompt.build(args),
     );
   }
 
