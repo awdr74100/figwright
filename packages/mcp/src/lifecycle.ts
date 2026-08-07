@@ -35,6 +35,11 @@ export interface ShutdownWiring {
  * lingers as a zombie even though shutdown "ran". hardExit is the backstop for that second zombie
  * class — armed when the trigger fires, it force-exits after hardExitDelayMs unless the graceful
  * path exited first.
+ *
+ * Returns the trigger itself, because stdin EOF is not the only way to lose the client. A transport
+ * that dies on its own — the SDK closes it when a read fails fatally — detaches from stdin without
+ * ending it, so none of the triggers above ever fire. The caller wires that in through the returned
+ * function so it shares this one "at most once" guard with the rest.
  */
 export const wireShutdown = ({
   proc,
@@ -42,7 +47,7 @@ export const wireShutdown = ({
   shutdown,
   hardExit,
   hardExitDelayMs,
-}: ShutdownWiring): void => {
+}: ShutdownWiring): (() => void) => {
   let triggered = false;
   const once = (): void => {
     if (triggered) return;
@@ -57,4 +62,5 @@ export const wireShutdown = ({
   proc.on('SIGTERM', once);
   stdin.on('end', once);
   stdin.on('close', once);
+  return once;
 };

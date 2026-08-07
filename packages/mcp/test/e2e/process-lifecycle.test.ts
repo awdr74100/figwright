@@ -49,6 +49,8 @@ const spawnServer = (port: number): Server => {
   child.on('exit', code => {
     exit = { code };
   });
+  // Once the server exits, writing to its stdin raises EPIPE. Tests here deliberately provoke that.
+  child.stdin?.on('error', () => {});
   const s: Server = { child, stderr: () => stderr, exited: () => exit };
   servers.push(s);
   return s;
@@ -95,6 +97,60 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process lifecycle (built dist)', () =>
       follower.child.stdin?.end();
       await waitFor(() => follower.exited() !== null, 'promoted follower exit', 8_000);
       expect(follower.exited()?.code).toBe(0);
+    },
+  );
+
+  it(
+    'exits and frees the port when the transport dies under it, and a follower takes over',
+    { timeout: 20_000 },
+    async () => {
+      // The third way to lose the client, and the one nothing covered. A read that fails fatally —
+      // reachable today because import_image carries base64 bytes as an *input* — makes the SDK
+      // close the transport. Closing detaches the stdin listeners and pauses the stream without
+      // ending it, so no 'end'/'close' fires and the process survives as a leader that can no
+      // longer hear anyone, still holding the relay port. Before this was wired, a follower waited
+      // behind it forever and the user had to kill the process by hand.
+      const port = await freePort();
+
+      const leader = spawnServer(port);
+      await waitFor(() => leader.stderr().includes('ready as leader'), 'leader ready', 8_000);
+      const follower = spawnServer(port);
+      await waitFor(() => follower.stderr().includes('ready as follower'), 'follower ready', 8_000);
+
+      const send = (msg: unknown): void => {
+        leader.child.stdin?.write(`${JSON.stringify(msg)}\n`, () => {});
+      };
+      send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'transport-death', version: '0' },
+        },
+      });
+      await new Promise<void>(resolve => setTimeout(resolve, 500));
+
+      // One inbound message past the transport's 10 MB read buffer.
+      send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'import_image',
+          arguments: { data: 'A'.repeat(12 * 1024 * 1024), x: 0, y: 0 },
+        },
+      });
+
+      await waitFor(() => leader.exited() !== null, 'leader exit after transport death', 9_000);
+      expect(leader.exited()?.code).toBe(0);
+      // Silence is what made this unrecoverable in practice: the user saw a server that answered
+      // nothing and no reason why.
+      expect(leader.stderr()).toContain('stdio transport error');
+
+      await waitFor(() => follower.stderr().includes('became LEADER'), 'follower takeover', 9_000);
+      expect(follower.exited()).toBeNull();
     },
   );
 });
