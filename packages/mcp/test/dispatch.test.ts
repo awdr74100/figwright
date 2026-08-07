@@ -76,8 +76,10 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
-            // Answers by invoking onServed the way the real relay does — synchronously, naming the
-            // session that handled this request.
+            // Models the real relay's timing: the answer arrives on a socket event (a macrotask
+            // away), and onServed fires only after that await — inside sendRequest's own async
+            // context. A fake that called onServed synchronously hid a live bug where the callback
+            // ran in the socket's context and reached nobody.
             sendRequest: async (
               _tool: string,
               _args: unknown,
@@ -85,6 +87,7 @@ describe('dispatchTool', () => {
               _sessionId?: string,
               onServed?: (served: string | undefined) => void,
             ): Promise<unknown> => {
+              await new Promise(resolve => setTimeout(resolve, 0));
               onServed?.('sess-that-served');
               return { ok: true };
             },

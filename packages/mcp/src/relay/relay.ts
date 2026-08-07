@@ -47,8 +47,9 @@ interface Pending {
   // The session this request was actually dispatched to (set in dispatchPending). Scanned by
   // sessionHasInflight so a busy plugin's heartbeat timeout is deferred rather than closing the socket.
   dispatchedToSessionId: string | undefined;
-  // Fired with that session the moment this request is answered — see sendRequest's `onServed`.
-  onServed: ((servingSessionId: string | undefined) => void) | undefined;
+  // Filled with that session as the response lands, and read by the awaiting caller — per request,
+  // so concurrent calls cannot observe each other's. See sendRequest's `onServed`.
+  served: { sessionId: string | undefined };
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -107,25 +108,31 @@ export class Relay {
     await new Promise<void>(resolve => this.wss.close(() => resolve()));
   }
 
-  sendRequest(
+  async sendRequest(
     method: string,
     params?: unknown,
     timeoutMs: number = DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS,
     sessionId?: string,
     /**
-     * Called with the session that served this request, at the moment it is answered.
+     * Called with the session that served this request, once it is answered.
      *
-     * A callback rather than a "who served last?" getter read after the await: `ws` can emit
-     * several messages within one tick, and every resolution's continuation runs only once
-     * microtasks drain — so two concurrent calls to plugins on different builds would both read
-     * whichever finished last, and a warning attributed to the wrong plugin is worse than none.
-     * Fired synchronously before resolving, leaving no window at all.
+     * Recorded per request as the response lands, then invoked here — after the await, inside
+     * `sendRequest`'s own async context, which is the caller's. Both halves of that matter and each
+     * was got wrong once:
+     *
+     * - Recording per request rather than in a shared "who served last?" field means two concurrent
+     *   calls to plugins on different builds cannot read each other's answer.
+     * - Invoking it _here_ rather than from the socket handler is what lets the caller attribute the
+     *   result at all. The handler runs in the socket's async context, so anything context-scoped a
+     *   caller set up (`captureSkew`) is invisible from there — a callback fired at that point
+     *   reaches nobody, which is precisely what shipped until an end-to-end test caught it.
      */
     onServed?: (servingSessionId: string | undefined) => void,
   ): Promise<unknown> {
     const id = newId();
     this.lastRequestAtMs = Date.now();
-    return new Promise<unknown>((resolve, reject) => {
+    const served: { sessionId: string | undefined } = { sessionId: undefined };
+    const result = await new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`plugin request timeout (method=${method})`));
@@ -139,7 +146,7 @@ export class Relay {
         dispatched: false,
         pinnedSessionId: sessionId,
         dispatchedToSessionId: undefined,
-        onServed,
+        served,
       };
       this.pending.set(id, entry);
 
@@ -172,6 +179,8 @@ export class Relay {
         this.opts.log(`[relay] queued ${method} (no plugin connected)`);
       }
     });
+    onServed?.(served.sessionId);
+    return result;
   }
 
   /**
@@ -450,8 +459,10 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
-        // Before resolving, so the attribution cannot be overtaken by another call finishing first.
-        p.onServed?.(p.dispatchedToSessionId);
+        // Recorded, not dispatched: this runs in the socket's async context, where anything the
+        // caller scoped to its own tool call is out of reach. sendRequest reports it after the
+        // await instead.
+        p.served.sessionId = p.dispatchedToSessionId;
         p.resolve(env.result);
       }
       return;

@@ -54,6 +54,8 @@ export interface FakePluginOptions {
   port: number;
   sessionId?: string;
   handlers: Record<string, (params: unknown) => unknown>;
+  /** Defaults to a version the server is happy with; override to exercise the skew warning. */
+  clientVersion?: string;
 }
 
 export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSocket> => {
@@ -82,9 +84,9 @@ export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSoc
             method: SystemMethod.Hello,
             params: {
               clientType: 'plugin',
-              // Must satisfy the relay's plugin floor. MIN_PLUGIN_VERSION always does: the floor
-              // actually applied is capped at the server's own version, so this is never below it.
-              clientVersion: MIN_PLUGIN_VERSION,
+              // MIN_PLUGIN_VERSION is always accepted without a warning: the threshold actually
+              // applied is capped at the server's own version, so this is never below it.
+              clientVersion: opts.clientVersion ?? MIN_PLUGIN_VERSION,
               protocolVersion: PROTOCOL_VERSION,
             },
           }),
