@@ -195,6 +195,12 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect(instructions).toContain('get_screenshot');
     // Clients may put this in the system prompt of every session, so its size is a running cost.
     expect(instructions?.length).toBeLessThan(2_000);
+
+    // Every tool it names must exist. Guidance that points at a renamed or removed tool is worse
+    // than none: the model follows it and calls something that is not there.
+    const cited = [...new Set([...(instructions ?? '').matchAll(/`([a-z_]+)`/g)].map(m => m[1]))];
+    expect(cited.length).toBeGreaterThan(0);
+    expect(cited.filter(name => !tools.some(t => t.name === name))).toEqual([]);
   });
 
   it('advertises exactly the registered tool set', () => {
