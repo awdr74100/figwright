@@ -322,8 +322,9 @@ export class RelayClient {
         const result = envelope.result as HelloResult;
         cleanup();
         this.hasConnected = true;
-        // A server that accepts this build clears the refusal: the user may have downgraded the
-        // server, or a newer leader may have taken over the port.
+        // Defensive: a build that got in is not refused. Unreachable while `connect()` is called
+        // once on mount (a refusal stops the loop, so nothing probes again), but it keeps the flag
+        // truthful for any future caller that reconnects a live client.
         this.refused = false;
         this.socket = ws;
         this.startHeartbeat(ws);
@@ -468,9 +469,9 @@ export class RelayClient {
           }
           return;
         }
-        // That probe reached a server and was refused for being too old. Retrying re-offers the
-        // same handshake to the same answer, so leave the loop and let the banner stand; a session
-        // that had been live lands here too, when the server it was talking to is upgraded past it.
+        // That probe reached a server that cannot exchange envelopes with this build at all.
+        // Retrying re-offers the same handshake to the same answer, so leave the loop and let the
+        // banner stand until the plugin is replaced.
         if (this.refused) {
           this.update({ status: 'disconnected' });
           return;

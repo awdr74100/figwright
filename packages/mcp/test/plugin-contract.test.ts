@@ -35,10 +35,21 @@ const write = (contract: RecordedContract): void => {
 
 const derived = derivePluginContract();
 
-// Re-record on request, or on first run. Done here rather than inside a test so the assertions
-// below stay unconditional — the report is what gets asserted, not the control flow around it.
-if (!existsSync(CONTRACT_PATH) || process.env.UPDATE_PLUGIN_CONTRACT === '1') {
+// Re-record only when asked. Done here rather than inside a test so the assertions below stay
+// unconditional — the report is what gets asserted, not the control flow around it.
+//
+// Deliberately NOT "write it if it is missing": a gate that regenerates its own baseline passes
+// while proving nothing, which is how a deleted or badly-merged file would turn every subsequent
+// argument change invisible. Missing is a failure, and says how to fix it.
+if (process.env.UPDATE_PLUGIN_CONTRACT === '1') {
   write({ minPluginVersion: MIN_PLUGIN_VERSION, tools: derived });
+}
+if (!existsSync(CONTRACT_PATH)) {
+  throw new Error(
+    `${CONTRACT_PATH} is missing — it is committed, so this is a deleted or unmerged file, not a ` +
+      'first run. Restore it from git; regenerate only if you know the recorded surface is wrong: ' +
+      'UPDATE_PLUGIN_CONTRACT=1 pnpm test plugin-contract && pnpm format',
+  );
 }
 
 const recorded = JSON.parse(readFileSync(CONTRACT_PATH, 'utf8')) as RecordedContract;
