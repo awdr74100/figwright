@@ -181,7 +181,43 @@ for (const prompt of PROMPTS) {
   );
 }
 
-const transport = new StdioServerTransport();
+/**
+ * A stdio transport that reports its own death.
+ *
+ * The SDK closes this transport when a read fails fatally — reachably today when an inbound message
+ * exceeds the 10MB read buffer, which `import_image`'s base64 `data` can do. Closing only detaches
+ * the stdin listeners and pauses the stream: it emits neither 'end' nor 'close', so none of
+ * wireShutdown's triggers fire. The process then survives as a leader that can no longer hear its
+ * client while still holding the relay port — a follower behind it can never take over, and nothing
+ * is logged. Reporting the close routes that silent dead end into the ordinary shutdown path, after
+ * which the port frees and a follower is promoted on its next tick.
+ *
+ * Overriding close() rather than onclose is deliberate: whoever owns the connection assigns onclose
+ * for its own bookkeeping, so it is not ours to take.
+ */
+class SelfReportingStdioTransport extends StdioServerTransport {
+  constructor(private readonly onClosed: () => void) {
+    super();
+  }
+
+  override async close(): Promise<void> {
+    await super.close();
+    this.onClosed();
+  }
+}
+
+// Deferred because the trigger only exists once wireShutdown has run, and that needs the transport.
+let triggerShutdown = (): void => {};
+const transport = new SelfReportingStdioTransport(() => {
+  triggerShutdown();
+});
+// Assigned before connect, which chains rather than replaces it. Without this a transport-level
+// failure is discarded entirely — the SDK's own default is to forward to a handler nobody set — so
+// the one message naming the cause (e.g. "ReadBuffer exceeded maximum size of 10485760 bytes")
+// never reaches the stderr the user is reading.
+transport.onerror = (error: Error): void => {
+  log(`[figwright] stdio transport error: ${error.message}`);
+};
 await mcp.connect(transport);
 
 const roleDetail = node.isLeader()
@@ -198,12 +234,14 @@ const shutdown = async (): Promise<void> => {
   await node.stop();
   process.exit(0);
 };
-// Exit on SIGINT/SIGTERM and on stdin EOF. stdin closes when the client that spawned us goes away
-// (including a crash that sends no signal); without this the process would linger holding the relay
-// port as a stale "zombie" leader serving an old build. wireShutdown runs shutdown at most once.
-// hardExit is the backstop for the graceful path itself stalling (e.g. a close waiting on
-// connections that never drain) — exit code 1 marks the forced, non-clean variant.
-wireShutdown({
+// Exit on SIGINT/SIGTERM, on stdin EOF, and on the transport dying under us. stdin closes when the
+// client that spawned us goes away (including a crash that sends no signal); without this the
+// process would linger holding the relay port as a stale "zombie" leader serving an old build.
+// wireShutdown runs shutdown at most once, so the transport trigger is safe to fire during our own
+// shutdown — which closes that same transport. hardExit is the backstop for the graceful path
+// itself stalling (e.g. a close waiting on connections that never drain) — exit code 1 marks the
+// forced, non-clean variant.
+triggerShutdown = wireShutdown({
   proc: process,
   stdin: process.stdin,
   shutdown,
