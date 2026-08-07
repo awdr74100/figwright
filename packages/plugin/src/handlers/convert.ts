@@ -64,11 +64,15 @@ export const toFigmaLineHeight = (lh: SerializedLineHeight): LineHeight => {
   return { unit: lh.unit as 'PIXELS' | 'PERCENT', value: lh.value };
 };
 
-/** Wire variable value → Figma VariableValue (alias / color / primitive). */
+/** Wire variable value → Figma VariableValue (alias / color / easing / primitive). */
 export const toFigmaVariableValue = (value: SerializedVariableValue): VariableValue => {
   if (typeof value === 'object' && value !== null) {
     if ('r' in value) return { r: value.r, g: value.g, b: value.b, a: value.a };
-    return { type: 'VARIABLE_ALIAS', id: value.id };
+    // Only an alias carries `id`; an EASING value carries its own `type` (EASE_IN / CUSTOM_SPRING /
+    // …) instead. Keying on `id` rather than falling through keeps an easing curve from being turned
+    // into an alias with `id: undefined`, which Figma would reject.
+    if ('id' in value) return { type: 'VARIABLE_ALIAS', id: value.id };
+    return value as unknown as VariableValue;
   }
   return value;
 };

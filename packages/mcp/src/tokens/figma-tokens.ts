@@ -1,6 +1,7 @@
 import {
   type GetStylesResult,
   type GetVariableDefsResult,
+  type SerializedMotionEasing,
   type SerializedVariable,
   type SerializedVariableCollection,
   type SerializedVariableValue,
@@ -23,7 +24,7 @@ export interface FigmaToken {
   name: string;
   /** Resolved value at the collection's default mode. */
   value: FigmaTokenValue;
-  /** Figma resolvedType: COLOR | FLOAT | STRING | BOOLEAN. */
+  /** Figma resolvedType: COLOR | FLOAT | STRING | BOOLEAN | EASING | TIMING. */
   type: string;
   /**
    * Display name of the variable's collection, e.g. "font" / "color" / "size". Lets the join
@@ -52,6 +53,26 @@ const isRgba = (
   val: SerializedVariableValue,
 ): val is { r: number; g: number; b: number; a: number } =>
   typeof val === 'object' && val !== null && 'r' in val && 'g' in val && 'b' in val;
+
+/**
+ * An EASING variable's curve flattened to a scalar, since a token value is one. A custom bezier
+ * becomes the CSS `cubic-bezier(...)` literal — lossless and what a code-side easing token actually
+ * looks like — and a custom spring keeps its bounce rather than dropping it. Every other curve is a
+ * named Figma preset, so the name is the whole value.
+ *
+ * Preset names stay as Figma spells them instead of being mapped onto CSS keywords: only a few have
+ * a real CSS counterpart (BOUNCY, GENTLE, HOLD and the BACK curves have none), and inventing one
+ * would assert an equivalence Figma never stated. The name join still matches on the variable
+ * name.
+ */
+const formatEasing = (val: SerializedMotionEasing): string => {
+  const bezier = val.easingFunctionCubicBezier;
+  if (bezier !== undefined) {
+    return `cubic-bezier(${bezier.x1}, ${bezier.y1}, ${bezier.x2}, ${bezier.y2})`;
+  }
+  if (val.easingFunctionSpring !== undefined) return `spring(${val.easingFunctionSpring.bounce})`;
+  return val.type;
+};
 
 /** The mode being resolved, carried across alias hops so Light keeps chasing Light. */
 interface ModeContext {
@@ -115,6 +136,8 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
       return target === undefined ? null : resolve(target, ctx, seen);
     }
     if (isRgba(raw)) return toHex(raw, raw.a);
+    // The only object-shaped value left is an EASING curve — flatten it to a scalar token value.
+    if (typeof raw === 'object' && raw !== null) return formatEasing(raw);
     return raw;
   };
 

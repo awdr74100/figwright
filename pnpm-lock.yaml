@@ -86,8 +86,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@figma/plugin-typings':
-        specifier: ^1.132.0
-        version: 1.132.0
+        specifier: ^1.133.0
+        version: 1.133.0
       '@figwright/shared':
         specifier: workspace:*
         version: link:../shared
@@ -157,8 +157,8 @@ packages:
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
-  '@figma/plugin-typings@1.132.0':
-    resolution: {integrity: sha512-yzFtPhAc/o1iQ/vjwFKFNBob1giUJC1E539XGvqBCXgChp3SYbivcIm1fXeEqIPIEmUWseBIr2NnX45acKUKXQ==}
+  '@figma/plugin-typings@1.133.0':
+    resolution: {integrity: sha512-MAM1zACY7JB18gO6B0ZaMquCk/xPhbk4Dkug3KGTN7H/M3fO2tZ0h/05b1umDiKA/P1ZEXbLraNyffaVFkFpXw==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -2303,7 +2303,7 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@figma/plugin-typings@1.132.0': {}
+  '@figma/plugin-typings@1.133.0': {}
 
   '@isaacs/cliui@8.0.2':
     dependencies:

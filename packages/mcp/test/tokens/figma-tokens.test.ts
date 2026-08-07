@@ -39,6 +39,39 @@ describe('resolveFigmaTokens', () => {
     expect(result[0]?.collection).toBe('Tokens'); // collection name carried through for the join
   });
 
+  // An EASING variable's value is an object, but a token value is a scalar — it must be flattened
+  // rather than handed through (which used to be a type error) or fed to the color path.
+  it('flattens EASING variables to a scalar token value', () => {
+    const mkVar = (id: string, value: unknown): GetVariableDefsResult['variables'][number] =>
+      ({
+        id,
+        name: `motion/${id}`,
+        key: `k${id}`,
+        resolvedType: 'EASING',
+        collectionId: 'col1',
+        valuesByMode: { m1: value },
+      }) as GetVariableDefsResult['variables'][number];
+
+    const result = resolveFigmaTokens(
+      defs({
+        variables: [
+          mkVar('preset', { type: 'EASE_IN_AND_OUT' }),
+          mkVar('bez', {
+            type: 'CUSTOM_CUBIC_BEZIER',
+            easingFunctionCubicBezier: { x1: 0.2, y1: 0, x2: 0.8, y2: 1 },
+          }),
+          mkVar('spring', { type: 'CUSTOM_SPRING', easingFunctionSpring: { bounce: 0.4 } }),
+        ],
+      }),
+    );
+
+    expect(result[0]).toMatchObject({ type: 'EASING', value: 'EASE_IN_AND_OUT' });
+    // a custom bezier keeps every control point, in the CSS form a code-side token would use
+    expect(result[1]?.value).toBe('cubic-bezier(0.2, 0, 0.8, 1)');
+    // the spring's bounce survives instead of collapsing to the bare type name
+    expect(result[2]?.value).toBe('spring(0.4)');
+  });
+
   it('keeps FLOAT / STRING / BOOLEAN values as-is', () => {
     const result = resolveFigmaTokens(
       defs({

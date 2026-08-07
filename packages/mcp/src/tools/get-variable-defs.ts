@@ -9,7 +9,8 @@ export const getVariableDefsTool: ToolSpec = {
   description:
     "Return the document's local variables as { collections, variables }. Each collection lists its modes " +
     'and defaultModeId; each variable lists its resolvedType and valuesByMode (primitives, RGBA colors, ' +
-    'or { type: "VARIABLE_ALIAS", id } references to other variables).',
+    '{ type: "VARIABLE_ALIAS", id } references to other variables, or — for an EASING variable — an ' +
+    'easing curve { type, easingFunctionCubicBezier?, easingFunctionSpring? }).',
   inputSchema: z.object({}),
   kind: 'read',
 };

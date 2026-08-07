@@ -1,13 +1,35 @@
-import { type GetVariableDefsResult, type SerializedVariableValue, toHex } from '@figwright/shared';
+import {
+  type GetVariableDefsResult,
+  type SerializedMotionEasing,
+  type SerializedVariableValue,
+  toHex,
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeCodeSyntax } from '../serializer.js';
+
+const serializeMotionEasing = (easing: MotionEasing): SerializedMotionEasing => {
+  const out: SerializedMotionEasing = { type: easing.type };
+  const bezier = easing.easingFunctionCubicBezier;
+  if (bezier !== undefined) {
+    out.easingFunctionCubicBezier = { x1: bezier.x1, y1: bezier.y1, x2: bezier.x2, y2: bezier.y2 };
+  }
+  if (easing.easingFunctionSpring !== undefined) {
+    out.easingFunctionSpring = { bounce: easing.easingFunctionSpring.bounce };
+  }
+  return out;
+};
 
 const serializeVariableValue = (value: VariableValue): SerializedVariableValue => {
   if (typeof value === 'object' && value !== null) {
     if ('type' in value && value.type === 'VARIABLE_ALIAS') {
       return { type: 'VARIABLE_ALIAS', id: value.id };
     }
+    // An EASING variable's value is a MotionEasing: it carries a `type` but no color channels, so it
+    // has to be caught before the color fallback below. That fallback casts whatever is left to RGB,
+    // which for an easing curve yields r/g/b: undefined and a "#NANNANNAN" hex — a fabricated color
+    // rather than a missing field, which no gate would flag downstream.
+    if ('type' in value) return serializeMotionEasing(value);
     const color = value as RGB | RGBA;
     const a = 'a' in color ? color.a : 1;
     // hex mirrors get_design_context's globalVars (#RRGGBB / #RRGGBBAA) so a bound color resolves in

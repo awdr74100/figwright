@@ -23,15 +23,19 @@ const coerceToResolvedType = (raw: unknown, resolvedType: VariableResolvedDataTy
       throw new TypeError(`set_variable_value: "${raw}" is not valid JSON`);
     }
   }
-  if (resolvedType === 'FLOAT') {
+  // TIMING is a duration, so it coerces exactly like FLOAT — a bare string can only mean a number.
+  // Figma currently rejects writing TIMING/EASING at all (see create-variable.ts), so these two
+  // arms only shape the value on its way to that rejection; they are here for when it opens up.
+  if (resolvedType === 'FLOAT' || resolvedType === 'TIMING') {
     const n = Number(raw);
     if (Number.isNaN(n)) throw new TypeError(`set_variable_value: "${raw}" is not a number`);
     return n;
   }
   if (resolvedType === 'BOOLEAN') return raw === 'true';
-  if (resolvedType === 'COLOR') {
-    // A COLOR value must arrive as a JSON object (RGBA or alias); a bare string is invalid.
-    throw new TypeError(`set_variable_value: COLOR value "${raw}" is not valid JSON`);
+  if (resolvedType === 'COLOR' || resolvedType === 'EASING') {
+    // COLOR (RGBA or alias) and EASING (a MotionEasing curve) must both arrive as a JSON object —
+    // the branch above already returned for anything that parsed, so a bare string here is invalid.
+    throw new TypeError(`set_variable_value: ${resolvedType} value "${raw}" is not valid JSON`);
   }
   return raw; // STRING
 };

@@ -145,6 +145,48 @@ describe('get_variable_defs handler', () => {
     expect(result.variables[2]?.codeSyntax).toBeUndefined();
   });
 
+  it('serializes an EASING value as a curve, not as a color', async () => {
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [],
+        [
+          {
+            id: 'V:5',
+            name: 'motion/enter',
+            key: 'vk5',
+            resolvedType: 'EASING',
+            variableCollectionId: 'VC:1',
+            valuesByMode: {
+              preset: { type: 'EASE_IN_AND_OUT' },
+              bezier: {
+                type: 'CUSTOM_CUBIC_BEZIER',
+                easingFunctionCubicBezier: { x1: 0.2, y1: 0, x2: 0.8, y2: 1 },
+              },
+              spring: { type: 'CUSTOM_SPRING', easingFunctionSpring: { bounce: 0.4 } },
+            },
+          },
+        ],
+      ),
+    );
+    const result = (await handler(undefined)) as GetVariableDefsResult;
+    const values = result.variables[0]?.valuesByMode;
+
+    // The pre-1.133 code had no easing branch: every one of these fell through to the color cast and
+    // came out as { a: 1, hex: '#NANNANNAN' } with undefined channels.
+    expect(values?.preset).toEqual({ type: 'EASE_IN_AND_OUT' });
+    expect(values?.bezier).toEqual({
+      type: 'CUSTOM_CUBIC_BEZIER',
+      easingFunctionCubicBezier: { x1: 0.2, y1: 0, x2: 0.8, y2: 1 },
+    });
+    expect(values?.spring).toEqual({
+      type: 'CUSTOM_SPRING',
+      easingFunctionSpring: { bounce: 0.4 },
+    });
+    // the optional payloads stay absent rather than being emitted as undefined
+    expect(values?.preset).not.toHaveProperty('easingFunctionCubicBezier');
+    expect(values?.preset).not.toHaveProperty('easingFunctionSpring');
+  });
+
   it('passes primitive values through unchanged', async () => {
     const handler = createGetVariableDefsHandler(
       fakeFigma(

@@ -88,6 +88,35 @@ describe('set_variable_value handler', () => {
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { type: 'VARIABLE_ALIAS', id: 'V:9' });
   });
 
+  // An EASING curve is an object with a `type` but no `id`. Before 1.133 the converter treated every
+  // non-color object as an alias, which turned this into { type: 'VARIABLE_ALIAS', id: undefined }.
+  // Real Figma rejects writing EASING/TIMING today, so this covers the conversion only — the value
+  // reaching setValueForMode intact is what we control; whether Figma accepts it is not.
+  it('passes an EASING curve through instead of mangling it into an alias', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'motion/enter', resolvedType: 'EASING', setValueForMode }),
+    );
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: { type: 'CUSTOM_SPRING', easingFunctionSpring: { bounce: 0.4 } },
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', {
+      type: 'CUSTOM_SPRING',
+      easingFunctionSpring: { bounce: 0.4 },
+    });
+  });
+
+  it('coerces a stringified TIMING value to a number, like FLOAT', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'motion/duration', resolvedType: 'TIMING', setValueForMode }),
+    );
+    await handler({ variableId: 'V:0', modeId: 'M:0', value: '250' });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', 250);
+  });
+
   it('rejects a stringified FLOAT that is not a number', async () => {
     const variable = {
       id: 'V:0',
