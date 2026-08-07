@@ -12,6 +12,7 @@ import {
   type ErrorEnvelope,
   type HelloParams,
   type HelloResult,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   type ResponseEnvelope,
@@ -51,7 +52,7 @@ const startRelay = async (
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
   const port = (server.address() as AddressInfo).port;
   const relay = new Relay({
-    serverVersion: 'test-1.0.0',
+    serverVersion: '1.0.0',
     server,
     heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? 60_000,
     heartbeatMaxMisses: overrides.heartbeatMaxMisses ?? 2,
@@ -78,7 +79,7 @@ const nextMessage = (ws: WebSocket): Promise<ArrayBuffer> =>
 
 const helloParams = (overrides: Partial<HelloParams> = {}): HelloParams => ({
   clientType: 'plugin',
-  clientVersion: '0.0.0',
+  clientVersion: MIN_PLUGIN_VERSION,
   protocolVersion: PROTOCOL_VERSION,
   ...overrides,
 });
@@ -139,7 +140,7 @@ describe('Relay hello loop', () => {
     expect(res.kind).toBe('res');
     expect(res.id).toBe('h1');
     const result = res.result as HelloResult;
-    expect(result.serverVersion).toBe('test-1.0.0');
+    expect(result.serverVersion).toBe('1.0.0');
     expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(result.sessionResumed).toBe(false);
     ws.close();
@@ -191,6 +192,70 @@ describe('Relay hello loop', () => {
     expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
     expect(res.error.message).toMatch(/protocol mismatch/i);
     await new Promise(r => ws.once('close', r));
+  });
+
+  it('refuses a plugin below the version floor, naming both versions and the way out', async () => {
+    // The connection is refused rather than degraded because a plugin below the floor drops
+    // arguments it predates and still answers { ok: true } — a served one writes the wrong thing
+    // and reports success.
+    const { port } = await startRelay();
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ErrorEnvelope;
+    expect(res.kind).toBe('err');
+    expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
+    expect(res.error.message).toMatch(/plugin too old/i);
+    // Actionable on its own: what it saw, what it needs, and what to do about it.
+    expect(res.error.message).toContain('0.0.1');
+    expect(res.error.message).toContain(MIN_PLUGIN_VERSION);
+    expect(res.error.message).toMatch(/re-import/i);
+    await new Promise(r => ws.once('close', r));
+  });
+
+  it('refuses a plugin whose version cannot be identified', async () => {
+    const { port } = await startRelay();
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: 'nightly' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ErrorEnvelope;
+    expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
+    await new Promise(r => ws.once('close', r));
+  });
+
+  it('admits a plugin newer than the server', async () => {
+    // Skew in this direction is safe: a newer plugin understands every argument an older server
+    // sends, so refusing it would cost the user a working session for nothing.
+    const { port } = await startRelay();
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '99.0.0' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+    expect(res.kind).toBe('res');
   });
 
   it('responds to client-initiated $ping with ok result', async () => {

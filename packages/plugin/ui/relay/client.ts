@@ -291,7 +291,13 @@ export class RelayClient {
           // A hello rejection (e.g. a protocol-version mismatch) is a concrete, actionable reason.
           // Record it so the UI surfaces "update your plugin" rather than the generic "no server
           // found", and so the reconnect path can preserve it (see connect()).
-          this.update({ lastError: envelope.error.message });
+          this.update({
+            lastError: envelope.error.message,
+            // A version refusal cannot be retried away, so it is held separately from the churn of
+            // an ordinary failed attempt and surfaced in the header until the plugin is replaced.
+            blockedReason:
+              envelope.error.code === ErrorCode.ProtocolMismatch ? envelope.error.message : null,
+          });
           fail(`hello rejected: ${envelope.error.message}`);
           return;
         }
@@ -312,6 +318,7 @@ export class RelayClient {
           sessionResumed: result.sessionResumed,
           serverVersion: result.serverVersion,
           lastError: null,
+          blockedReason: null,
           connectedAt: Date.now(),
         });
         this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);

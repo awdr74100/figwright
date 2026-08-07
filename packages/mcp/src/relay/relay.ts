@@ -7,6 +7,7 @@ import {
   createResponse,
   decodeEnvelope,
   encodeEnvelope,
+  checkPluginCompatibility,
   type Envelope,
   ErrorCode,
   HEARTBEAT_INTERVAL_MS,
@@ -307,13 +308,32 @@ export class Relay {
       return null;
     }
 
-    // Gate protocol compatibility here (the envelope schema no longer enforces it per-message, so the
-    // mismatched peer can decode this rejection). A skew is realistic: the plugin ships as a manually
-    // imported release while the server updates via `npx @latest`.
+    // Two gates, two different questions — both settled once here, at the handshake, the way MCP's
+    // `initialize` settles version before any operation runs. The envelope schema deliberately no
+    // longer enforces either per-message, so a rejected peer can still decode the rejection.
+    //
+    // Wire format: can we understand each other's envelopes at all?
     if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
       const message =
         `protocol mismatch: server speaks ${PROTOCOL_VERSION}, plugin speaks ${parsed.data.protocolVersion} — ` +
         'update the older Figwright component so both match (server: @figwright/mcp, plugin: re-import the latest release)';
+      this.opts.log(`[relay] rejecting plugin — ${message}`);
+      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
+      return null;
+    }
+
+    // Feature set: does this plugin still act on everything this server sends? A plugin below the
+    // floor has handlers that silently drop arguments they predate, and a dropped argument returns
+    // `{ ok: true }` like any success — so this connection has to be refused rather than degraded.
+    // Serving it would mean writes that report success and did something else.
+    const compat = checkPluginCompatibility(parsed.data.clientVersion, this.opts.serverVersion);
+    if (!compat.compatible) {
+      const message =
+        `plugin too old: this server (v${this.opts.serverVersion}) needs the Figwright plugin at ` +
+        `v${compat.required} or newer, but the connected plugin reports v${parsed.data.clientVersion}. ` +
+        'An older plugin ignores arguments it predates and still reports success, so it is refused ' +
+        'rather than served. Re-import the plugin from the latest release ' +
+        '(https://github.com/awdr74100/figwright/releases/latest), then reopen it in Figma.';
       this.opts.log(`[relay] rejecting plugin — ${message}`);
       this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
       return null;

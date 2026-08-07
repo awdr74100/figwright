@@ -22,6 +22,7 @@ const state: RelayClientState = {
   sessionResumed: false,
   serverVersion: '0.3.0',
   lastError: null,
+  blockedReason: null,
   connectedAt: Date.now(),
   reconnectCount: 0,
   totalCalls: 0,
@@ -81,6 +82,27 @@ describe('App window chrome', () => {
   // default to the floating case: a plugin window flashing its own chrome away is worse than the
   // Inspect panel showing it for one frame, and the floating window is the overwhelmingly common
   // case.
+  it('states in the header why the server refused this plugin', () => {
+    // A refusal is the one error retrying cannot clear — the user has to re-import the plugin — so
+    // it has to be legible without opening the Debug tab, which is where every other error lives.
+    contextRef.value = context('default');
+    state.blockedReason =
+      'plugin too old: this server (v0.4.0) needs the Figwright plugin at v0.4.0';
+
+    const wrapper = mount(App);
+
+    expect(wrapper.text()).toContain('plugin too old');
+    state.blockedReason = null;
+  });
+
+  it('shows no refusal banner when the server has not refused anything', () => {
+    contextRef.value = context('default');
+
+    const wrapper = mount(App);
+
+    expect(wrapper.text()).not.toContain('plugin too old');
+  });
+
   it('assumes a floating window until the sandbox has said otherwise', () => {
     contextRef.value = null;
 

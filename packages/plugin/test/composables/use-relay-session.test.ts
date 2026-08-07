@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
     sessionResumed: false,
     serverVersion: null,
     lastError: null,
+    blockedReason: null,
     connectedAt: null,
     reconnectCount: 0,
     totalCalls: 0,

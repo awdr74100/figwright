@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   encodeEnvelope,
   ErrorCode,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   type HelloParams,
@@ -57,10 +58,10 @@ const startLeader = async (
   const http = createServer();
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
   const port = (http.address() as AddressInfo).port;
-  const relay = new Relay({ serverVersion: 'test-1.0.0', server: http });
+  const relay = new Relay({ serverVersion: '1.0.0', server: http });
   const detach = attachLeaderEndpoints(http, {
     relay,
-    serverVersion: 'test-1.0.0',
+    serverVersion: '1.0.0',
     rpcTimeoutMs,
     ...extraDeps,
   });
@@ -114,7 +115,7 @@ const attachFakePlugin = async (
 
   const helloParams: HelloParams = {
     clientType: 'plugin',
-    clientVersion: '0.0.0',
+    clientVersion: MIN_PLUGIN_VERSION,
     protocolVersion: PROTOCOL_VERSION,
   };
   ws.send(
@@ -144,7 +145,7 @@ describe('leader endpoints', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; serverVersion: string; plugins: number };
     expect(body.ok).toBe(true);
-    expect(body.serverVersion).toBe('test-1.0.0');
+    expect(body.serverVersion).toBe('1.0.0');
     expect(body.plugins).toBe(0);
 
     await attachFakePlugin(b, async () => ({ noop: true }));
@@ -251,7 +252,7 @@ describe('leader endpoints', () => {
           method: SystemMethod.Hello,
           params: {
             clientType: 'plugin',
-            clientVersion: '0.0.0',
+            clientVersion: MIN_PLUGIN_VERSION,
             protocolVersion: PROTOCOL_VERSION,
           } satisfies HelloParams,
         }),

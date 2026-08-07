@@ -60,6 +60,14 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
         />
         <PanelBackgroundButton v-if="!embedded" />
       </div>
+      <!-- The server refused this plugin (version floor). Nothing the user does in here fixes it,
+           so it states the reason where they already are rather than in the Debug tab. -->
+      <p
+        v-if="state.blockedReason !== null"
+        class="mt-2 rounded-md bg-raised p-1.5 text-meta wrap-break-word text-danger"
+      >
+        {{ state.blockedReason }}
+      </p>
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>
 

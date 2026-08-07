@@ -46,6 +46,14 @@ export interface RelayClientState {
   /** Server version from the hello handshake, or null until connected (for diagnostics). */
   serverVersion: string | null;
   lastError: string | null;
+  /**
+   * Why the server refused this plugin outright, or null. Distinct from `lastError`, which also
+   * holds the ordinary churn of looking for a server that is not running yet — reconnecting forever
+   * is the correct response to that, and a banner for it would be noise. A refusal is the opposite:
+   * retrying cannot fix it, no reconnect will, and the only way out is the user re-importing the
+   * plugin. So it is kept apart and shown in the header, where they already are.
+   */
+  blockedReason: string | null;
   /** Epoch ms of the current connection, or null while not connected (for uptime). */
   connectedAt: number | null;
   /** How many times the live socket dropped and was re-established. */
@@ -68,6 +76,7 @@ export const initialRelayState = (): RelayClientState => ({
   sessionResumed: false,
   serverVersion: null,
   lastError: null,
+  blockedReason: null,
   connectedAt: null,
   reconnectCount: 0,
   totalCalls: 0,

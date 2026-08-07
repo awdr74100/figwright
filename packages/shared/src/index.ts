@@ -11,4 +11,5 @@ export * from './serialized-node.js';
 export * from './styles.js';
 export * from './tool-budgets.js';
 export * from './variables.js';
+export * from './version.js';
 export * from './writes.js';

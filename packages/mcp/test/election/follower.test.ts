@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   encodeEnvelope,
   ErrorCode,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   type HelloParams,
@@ -45,8 +46,8 @@ const startLeader = async (): Promise<Bound> => {
   const http = createServer();
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
   const port = (http.address() as AddressInfo).port;
-  const relay = new Relay({ serverVersion: 'test-1.0.0', server: http });
-  const detach = attachLeaderEndpoints(http, { relay, serverVersion: 'test-1.0.0' });
+  const relay = new Relay({ serverVersion: '1.0.0', server: http });
+  const detach = attachLeaderEndpoints(http, { relay, serverVersion: '1.0.0' });
   const b: Bound = { http, relay, port, detach, plugins: [] };
   all.push(b);
   return b;
@@ -56,10 +57,10 @@ const startLeaderWithTimeout = async (rpcTimeoutMs: number): Promise<Bound> => {
   const http = createServer();
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
   const port = (http.address() as AddressInfo).port;
-  const relay = new Relay({ serverVersion: 'test-1.0.0', server: http });
+  const relay = new Relay({ serverVersion: '1.0.0', server: http });
   const detach = attachLeaderEndpoints(http, {
     relay,
-    serverVersion: 'test-1.0.0',
+    serverVersion: '1.0.0',
     rpcTimeoutMs,
   });
   const b: Bound = { http, relay, port, detach, plugins: [] };
@@ -104,7 +105,7 @@ const attachFakePlugin = async (
         method: SystemMethod.Hello,
         params: {
           clientType: 'plugin',
-          clientVersion: '0.0.0',
+          clientVersion: MIN_PLUGIN_VERSION,
           protocolVersion: PROTOCOL_VERSION,
         } satisfies HelloParams,
       }),

@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   encodeEnvelope,
   type Envelope,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   SystemMethod,
@@ -81,7 +82,9 @@ export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSoc
             method: SystemMethod.Hello,
             params: {
               clientType: 'plugin',
-              clientVersion: 'fake-0.0.0',
+              // Must satisfy the relay's plugin floor. MIN_PLUGIN_VERSION always does: the floor
+              // actually applied is capped at the server's own version, so this is never below it.
+              clientVersion: MIN_PLUGIN_VERSION,
               protocolVersion: PROTOCOL_VERSION,
             },
           }),

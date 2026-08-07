@@ -64,6 +64,14 @@ export interface PingSessionInfo {
   fileName: string | null;
   pageName: string | null;
   lastActivityAt: number;
+  /**
+   * The plugin build on the other end. A plugin below MIN_PLUGIN_VERSION never gets this far — the
+   * relay refuses it at `$hello` — so this reports the skew that is still allowed: a plugin older
+   * than the server but new enough to act on everything it is sent. Worth surfacing anyway, because
+   * "which halves is this session actually made of" is otherwise only visible inside Figma's
+   * panel.
+   */
+  pluginVersion: string;
 }
 
 export interface PingSessionsInfo {
@@ -148,6 +156,7 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         fileName: s.fileName,
         pageName: s.pageName,
         lastActivityAt: s.lastActivityAt,
+        pluginVersion: s.clientVersion,
       }));
     const sessions: PingSessionsInfo = {
       connectedCount: connected.length,
