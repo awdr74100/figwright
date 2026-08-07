@@ -1,8 +1,15 @@
 import type { ZodRawShape } from 'zod';
 
-// A tool's input schema as a single source of truth: a Zod raw shape. index.ts registers each spec
-// with McpServer.registerTool, which consumes `inputShape` directly and auto-generates the advertised
-// JSON Schema. `.describe()` on a field becomes its JSON Schema description.
+// A tool's input schema as a single source of truth: a Zod raw shape. index.ts wraps it with
+// `z.object()` before handing it to McpServer.registerTool — the SDK takes Standard Schema objects,
+// and the bare-shape overload it still accepts is deprecated. `.describe()` on a field becomes its
+// JSON Schema description.
+//
+// The shape stays raw here because that is all any tool needs: every input is a flat object of
+// independent fields. The four tools with a cross-field rule (`import_image` data-or-url and
+// friends) enforce it in the sandbox, which a `z.object().refine()` could not improve on — Zod drops
+// refinements from the generated JSON Schema, so the model would still learn the rule only from the
+// description and the error, exactly as it does today.
 
 export type ToolKind = 'read' | 'write' | 'local';
 
