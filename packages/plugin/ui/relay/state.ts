@@ -53,7 +53,7 @@ export interface RelayClientState {
    * be noise. This is the opposite: no reconnect changes it, and the only way out is the user
    * updating the plugin. So it is kept apart and shown in the header, where they already are.
    */
-  blockedReason: string | null;
+  versionNotice: string | null;
   /** Epoch ms of the current connection, or null while not connected (for uptime). */
   connectedAt: number | null;
   /** How many times the live socket dropped and was re-established. */
@@ -76,7 +76,7 @@ export const initialRelayState = (): RelayClientState => ({
   sessionResumed: false,
   serverVersion: null,
   lastError: null,
-  blockedReason: null,
+  versionNotice: null,
   connectedAt: null,
   reconnectCount: 0,
   totalCalls: 0,

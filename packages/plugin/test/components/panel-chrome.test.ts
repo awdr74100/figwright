@@ -22,7 +22,7 @@ const state: RelayClientState = {
   sessionResumed: false,
   serverVersion: '0.3.0',
   lastError: null,
-  blockedReason: null,
+  versionNotice: null,
   connectedAt: Date.now(),
   reconnectCount: 0,
   totalCalls: 0,
@@ -86,13 +86,13 @@ describe('App window chrome', () => {
     // A refusal is the one error retrying cannot clear — the user has to re-import the plugin — so
     // it has to be legible without opening the Debug tab, which is where every other error lives.
     contextRef.value = context('default');
-    state.blockedReason =
+    state.versionNotice =
       'plugin too old: this server (v0.4.0) needs the Figwright plugin at v0.4.0';
 
     const wrapper = mount(App);
 
     expect(wrapper.text()).toContain('plugin too old');
-    state.blockedReason = null;
+    state.versionNotice = null;
   });
 
   it('shows no refusal banner when the server has not refused anything', () => {

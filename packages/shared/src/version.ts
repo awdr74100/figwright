@@ -104,12 +104,6 @@ export const compareVersions = (a: string, b: string): number | null => {
   return comparePre(left.pre, right.pre);
 };
 
-export interface PluginCompatibility {
-  compatible: boolean;
-  /** The floor actually applied — see `requiredPluginVersion`. */
-  required: string;
-}
-
 /**
  * The warning shown when a plugin predates the server, worded for whoever reads it — which is an
  * agent about to report a result to its user, not a developer reading a log.
@@ -131,14 +125,15 @@ export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): 
   '(Plugins → Development → Import plugin from manifest).';
 
 /**
- * The floor this server can honestly demand: never newer than the server itself.
+ * The threshold this server can honestly apply: never newer than the server itself.
  *
  * `MIN_PLUGIN_VERSION` names a release that may not exist yet — it is raised in the change that
  * breaks compatibility, which is always some commits ahead of the release that carries it. In that
  * window `packages/mcp/package.json` still holds the _previous_ version, and both halves built from
- * that tree report it, so an uncapped floor would have the dev server reject the dev plugin it was
- * built alongside. Capping at the server's own version says the only sound thing: a plugin that is
- * this server's generation is in lockstep with it, whatever the floor aspires to.
+ * that tree report it, so an uncapped threshold would have the dev server warn about the dev plugin
+ * it was built alongside — a warning that is not just noise but actively false. Capping at the
+ * server's own version says the only sound thing: a plugin of this server's generation is in
+ * lockstep with it, whatever the threshold aspires to.
  */
 export const requiredPluginVersion = (serverVersion: string): string => {
   const order = compareVersions(MIN_PLUGIN_VERSION, serverVersion);
@@ -146,14 +141,14 @@ export const requiredPluginVersion = (serverVersion: string): string => {
   return order <= 0 ? MIN_PLUGIN_VERSION : serverVersion;
 };
 
-/** Decide whether a plugin reporting `pluginVersion` may connect to a server on `serverVersion`. */
-export const checkPluginCompatibility = (
-  pluginVersion: string,
-  serverVersion: string,
-): PluginCompatibility => {
-  const required = requiredPluginVersion(serverVersion);
-  const order = compareVersions(pluginVersion, required);
-  // An unparseable version is not a build this product ships; refuse rather than guess, since the
-  // whole point of the gate is that skew must never proceed silently.
-  return { compatible: order !== null && order >= 0, required };
+/**
+ * Does a plugin reporting `pluginVersion` act on everything a server on `serverVersion` sends?
+ * False means its results carry {@linkcode pluginSkewNotice}; nothing is refused either way.
+ */
+export const checkPluginCompatibility = (pluginVersion: string, serverVersion: string): boolean => {
+  const order = compareVersions(pluginVersion, requiredPluginVersion(serverVersion));
+  // An unparseable version is not a build this product ships. Warn rather than assume it is fine:
+  // the whole point is that skew is never silent, and a version we cannot read is not evidence of
+  // anything.
+  return order !== null && order >= 0;
 };

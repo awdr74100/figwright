@@ -22,7 +22,7 @@ const state = (over: Partial<RelayClientState> = {}): RelayClientState => ({
   sessionResumed: false,
   serverVersion: '0.3.0',
   lastError: null,
-  blockedReason: null,
+  versionNotice: null,
   connectedAt: Date.now(),
   reconnectCount: 0,
   totalCalls: 0,

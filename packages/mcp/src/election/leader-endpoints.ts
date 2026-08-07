@@ -214,8 +214,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
             sessionId,
           );
           // Only the leader holds the relay, so the skew warning has to travel with the result: a
-          // follower has no other way to know which plugin build served its call.
-          const notice = relay.skewNotice(sessionId);
+          // follower has no other way to know which plugin build served its call. Attributed to the
+          // session that actually served it — an unpinned call routes to whoever is most-active.
+          const notice = relay.skewNotice(relay.sessionServing());
           writeMsgpack(res, 200, {
             kind: 'ok',
             requestId,

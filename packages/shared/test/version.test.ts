@@ -75,29 +75,30 @@ describe('pluginSkewNotice', () => {
 });
 
 describe('checkPluginCompatibility', () => {
-  it('accepts a plugin at or above the floor', () => {
-    expect(checkPluginCompatibility('0.4.0', '0.4.0').compatible).toBe(true);
-    expect(checkPluginCompatibility('0.5.0', '0.4.0').compatible).toBe(true);
-    // A plugin newer than the server is fine: it understands every argument an older server sends.
-    expect(checkPluginCompatibility('0.5.0', '0.4.0').compatible).toBe(true);
+  it('is satisfied at or above the threshold', () => {
+    expect(checkPluginCompatibility('0.4.0', '0.4.0')).toBe(true);
+    expect(checkPluginCompatibility('0.4.1', '0.4.0')).toBe(true);
+    // A plugin newer than the server understands every argument an older server sends, so there is
+    // nothing to warn about in that direction.
+    expect(checkPluginCompatibility('0.5.0', '0.4.0')).toBe(true);
   });
 
-  it('refuses a plugin below the floor', () => {
-    const result = checkPluginCompatibility('0.3.0', '0.4.0');
-    expect(result.compatible).toBe(false);
-    expect(result.required).toBe('0.4.0');
+  it('is not satisfied below the threshold', () => {
+    expect(checkPluginCompatibility('0.3.0', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('0.4.0-beta.1', '0.4.0')).toBe(false);
   });
 
-  it('accepts a same-generation plugin while the floor is still ahead of the release', () => {
-    // Development on the change that raised the floor: package.json still says 0.3.0, so both halves
-    // report 0.3.0. Refusing here would break the dev loop for everyone on that branch.
-    expect(checkPluginCompatibility('0.3.0', '0.3.0').compatible).toBe(true);
+  it('is satisfied by a same-generation plugin while the threshold is ahead of the release', () => {
+    // Development on the change that raised the threshold: package.json still says 0.3.0, so both
+    // halves report 0.3.0. Warning here would flag the dev plugin against the server built beside
+    // it — not noise but a false statement.
+    expect(checkPluginCompatibility('0.3.0', '0.3.0')).toBe(true);
   });
 
-  it('refuses a plugin whose version cannot be identified', () => {
-    // Not a build this product ships. The gate exists so skew cannot proceed on a guess, and an
-    // unreadable version is exactly that.
-    expect(checkPluginCompatibility('unknown', '0.4.0').compatible).toBe(false);
-    expect(checkPluginCompatibility('', '0.4.0').compatible).toBe(false);
+  it('is not satisfied by a version it cannot identify', () => {
+    // Not a build this product ships. A version we cannot read is not evidence that anything is
+    // fine, and the whole point is that skew is never silent.
+    expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(false);
+    expect(checkPluginCompatibility('', '0.4.0')).toBe(false);
   });
 });

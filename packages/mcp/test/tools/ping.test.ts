@@ -39,8 +39,7 @@ describe('ping tool', () => {
     expect(result.server.version).toBe('1.0.0');
     expect(result.server.role).toBe(NodeRole.Leader);
     expect(result.server.port).toBe(3055);
-    // Nothing connected, so nothing to say about skew.
-    expect(result.pluginSkew).toBeUndefined();
+    expect(result.sessions?.connectedCount).toBe(0);
   });
 
   it('surfaces a portConflict warning when the node is conflicted', async () => {
@@ -84,6 +83,7 @@ describe('ping tool', () => {
           port: 3055,
           relay: {
             sessions: { connected: () => [sessA, sessB] },
+            sessionServing: () => 'sess-b',
             pickActiveSession: () => sessB,
             skewNotice: () => null,
             sendRequest: async () => pluginInfo,

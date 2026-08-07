@@ -66,8 +66,8 @@ export interface PingSessionInfo {
   lastActivityAt: number;
   /**
    * The plugin build on the other end. Nothing is refused for being old, so this is how "which
-   * halves is this session actually made of" becomes answerable outside Figma's own panel — and it
-   * is what `pluginSkew` is derived from.
+   * halves is this session actually made of" becomes answerable outside Figma's own panel. The
+   * prose warning rides on the tool result itself; this is the fact behind it.
    */
   pluginVersion: string;
 }
@@ -87,11 +87,6 @@ export interface PingResult {
   server: PingServerInfo;
   sessions?: PingSessionsInfo;
   plugin: unknown | null;
-  /**
-   * Present when the routed plugin predates this server, so its results may be incomplete. Every
-   * affected tool result carries the same warning; this is here so a health check states it too.
-   */
-  pluginSkew?: string;
   dispatchError?: string;
 }
 
@@ -179,15 +174,10 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         'ping',
         {},
       );
-      const skew = relay.skewNotice();
-      return {
-        ok: true,
-        hop: 'e2e',
-        server,
-        sessions,
-        plugin,
-        ...(skew === null ? {} : { pluginSkew: skew }),
-      };
+      // No skew warning in here on purpose: every tool result already carries one when it applies,
+      // ping included, and repeating the same paragraph inside the payload it is appended to reads
+      // as two separate problems. `pluginVersion` above is the fact; the warning is the prose.
+      return { ok: true, hop: 'e2e', server, sessions, plugin };
     } catch (err) {
       const dispatchError = err instanceof Error ? err.message : String(err);
       ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);

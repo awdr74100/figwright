@@ -89,14 +89,15 @@ export class RelayClient {
    */
   private hasConnected = false;
   /**
-   * True once a server has refused this build outright (a version floor it does not meet). Unlike
-   * every other connection failure, retrying cannot change the answer — the plugin has to be
-   * replaced — so the back-off loop stops instead of running forever.
+   * True once a server has refused this build outright — which now means only one thing: a
+   * `PROTOCOL_VERSION` mismatch, an envelope format the two sides cannot exchange at all. (Being
+   * _older_ than the server is not refused; it connects and every result carries a warning.)
+   * Retrying cannot change that answer, so the back-off loop stops instead of running forever.
    *
-   * Without this the cost is not theoretical: a refused plugin never sets `hasConnected`, so the
-   * loop takes the cold-start ceiling of 150ms and re-offers the same rejected handshake about
-   * seven times a second, for as long as the panel is open, writing a rejection line into the
-   * server's log each time.
+   * The cost of not stopping is not theoretical: a refused plugin never sets `hasConnected`, so the
+   * loop takes the 150ms cold-start ceiling and re-offers the same rejected handshake about seven
+   * times a second for as long as the panel is open. Measured at 195 sockets in TIME_WAIT, steady
+   * state, from a single tab — which is what ruled out refusing on version skew.
    */
   private refused = false;
   private toolHandler: ToolHandler | null = null;
@@ -306,9 +307,9 @@ export class RelayClient {
           if (envelope.error.code === ErrorCode.ProtocolMismatch) this.refused = true;
           this.update({
             lastError: envelope.error.message,
-            // A version refusal cannot be retried away, so it is held separately from the churn of
-            // an ordinary failed attempt and surfaced in the header until the plugin is replaced.
-            blockedReason: this.refused ? envelope.error.message : null,
+            // A refusal cannot be retried away, so it is held apart from the churn of an ordinary
+            // failed attempt and surfaced in the header until the plugin is replaced.
+            versionNotice: this.refused ? envelope.error.message : null,
           });
           fail(`hello rejected: ${envelope.error.message}`);
           return;
@@ -336,7 +337,7 @@ export class RelayClient {
           // Connected, but the server may have said this build is behind it. That is not a failure
           // — every call still runs — so it belongs in the banner rather than as an error, and it
           // has to survive the successful connect that clears everything else.
-          blockedReason: result.skewNotice ?? null,
+          versionNotice: result.skewNotice ?? null,
           connectedAt: Date.now(),
         });
         this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);

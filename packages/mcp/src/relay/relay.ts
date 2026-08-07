@@ -58,6 +58,8 @@ export class Relay {
   private readonly pending = new Map<string, Pending>();
   private heartbeatDeferrals = 0;
   private lastRequestAtMs = 0;
+  /** Session that served the last completed request — see `sessionServing`. */
+  private lastServingSessionId: string | undefined;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -103,6 +105,15 @@ export class Relay {
       client.terminate();
     }
     await new Promise<void>(resolve => this.wss.close(() => resolve()));
+  }
+
+  /**
+   * The session that served the most recent completed request, or undefined if none has. Read
+   * straight after awaiting `sendRequest` to attribute that call to the plugin that actually
+   * handled it — unpinned calls route to whoever is most-active, which can change between calls.
+   */
+  sessionServing(): string | undefined {
+    return this.lastServingSessionId;
   }
 
   sendRequest(
@@ -162,16 +173,19 @@ export class Relay {
   }
 
   /**
-   * The skew warning for the session routing would pick, or null when the connected plugin is
-   * current. Read per tool call so the notice rides along with every result — the agent has to be
-   * told on the call it is about to act on, not only if it happens to ask.
+   * The skew warning for one session, or null when that plugin is current.
+   *
+   * Takes a session id rather than looking up the active one, because with two Figma files open on
+   * different plugin builds "the active session" can differ between dispatching a call and
+   * answering it — and a warning attributed to the wrong plugin is worse than none. Callers that
+   * have just made a request pass the session that served it (`sessionServing`); `ping` passes the
+   * one it is reporting on.
    */
-  skewNotice(sessionId?: string): string | null {
-    const session =
-      sessionId === undefined ? this.pickActiveSession() : this.sessions.get(sessionId);
+  skewNotice(sessionId: string | undefined): string | null {
+    if (sessionId === undefined) return null;
+    const session = this.sessions.get(sessionId);
     if (session === undefined) return null;
-    const compat = checkPluginCompatibility(session.clientVersion, this.opts.serverVersion);
-    return compat.compatible
+    return checkPluginCompatibility(session.clientVersion, this.opts.serverVersion)
       ? null
       : pluginSkewNotice(session.clientVersion, this.opts.serverVersion);
   }
@@ -353,8 +367,8 @@ export class Relay {
     // second forever, because the "stop retrying" half can only ever live in a plugin new enough not
     // to be refused. What the server can do is make sure nobody is misled: every result this session
     // serves carries the notice below.
-    const compat = checkPluginCompatibility(parsed.data.clientVersion, this.opts.serverVersion);
-    if (!compat.compatible) {
+    const compatible = checkPluginCompatibility(parsed.data.clientVersion, this.opts.serverVersion);
+    if (!compatible) {
       this.opts.log(
         `[relay] plugin "${parsed.data.clientVersion}" predates this server (v${this.opts.serverVersion}); ` +
           'serving it, and marking every result as unverified',
@@ -394,7 +408,7 @@ export class Relay {
       serverVersion: this.opts.serverVersion,
       protocolVersion: PROTOCOL_VERSION,
       sessionResumed: resumed,
-      ...(compat.compatible
+      ...(compatible
         ? {}
         : { skewNotice: pluginSkewNotice(parsed.data.clientVersion, this.opts.serverVersion) }),
     };
@@ -430,6 +444,9 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        // Record before resolving: the awaiting caller reads this synchronously to attribute the
+        // result to the plugin that produced it.
+        this.lastServingSessionId = p.dispatchedToSessionId;
         p.resolve(env.result);
       }
       return;

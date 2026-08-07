@@ -343,7 +343,7 @@ describe('RelayClient', () => {
     await new Promise(resolve => setTimeout(resolve, 250));
 
     expect(sockets.length).toBe(afterConnect);
-    expect(client.getState().blockedReason).toMatch(/plugin too old/i);
+    expect(client.getState().versionNotice).toMatch(/plugin too old/i);
     expect(client.getState().status).toBe('disconnected');
     await client.disconnect();
   });
@@ -369,7 +369,7 @@ describe('RelayClient', () => {
     await client.connect();
 
     expect(client.getState().status).toBe('connected');
-    expect(client.getState().blockedReason).toMatch(/older than this server/i);
+    expect(client.getState().versionNotice).toMatch(/older than this server/i);
     expect(client.getState().lastError).toBeNull();
     await client.disconnect();
   });
@@ -386,7 +386,7 @@ describe('RelayClient', () => {
 
     await client.connect();
 
-    expect(client.getState().blockedReason).toBeNull();
+    expect(client.getState().versionNotice).toBeNull();
     await client.disconnect();
   });
 
@@ -408,7 +408,7 @@ describe('RelayClient', () => {
     await new Promise(resolve => setTimeout(resolve, 250));
 
     expect(sockets.length).toBeGreaterThan(afterConnect);
-    expect(client.getState().blockedReason).toBeNull();
+    expect(client.getState().versionNotice).toBeNull();
     await client.disconnect();
   });
 

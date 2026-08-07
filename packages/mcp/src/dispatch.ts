@@ -2,6 +2,7 @@ import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared'
 
 import type { Follower } from './election/follower.js';
 import type { Node } from './election/node.js';
+import { reportSkew } from './tools/skew-notice.js';
 
 export const DEFAULT_DISPATCH_MAX_ATTEMPTS = 3;
 export const DEFAULT_DISPATCH_RETRY_DELAY_MS = 1_500;
@@ -19,12 +20,6 @@ export interface DispatchContext {
   node: Node;
   follower: Follower;
   log?: (msg: string) => void;
-  /**
-   * Called with the skew warning for the plugin that served a call, or null when it is current.
-   * Both roles report through here — the leader reads its own relay, a follower reads what the
-   * leader attached to the RPC response — so the caller does not have to know which it is.
-   */
-  onSkewNotice?: (notice: string | null) => void;
 }
 
 export class DispatchError extends Error {
@@ -80,7 +75,9 @@ export const dispatchTool = async (
           opts.perCallTimeoutMs ?? getRelayBudget(toolName),
           opts.sessionId,
         );
-        ctx.onSkewNotice?.(leader.relay.skewNotice(opts.sessionId));
+        // Attribute to the session that actually served this call, not to whoever is most-active
+        // now — with two files open on different builds those differ.
+        reportSkew(leader.relay.skewNotice(leader.relay.sessionServing()));
         return result;
       } catch (err) {
         lastError = err as Error;
@@ -98,7 +95,7 @@ export const dispatchTool = async (
       opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
     );
     if (resp.kind === 'ok') {
-      ctx.onSkewNotice?.(resp.notice ?? null);
+      reportSkew(resp.notice ?? null);
       return resp.result;
     }
 

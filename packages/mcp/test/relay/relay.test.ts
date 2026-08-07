@@ -219,8 +219,9 @@ describe('Relay hello loop', () => {
     expect(result.skewNotice).toMatch(/older than this server/i);
     expect(result.skewNotice).toMatch(/silently ignored/i);
     expect(result.skewNotice).toMatch(/update the Figma plugin/i);
-    // And available per call, which is where an agent actually reads it.
-    expect(b.relay.skewNotice()).toMatch(/older than this server/i);
+    // And available per session, which is what a call attributes its result to.
+    const [session] = b.relay.sessions.connected();
+    expect(b.relay.skewNotice(session?.id)).toMatch(/older than this server/i);
     ws.close();
   });
 
@@ -261,7 +262,8 @@ describe('Relay hello loop', () => {
     const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
 
     expect((res.result as HelloResult).skewNotice).toBeUndefined();
-    expect(b.relay.skewNotice()).toBeNull();
+    const [session] = b.relay.sessions.connected();
+    expect(b.relay.skewNotice(session?.id)).toBeNull();
     ws.close();
   });
 

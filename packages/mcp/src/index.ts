@@ -29,7 +29,7 @@ import { ALL_TOOL_SPECS } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
-import { withSkewNotice } from './tools/skew-notice.js';
+import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = 'figwright';
@@ -75,19 +75,8 @@ await election.start();
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
-/**
- * Skew warning for the plugin that served the most recent dispatch, appended to the results of
- * tools that reach the plugin. Process-wide rather than per-call on purpose: it describes the
- * connected plugin build, not the call, so two calls in flight at once would carry the same text
- * anyway and reading the other's value changes nothing.
- */
-let lastSkewNotice: string | null = null;
-const noteSkew = (notice: string | null): void => {
-  lastSkewNotice = notice;
-};
-
 const dispatch = (tool: string, args: unknown): Promise<unknown> =>
-  dispatchTool({ node, follower, log, onSkewNotice: noteSkew }, tool, args);
+  dispatchTool({ node, follower, log }, tool, args);
 
 // A session-pinned dispatcher for multi-call tools: resolve the active plugin once, then route
 // every sub-call to that exact session so they can't drift across plugins if routing flips
@@ -95,8 +84,7 @@ const dispatch = (tool: string, args: unknown): Promise<unknown> =>
 const routedDispatch = async (): Promise<typeof dispatch> => {
   const sessionId = await resolveRoutingSession({ node, follower, log });
   const opts = sessionId === undefined ? {} : { sessionId };
-  return (tool, args) =>
-    dispatchTool({ node, follower, log, onSkewNotice: noteSkew }, tool, args, opts);
+  return (tool, args) => dispatchTool({ node, follower, log }, tool, args, opts);
 };
 
 const textResult = (data: unknown): CallToolResult => ({
@@ -180,7 +168,10 @@ const createMcpServer = (): McpServer => {
     // call, is what replaces the refusal this used to be: the agent is told before it reports
     // success to the user.
     const handler: ToolHandler = async args =>
-      withSkewNotice(await run(normalizeIdArgs(args)), spec.kind, lastSkewNotice);
+      captureSkew(
+        () => run(normalizeIdArgs(args)),
+        (result, notice) => withSkewNotice(result, spec.kind, notice),
+      );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;
     // v2's typing accepts ToolHandler directly, so the result stays checked against CallToolResult.

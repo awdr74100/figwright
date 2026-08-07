@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 
-import { withSkewNotice } from '../../src/tools/skew-notice.js';
+import { captureSkew, reportSkew, withSkewNotice } from '../../src/tools/skew-notice.js';
 
 const result = (text: string): CallToolResult => ({ content: [{ type: 'text', text }] });
 const NOTICE = 'Figwright plugin v0.3.0 is older than this server (v0.4.0).';
@@ -11,6 +11,85 @@ const textOf = (from: CallToolResult, index: number): string => {
   const block = from.content[index];
   return block !== undefined && block.type === 'text' ? block.text : '';
 };
+
+describe('captureSkew', () => {
+  it('scopes a report to the call that caused it', async () => {
+    const captured = await captureSkew(
+      async () => {
+        reportSkew(NOTICE);
+        return result('{}');
+      },
+      (r, notice) => withSkewNotice(r, 'read', notice),
+    );
+
+    expect(captured.content).toHaveLength(2);
+  });
+
+  it('carries the warning on the very first call, not from the call before', async () => {
+    // The predecessor to this was a module-level "last notice seen", which had nothing recorded
+    // when the first call ran — so the first tool call after the server started shipped unwarned.
+    // That is the call most likely to be a write, and the one an agent is most likely to trust.
+    let first: string | null = 'unset';
+    await captureSkew(
+      async () => {
+        reportSkew(NOTICE);
+        return result('{}');
+      },
+      (r, notice) => {
+        first = notice;
+        return r;
+      },
+    );
+
+    expect(first).toBe(NOTICE);
+  });
+
+  it('does not leak a warning into the next call', async () => {
+    await captureSkew(
+      async () => {
+        reportSkew(NOTICE);
+        return result('{}');
+      },
+      r => r,
+    );
+
+    // The plugin was updated between calls; this one must come back clean.
+    let second: string | null = 'unset';
+    await captureSkew(
+      async () => result('{}'),
+      (r, notice) => {
+        second = notice;
+        return r;
+      },
+    );
+
+    expect(second).toBeNull();
+  });
+
+  it('keeps the warning when a call reaches several plugins and any one is old', async () => {
+    // ping and the map tools dispatch more than once; if any plugin involved is out of date the
+    // result as a whole is unverified, so a later clean report must not clear an earlier warning.
+    let notice: string | null = 'unset';
+    await captureSkew(
+      async () => {
+        reportSkew(NOTICE);
+        reportSkew(null);
+        return result('{}');
+      },
+      (r, n) => {
+        notice = n;
+        return r;
+      },
+    );
+
+    expect(notice).toBe(NOTICE);
+  });
+
+  it('ignores a report made outside any call', () => {
+    // Election probes and the leader's own RPC endpoint dispatch with no tool call to attribute to.
+    expect(() => reportSkew(NOTICE)).not.toThrow();
+  });
+});
 
 describe('withSkewNotice', () => {
   it('appends the warning without disturbing the result the agent asked for', () => {

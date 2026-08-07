@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
 import type { Node } from '../src/election/node.js';
+import { captureSkew } from '../src/tools/skew-notice.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
   ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
@@ -17,6 +18,8 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
+            sessionServing: () => undefined,
+            skewNotice: () => null,
             sendRequest: async (name: string, args: unknown) => {
               calls.push({ name, args });
               return { from: 'leader-relay', echoed: args };
@@ -65,6 +68,43 @@ describe('dispatchTool', () => {
     expect(received).toEqual({ tool: 'remote_tool', args: { y: 2 } });
   });
 
+  it('warns on the leader path, attributed to the session that served the call', async () => {
+    // Not the session that is most-active *now*: with two files open on different plugin builds
+    // those differ, and a warning pinned to the wrong plugin is worse than no warning.
+    const asked: (string | undefined)[] = [];
+    const node = makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: {
+            sendRequest: async (): Promise<unknown> => ({ ok: true }),
+            sessionServing: () => 'sess-that-served',
+            skewNotice: (id?: string) => {
+              asked.push(id);
+              return id === 'sess-that-served' ? 'plugin v0.3.0 is older than this server' : null;
+            },
+          },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    let seen: string | null = null;
+
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower: makeFollower({}) }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
+
+    expect(asked).toEqual(['sess-that-served']);
+    expect(seen).toMatch(/older than this server/);
+  });
+
   it('carries the leader’s skew warning back to a follower', async () => {
     // Only the leader holds the relay, so a follower has no way of its own to know which plugin
     // build served the call. Without this the warning would reach some users and not others,
@@ -78,11 +118,20 @@ describe('dispatchTool', () => {
         notice: 'Figwright plugin v0.3.0 is older than this server (v0.4.0).',
       }),
     });
-    const seen: (string | null)[] = [];
+    let seen: string | null = null;
 
-    await dispatchTool({ node, follower, onSkewNotice: n => seen.push(n) }, 'set_fills', {});
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
 
-    expect(seen).toEqual(['Figwright plugin v0.3.0 is older than this server (v0.4.0).']);
+    expect(seen).toMatch(/older than this server/);
   });
 
   it('reports no skew when the leader attaches none', async () => {
@@ -90,11 +139,20 @@ describe('dispatchTool', () => {
     const follower = makeFollower({
       sendRpc: async (): Promise<RpcResponse> => ({ kind: 'ok', requestId: 'r', result: {} }),
     });
-    const seen: (string | null)[] = [];
+    let seen: string | null = 'unset';
 
-    await dispatchTool({ node, follower, onSkewNotice: n => seen.push(n) }, 'set_fills', {});
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
 
-    expect(seen).toEqual([null]);
+    expect(seen).toBeNull();
   });
 
   it('throws DispatchError immediately on non-transient follower error', async () => {
@@ -171,6 +229,8 @@ describe('dispatchTool', () => {
         attempts >= 1
           ? ({
               relay: {
+                sessionServing: () => undefined,
+                skewNotice: () => null,
                 sendRequest: async (): Promise<unknown> => leaderResult,
               },
               http: undefined as never,
@@ -223,6 +283,8 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
+            sessionServing: () => undefined,
+            skewNotice: () => null,
             sendRequest: async (_n: string, _a: unknown, _t?: number, sessionId?: string) => {
               pinned = sessionId;
               return { ok: true };
