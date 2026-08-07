@@ -205,6 +205,10 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
 
         const { requestId, toolName, args, sessionId } = rpc.data;
         try {
+          // Only the leader holds the relay, so the skew warning has to travel back with the result:
+          // a follower has no other way to know which plugin build served its call. Captured as the
+          // request is answered, so it names the session that actually served this one.
+          let notice: string | null = null;
           // Per-tool relay budget (B + margin) by default so a heavy follower-originated call gets the
           // same headroom as a direct one; deps.rpcTimeoutMs overrides (tests).
           const result = await relay.sendRequest(
@@ -212,11 +216,10 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
             args,
             deps.rpcTimeoutMs ?? getRelayBudget(toolName),
             sessionId,
+            served => {
+              notice = relay.skewNotice(served);
+            },
           );
-          // Only the leader holds the relay, so the skew warning has to travel with the result: a
-          // follower has no other way to know which plugin build served its call. Attributed to the
-          // session that actually served it — an unpinned call routes to whoever is most-active.
-          const notice = relay.skewNotice(relay.sessionServing());
           writeMsgpack(res, 200, {
             kind: 'ok',
             requestId,

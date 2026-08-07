@@ -69,15 +69,15 @@ export const dispatchTool = async (
       try {
         // Relay→plugin budget = B + one margin (see getRelayBudget) so the inner sandbox-bridge timer
         // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
+        // Attribution is captured as the request is answered, not read afterwards: two concurrent
+        // calls to plugins on different builds would otherwise both see whichever finished last.
         const result = await leader.relay.sendRequest(
           toolName,
           args,
           opts.perCallTimeoutMs ?? getRelayBudget(toolName),
           opts.sessionId,
+          served => reportSkew(leader.relay.skewNotice(served)),
         );
-        // Attribute to the session that actually served this call, not to whoever is most-active
-        // now — with two files open on different builds those differ.
-        reportSkew(leader.relay.skewNotice(leader.relay.sessionServing()));
         return result;
       } catch (err) {
         lastError = err as Error;

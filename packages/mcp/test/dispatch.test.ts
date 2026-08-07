@@ -18,7 +18,6 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
-            sessionServing: () => undefined,
             skewNotice: () => null,
             sendRequest: async (name: string, args: unknown) => {
               calls.push({ name, args });
@@ -77,8 +76,18 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
-            sendRequest: async (): Promise<unknown> => ({ ok: true }),
-            sessionServing: () => 'sess-that-served',
+            // Answers by invoking onServed the way the real relay does — synchronously, naming the
+            // session that handled this request.
+            sendRequest: async (
+              _tool: string,
+              _args: unknown,
+              _timeout?: number,
+              _sessionId?: string,
+              onServed?: (served: string | undefined) => void,
+            ): Promise<unknown> => {
+              onServed?.('sess-that-served');
+              return { ok: true };
+            },
             skewNotice: (id?: string) => {
               asked.push(id);
               return id === 'sess-that-served' ? 'plugin v0.3.0 is older than this server' : null;
@@ -229,7 +238,6 @@ describe('dispatchTool', () => {
         attempts >= 1
           ? ({
               relay: {
-                sessionServing: () => undefined,
                 skewNotice: () => null,
                 sendRequest: async (): Promise<unknown> => leaderResult,
               },
@@ -283,7 +291,6 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
-            sessionServing: () => undefined,
             skewNotice: () => null,
             sendRequest: async (_n: string, _a: unknown, _t?: number, sessionId?: string) => {
               pinned = sessionId;

@@ -245,6 +245,65 @@ describe('Relay hello loop', () => {
     ws.close();
   });
 
+  it('attributes each concurrent call to the plugin that answered it', async () => {
+    // Two Figma files open on different builds, calls in flight against both. Attribution has to
+    // follow the request, not the relay's current routing: an implementation that asked "who is
+    // most-active?" would give both calls the same answer and mislabel one of them.
+    const b = await startRelay();
+    const oldPlugin = await connect(b.port);
+    const staleId = newId();
+    oldPlugin.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: staleId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(oldPlugin);
+
+    const newPlugin = await connect(b.port);
+    const currentId = newId();
+    newPlugin.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h2',
+          sessionId: currentId,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(newPlugin);
+
+    // Each plugin answers whatever it is asked, back to back.
+    const answer = (ws: WebSocket, sessionId: string): void => {
+      ws.on('message', data => {
+        const env = decodeEnvelope(data as ArrayBuffer);
+        if (env.kind === 'req' && env.method === 'get_document') {
+          ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })));
+        }
+      });
+    };
+    answer(oldPlugin, staleId);
+    answer(newPlugin, currentId);
+
+    const seen = new Map<string, string | null>();
+    await Promise.all([
+      b.relay.sendRequest('get_document', {}, 5000, staleId, served =>
+        seen.set('old', b.relay.skewNotice(served)),
+      ),
+      b.relay.sendRequest('get_document', {}, 5000, currentId, served =>
+        seen.set('new', b.relay.skewNotice(served)),
+      ),
+    ]);
+
+    expect(seen.get('old')).toMatch(/older than this server/i);
+    expect(seen.get('new')).toBeNull();
+  });
+
   it('says nothing about skew for a current plugin', async () => {
     // The warning only means anything if it stays quiet when there is nothing to warn about.
     const b = await startRelay();

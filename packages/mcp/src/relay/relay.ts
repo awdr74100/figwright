@@ -47,6 +47,8 @@ interface Pending {
   // The session this request was actually dispatched to (set in dispatchPending). Scanned by
   // sessionHasInflight so a busy plugin's heartbeat timeout is deferred rather than closing the socket.
   dispatchedToSessionId: string | undefined;
+  // Fired with that session the moment this request is answered — see sendRequest's `onServed`.
+  onServed: ((servingSessionId: string | undefined) => void) | undefined;
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -58,8 +60,6 @@ export class Relay {
   private readonly pending = new Map<string, Pending>();
   private heartbeatDeferrals = 0;
   private lastRequestAtMs = 0;
-  /** Session that served the last completed request — see `sessionServing`. */
-  private lastServingSessionId: string | undefined;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -107,20 +107,21 @@ export class Relay {
     await new Promise<void>(resolve => this.wss.close(() => resolve()));
   }
 
-  /**
-   * The session that served the most recent completed request, or undefined if none has. Read
-   * straight after awaiting `sendRequest` to attribute that call to the plugin that actually
-   * handled it — unpinned calls route to whoever is most-active, which can change between calls.
-   */
-  sessionServing(): string | undefined {
-    return this.lastServingSessionId;
-  }
-
   sendRequest(
     method: string,
     params?: unknown,
     timeoutMs: number = DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS,
     sessionId?: string,
+    /**
+     * Called with the session that served this request, at the moment it is answered.
+     *
+     * A callback rather than a "who served last?" getter read after the await: `ws` can emit
+     * several messages within one tick, and every resolution's continuation runs only once
+     * microtasks drain — so two concurrent calls to plugins on different builds would both read
+     * whichever finished last, and a warning attributed to the wrong plugin is worse than none.
+     * Fired synchronously before resolving, leaving no window at all.
+     */
+    onServed?: (servingSessionId: string | undefined) => void,
   ): Promise<unknown> {
     const id = newId();
     this.lastRequestAtMs = Date.now();
@@ -138,6 +139,7 @@ export class Relay {
         dispatched: false,
         pinnedSessionId: sessionId,
         dispatchedToSessionId: undefined,
+        onServed,
       };
       this.pending.set(id, entry);
 
@@ -178,8 +180,8 @@ export class Relay {
    * Takes a session id rather than looking up the active one, because with two Figma files open on
    * different plugin builds "the active session" can differ between dispatching a call and
    * answering it — and a warning attributed to the wrong plugin is worse than none. Callers that
-   * have just made a request pass the session that served it (`sessionServing`); `ping` passes the
-   * one it is reporting on.
+   * have just made a request pass the session that served it (see sendRequest's `onServed`); `ping`
+   * passes the one it is reporting on.
    */
   skewNotice(sessionId: string | undefined): string | null {
     if (sessionId === undefined) return null;
@@ -444,9 +446,8 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
-        // Record before resolving: the awaiting caller reads this synchronously to attribute the
-        // result to the plugin that produced it.
-        this.lastServingSessionId = p.dispatchedToSessionId;
+        // Before resolving, so the attribution cannot be overtaken by another call finishing first.
+        p.onServed?.(p.dispatchedToSessionId);
         p.resolve(env.result);
       }
       return;

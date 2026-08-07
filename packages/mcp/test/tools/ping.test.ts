@@ -83,7 +83,6 @@ describe('ping tool', () => {
           port: 3055,
           relay: {
             sessions: { connected: () => [sessA, sessB] },
-            sessionServing: () => 'sess-b',
             pickActiveSession: () => sessB,
             skewNotice: () => null,
             sendRequest: async () => pluginInfo,
