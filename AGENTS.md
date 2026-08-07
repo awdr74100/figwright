@@ -80,11 +80,16 @@ Figwright's moat is **grounding fidelity and generality** — how accurately and
 
 ## Releasing
 
-Versioning and changelog are driven by Conventional Commits via **changelogen**:
+Versioning and changelog are driven by Conventional Commits via **changelogen**, behind `scripts/release.mjs`:
 
 ```bash
-pnpm release            # bump @figwright/mcp, write the root CHANGELOG.md, commit + tag vX.Y.Z
-git push --follow-tags  # the tag triggers .github/workflows/release.yml
+pnpm release            # pick the version from a menu, then bump @figwright/mcp,
+                        # write the root CHANGELOG.md, commit + tag vX.Y.Z, and
+                        # offer to push (the push triggers release.yml)
 ```
+
+The menu exists because **changelogen demotes every bump while the version is `0.x`** — its `bumpVersion()` turns major into minor _and_ minor into patch, so a release full of features lands on `0.3.1` and even `changelogen --release --minor` does. An explicit `-r <version>` is the only way to override that before 1.0, which is what the script passes. It re-infers the bump from the same commit set changelogen would changelog, keeps the half of the pre-1.0 rule that is actually conventional (breaking → minor, since 0.x promises no stability), and offers that as the default; `1.0.0` stays in the menu but has to be chosen. It refuses to run on a dirty tree — changelogen only stages `CHANGELOG.md` and `packages/mcp/package.json`, so the tag would otherwise point at a commit missing whatever else is in flight — and on a tag that already exists. There is **no flag or argument that picks the version for you** — cutting a release is meant to be a hands-on act, so the script takes no arguments and refuses to run without a tty rather than falling back to a guess.
+
+The **push is a separate prompt that defaults to no**, because it is the irreversible half: the tag landing on GitHub starts `release.yml`, and npm refuses to reuse a version even after an unpublish. Until you answer it the tag is local, so a wrong version is still `git tag -d` + `git reset --hard HEAD~1` away (the script prints exactly that on decline). Answering yes runs `git push --follow-tags` with an inherited tty, so git can still prompt for your SSH passphrase; if the push fails the tag stays local and the retry command is printed.
 
 The release workflow builds and tests, publishes `@figwright/mcp` to npm (OIDC trusted publishing + provenance), creates the GitHub Release from the changelog, and attaches the Figma plugin as a downloadable zip (manifest + built `dist`) for manual import in Figma dev mode.
