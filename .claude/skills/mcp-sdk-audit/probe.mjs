@@ -106,28 +106,32 @@ const capture = async repo => {
     instructions: init.instructions ?? null,
     toolCount: tools.length,
     promptCount: prompts.length,
-    // Each tool's JSON Schema exactly as the wire carries it, hashed so a diff can name the tools
-    // that moved, with the full schema kept so it can explain how.
+    // Each tool exactly as the wire carries it — the whole object, not a chosen subset. An earlier
+    // version stored only inputSchema and annotations, and so reported "no change" across the v1→v2
+    // upgrade that silently dropped `execution.taskSupport` from all 112 tools, and across a
+    // rewritten tool description. What an audit needs to know is precisely the thing nobody thought
+    // to allowlist, so the allowlist is the bug: capture everything and let the diff find it.
     tools: Object.fromEntries(
       tools
         .map(tool => [
           tool.name,
-          {
-            schemaHash: createHash('sha256')
-              .update(JSON.stringify(tool.inputSchema))
-              .digest('hex')
-              .slice(0, 12),
-            annotations: tool.annotations ?? null,
-            inputSchema: tool.inputSchema,
-          },
+          { hash: createHash('sha256').update(stable(tool)).digest('hex').slice(0, 12), tool },
         ])
         .toSorted(([a], [b]) => a.localeCompare(b)),
     ),
-    prompts: prompts.map(prompt => ({ name: prompt.name, args: prompt.arguments ?? [] })),
+    prompts: prompts.toSorted((a, b) => a.name.localeCompare(b.name)),
     pingResultKeys: Object.keys(ping).toSorted(),
     pingContentTypes: (ping.content ?? []).map(block => block.type),
   };
 };
+
+/** Key-sorted JSON, so member order never registers as a difference the wire cannot express. */
+const stable = value =>
+  JSON.stringify(value, (_key, v) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
 
 const readSnapshot = path => JSON.parse(readFileSync(path, 'utf8'));
 
@@ -170,7 +174,11 @@ const schemaDelta = (before, after) => {
   const changed = [...a]
     .filter(path => b.has(path))
     .filter(path => {
-      const at = source => path.split('.').reduce((node, key) => node?.[key], source);
+      // Segments are dot-joined for object keys and bracketed for array indices (`arguments[0].x`),
+      // so a plain split('.') cannot walk them — it would look up the literal key "arguments[0]",
+      // find nothing, and report every changed leaf inside an array as unlocatable.
+      const at = source =>
+        [...path.matchAll(/[^.[\]]+/g)].reduce((node, [key]) => node?.[key], source);
       const [x, y] = [at(before), at(after)];
       return isLeaf(x) && isLeaf(y) && x !== y;
     });
@@ -202,16 +210,13 @@ const report = (base, after) => {
 
   for (const name of names.filter(n => n in after.tools)) {
     const [a, b] = [base.tools[name], after.tools[name]];
-    if (a.schemaHash !== b.schemaHash) {
-      findings.push(`schema changed — ${name}\n    ${schemaDelta(a.inputSchema, b.inputSchema)}`);
-    }
-    if (JSON.stringify(a.annotations) !== JSON.stringify(b.annotations)) {
-      findings.push(line(`annotations changed — ${name}`, a.annotations, b.annotations));
-    }
+    if (a.hash !== b.hash) findings.push(`tool changed — ${name}\n    ${schemaDelta(a.tool, b.tool)}`);
   }
 
-  if (JSON.stringify(base.prompts) !== JSON.stringify(after.prompts)) {
-    findings.push(line('prompts', base.prompts, after.prompts));
+  // Same treatment the tools get: name the path that moved rather than dumping both lists, which
+  // for a one-word description change is two screens of identical text with the difference buried.
+  if (stable(base.prompts) !== stable(after.prompts)) {
+    findings.push(`prompts changed\n    ${schemaDelta(base.prompts, after.prompts)}`);
   }
 
   console.log(`${base.sdkVersion} → ${after.sdkVersion}`);
