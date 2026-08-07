@@ -85,6 +85,32 @@ describe('captureSkew', () => {
     expect(notice).toBe(NOTICE);
   });
 
+  it('attaches the warning to a failure, where it explains the failure', async () => {
+    // The loudest thing an out-of-date plugin does is answer METHOD_NOT_FOUND for a tool it
+    // predates — nine of them for the last shipped build. Unattributed, an agent reads that as
+    // "this tool is broken" and looks for another way round, which is the same misdirection as a
+    // silent wrong write.
+    await expect(
+      captureSkew(
+        async () => {
+          reportSkew(NOTICE);
+          throw new Error('METHOD_NOT_FOUND: no sandbox handler (method=export_video)');
+        },
+        r => r,
+      ),
+    ).rejects.toThrow(/METHOD_NOT_FOUND[\s\S]*OUT OF DATE[\s\S]*older than this server/);
+  });
+
+  it('leaves a failure untouched when the plugin is current', async () => {
+    const original = new Error('node not found');
+    await expect(
+      captureSkew(
+        () => Promise.reject(original),
+        r => r,
+      ),
+    ).rejects.toBe(original);
+  });
+
   it('ignores a report made outside any call', () => {
     // Election probes and the leader's own RPC endpoint dispatch with no tool call to attribute to.
     expect(() => reportSkew(NOTICE)).not.toThrow();

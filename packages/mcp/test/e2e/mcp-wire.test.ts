@@ -305,6 +305,34 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     }
   }, 30_000);
 
+  it('explains a METHOD_NOT_FOUND from an out-of-date plugin instead of leaving it bare', async () => {
+    // What an old plugin does loudest: nine tools in the last shipped build have no handler in it.
+    // Bare, that error reads as "this tool is broken" and the agent goes looking for another way
+    // round; attributed, the user gets told to update.
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      clientVersion: '0.0.1',
+      // No handler for the tool called below — exactly what a plugin that predates it does.
+      handlers: {},
+    });
+
+    try {
+      const res = await server.send('tools/call', { name: 'get_selection', arguments: {} });
+
+      expect(res.result?.isError).toBe(true);
+      const content = res.result?.content as { type: string; text: string }[];
+      const text = content.map(c => c.text).join('');
+      expect(text).toMatch(/OUT OF DATE/);
+      expect(text).toMatch(/older than this server/i);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
   it('leaves a real tools/call alone when the plugin is current', async () => {
     const server = new WireClient();
     await server.start();

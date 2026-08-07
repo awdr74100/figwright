@@ -132,55 +132,61 @@ export class Relay {
     const id = newId();
     this.lastRequestAtMs = Date.now();
     const served: { sessionId: string | undefined } = { sessionId: undefined };
-    const result = await new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`plugin request timeout (method=${method})`));
-      }, timeoutMs);
-      const entry: Pending = {
-        resolve,
-        reject,
-        timer,
-        method,
-        params,
-        dispatched: false,
-        pinnedSessionId: sessionId,
-        dispatchedToSessionId: undefined,
-        served,
-      };
-      this.pending.set(id, entry);
-
-      if (sessionId !== undefined) {
-        // Pinned: route only to this session. If it's fully gone (not even within the disconnect
-        // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
-        // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
-        // when that same session reconnects (session ids survive resume).
-        const target = this.sessions.get(sessionId);
-        if (target === undefined) {
-          clearTimeout(timer);
+    try {
+      return await new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
           this.pending.delete(id);
-          reject(
-            new Error(`pinned session not connected (sessionId=${sessionId}, method=${method})`),
-          );
+          reject(new Error(`plugin request timeout (method=${method})`));
+        }, timeoutMs);
+        const entry: Pending = {
+          resolve,
+          reject,
+          timer,
+          method,
+          params,
+          dispatched: false,
+          pinnedSessionId: sessionId,
+          dispatchedToSessionId: undefined,
+          served,
+        };
+        this.pending.set(id, entry);
+
+        if (sessionId !== undefined) {
+          // Pinned: route only to this session. If it's fully gone (not even within the disconnect
+          // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
+          // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
+          // when that same session reconnects (session ids survive resume).
+          const target = this.sessions.get(sessionId);
+          if (target === undefined) {
+            clearTimeout(timer);
+            this.pending.delete(id);
+            reject(
+              new Error(`pinned session not connected (sessionId=${sessionId}, method=${method})`),
+            );
+            return;
+          }
+          if (target.socket !== null && target.state === 'connected') {
+            this.dispatchPending(id, entry, target);
+          } else {
+            this.opts.log(`[relay] queued ${method} (pinned session ${sessionId} reconnecting)`);
+          }
           return;
         }
-        if (target.socket !== null && target.state === 'connected') {
-          this.dispatchPending(id, entry, target);
-        } else {
-          this.opts.log(`[relay] queued ${method} (pinned session ${sessionId} reconnecting)`);
-        }
-        return;
-      }
 
-      const session = this.pickActiveSession();
-      if (session !== undefined && session.socket !== null) {
-        this.dispatchPending(id, entry, session);
-      } else {
-        this.opts.log(`[relay] queued ${method} (no plugin connected)`);
-      }
-    });
-    onServed?.(served.sessionId);
-    return result;
+        const session = this.pickActiveSession();
+        if (session !== undefined && session.socket !== null) {
+          this.dispatchPending(id, entry, session);
+        } else {
+          this.opts.log(`[relay] queued ${method} (no plugin connected)`);
+        }
+      });
+    } finally {
+      // In `finally`, so a failed call is attributed too. The loudest thing an out-of-date plugin
+      // does is answer METHOD_NOT_FOUND for a tool it predates — nine of them for the last shipped
+      // build — and an unattributed one reads as "this tool is broken", which is the same
+      // misdirection as a silent wrong write, just noisier.
+      onServed?.(served.sessionId);
+    }
   }
 
   /**
@@ -472,6 +478,9 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        // Recorded on the error path too: a plugin that answers METHOD_NOT_FOUND for a tool it
+        // predates is the most visible thing an out-of-date one does, and the least self-explaining.
+        p.served.sessionId = p.dispatchedToSessionId;
         p.reject(new Error(`${env.error.code}: ${env.error.message}`));
       }
       return;

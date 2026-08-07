@@ -22,8 +22,21 @@ export const captureSkew = async (
   finish: (result: CallToolResult, notice: string | null) => CallToolResult,
 ): Promise<CallToolResult> => {
   const box = { notice: null as string | null };
-  const result = await store.run(box, run);
-  return finish(result, box.notice);
+  try {
+    const result = await store.run(box, run);
+    return finish(result, box.notice);
+  } catch (err) {
+    // A failure needs the warning as much as a result does — more, arguably: an out-of-date plugin
+    // answers METHOD_NOT_FOUND for every tool it predates, and unattributed that reads as "this
+    // tool is broken", so the agent goes looking for another way to do the same thing. The SDK
+    // turns a thrown error into the tool result the model sees, so the message is where it has to
+    // go; `finish` never runs on this path.
+    if (box.notice === null) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`${message}\n\n⚠️ FIGWRIGHT PLUGIN OUT OF DATE\n${box.notice}`, {
+      cause: err,
+    });
+  }
 };
 
 /**
