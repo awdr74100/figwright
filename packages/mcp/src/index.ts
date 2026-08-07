@@ -10,6 +10,7 @@ import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
 import { Node, NodeRole } from './election/node.js';
+import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { wireShutdown } from './lifecycle.js';
 import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
@@ -146,7 +147,10 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
 // it; a 2026-07-28 client negotiates the modern revision instead — which a hand-wired transport
 // can't do. On stdio there is exactly one connection per process, so this runs once.
 const createMcpServer = (): McpServer => {
-  const mcp = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+  const mcp = new McpServer(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   for (const spec of ALL_TOOL_SPECS) {
     const run: ToolHandler =

@@ -185,6 +185,18 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect(initResult.capabilities).toMatchObject({ tools: {}, prompts: {} });
   });
 
+  it('sends instructions a client can fold into the model prompt', () => {
+    // The only channel that reaches every client. Claude Code users get this guidance from the
+    // skills; Cursor and Codex users get it from nowhere else, and without it the likeliest first
+    // move on a design is to eyeball an image — the one failure this project exists to prevent.
+    const instructions = initResult.instructions as string | undefined;
+    expect(instructions).toBeTypeOf('string');
+    expect(instructions).toContain('get_design_context');
+    expect(instructions).toContain('get_screenshot');
+    // Clients may put this in the system prompt of every session, so its size is a running cost.
+    expect(instructions?.length).toBeLessThan(2_000);
+  });
+
   it('advertises exactly the registered tool set', () => {
     expect(tools.map(t => t.name).toSorted()).toEqual(ALL_TOOL_SPECS.map(s => s.name).toSorted());
   });
