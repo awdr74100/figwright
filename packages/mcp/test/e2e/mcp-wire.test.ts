@@ -229,6 +229,19 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect([...dialects]).toEqual(['https://json-schema.org/draft/2020-12/schema']);
   });
 
+  it('advertises the annotation values each tool kind is supposed to carry', () => {
+    // Pinned as literals on purpose. The check below compares the wire against `annotationsFor`,
+    // which cannot tell a correct derivation from a broken one — flip the function and both sides
+    // move together and it stays green. These are what the MCP spec means, so they are what the
+    // wire has to say: a client uses readOnlyHint to decide whether a call needs confirmation, and
+    // destructiveHint to decide how loudly to ask.
+    const advertised = (name: string): unknown => tools.find(t => t.name === name)?.annotations;
+    expect(advertised('get_node')).toEqual({ readOnlyHint: true });
+    expect(advertised('analyze_project')).toEqual({ readOnlyHint: true });
+    expect(advertised('set_fills')).toEqual({ readOnlyHint: false, destructiveHint: false });
+    expect(advertised('delete_nodes')).toEqual({ readOnlyHint: false, destructiveHint: true });
+  });
+
   it('advertises annotations derived from each spec', () => {
     const mismatched = ALL_TOOL_SPECS.filter(
       spec =>
