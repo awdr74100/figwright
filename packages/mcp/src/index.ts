@@ -161,15 +161,14 @@ const createMcpServer = (): McpServer => {
     // every tool — generic or special-cased — accepts them without per-handler conversion.
     const handler: ToolHandler = async args =>
       run(normalizeIdArgs(args) as Record<string, unknown>);
-    // z.object() wraps the raw shape explicitly: v2 takes Standard Schema objects, and the
-    // bare-shape overload it still accepts is @deprecated. Registering heterogeneous specs through
-    // one loop needed a handler cast under v1; v2's typing accepts ToolHandler directly, so the
-    // handler's result stays checked against CallToolResult.
+    // The spec's own Zod object goes straight through: it is already the Standard Schema object the
+    // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;
+    // v2's typing accepts ToolHandler directly, so the result stays checked against CallToolResult.
     mcp.registerTool(
       spec.name,
       {
         description: spec.description,
-        inputSchema: z.object(spec.inputShape),
+        inputSchema: spec.inputSchema,
         annotations: annotationsFor(spec),
       },
       handler,

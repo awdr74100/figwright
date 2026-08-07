@@ -9,10 +9,10 @@ export const batchRenameNodesTool: ToolSpec = {
   description:
     'Rename many nodes at once from a [{ nodeId, name }] list. Missing nodes are skipped. ' +
     'Returns { ok, affected }.',
-  inputShape: {
+  inputSchema: z.object({
     renames: z
       .array(z.object({ nodeId: z.string(), name: z.string() }))
       .describe('Per-node rename instructions'),
-  },
+  }),
   kind: 'write',
 };

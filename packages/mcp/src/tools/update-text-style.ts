@@ -12,7 +12,7 @@ export const updateTextStyleTool: ToolSpec = {
     'loaded before assignment. lineHeight unit is AUTO / PIXELS / PERCENT (AUTO omits value); ' +
     'letterSpacing unit is PIXELS / PERCENT. Use this to keep a shared style in sync with code ' +
     'instead of creating a duplicate. Returns { ok, styleId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     styleId: z.string().describe('Text style id to update'),
     name: z.string().optional(),
     fontName: z.object({ family: z.string(), style: z.string() }).optional(),
@@ -22,6 +22,6 @@ export const updateTextStyleTool: ToolSpec = {
       .optional(),
     letterSpacing: z.object({ unit: z.enum(['PIXELS', 'PERCENT']), value: z.number() }).optional(),
     description: z.string().optional(),
-  },
+  }),
   kind: 'write',
 };

@@ -26,7 +26,7 @@ export const setTextPropertiesTool: ToolSpec = {
     'required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
     'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
     'textTruncation is ENDING. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id'),
     // Typography (font load happens automatically when any of these is set)
     fontName: z
@@ -64,6 +64,6 @@ export const setTextPropertiesTool: ToolSpec = {
       .enum(['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'])
       .optional()
       .describe('How the text box resizes to its content'),
-  },
+  }),
   kind: 'write',
 };

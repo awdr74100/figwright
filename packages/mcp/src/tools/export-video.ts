@@ -9,7 +9,7 @@ import type { ToolSpec } from './spec.js';
 
 export const EXPORT_VIDEO_TOOL_NAME = 'export_video';
 
-const inputShape = {
+const inputSchema = z.object({
   nodeId: z
     .string()
     .describe(
@@ -34,7 +34,7 @@ const inputShape = {
     .optional(),
   constraint: videoExportConstraintSchema.optional(),
   outPath: z.string().describe('File path to write the video to (parent dirs created if missing)'),
-};
+});
 
 export const exportVideoTool: ToolSpec = {
   name: EXPORT_VIDEO_TOOL_NAME,
@@ -46,7 +46,7 @@ export const exportVideoTool: ToolSpec = {
     'yields path:null with a reason (and, when reason is `failed`, Figma’s own message in ' +
     'error). Encoding is a heavy render — call it on its own, not concurrently with other tool ' +
     'calls, or the render can fail. Returns { nodeId, format, path, reason?, error? }.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 
@@ -79,7 +79,7 @@ export const handleExportVideo = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ExportVideoResult> => {
-  const { outPath, ...pluginArgs } = z.object(inputShape).parse(rawArgs);
+  const { outPath, ...pluginArgs } = inputSchema.parse(rawArgs);
   const video = (await dispatch(EXPORT_VIDEO_TOOL_NAME, pluginArgs)) as VideoExport;
   return writeExportedVideo(outPath, video);
 };

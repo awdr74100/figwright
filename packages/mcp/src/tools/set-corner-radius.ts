@@ -12,13 +12,13 @@ export const setCornerRadiusTool: ToolSpec = {
     'individual corners, e.g. a card rounded only on top, a tab or a chat bubble). A per-corner ' +
     'value overrides radius for that corner. At least one of radius or a corner is required. ' +
     'Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id'),
     radius: z.number().min(0).optional().describe('Uniform corner radius in px'),
     topLeftRadius: z.number().min(0).optional().describe('Top-left corner radius in px'),
     topRightRadius: z.number().min(0).optional().describe('Top-right corner radius in px'),
     bottomRightRadius: z.number().min(0).optional().describe('Bottom-right corner radius in px'),
     bottomLeftRadius: z.number().min(0).optional().describe('Bottom-left corner radius in px'),
-  },
+  }),
   kind: 'write',
 };

@@ -9,10 +9,10 @@ export const setTimelineDurationTool: ToolSpec = {
   description:
     'Set the duration (in seconds, must be > 0) of a Figma Motion timeline. Get the timelineId from ' +
     "get_node_motion (a node's `timelines`). Returns { ok, nodeId }.",
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('A node on the timeline (used to resolve the Motion API)'),
     timelineId: z.string().describe('Timeline id from get_node_motion'),
     duration: z.number().positive().describe('New timeline duration in seconds (> 0)'),
-  },
+  }),
   kind: 'write',
 };

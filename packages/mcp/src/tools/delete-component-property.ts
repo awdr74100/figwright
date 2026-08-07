@@ -11,10 +11,10 @@ export const deleteComponentPropertyTool: ToolSpec = {
     'to it. VARIANT properties are the variant-set structure — delete their variants instead; this ' +
     'refuses a VARIANT. Get current property ids from get_component_api. Returns { ok, componentId, ' +
     'propertyId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     componentId: z.string().describe('Component or component-set id that owns the property'),
     propertyId: z.string().describe('Property id to delete (name#id, from get_component_api)'),
-  },
+  }),
   kind: 'write',
   destructive: true,
 };

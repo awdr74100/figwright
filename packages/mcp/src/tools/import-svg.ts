@@ -13,7 +13,7 @@ export const importSvgTool: ToolSpec = {
     'intrinsic size unless width/height are given. For raster photos (PNG / JPG) use import_image ' +
     'instead; when a matching icon component already exists, create_instance it rather than re-pasting ' +
     'the SVG. Returns { ok, nodeId, name, type }.',
-  inputShape: {
+  inputSchema: z.object({
     svg: z.string().describe('Raw SVG markup, e.g. "<svg …>…</svg>"'),
     name: z.string().optional().describe('Optional name for the new node'),
     parentId: z.string().optional().describe('Parent node id (default: current page)'),
@@ -21,6 +21,6 @@ export const importSvgTool: ToolSpec = {
     y: z.number().optional(),
     width: z.number().optional().describe('Override width (default: SVG intrinsic width)'),
     height: z.number().optional().describe('Override height (default: SVG intrinsic height)'),
-  },
+  }),
   kind: 'write',
 };

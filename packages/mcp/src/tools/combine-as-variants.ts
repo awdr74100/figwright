@@ -11,7 +11,7 @@ export const combineAsVariantsTool: ToolSpec = {
     'Name each component with Figma variant syntax (e.g. "Size=Small", "Size=Large") beforehand so ' +
     'the set derives its properties. The components are reparented into the new set under parentId ' +
     "(default: the first component's current parent). Returns { ok, nodeId, name, type }.",
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z
       .array(z.string())
       .min(2)
@@ -21,6 +21,6 @@ export const combineAsVariantsTool: ToolSpec = {
       .optional()
       .describe("Parent to place the set under (default: the first component's parent)"),
     name: z.string().optional().describe('Optional name for the resulting component set'),
-  },
+  }),
   kind: 'write',
 };

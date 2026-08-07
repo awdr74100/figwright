@@ -30,7 +30,7 @@ export const getDesignContextTool: ToolSpec = {
     'hypothesis to verify, not a resolved binding: emit the ref only when the token fits the ' +
     'context semantically, keep the raw value otherwise, and let a bound Figma variable win over ' +
     'a raw-value match.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z
       .string()
       .describe('Root node id (a pasted Figma URL also works); omit to use the selection')
@@ -48,6 +48,6 @@ export const getDesignContextTool: ToolSpec = {
       .boolean()
       .describe('Collapse repeated instances of the same main component (default true)')
       .optional(),
-  },
+  }),
   kind: 'read',
 };

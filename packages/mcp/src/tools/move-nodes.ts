@@ -8,10 +8,10 @@ export const moveNodesTool: ToolSpec = {
   name: MOVE_NODES_TOOL_NAME,
   description:
     'Translate nodes by (dx, dy). Nodes without a position are skipped. Returns { ok, affected }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to move'),
     dx: z.number().optional().describe('Horizontal delta (default 0)'),
     dy: z.number().optional().describe('Vertical delta (default 0)'),
-  },
+  }),
   kind: 'write',
 };

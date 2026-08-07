@@ -9,9 +9,9 @@ export const deletePageTool: ToolSpec = {
   description:
     'Delete a page by id. The current page and the last remaining page cannot be deleted. ' +
     'Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     pageId: z.string().describe('Page id to delete'),
-  },
+  }),
   kind: 'write',
   destructive: true,
 };

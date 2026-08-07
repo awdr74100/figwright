@@ -11,8 +11,8 @@ export const lockNodesTool: ToolSpec = {
     'parent also locks its descendants. Locked nodes still render and export — this only affects ' +
     'canvas interaction and is reversed by unlock_nodes. Returns { ok, affected } with the ids ' +
     'actually locked.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to lock'),
-  },
+  }),
   kind: 'write',
 };

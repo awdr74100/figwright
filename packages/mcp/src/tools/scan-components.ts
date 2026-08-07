@@ -6,13 +6,13 @@ import type { ToolSpec } from './spec.js';
 
 export const SCAN_COMPONENTS_TOOL_NAME = 'scan_components';
 
-const inputShape = {
+const inputSchema = z.object({
   rootDir: z.string().describe('Project root to scan; defaults to the server cwd').optional(),
   extensions: z
     .array(z.string())
     .describe('Component file extensions to scan; defaults to the detected profile')
     .optional(),
-};
+});
 
 export const scanComponentsTool: ToolSpec = {
   name: SCAN_COMPONENTS_TOOL_NAME,
@@ -23,7 +23,7 @@ export const scanComponentsTool: ToolSpec = {
     'is parsed for name + props; Vue/Svelte derive the name from the file and parse props from the ' +
     '<script> block (defineProps / export let / $props). extensions defaults to the ' +
     "detected profile's; rootDir defaults to the server cwd. Returns { components, profile }.",
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 export interface ScanComponentsResult {
@@ -32,7 +32,7 @@ export interface ScanComponentsResult {
 }
 
 export const handleScanComponents = async (rawArgs: unknown): Promise<ScanComponentsResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const profile = await analyzeProject(rootDir);
   const extensions = args.extensions ?? profile.componentExtensions;

@@ -190,7 +190,7 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
   });
 
   it('advertises each tool with the JSON Schema its spec declares', () => {
-    // The expected side is derived from `inputShape` independently of the SDK, so this catches an
+    // The expected side is derived from the spec's own schema independently of the SDK, so this catches an
     // SDK release that changes schema generation — the failure mode with no other gate in the repo.
     // Report the first real difference rather than a bare list of names: when this fails, what
     // matters is *how* the generated schema moved, and that is what the next audit needs to read.

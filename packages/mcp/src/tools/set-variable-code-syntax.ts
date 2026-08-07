@@ -18,7 +18,7 @@ export const setVariableCodeSyntaxTool: ToolSpec = {
     'When authoring design-system variables from existing code tokens, declare the source token ' +
     'name here so future codegen resolves to the exact token instead of deriving a name. Returns ' +
     '{ ok, variableId, name, codeSyntax } with the declarations now in effect.',
-  inputShape: {
+  inputSchema: z.object({
     variableId: z.string().describe('Variable id'),
     codeSyntax: z
       .object({
@@ -29,6 +29,6 @@ export const setVariableCodeSyntaxTool: ToolSpec = {
         iOS: platformDeclaration.optional().describe('iOS symbol name'),
       })
       .describe('Per-platform declarations: string sets, null removes, omitted is untouched'),
-  },
+  }),
   kind: 'write',
 };

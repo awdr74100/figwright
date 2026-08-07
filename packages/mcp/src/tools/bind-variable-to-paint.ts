@@ -12,7 +12,7 @@ export const bindVariableToPaintTool: ToolSpec = {
     'not the node, so this is separate from bind_variable_to_node (which covers scalar fields like ' +
     'width / padding / radius). target is fills (default) or strokes; index selects which paint ' +
     '(default 0). The paint at that index must be SOLID. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node whose fill/stroke paint to bind'),
     target: z
       .enum(['fills', 'strokes'])
@@ -28,6 +28,6 @@ export const bindVariableToPaintTool: ToolSpec = {
       .string()
       .nullable()
       .describe('COLOR variable id to bind, or null to remove the binding'),
-  },
+  }),
   kind: 'write',
 };

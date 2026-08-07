@@ -9,9 +9,9 @@ export const reorderNodesTool: ToolSpec = {
   description:
     'Reorder nodes within their current parent by inserting each at `index` (0 = bottom of the ' +
     'z-order). Detached nodes are skipped. Returns { ok, affected }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to reorder'),
     index: z.number().describe('Target index within the parent'),
-  },
+  }),
   kind: 'write',
 };

@@ -13,11 +13,11 @@ export const updateEffectStyleTool: ToolSpec = {
     'INNER_SHADOW) need color + offset; blurs (LAYER_BLUR / BACKGROUND_BLUR) need radius. Use this ' +
     'to keep a shared style in sync with code instead of creating a duplicate. Returns { ok, ' +
     'styleId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     styleId: z.string().describe('Effect style id to update'),
     name: z.string().optional(),
     effects: z.array(effectItemSchema).optional().describe('New effects (replaces all)'),
     description: z.string().optional(),
-  },
+  }),
   kind: 'write',
 };

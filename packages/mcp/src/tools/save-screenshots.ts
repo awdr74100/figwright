@@ -15,7 +15,7 @@ import type { ToolSpec } from './spec.js';
 
 export const SAVE_SCREENSHOTS_TOOL_NAME = 'save_screenshots';
 
-const inputShape = {
+const inputSchema = z.object({
   nodeIds: z.array(z.string()).describe('Figma node ids to export'),
   outDir: z.string().describe('Directory to write files into (created if missing)'),
   format: z
@@ -23,7 +23,7 @@ const inputShape = {
     .describe('Export format: PNG (default) / JPG / SVG')
     .optional(),
   scale: z.number().positive().describe('Raster scale factor (PNG/JPG), default 1').optional(),
-};
+});
 
 export const saveScreenshotsTool: ToolSpec = {
   name: SAVE_SCREENSHOTS_TOOL_NAME,
@@ -34,7 +34,7 @@ export const saveScreenshotsTool: ToolSpec = {
     "(e.g. a carousel's edge items) are auto-recovered at their intrinsic bounds and flagged recovered:true. " +
     'empty:true means the node genuinely renders nothing even unclipped (hidden / no content) so the file is blank. ' +
     'Files are named after a sanitized node id.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
@@ -81,7 +81,7 @@ export const handleSaveScreenshots = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<SaveScreenshotsResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
 
   const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
   if (args.format !== undefined) screenshotArgs.format = args.format;

@@ -11,9 +11,9 @@ export const setVisibleTool: ToolSpec = {
     'is excluded from rendering and exports, and its descendants are hidden with it; the change is ' +
     'fully reversible. To remove a node use delete_nodes; to dim one while keeping it visible and ' +
     'exported use set_opacity. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id'),
     visible: z.boolean().describe('true to show, false to hide'),
-  },
+  }),
   kind: 'write',
 };

@@ -11,9 +11,9 @@ export const detachInstanceTool: ToolSpec = {
     'component; the frame keeps its current appearance and its layers become directly editable. To ' +
     'switch an instance to a different component instead of detaching, use swap_component. Returns ' +
     '{ ok, nodeId, name, type } for the resulting frame.',
-  inputShape: {
+  inputSchema: z.object({
     instanceId: z.string().describe('Instance node id to detach'),
-  },
+  }),
   kind: 'write',
   // Severs the instance→component link permanently (Figma has no re-attach) — the binding is lost.
   destructive: true,

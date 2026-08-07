@@ -11,9 +11,9 @@ export const scanNodesByTypesTool: ToolSpec = {
     'subtree scoped by `root` (a node id) or the current page by default. Use this to collect nodes ' +
     'by kind (e.g. all TEXT or COMPONENT nodes); to search by name or characters use search_nodes, ' +
     'and for a styled tree snapshot use get_design_context. Returns a flat array of matching nodes.',
-  inputShape: {
+  inputSchema: z.object({
     types: z.array(z.string()).describe('Node types to match, e.g. ["FRAME", "COMPONENT"]'),
     root: z.string().describe('Node id to scope the scan; omit for the current page').optional(),
-  },
+  }),
   kind: 'read',
 };

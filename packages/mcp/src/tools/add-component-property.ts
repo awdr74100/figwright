@@ -14,7 +14,7 @@ export const addComponentPropertyTool: ToolSpec = {
     'string / a component key string); preferredValues (INSTANCE_SWAP only) pre-populates the swap ' +
     'menu. VARIANT properties come from combine_as_variants, not here. Returns { ok, componentId, ' +
     'propertyId, name } — pass propertyId to bind / edit / delete / set_instance_properties.',
-  inputShape: {
+  inputSchema: z.object({
     componentId: z
       .string()
       .describe('Component or component-set id (a variant resolves to its set)'),
@@ -27,6 +27,6 @@ export const addComponentPropertyTool: ToolSpec = {
       .array(z.object({ type: z.enum(['COMPONENT', 'COMPONENT_SET']), key: z.string() }))
       .describe('INSTANCE_SWAP only: components/sets offered in the swap menu')
       .optional(),
-  },
+  }),
   kind: 'write',
 };

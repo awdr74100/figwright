@@ -11,8 +11,8 @@ export const cloneNodeTool: ToolSpec = {
     'the original under the same parent. Cloning a component instance keeps it an instance; to make ' +
     'a fresh instance of a component use create_instance instead. Returns ' +
     '{ ok, nodeId, name, type } for the copy.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node id to clone'),
-  },
+  }),
   kind: 'write',
 };

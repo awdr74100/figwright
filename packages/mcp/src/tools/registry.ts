@@ -1,6 +1,6 @@
 // Single source of truth for what the MCP server advertises and which tools are writes. index.ts
 // registers every spec with McpServer (which generates the advertised JSON Schema from each Zod
-// inputShape); the write set is derived from `kind`, not maintained by hand. A registry test asserts
+// inputSchema); the write set is derived from `kind`, not maintained by hand. A registry test asserts
 // these stay in sync with the plugin's handler map so a new tool can't be half-wired.
 
 import { addComponentPropertyTool } from './add-component-property.js';

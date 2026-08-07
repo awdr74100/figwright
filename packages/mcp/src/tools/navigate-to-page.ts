@@ -9,8 +9,8 @@ export const navigateToPageTool: ToolSpec = {
   description:
     'Switch the active page. Subsequent selection / read tools operate on this page. ' +
     'Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     pageId: z.string().describe('Page id to navigate to'),
-  },
+  }),
   kind: 'write',
 };

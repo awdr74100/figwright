@@ -20,7 +20,7 @@ export const COMPONENT_MAP_TOOL_NAME = 'component_map';
 const DEFAULT_THRESHOLD = 0.7;
 const MAP_FILE = 'docs/figma-component-map.md';
 
-const inputShape = {
+const inputSchema = z.object({
   nodeId: z.string().describe('Root node id; omit to use the selection or current page').optional(),
   threshold: z
     .number()
@@ -29,7 +29,7 @@ const inputShape = {
     .describe('Confidence at/above which a match counts as a reliable reuse (default 0.7)')
     .optional(),
   rootDir: z.string().describe('Project root to scan; defaults to the server cwd').optional(),
-};
+});
 
 export interface ComponentMapResult {
   mappings: ComponentMapping[];
@@ -59,7 +59,7 @@ export const componentMapTool: ToolSpec = {
     'has) and unmatchedProps (axes it lacks → component-extension TODOs). ' +
     'Returns { mappings (candidate + confidence + status high/medium/low/unmapped), unmapped, ' +
     'staleOverrides, profile }.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
@@ -108,7 +108,7 @@ export const handleComponentMap = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ComponentMapResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 

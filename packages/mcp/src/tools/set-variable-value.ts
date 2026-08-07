@@ -27,10 +27,10 @@ export const setVariableValueTool: ToolSpec = {
     'match the variable resolvedType: a boolean, a number (FLOAT), a string, a color { r, g, b, a } ' +
     '(0–1), or an alias { type: "VARIABLE_ALIAS", id } pointing at another variable. Create the ' +
     'variable first with create_variable. Returns { ok, variableId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     variableId: z.string().describe('Variable id'),
     modeId: z.string().describe('Mode id (from the collection)'),
     value: variableValue,
-  },
+  }),
   kind: 'write',
 };

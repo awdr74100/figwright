@@ -10,13 +10,13 @@ export const setMaskTool: ToolSpec = {
     'Set whether a node is a mask — a mask clips its later siblings to its own shape. Pass isMask ' +
     'true/false, and optionally maskType (ALPHA / LUMINANCE / GEOMETRY) when enabling. Returns ' +
     '{ ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id'),
     isMask: z.boolean().describe('Whether the node masks its later siblings'),
     maskType: z
       .enum(['ALPHA', 'LUMINANCE', 'GEOMETRY'])
       .optional()
       .describe('How the mask clips (only applied when enabling)'),
-  },
+  }),
   kind: 'write',
 };

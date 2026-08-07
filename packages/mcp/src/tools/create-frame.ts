@@ -11,7 +11,7 @@ export const createFrameTool: ToolSpec = {
     'optionally sized/positioned and appended to a parent (default: current page). Enable ' +
     'auto-layout afterwards with set_auto_layout; for a canvas-level grouping container use ' +
     'create_section instead. Returns { ok, nodeId, name, type }.',
-  inputShape: {
+  inputSchema: z.object({
     parentId: z
       .string()
       .optional()
@@ -21,6 +21,6 @@ export const createFrameTool: ToolSpec = {
     y: z.number().optional(),
     width: z.number().optional().describe('Frame width (with height, resizes from default)'),
     height: z.number().optional().describe('Frame height (with width, resizes from default)'),
-  },
+  }),
   kind: 'write',
 };

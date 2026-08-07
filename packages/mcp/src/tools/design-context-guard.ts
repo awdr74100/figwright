@@ -4,7 +4,6 @@ import {
   type DesignContextSection,
   type GetDesignContextResult,
 } from '@figwright/shared';
-import { z } from 'zod';
 
 import { annotateProjectTokens, loadTokenValueIndex } from '../tokens/token-index.js';
 import { getDesignContextTool } from './get-design-context.js';
@@ -143,7 +142,7 @@ export const handleDesignContext = async (
 ): Promise<GetDesignContextResult> => {
   // Parsing with the public shape also strips any caller-supplied `budget` key, so arming the
   // plugin bail stays exclusively this wrapper's decision.
-  const args = z.object(getDesignContextTool.inputShape).parse(rawArgs ?? {});
+  const args = getDesignContextTool.inputSchema.parse(rawArgs ?? {});
   const detail = args.detail ?? 'full';
   const dedupeComponents = args.dedupeComponents ?? true;
   const raw = (await dispatch(getDesignContextTool.name, {

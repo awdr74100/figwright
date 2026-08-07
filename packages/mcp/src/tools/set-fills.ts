@@ -11,9 +11,9 @@ export const setFillsTool: ToolSpec = {
     "Set a node's fills. SOLID: { type:'SOLID', color:{r,g,b} } (0–1). Gradient: " +
     "{ type:'GRADIENT_LINEAR'|…, gradientStops:[{position,color:{r,g,b,a}}], gradientTransform } " +
     '(round-trips get_node output). Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id to repaint'),
     fills: z.array(paintItemSchema).describe('Paints to apply'),
-  },
+  }),
   kind: 'write',
 };

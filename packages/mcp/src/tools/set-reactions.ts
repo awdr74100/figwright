@@ -30,9 +30,9 @@ export const setReactionsTool: ToolSpec = {
     "appending. Each reaction pairs a trigger (e.g. { type: 'ON_CLICK' }) with an actions array " +
     "(e.g. { type: 'NODE', destinationId, navigation, transition }). Best used to round-trip " +
     'get_reactions output; to clear all reactions instead use remove_reactions. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node to set reactions on'),
     reactions: z.array(reaction).describe('Reactions to apply (replaces existing)'),
-  },
+  }),
   kind: 'write',
 };

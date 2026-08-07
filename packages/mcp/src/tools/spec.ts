@@ -1,23 +1,24 @@
-import type { ZodRawShape } from 'zod';
+import type { z } from 'zod';
 
-// A tool's input schema as a single source of truth: a Zod raw shape. index.ts wraps it with
-// `z.object()` before handing it to McpServer.registerTool — the SDK takes Standard Schema objects,
-// and the bare-shape overload it still accepts is deprecated. `.describe()` on a field becomes its
-// JSON Schema description.
+// A tool's input schema as a single source of truth: a Zod object, which is what the MCP SDK takes
+// (`registerTool` wants a Standard Schema object; the bare-shape overload it also accepts is
+// deprecated). `.describe()` on a field becomes its JSON Schema description.
 //
-// The shape stays raw here because that is all any tool needs: every input is a flat object of
-// independent fields. The four tools with a cross-field rule (`import_image` data-or-url and
-// friends) enforce it in the sandbox, which a `z.object().refine()` could not improve on — Zod drops
-// refinements from the generated JSON Schema, so the model would still learn the rule only from the
-// description and the error, exactly as it does today.
+// Storing the built object rather than a raw shape is what lets every consumer share one instance:
+// registration, the handlers that re-parse their own arguments, and the test-only derivation in
+// `test/tool-schema.ts`. Rebuilding it per call — which the raw shape forced on eleven handlers —
+// measured ~120x the cost of parsing against a prebuilt one.
 
 export type ToolKind = 'read' | 'write' | 'local';
 
 export interface ToolSpec {
   name: string;
   description: string;
-  /** Zod raw shape (e.g. `{ nodeId: z.string() }`); `{}` for a no-argument tool. */
-  inputShape: ZodRawShape;
+  /**
+   * Arguments as a Zod object (e.g. `z.object({ nodeId: z.string() })`); `z.object({})` when the
+   * tool takes none.
+   */
+  inputSchema: z.ZodObject;
   kind: ToolKind;
   /**
    * Marks a write that irreversibly destroys user data (a delete, ungrouping, clearing reactions,

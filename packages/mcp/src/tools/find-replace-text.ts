@@ -10,11 +10,11 @@ export const findReplaceTextTool: ToolSpec = {
     'Replace a substring across all TEXT nodes under a scope. Without rootId the whole current ' +
     'page is searched; matching is case-insensitive unless caseSensitive is true. Fonts are loaded ' +
     'before each edit. Returns { ok, affected } — the text node ids changed.',
-  inputShape: {
+  inputSchema: z.object({
     find: z.string().describe('Substring to find (non-empty)'),
     replace: z.string().describe('Replacement string'),
     rootId: z.string().optional().describe('Optional node id to scope the search (default: page)'),
     caseSensitive: z.boolean().optional().describe('Match case (default false)'),
-  },
+  }),
   kind: 'write',
 };

@@ -16,7 +16,7 @@ import type { ToolSpec } from '../src/tools/spec.js';
 export const toToolDefinition = (spec: ToolSpec): Tool => ({
   name: spec.name,
   description: spec.description,
-  inputSchema: z.toJSONSchema(z.object(spec.inputShape), {
+  inputSchema: z.toJSONSchema(spec.inputSchema, {
     io: 'input',
     target: 'draft-2020-12',
   }) as Tool['inputSchema'],

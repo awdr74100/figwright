@@ -5,9 +5,9 @@ import type { ToolSpec } from './spec.js';
 
 export const ANALYZE_PROJECT_TOOL_NAME = 'analyze_project';
 
-const inputShape = {
+const inputSchema = z.object({
   rootDir: z.string().describe('Project root to analyze; defaults to the server cwd').optional(),
-};
+});
 
 export const analyzeProjectTool: ToolSpec = {
   name: ANALYZE_PROJECT_TOOL_NAME,
@@ -19,10 +19,10 @@ export const analyzeProjectTool: ToolSpec = {
     'the server filesystem. rootDir defaults to the server cwd. Detects Tailwind v3 (config file) and ' +
     'v4 (CSS-first @import/@theme) and reports tailwindVersion; detects svg loader (svgr / ' +
     'vite-svg-loader / …) → svg.mode component vs url + an import hint.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 export const handleAnalyzeProject = async (rawArgs: unknown): Promise<ProjectProfile> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   return analyzeProject(args.rootDir ?? process.cwd());
 };

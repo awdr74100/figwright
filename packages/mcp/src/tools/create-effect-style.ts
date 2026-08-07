@@ -10,10 +10,10 @@ export const createEffectStyleTool: ToolSpec = {
   description:
     'Create a local effect style. Shadows (DROP_SHADOW / INNER_SHADOW) need color + offset; ' +
     'blurs (LAYER_BLUR / BACKGROUND_BLUR) need radius. Returns { ok, styleId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Elevation/Card"'),
     effects: z.array(effectItemSchema),
     description: z.string().optional(),
-  },
+  }),
   kind: 'write',
 };

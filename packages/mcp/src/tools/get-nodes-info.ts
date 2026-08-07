@@ -8,6 +8,6 @@ export const getNodesInfoTool: ToolSpec = {
   name: GET_NODES_INFO_TOOL_NAME,
   description:
     'Return multiple Figma nodes by id. Output preserves input order; missing ids slot null.',
-  inputShape: { nodeIds: z.array(z.string()).describe('Figma node ids to fetch') },
+  inputSchema: z.object({ nodeIds: z.array(z.string()).describe('Figma node ids to fetch') }),
   kind: 'read',
 };

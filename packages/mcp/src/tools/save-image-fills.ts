@@ -14,12 +14,12 @@ import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
 
-const inputShape = {
+const inputSchema = z.object({
   nodeIds: z.array(z.string()).describe('Figma node ids whose IMAGE fills to extract'),
   outDir: z
     .string()
     .describe('Directory to write the original image files into (created if missing)'),
-};
+});
 
 export const saveImageFillsTool: ToolSpec = {
   name: SAVE_IMAGE_FILLS_TOOL_NAME,
@@ -35,7 +35,7 @@ export const saveImageFillsTool: ToolSpec = {
     "can't be resolved; images:[] means the node has no image fill; mixed:true means the node's fills " +
     'are per-text-range and were not enumerated. For a rendered/composited raster use save_screenshots; ' +
     'for a vector node use export_pdf.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 
@@ -126,7 +126,7 @@ export const handleSaveImageFills = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<SaveImageFillsResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const { nodes } = (await dispatch(SAVE_IMAGE_FILLS_TOOL_NAME, {
     nodeIds: args.nodeIds,
   })) as ImageFillsResult;

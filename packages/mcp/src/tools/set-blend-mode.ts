@@ -11,9 +11,9 @@ export const setBlendModeTool: ToolSpec = {
     'DARKEN, LIGHTEN, COLOR_DODGE, etc.). PASS_THROUGH is only meaningful on groups/frames (lets ' +
     "children blend with content outside the group). Affects compositing only, not the node's own " +
     'fills — use set_fills or set_opacity for those. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node to set the blend mode on'),
     blendMode: z.string().describe('Figma blend mode literal, e.g. "MULTIPLY"'),
-  },
+  }),
   kind: 'write',
 };

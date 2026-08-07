@@ -10,11 +10,11 @@ export const getAnnotationsTool: ToolSpec = {
     'Return Dev Mode annotations as { annotations: [{ nodeId, nodeName, annotations }] }. ' +
     "With nodeId, returns that node's annotations; without it, scans the current page for all " +
     'annotated nodes.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z
       .string()
       .describe('Node id to read annotations from; omit to scan the current page')
       .optional(),
-  },
+  }),
   kind: 'read',
 };

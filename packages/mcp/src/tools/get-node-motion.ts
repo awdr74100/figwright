@@ -14,8 +14,8 @@ export const getNodeMotionTool: ToolSpec = {
     "Motion. Also returns playheadPosition — the editor's Motion playhead in seconds, present only " +
     'in the Figma Design editor with an active timeline. Use it as a keyframe timelinePosition when ' +
     'the user means "here", i.e. wherever they have scrubbed to.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id to read Motion state from'),
-  },
+  }),
   kind: 'read',
 };

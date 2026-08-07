@@ -13,7 +13,7 @@ export const bindComponentPropertyTool: ToolSpec = {
     'property can be bound to several layers (call once per layer). Pass propertyId: null to remove ' +
     "the binding on that field. The property's type must match the field and it must exist on the " +
     'containing component. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Sublayer inside the component to bind on'),
     field: z
       .enum(['visible', 'characters', 'mainComponent'])
@@ -22,6 +22,6 @@ export const bindComponentPropertyTool: ToolSpec = {
       .string()
       .nullable()
       .describe('Property id (name#id) to bind, or null to unbind this field'),
-  },
+  }),
   kind: 'write',
 };

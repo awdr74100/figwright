@@ -11,11 +11,11 @@ export const getLocalComponentsTool: ToolSpec = {
     '{ components, componentSets }. Scans a subtree, not the whole document — pass nodeId, or select ' +
     'the frames to scan. Components carry their variantProperties (when part of a set); component sets ' +
     'carry their variantGroupProperties (available values per axis) and the ids of their variant components.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z
       .string()
       .describe('Root node id to scan within; omit to use the current selection')
       .optional(),
-  },
+  }),
   kind: 'read',
 };

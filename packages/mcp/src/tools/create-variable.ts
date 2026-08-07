@@ -10,10 +10,10 @@ export const createVariableTool: ToolSpec = {
     'Create a variable in a collection with resolvedType BOOLEAN / FLOAT / STRING / COLOR. The ' +
     'variable starts empty — set per-mode values with set_variable_value, then attach it with ' +
     'bind_variable_to_node or bind_variable_to_paint. Returns { ok, variableId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     name: z.string().describe('Variable name, e.g. "color/primary"'),
     collectionId: z.string().describe('Variable collection id'),
     resolvedType: z.enum(['BOOLEAN', 'FLOAT', 'STRING', 'COLOR']).describe('Variable data type'),
-  },
+  }),
   kind: 'write',
 };

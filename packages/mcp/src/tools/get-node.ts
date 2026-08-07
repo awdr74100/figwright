@@ -13,8 +13,8 @@ export const getNodeTool: ToolSpec = {
     'node you are about to modify; for exploring or grounding anything large, prefer ' +
     'get_design_context (depth-limited, deduped, tokens resolved to names). Returns { node }, ' +
     'null when the id matches nothing.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id, e.g. "1:42"; a pasted Figma URL also works'),
-  },
+  }),
   kind: 'read',
 };

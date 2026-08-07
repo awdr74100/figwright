@@ -13,7 +13,7 @@ export const setAutoLayoutTool: ToolSpec = {
     'strokesIncludedInLayout for paint order and stroke-in-layout); GRID enables CSS-Grid-style ' +
     'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). ' +
     'Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string(),
     layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID']),
     paddingTop: z.number().optional(),
@@ -59,6 +59,6 @@ export const setAutoLayoutTool: ToolSpec = {
     gridColumnCount: z.number().int().positive().optional(),
     gridRowGap: z.number().optional(),
     gridColumnGap: z.number().optional(),
-  },
+  }),
   kind: 'write',
 };

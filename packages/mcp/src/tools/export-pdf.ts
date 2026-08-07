@@ -8,7 +8,7 @@ import type { ToolSpec } from './spec.js';
 
 export const EXPORT_PDF_TOOL_NAME = 'export_pdf';
 
-const inputShape = {
+const inputSchema = z.object({
   nodeId: z
     .string()
     .describe(
@@ -16,7 +16,7 @@ const inputShape = {
     )
     .optional(),
   outPath: z.string().describe('File path to write the .pdf to (parent dirs created if missing)'),
-};
+});
 
 export const exportPdfTool: ToolSpec = {
   name: EXPORT_PDF_TOOL_NAME,
@@ -27,7 +27,7 @@ export const exportPdfTool: ToolSpec = {
     'of that node; omit nodeId for the current page (large pages can be slow). For raster output ' +
     '(PNG/JPG) use save_screenshots instead. Returns { nodeId, path, empty? }; path is null if the ' +
     'target is missing or not exportable, and empty:true means it rendered a blank PDF.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 
@@ -54,7 +54,7 @@ export const handleExportPdf = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ExportPdfResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const pluginArgs: Record<string, unknown> = {};
   if (args.nodeId !== undefined) pluginArgs.nodeId = args.nodeId;
   const pdf = (await dispatch(EXPORT_PDF_TOOL_NAME, pluginArgs)) as PdfExport;

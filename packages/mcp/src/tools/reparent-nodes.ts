@@ -11,10 +11,10 @@ export const reparentNodesTool: ToolSpec = {
     'On-screen positions may shift because coordinates become relative to the new parent; nodes ' +
     'that no longer exist are skipped. To reorder within the current parent use reorder_nodes; to ' +
     'wrap nodes in a new frame/group use group_nodes. Returns { ok, affected }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to move'),
     newParentId: z.string().describe('Id of the parent to move them into'),
     index: z.number().optional().describe('Optional insertion index within the new parent'),
-  },
+  }),
   kind: 'write',
 };

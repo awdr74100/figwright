@@ -12,7 +12,7 @@ export const setLayoutGridsTool: ToolSpec = {
     'grid is COLUMNS / ROWS (count + gutterSize + alignment, e.g. a 12-col grid) or GRID (uniform ' +
     "squares via sectionSize, a baseline). Replaces the frame's grids with the array given; pass [] " +
     'to clear them. Only frames (and components/instances) carry layout grids. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Frame (or component/instance) node id'),
     grids: z
       .array(
@@ -33,6 +33,6 @@ export const setLayoutGridsTool: ToolSpec = {
         }),
       )
       .describe('Layout grids to set; [] clears all grids on the frame'),
-  },
+  }),
   kind: 'write',
 };

@@ -11,7 +11,7 @@ export const ICON_MAP_TOOL_NAME = 'icon_map';
 
 const DEFAULT_THRESHOLD = 0.7;
 
-const inputShape = {
+const inputSchema = z.object({
   nodeId: z.string().describe('Root node id; omit to use the selection or current page').optional(),
   threshold: z
     .number()
@@ -20,7 +20,7 @@ const inputShape = {
     .describe('Confidence at/above which a match counts as a reliable reuse (default 0.7)')
     .optional(),
   rootDir: z.string().describe('Project root to scan; defaults to the server cwd').optional(),
-};
+});
 
 export interface IconMapResult {
   mappings: IconMapping[];
@@ -54,7 +54,7 @@ export const iconMapTool: ToolSpec = {
     'path. Unmatched icons are returned in `unmapped`; `iconLibraries` lists any installed icon component ' +
     'library (lucide / heroicons / iconify) as the alternative to a fresh export. rootDir defaults to the ' +
     'server cwd. Returns { mappings, unmapped, iconLibraries, profile }.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
@@ -68,7 +68,7 @@ export const handleIconMap = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<IconMapResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 

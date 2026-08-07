@@ -123,7 +123,7 @@ describe('normalizeIdArgs', () => {
     const covered = new Set<string>([...STRING_ID_FIELDS, 'nodeIds']);
     const offenders: string[] = [];
     for (const spec of ALL_TOOL_SPECS) {
-      for (const key of Object.keys(spec.inputShape)) {
+      for (const key of Object.keys(spec.inputSchema.shape)) {
         const idShaped = /Ids?$/.test(key) || key === 'root';
         if (!idShaped || NON_CANVAS_ID_FIELDS.has(key)) continue;
         if (!covered.has(key)) offenders.push(`${spec.name}.${key}`);

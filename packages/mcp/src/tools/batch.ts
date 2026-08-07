@@ -18,7 +18,7 @@ export const batchTool: ToolSpec = {
     'list of { tool, params } where tool is an invertible write (e.g. set_fills, rename_node, ' +
     'move_nodes, create_frame). Destructive ops (delete_*, ungroup_nodes, …) are rejected. ' +
     'Returns { ok, results } with one result per op in order.',
-  inputShape: {
+  inputSchema: z.object({
     ops: z
       .array(
         z.object({
@@ -29,6 +29,6 @@ export const batchTool: ToolSpec = {
       )
       .min(1)
       .describe('Ordered write ops applied atomically'),
-  },
+  }),
   kind: 'write',
 };

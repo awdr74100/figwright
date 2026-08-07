@@ -8,9 +8,9 @@ export const rotateNodesTool: ToolSpec = {
   name: ROTATE_NODES_TOOL_NAME,
   description:
     'Set absolute rotation (degrees) on nodes. Nodes without rotation are skipped. Returns { ok, affected }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to rotate'),
     rotation: z.number().describe('Rotation in degrees'),
-  },
+  }),
   kind: 'write',
 };

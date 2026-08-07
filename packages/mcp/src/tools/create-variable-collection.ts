@@ -9,8 +9,8 @@ export const createVariableCollectionTool: ToolSpec = {
   description:
     'Create a variable collection. Figma auto-creates a default mode. ' +
     'Returns { ok, collectionId, defaultModeId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     name: z.string().describe('Collection name, e.g. "Theme"'),
-  },
+  }),
   kind: 'write',
 };

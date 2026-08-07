@@ -25,7 +25,7 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
 const SNAPSHOT_FORMAT_VERSION = 2;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
-const inputShape = {
+const inputSchema = z.object({
   nodeId: z
     .string()
     .describe('Node to snapshot / diff (a pasted Figma URL also works); omit to use the selection')
@@ -35,7 +35,7 @@ const inputShape = {
     .boolean()
     .describe('After diffing, overwrite the baseline with the current design (accept the changes)')
     .optional(),
-};
+});
 
 export const designDiffTool: ToolSpec = {
   name: DESIGN_DIFF_TOOL_NAME,
@@ -50,7 +50,7 @@ export const designDiffTool: ToolSpec = {
     'server cwd. The baseline is a plain file the tool writes under the project — committing it (so ' +
     'teammates share the baseline) or gitignoring it is your call; the tool never changes git. It ' +
     'never mutates Figma. Scope by a component / section nodeId, the same unit codegen works on.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 
@@ -151,7 +151,7 @@ export const handleDesignDiff = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<DesignDiffResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
 
   const current = (await dispatch(GET_DESIGN_CONTEXT_TOOL_NAME, {

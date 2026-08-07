@@ -12,7 +12,7 @@ export const createComponentTool: ToolSpec = {
     'parent unless parentId is given; omit fromNodeId to create an empty component to build into. ' +
     'Then create_instance the result to reuse it. Optionally sized / named / positioned and placed ' +
     'under a parent (default: current page). Returns { ok, nodeId, name, type }.',
-  inputShape: {
+  inputSchema: z.object({
     fromNodeId: z
       .string()
       .optional()
@@ -23,6 +23,6 @@ export const createComponentTool: ToolSpec = {
     y: z.number().optional(),
     width: z.number().optional(),
     height: z.number().optional(),
-  },
+  }),
   kind: 'write',
 };

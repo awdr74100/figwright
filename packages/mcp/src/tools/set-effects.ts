@@ -10,9 +10,9 @@ export const setEffectsTool: ToolSpec = {
   description:
     "Set a node's effects. Shadows (DROP_SHADOW / INNER_SHADOW) need color + offset; blurs need " +
     'radius. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id to apply effects to'),
     effects: z.array(effectItemSchema).describe('Effects to apply'),
-  },
+  }),
   kind: 'write',
 };

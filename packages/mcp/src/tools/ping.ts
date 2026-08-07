@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { dispatchTool } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
@@ -11,7 +13,7 @@ export const pingTool: ToolSpec = {
     'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the ' +
     'Figma sandbox. On a follower it also reports the leader’s version and build, and warns ' +
     '(versionSkew / buildSkew) when a stale older server still owns the plugin.',
-  inputShape: {},
+  inputSchema: z.object({}),
   kind: 'read',
 };
 export type PingHop = 'server-only' | 'e2e';

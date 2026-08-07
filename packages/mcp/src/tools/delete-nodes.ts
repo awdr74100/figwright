@@ -10,9 +10,9 @@ export const deleteNodesTool: ToolSpec = {
     'Permanently delete nodes by id; missing or non-removable nodes are skipped. To hide nodes ' +
     'reversibly instead of deleting them, use set_visible(false). Returns { ok, affected } — the ' +
     'ids actually removed.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to delete'),
-  },
+  }),
   kind: 'write',
   destructive: true,
 };

@@ -10,9 +10,9 @@ export const renameVariableTool: ToolSpec = {
     'Rename a variable (e.g. "color/primary" → "color/brand"); use slashes in the name for folder ' +
     'grouping in the Variables panel. The variable id is unchanged, so existing bindings keep ' +
     'working. Returns { ok, variableId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     variableId: z.string().describe('Variable id'),
     name: z.string().describe('New variable name, e.g. "color/brand"'),
-  },
+  }),
   kind: 'write',
 };

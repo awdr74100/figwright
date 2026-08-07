@@ -13,7 +13,7 @@ export const setArcTool: ToolSpec = {
     '> 0 = a ring with a hole, e.g. 0.6 for a donut or progress ring). Only ellipses have arc data. ' +
     'Pass any subset — omitted fields keep their current value. At least one is required. Returns ' +
     '{ ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Figma node id (must be an ellipse)'),
     startingAngle: z.number().optional().describe('Arc start angle in radians'),
     endingAngle: z.number().optional().describe('Arc end angle in radians'),
@@ -23,6 +23,6 @@ export const setArcTool: ToolSpec = {
       .max(1)
       .optional()
       .describe('Inner radius 0–1 of the outer radius (0 = solid disc, > 0 = ring / donut)'),
-  },
+  }),
   kind: 'write',
 };

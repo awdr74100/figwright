@@ -11,7 +11,7 @@ export const importImageTool: ToolSpec = {
     'data (base64-encoded image bytes) or url. The rectangle defaults to the image size unless ' +
     'width/height are given. scaleMode is FILL / FIT / CROP / TILE (default FILL). For vector SVG ' +
     '(logos / icons) use import_svg instead. Returns { ok, nodeId, name, type }.',
-  inputShape: {
+  inputSchema: z.object({
     data: z.string().optional().describe('Base64-encoded image bytes (PNG / JPG / GIF)'),
     url: z.string().optional().describe('Image URL to fetch instead of data'),
     name: z.string().optional().describe('Optional name for the new rectangle'),
@@ -21,6 +21,6 @@ export const importImageTool: ToolSpec = {
     width: z.number().optional().describe('Override width (default: image width)'),
     height: z.number().optional().describe('Override height (default: image height)'),
     scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
-  },
+  }),
   kind: 'write',
 };

@@ -14,10 +14,10 @@ export const setConstraintsTool: ToolSpec = {
     'STRETCH pins both edges (grows with the parent), and SCALE resizes proportionally. Constraints ' +
     'apply inside plain frames only — auto-layout frames position children by layout rules and ' +
     'ignore them. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node to constrain'),
     horizontal: constraint.describe('Horizontal behavior when the parent resizes'),
     vertical: constraint.describe('Vertical behavior when the parent resizes'),
-  },
+  }),
   kind: 'write',
 };

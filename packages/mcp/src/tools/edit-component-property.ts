@@ -12,7 +12,7 @@ export const editComponentPropertyTool: ToolSpec = {
     '#id suffix is kept but the name part changes), so use the returned propertyId for later calls; ' +
     'existing bindings keep working. Get current property ids from get_component_api. Returns ' +
     '{ ok, componentId, propertyId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     componentId: z.string().describe('Component or component-set id that owns the property'),
     propertyId: z.string().describe('Property id to edit (name#id, from get_component_api / add)'),
     name: z.string().describe('New property name').optional(),
@@ -24,6 +24,6 @@ export const editComponentPropertyTool: ToolSpec = {
       .array(z.object({ type: z.enum(['COMPONENT', 'COMPONENT_SET']), key: z.string() }))
       .describe('INSTANCE_SWAP only: replacement swap-menu components/sets')
       .optional(),
-  },
+  }),
   kind: 'write',
 };

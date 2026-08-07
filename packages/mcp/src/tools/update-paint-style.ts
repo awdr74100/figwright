@@ -10,11 +10,11 @@ export const updatePaintStyleTool: ToolSpec = {
   description:
     'Update an existing paint style by id. Any of name / paints / description may be omitted to ' +
     'leave unchanged. Returns { ok, styleId, name }.',
-  inputShape: {
+  inputSchema: z.object({
     styleId: z.string().describe('Paint style id to update'),
     name: z.string().optional(),
     paints: z.array(paintItemSchema).optional().describe('New paints (SOLID or gradient)'),
     description: z.string().optional(),
-  },
+  }),
   kind: 'write',
 };

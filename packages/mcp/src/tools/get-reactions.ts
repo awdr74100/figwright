@@ -10,6 +10,6 @@ export const getReactionsTool: ToolSpec = {
     'Return the prototype reactions on a node as { nodeId, reactions: [{ trigger, actions }] }. ' +
     'Each reaction pairs an interaction trigger (click, hover, timeout…) with its actions ' +
     '(navigate to node, open URL, back/close…).',
-  inputShape: { nodeId: z.string().describe('Figma node id to read reactions from') },
+  inputSchema: z.object({ nodeId: z.string().describe('Figma node id to read reactions from') }),
   kind: 'read',
 };

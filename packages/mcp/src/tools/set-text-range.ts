@@ -64,9 +64,9 @@ export const setTextRangeTool: ToolSpec = {
     'textStyleId / fillStyleId / boundVariables. Ranges apply in order (a later range overrides an ' +
     'earlier one on overlap). Fonts are loaded automatically. Set the whole node first with create_text ' +
     '/ set_text; use set_text_properties for node-level typography & overflow. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id whose ranges to style'),
     ranges: z.array(rangeSchema).describe('Character ranges + the run properties to apply to each'),
-  },
+  }),
   kind: 'write',
 };

@@ -25,7 +25,7 @@ const readOverrides = async (rootDir: string): Promise<ReturnType<typeof parseTo
   }
 };
 
-const inputShape = {
+const inputSchema = z.object({
   rootDir: z.string().describe('Project root; defaults to the server cwd').optional(),
   tokenSource: z
     .string()
@@ -37,7 +37,7 @@ const inputShape = {
     .max(1)
     .describe('Confidence at/above which a match counts as reliable (default 0.7)')
     .optional(),
-};
+});
 
 export interface TokenMapResult {
   mappings: TokenMapping[];
@@ -92,7 +92,7 @@ export const tokenMapTool: ToolSpec = {
     'project token is reported in staleOverrides and degrades to the normal join. Returns { mappings ' +
     '(candidate + confidence + status + matchedBy + builtin), unmapped, staleOverrides, tokenSource, ' +
     'profile }.',
-  inputShape,
+  inputSchema,
   kind: 'local',
 };
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
@@ -107,7 +107,7 @@ export const handleTokenMap = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<TokenMapResult> => {
-  const args = z.object(inputShape).parse(rawArgs);
+  const args = inputSchema.parse(rawArgs);
   const rootDir = args.rootDir ?? process.cwd();
   const threshold = args.threshold ?? DEFAULT_THRESHOLD;
 

@@ -9,9 +9,9 @@ export const groupNodesTool: ToolSpec = {
   description:
     'Group nodes under their shared parent. nodeIds must be a non-empty list. ' +
     'Returns { ok, nodeId, name, type } for the new group.',
-  inputShape: {
+  inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to group'),
     name: z.string().optional().describe('Optional name for the new group'),
-  },
+  }),
   kind: 'write',
 };

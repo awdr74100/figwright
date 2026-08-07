@@ -18,7 +18,7 @@ export const setLayoutPropsTool: ToolSpec = {
     'max-w); pass null to clear a bound. Bounds apply to auto-layout frames and their direct ' +
     'children. HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. Any ' +
     'field may be omitted to leave it unchanged. Returns { ok, nodeId }.',
-  inputShape: {
+  inputSchema: z.object({
     nodeId: z.string().describe('Node id — an auto-layout frame, or a child inside one'),
     layoutSizingHorizontal: z
       .enum(['FIXED', 'HUG', 'FILL'])
@@ -65,6 +65,6 @@ export const setLayoutPropsTool: ToolSpec = {
       .nullable()
       .optional()
       .describe('Maximum height in px (null clears the bound)'),
-  },
+  }),
   kind: 'write',
 };
