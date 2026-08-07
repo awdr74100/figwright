@@ -4,6 +4,7 @@ import {
   checkPluginCompatibility,
   compareVersions,
   MIN_PLUGIN_VERSION,
+  pluginSkewNotice,
   requiredPluginVersion,
 } from '../src/version.js';
 
@@ -49,6 +50,27 @@ describe('requiredPluginVersion', () => {
     // version, and a server that demanded a plugin newer than itself would reject its own build.
     expect(requiredPluginVersion('0.3.0')).toBe('0.3.0');
     expect(requiredPluginVersion('0.1.0')).toBe('0.1.0');
+  });
+});
+
+describe('pluginSkewNotice', () => {
+  it('says what may be wrong, not merely that versions differ', () => {
+    const notice = pluginSkewNotice('0.3.0', '0.4.0');
+    // The failure has no symptom of its own, so the text has to supply one.
+    expect(notice).toContain('v0.3.0');
+    expect(notice).toContain('v0.4.0');
+    expect(notice).toMatch(/silently ignored/i);
+    expect(notice).toMatch(/report success/i);
+    expect(notice).toMatch(/unverified/i);
+    // And the action, aimed at the agent's user rather than at a developer.
+    expect(notice).toMatch(/tell the user to update/i);
+    expect(notice).toContain('releases/latest');
+  });
+
+  it('quotes a version it cannot parse instead of dressing it up', () => {
+    // `vnightly` — caught twice in live testing, once in each wording.
+    expect(pluginSkewNotice('nightly', '0.4.0')).toContain('"nightly"');
+    expect(pluginSkewNotice('nightly', '0.4.0')).not.toContain('vnightly');
   });
 });
 

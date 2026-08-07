@@ -333,7 +333,10 @@ export class RelayClient {
           sessionResumed: result.sessionResumed,
           serverVersion: result.serverVersion,
           lastError: null,
-          blockedReason: null,
+          // Connected, but the server may have said this build is behind it. That is not a failure
+          // — every call still runs — so it belongs in the banner rather than as an error, and it
+          // has to survive the successful connect that clears everything else.
+          blockedReason: result.skewNotice ?? null,
           connectedAt: Date.now(),
         });
         this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);

@@ -65,6 +65,38 @@ describe('dispatchTool', () => {
     expect(received).toEqual({ tool: 'remote_tool', args: { y: 2 } });
   });
 
+  it('carries the leader’s skew warning back to a follower', async () => {
+    // Only the leader holds the relay, so a follower has no way of its own to know which plugin
+    // build served the call. Without this the warning would reach some users and not others,
+    // depending on which process happened to win the election.
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => ({
+        kind: 'ok',
+        requestId: 'r',
+        result: { ok: true },
+        notice: 'Figwright plugin v0.3.0 is older than this server (v0.4.0).',
+      }),
+    });
+    const seen: (string | null)[] = [];
+
+    await dispatchTool({ node, follower, onSkewNotice: n => seen.push(n) }, 'set_fills', {});
+
+    expect(seen).toEqual(['Figwright plugin v0.3.0 is older than this server (v0.4.0).']);
+  });
+
+  it('reports no skew when the leader attaches none', async () => {
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => ({ kind: 'ok', requestId: 'r', result: {} }),
+    });
+    const seen: (string | null)[] = [];
+
+    await dispatchTool({ node, follower, onSkewNotice: n => seen.push(n) }, 'set_fills', {});
+
+    expect(seen).toEqual([null]);
+  });
+
   it('throws DispatchError immediately on non-transient follower error', async () => {
     const node = makeNode({ isLeader: () => false, getLeader: () => null });
     const follower = makeFollower({

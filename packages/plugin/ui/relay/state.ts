@@ -47,11 +47,11 @@ export interface RelayClientState {
   serverVersion: string | null;
   lastError: string | null;
   /**
-   * Why the server refused this plugin outright, or null. Distinct from `lastError`, which also
-   * holds the ordinary churn of looking for a server that is not running yet — reconnecting forever
-   * is the correct response to that, and a banner for it would be noise. A refusal is the opposite:
-   * retrying cannot fix it, no reconnect will, and the only way out is the user re-importing the
-   * plugin. So it is kept apart and shown in the header, where they already are.
+   * Set when this build is behind the server it connected to, or when a server refused it outright.
+   * Distinct from `lastError`, which also holds the ordinary churn of looking for a server that is
+   * not running yet — reconnecting forever is the right answer to that, and a banner for it would
+   * be noise. This is the opposite: no reconnect changes it, and the only way out is the user
+   * updating the plugin. So it is kept apart and shown in the header, where they already are.
    */
   blockedReason: string | null;
   /** Epoch ms of the current connection, or null while not connected (for uptime). */

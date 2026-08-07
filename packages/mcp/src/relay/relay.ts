@@ -16,6 +16,7 @@ import {
   HelloParamsSchema,
   type HelloResult,
   newId,
+  pluginSkewNotice,
   PROTOCOL_VERSION,
   SystemMethod,
 } from '@figwright/shared';
@@ -57,12 +58,6 @@ export class Relay {
   private readonly pending = new Map<string, Pending>();
   private heartbeatDeferrals = 0;
   private lastRequestAtMs = 0;
-  /**
-   * The message from the most recent plugin turned away at `$hello`, cleared as soon as any plugin
-   * is accepted. It is what a tool call answers with while nothing is connected, so the agent can
-   * tell the user to update their plugin instead of reporting a timeout.
-   */
-  private lastRefusal: string | null = null;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -160,23 +155,25 @@ export class Relay {
       const session = this.pickActiveSession();
       if (session !== undefined && session.socket !== null) {
         this.dispatchPending(id, entry, session);
-      } else if (this.lastRefusal !== null) {
-        // A plugin *did* reach this server and was turned away for being too old. Queueing here
-        // would spend the whole timeout and then report "plugin request timeout", which reads as
-        // "the plugin isn't open" — sending the agent, and the user it is advising, after the wrong
-        // problem entirely. The refusal is the answer, so give it now.
-        clearTimeout(timer);
-        this.pending.delete(id);
-        reject(new Error(this.lastRefusal));
       } else {
         this.opts.log(`[relay] queued ${method} (no plugin connected)`);
       }
     });
   }
 
-  /** The most recent `$hello` refusal, or null if a plugin has since been accepted. */
-  refusalReason(): string | null {
-    return this.lastRefusal;
+  /**
+   * The skew warning for the session routing would pick, or null when the connected plugin is
+   * current. Read per tool call so the notice rides along with every result — the agent has to be
+   * told on the call it is about to act on, not only if it happens to ask.
+   */
+  skewNotice(sessionId?: string): string | null {
+    const session =
+      sessionId === undefined ? this.pickActiveSession() : this.sessions.get(sessionId);
+    if (session === undefined) return null;
+    const compat = checkPluginCompatibility(session.clientVersion, this.opts.serverVersion);
+    return compat.compatible
+      ? null
+      : pluginSkewNotice(session.clientVersion, this.opts.serverVersion);
   }
 
   pendingCount(): number {
@@ -351,36 +348,18 @@ export class Relay {
     }
 
     // Feature set: does this plugin still act on everything this server sends? A plugin below the
-    // floor has handlers that silently drop arguments they predate, and a dropped argument returns
-    // `{ ok: true }` like any success — so this connection has to be refused rather than degraded.
-    // Serving it would mean writes that report success and did something else.
+    // floor silently drops arguments it predates. It is served anyway — refusing it was built,
+    // measured against a real v0.3.0 plugin, and abandoned when it produced ~7 rejected handshakes a
+    // second forever, because the "stop retrying" half can only ever live in a plugin new enough not
+    // to be refused. What the server can do is make sure nobody is misled: every result this session
+    // serves carries the notice below.
     const compat = checkPluginCompatibility(parsed.data.clientVersion, this.opts.serverVersion);
     if (!compat.compatible) {
-      const message =
-        `plugin too old: this server (v${this.opts.serverVersion}) needs the Figwright plugin at ` +
-        // Quoted, not `v`-prefixed: this value is whatever the peer claimed, and an unreadable one
-        // (which is refused too) renders as `vnightly` if it is dressed up as a version.
-        `v${compat.required} or newer, but the connected plugin reports "${parsed.data.clientVersion}". ` +
-        'An older plugin ignores arguments it predates and still reports success, so it is refused ' +
-        'rather than served. Re-import the plugin from the latest release ' +
-        '(https://github.com/awdr74100/figwright/releases/latest), then reopen it in Figma.';
-      // Remember it: the plugin now stops retrying (see the client's `refused` flag), so this is the
-      // only trace that a too-old plugin tried. Without it a later tool call reports a generic
-      // timeout and the agent tells the user to check that the plugin is open.
-      this.lastRefusal = message;
-      this.opts.log(`[relay] rejecting plugin — ${message}`);
-      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message, {
-        reason: 'pluginTooOld',
-        required: compat.required,
-        actual: parsed.data.clientVersion,
-        serverVersion: this.opts.serverVersion,
-      });
-      return null;
+      this.opts.log(
+        `[relay] plugin "${parsed.data.clientVersion}" predates this server (v${this.opts.serverVersion}); ` +
+          'serving it, and marking every result as unverified',
+      );
     }
-
-    // Accepted, so any earlier refusal is stale — a second Figma file on a current plugin must not
-    // keep answering for one the user has since replaced.
-    this.lastRefusal = null;
 
     const { session, resumed } = this.sessions.register({
       id: env.sessionId,
@@ -415,6 +394,9 @@ export class Relay {
       serverVersion: this.opts.serverVersion,
       protocolVersion: PROTOCOL_VERSION,
       sessionResumed: resumed,
+      ...(compat.compatible
+        ? {}
+        : { skewNotice: pluginSkewNotice(parsed.data.clientVersion, this.opts.serverVersion) }),
     };
     this.sendResponse(socket, env, result);
     this.opts.log(`[relay] session ${session.id} hello (resumed=${resumed})`);

@@ -194,44 +194,10 @@ describe('Relay hello loop', () => {
     await new Promise(r => ws.once('close', r));
   });
 
-  it('refuses a plugin below the version floor, naming both versions and the way out', async () => {
-    // The connection is refused rather than degraded because a plugin below the floor drops
-    // arguments it predates and still answers { ok: true } — a served one writes the wrong thing
-    // and reports success.
-    const { port } = await startRelay();
-    const ws = await connect(port);
-    ws.send(
-      encodeEnvelope(
-        createRequest({
-          id: 'h1',
-          sessionId: newId(),
-          method: SystemMethod.Hello,
-          params: helloParams({ clientVersion: '0.0.1' }),
-        }),
-      ),
-    );
-    const res = decodeEnvelope(await nextMessage(ws)) as ErrorEnvelope;
-    expect(res.kind).toBe('err');
-    expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
-    expect(res.error.message).toMatch(/plugin too old/i);
-    // Actionable on its own: what it saw, what it needs, and what to do about it.
-    expect(res.error.message).toContain('0.0.1');
-    expect(res.error.message).toContain(MIN_PLUGIN_VERSION);
-    expect(res.error.message).toMatch(/re-import/i);
-    // Structured beside the prose, so a consumer acts on fields rather than parsing a sentence.
-    expect(res.error.data).toEqual({
-      reason: 'pluginTooOld',
-      required: MIN_PLUGIN_VERSION,
-      actual: '0.0.1',
-      serverVersion: '1.0.0',
-    });
-    await new Promise(r => ws.once('close', r));
-  });
-
-  it('answers a tool call with the refusal instead of timing out on an empty queue', async () => {
-    // The half an agent sees. A refused plugin leaves no session, so a dispatch would otherwise sit
-    // in the queue until the timeout and report "plugin request timeout" — which reads as "the
-    // plugin isn't open", and is the advice that sends the user looking in the wrong place.
+  it('serves a plugin below the floor, and marks its session as skewed', async () => {
+    // Refusing was built, measured against a real v0.3.0 plugin, and abandoned: the "stop retrying"
+    // half can only live in a plugin new enough never to be refused, so an old one re-offered the
+    // rejected handshake ~7x a second forever. The server serves it and says so instead.
     const b = await startRelay();
     const ws = await connect(b.port);
     ws.send(
@@ -244,48 +210,23 @@ describe('Relay hello loop', () => {
         }),
       ),
     );
-    await nextMessage(ws);
-    await new Promise(r => ws.once('close', r));
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
 
-    await expect(b.relay.sendRequest('get_document', {}, 500)).rejects.toThrow(/plugin too old/i);
-    expect(b.relay.refusalReason()).toMatch(/plugin too old/i);
+    expect(res.kind).toBe('res');
+    expect(b.relay.sessions.connected()).toHaveLength(1);
+    // Told on the handshake, so a plugin new enough to render it can, before any call is made.
+    const result = res.result as HelloResult;
+    expect(result.skewNotice).toMatch(/older than this server/i);
+    expect(result.skewNotice).toMatch(/silently ignored/i);
+    expect(result.skewNotice).toMatch(/update the Figma plugin/i);
+    // And available per call, which is where an agent actually reads it.
+    expect(b.relay.skewNotice()).toMatch(/older than this server/i);
+    ws.close();
   });
 
-  it('forgets the refusal once a current plugin connects', async () => {
-    // A second Figma file on an up-to-date plugin must not keep answering for one already replaced.
+  it('serves a plugin whose version cannot be identified, and warns about it', async () => {
     const b = await startRelay();
-    const stale = await connect(b.port);
-    stale.send(
-      encodeEnvelope(
-        createRequest({
-          id: 'h1',
-          sessionId: newId(),
-          method: SystemMethod.Hello,
-          params: helloParams({ clientVersion: '0.0.1' }),
-        }),
-      ),
-    );
-    await nextMessage(stale);
-
-    const ok = await connect(b.port);
-    ok.send(
-      encodeEnvelope(
-        createRequest({
-          id: 'h2',
-          sessionId: newId(),
-          method: SystemMethod.Hello,
-          params: helloParams(),
-        }),
-      ),
-    );
-    await nextMessage(ok);
-
-    expect(b.relay.refusalReason()).toBeNull();
-  });
-
-  it('refuses a plugin whose version cannot be identified', async () => {
-    const { port } = await startRelay();
-    const ws = await connect(port);
+    const ws = await connect(b.port);
     ws.send(
       encodeEnvelope(
         createRequest({
@@ -296,16 +237,38 @@ describe('Relay hello loop', () => {
         }),
       ),
     );
-    const res = decodeEnvelope(await nextMessage(ws)) as ErrorEnvelope;
-    expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
-    await new Promise(r => ws.once('close', r));
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect(res.kind).toBe('res');
+    expect((res.result as HelloResult).skewNotice).toMatch(/older than this server/i);
+    ws.close();
   });
 
-  it('admits a plugin newer than the server', async () => {
-    // Skew in this direction is safe: a newer plugin understands every argument an older server
-    // sends, so refusing it would cost the user a working session for nothing.
-    const { port } = await startRelay();
-    const ws = await connect(port);
+  it('says nothing about skew for a current plugin', async () => {
+    // The warning only means anything if it stays quiet when there is nothing to warn about.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect((res.result as HelloResult).skewNotice).toBeUndefined();
+    expect(b.relay.skewNotice()).toBeNull();
+    ws.close();
+  });
+
+  it('admits a plugin newer than the server without warning', async () => {
+    // Skew this way is safe: a newer plugin understands every argument an older server sends.
+    const b = await startRelay();
+    const ws = await connect(b.port);
     ws.send(
       encodeEnvelope(
         createRequest({
@@ -317,7 +280,10 @@ describe('Relay hello loop', () => {
       ),
     );
     const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
     expect(res.kind).toBe('res');
+    expect((res.result as HelloResult).skewNotice).toBeUndefined();
+    ws.close();
   });
 
   it('responds to client-initiated $ping with ok result', async () => {

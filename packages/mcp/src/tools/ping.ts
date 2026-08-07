@@ -65,11 +65,9 @@ export interface PingSessionInfo {
   pageName: string | null;
   lastActivityAt: number;
   /**
-   * The plugin build on the other end. A plugin below MIN_PLUGIN_VERSION never gets this far — the
-   * relay refuses it at `$hello` — so this reports the skew that is still allowed: a plugin older
-   * than the server but new enough to act on everything it is sent. Worth surfacing anyway, because
-   * "which halves is this session actually made of" is otherwise only visible inside Figma's
-   * panel.
+   * The plugin build on the other end. Nothing is refused for being old, so this is how "which
+   * halves is this session actually made of" becomes answerable outside Figma's own panel — and it
+   * is what `pluginSkew` is derived from.
    */
   pluginVersion: string;
 }
@@ -90,11 +88,10 @@ export interface PingResult {
   sessions?: PingSessionsInfo;
   plugin: unknown | null;
   /**
-   * Present only when a plugin was refused at the handshake and none has connected since: the
-   * version floor turned it away. Distinguishes "too old, tell the user to re-import" from the "no
-   * plugin open" that an empty session list otherwise implies.
+   * Present when the routed plugin predates this server, so its results may be incomplete. Every
+   * affected tool result carries the same warning; this is here so a health check states it too.
    */
-  pluginRefused?: string;
+  pluginSkew?: string;
   dispatchError?: string;
 }
 
@@ -139,7 +136,6 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
 
   if (relay !== undefined) {
     const connected = relay.sessions.connected();
-    const refused = relay.refusalReason();
     if (connected.length === 0) {
       return {
         ok: true,
@@ -153,10 +149,6 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
           all: [],
         },
         plugin: null,
-        // Nothing is connected — but if a plugin reached this server and was turned away for being
-        // too old, that is the reason, and it is the one an agent can act on. Without it `ping`
-        // reads as "no plugin open", which is the advice that wastes the user's afternoon.
-        ...(refused === null ? {} : { pluginRefused: refused }),
       };
     }
     const routed = relay.pickActiveSession();
@@ -187,7 +179,15 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         'ping',
         {},
       );
-      return { ok: true, hop: 'e2e', server, sessions, plugin };
+      const skew = relay.skewNotice();
+      return {
+        ok: true,
+        hop: 'e2e',
+        server,
+        sessions,
+        plugin,
+        ...(skew === null ? {} : { pluginSkew: skew }),
+      };
     } catch (err) {
       const dispatchError = err instanceof Error ? err.message : String(err);
       ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);

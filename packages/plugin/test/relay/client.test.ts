@@ -348,6 +348,48 @@ describe('RelayClient', () => {
     await client.disconnect();
   });
 
+  it('shows the skew warning from a successful hello without treating it as a failure', async () => {
+    // The plugin is served — status must reach connected — but the panel has to say the results
+    // coming back may be incomplete. Carried on the hello so it is visible before any call is made.
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({
+          id: req.id,
+          sessionId: req.sessionId,
+          result: helloResult({
+            skewNotice: 'Figwright plugin v0.3.0 is older than this server (v0.4.0).',
+          }),
+        }),
+      );
+    });
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.3.0', WS });
+
+    await client.connect();
+
+    expect(client.getState().status).toBe('connected');
+    expect(client.getState().blockedReason).toMatch(/older than this server/i);
+    expect(client.getState().lastError).toBeNull();
+    await client.disconnect();
+  });
+
+  it('leaves the banner clear when the server reports no skew', async () => {
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.4.0', WS });
+
+    await client.connect();
+
+    expect(client.getState().blockedReason).toBeNull();
+    await client.disconnect();
+  });
+
   it('keeps retrying when the server is merely absent', async () => {
     // The counterpart the fix must not break: no server yet is the ordinary cold start, and it has
     // to keep probing so the plugin connects on its own once the MCP server launches.

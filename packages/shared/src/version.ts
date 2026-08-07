@@ -9,40 +9,46 @@
 // It bites in a way no gate here can see. Tool arguments are validated on the server (Zod, in
 // `tools/`) and read positionally by the sandbox handler (`const p = params as { … }`), so a server
 // that sends an argument an older handler never destructures gets no error — the field simply
-// vanishes and the write reports `{ ok: true }`. Measured against the shipped releases: a v0.3.0
-// plugin drops `get_screenshot`'s `forVision`, which is the cap that keeps a raster inside the
-// model's context window, so the screenshot comes back at full scale and can take the connection
-// down on the 10MB stdio ceiling.
+// vanishes and the write reports `{ ok: true }`. Measured against the shipped releases: a v0.1.0
+// plugin drops `layoutSizingHorizontal`, so "make this fill its container" reports success and
+// changes nothing.
 //
-// MCP settles the equivalent question by refusing rather than guessing: a peer asking for a version
-// the other does not implement gets `UnsupportedProtocolVersionError` carrying what is supported and
-// what was requested, and if nothing is mutually supported the client surfaces the error to the
-// user. MIN_PLUGIN_VERSION is that idea applied to the implementation version: the oldest plugin
-// this server will talk to.
+// **Skew warns; it never blocks.** Refusing the connection was built first and measured against a
+// real old plugin, which is how the reason not to shipped itself: the plugin decides whether to keep
+// retrying, and every plugin that would be refused is by definition too old to contain that
+// decision. A v0.3.0 plugin re-offered the rejected handshake ~7 times a second, indefinitely — 195
+// sockets in TIME_WAIT, steady state, from one Figma tab. Everything that could soften a refusal
+// (stop retrying, show a banner) lives in the plugin, and so reaches only plugins that are already
+// new enough not to need it. For the population this exists for, the server is the only half that
+// can act at all.
 //
-// Where it deliberately diverges: as of revision 2026-07-28 MCP has no negotiation handshake at all
-// — every request carries its own version and is accepted or rejected on its own. That works because
-// an MCP client can retry with a different version. This relay is a stateful session (the plugin
-// connects once and is dispatched to for as long as the panel is open) and the plugin has nothing to
-// fall back to, so the question is settled once, at `$hello`, in the shape of the earlier
-// handshake-based revisions.
+// So the server acts by removing the *silence*, which was the actual defect — the call still runs,
+// and every result carries {@linkcode pluginSkewNotice} telling the agent the result is unverified
+// and the user should update. A wrong write is still possible; it is no longer unattributable.
 //
-// Capabilities are also deliberately not used. They exist for features a peer may legitimately never
-// have (sampling, roots; extensions in the modern revision), and the rule there is that the
-// supporting side reverts to core behaviour or rejects. A plugin missing `layoutSizingHorizontal` is
-// not declining an option, it is one product at an older version — what a floor is for. Per-argument
-// flags would also need a hand-kept table of which argument arrived when, and this repo knows where
-// those end up: `PROTOCOL_VERSION` sat at its initial value for every release because nothing forced
-// it to move. `test/plugin-contract.test.ts` is what forces this one to move.
+// This is also what MCP does at the equivalent seam, once you follow it past the version handshake:
+// for optional behaviour a peer may not have, "the supporting party MUST either revert to core
+// protocol behavior or reject the request" — reverting is a legitimate answer, not a lesser one. Its
+// hard `UnsupportedProtocolVersionError` is reserved for a peer it genuinely cannot parse, which
+// here is `PROTOCOL_VERSION`, still a refusal and still separate. (Worth noting the handshake itself
+// is gone as of revision 2026-07-28: every request now carries its own version. That model relies on
+// a client that can retry with a different one, which a Figma plugin cannot, so this stays a
+// handshake in the shape of the earlier revisions.)
+//
+// Per-argument capability flags, LSP-style, are the other road not taken: they need a hand-kept
+// table of which argument arrived when, and this repo knows where those end up — `PROTOCOL_VERSION`
+// sat at its initial value for every release because nothing forced it to move.
+// `test/plugin-contract.test.ts` is what forces this one to move.
 
 /**
- * Oldest plugin build this server accepts. Raise it in the same change that makes older plugins
- * wrong — a new argument on an existing tool, a changed result shape, a renamed method — to the
- * version that change will ship in.
+ * The version below which a plugin is missing arguments this server sends. Raise it in the same
+ * change that makes older plugins wrong — a new argument on an existing tool, a changed result
+ * shape, a renamed method — to the version that change will ship in.
  *
- * Raising it locks out every plugin below it until the user re-imports, so it buys correctness with
- * the user's time: raise it for a silent-wrong-answer bug, not for a feature they can live
- * without.
+ * Nothing is blocked below it; it is the threshold at which every tool result starts carrying
+ * {@linkcode pluginSkewNotice}. Keeping a threshold rather than warning on any difference is what
+ * keeps the warning meaningful: a plugin one patch behind a server that changed no arguments is
+ * fine, and crying wolf there would teach an agent to discount the warning that matters.
  */
 export const MIN_PLUGIN_VERSION = '0.4.0';
 
@@ -103,6 +109,26 @@ export interface PluginCompatibility {
   /** The floor actually applied — see `requiredPluginVersion`. */
   required: string;
 }
+
+/**
+ * The warning shown when a plugin predates the server, worded for whoever reads it — which is an
+ * agent about to report a result to its user, not a developer reading a log.
+ *
+ * It has to say what may be wrong rather than only that versions differ, because the failure it
+ * describes has no symptom: a handler that predates an argument ignores it and still answers `{ ok:
+ * true }`, so a write can report success having done something else. Telling the agent exactly that
+ * is the whole mechanism — nothing here blocks the call.
+ */
+export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): string =>
+  // `v`-prefixed only when it is really a version. Whatever the peer claimed is echoed as-is
+  // otherwise, because an unreadable one dressed up as a version reads as `vnightly`.
+  `Figwright plugin ${parse(pluginVersion) === null ? `"${pluginVersion}"` : `v${pluginVersion}`} ` +
+  `is older than this server (v${serverVersion}). ` +
+  'Arguments added after the plugin was built are silently ignored by it — a write can report ' +
+  'success having applied only part of what was asked, and results can be incomplete. Treat this ' +
+  "call's result as unverified, and tell the user to update the Figma plugin: download the latest " +
+  'release from https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
+  '(Plugins → Development → Import plugin from manifest).';
 
 /**
  * The floor this server can honestly demand: never newer than the server itself.

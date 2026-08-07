@@ -213,7 +213,15 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
             deps.rpcTimeoutMs ?? getRelayBudget(toolName),
             sessionId,
           );
-          writeMsgpack(res, 200, { kind: 'ok', requestId, result });
+          // Only the leader holds the relay, so the skew warning has to travel with the result: a
+          // follower has no other way to know which plugin build served its call.
+          const notice = relay.skewNotice(sessionId);
+          writeMsgpack(res, 200, {
+            kind: 'ok',
+            requestId,
+            result,
+            ...(notice === null ? {} : { notice }),
+          });
         } catch (err) {
           const message = (err as Error).message;
           const code =
