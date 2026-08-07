@@ -14,17 +14,26 @@
 // model's context window, so the screenshot comes back at full scale and can take the connection
 // down on the 10MB stdio ceiling.
 //
-// MCP's own lifecycle answers this with version negotiation at `initialize` — the peer that cannot
-// speak the other's version is told so and disconnects, rather than proceeding on a guess. That is
-// what MIN_PLUGIN_VERSION is: the oldest plugin this server will talk to.
+// MCP settles the equivalent question by refusing rather than guessing: a peer asking for a version
+// the other does not implement gets `UnsupportedProtocolVersionError` carrying what is supported and
+// what was requested, and if nothing is mutually supported the client surfaces the error to the
+// user. MIN_PLUGIN_VERSION is that idea applied to the implementation version: the oldest plugin
+// this server will talk to.
 //
-// Capability negotiation — the other half of the MCP handshake — is deliberately *not* used here.
-// Capabilities exist for features a peer may legitimately never have (sampling, roots). A plugin
-// missing `layoutSizingHorizontal` is not exercising an option; it is one product at an older
-// version, which is exactly what a version floor is for. Per-argument capability flags would also
-// mean a hand-kept table of which argument arrived when — and this repo already learned where those
-// end up: `PROTOCOL_VERSION` sat at its initial value for every release because nothing forced it to
-// move. `test/plugin-contract.test.ts` is the thing that forces this one to move.
+// Where it deliberately diverges: as of revision 2026-07-28 MCP has no negotiation handshake at all
+// — every request carries its own version and is accepted or rejected on its own. That works because
+// an MCP client can retry with a different version. This relay is a stateful session (the plugin
+// connects once and is dispatched to for as long as the panel is open) and the plugin has nothing to
+// fall back to, so the question is settled once, at `$hello`, in the shape of the earlier
+// handshake-based revisions.
+//
+// Capabilities are also deliberately not used. They exist for features a peer may legitimately never
+// have (sampling, roots; extensions in the modern revision), and the rule there is that the
+// supporting side reverts to core behaviour or rejects. A plugin missing `layoutSizingHorizontal` is
+// not declining an option, it is one product at an older version — what a floor is for. Per-argument
+// flags would also need a hand-kept table of which argument arrived when, and this repo knows where
+// those end up: `PROTOCOL_VERSION` sat at its initial value for every release because nothing forced
+// it to move. `test/plugin-contract.test.ts` is what forces this one to move.
 
 /**
  * Oldest plugin build this server accepts. Raise it in the same change that makes older plugins

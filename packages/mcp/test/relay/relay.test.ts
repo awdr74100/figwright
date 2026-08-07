@@ -218,7 +218,69 @@ describe('Relay hello loop', () => {
     expect(res.error.message).toContain('0.0.1');
     expect(res.error.message).toContain(MIN_PLUGIN_VERSION);
     expect(res.error.message).toMatch(/re-import/i);
+    // Structured beside the prose, so a consumer acts on fields rather than parsing a sentence.
+    expect(res.error.data).toEqual({
+      reason: 'pluginTooOld',
+      required: MIN_PLUGIN_VERSION,
+      actual: '0.0.1',
+      serverVersion: '1.0.0',
+    });
     await new Promise(r => ws.once('close', r));
+  });
+
+  it('answers a tool call with the refusal instead of timing out on an empty queue', async () => {
+    // The half an agent sees. A refused plugin leaves no session, so a dispatch would otherwise sit
+    // in the queue until the timeout and report "plugin request timeout" — which reads as "the
+    // plugin isn't open", and is the advice that sends the user looking in the wrong place.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+    await new Promise(r => ws.once('close', r));
+
+    await expect(b.relay.sendRequest('get_document', {}, 500)).rejects.toThrow(/plugin too old/i);
+    expect(b.relay.refusalReason()).toMatch(/plugin too old/i);
+  });
+
+  it('forgets the refusal once a current plugin connects', async () => {
+    // A second Figma file on an up-to-date plugin must not keep answering for one already replaced.
+    const b = await startRelay();
+    const stale = await connect(b.port);
+    stale.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(stale);
+
+    const ok = await connect(b.port);
+    ok.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h2',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(ok);
+
+    expect(b.relay.refusalReason()).toBeNull();
   });
 
   it('refuses a plugin whose version cannot be identified', async () => {

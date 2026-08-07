@@ -89,6 +89,12 @@ export interface PingResult {
   server: PingServerInfo;
   sessions?: PingSessionsInfo;
   plugin: unknown | null;
+  /**
+   * Present only when a plugin was refused at the handshake and none has connected since: the
+   * version floor turned it away. Distinguishes "too old, tell the user to re-import" from the "no
+   * plugin open" that an empty session list otherwise implies.
+   */
+  pluginRefused?: string;
   dispatchError?: string;
 }
 
@@ -133,6 +139,7 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
 
   if (relay !== undefined) {
     const connected = relay.sessions.connected();
+    const refused = relay.refusalReason();
     if (connected.length === 0) {
       return {
         ok: true,
@@ -146,6 +153,10 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
           all: [],
         },
         plugin: null,
+        // Nothing is connected — but if a plugin reached this server and was turned away for being
+        // too old, that is the reason, and it is the one an agent can act on. Without it `ping`
+        // reads as "no plugin open", which is the advice that wastes the user's afternoon.
+        ...(refused === null ? {} : { pluginRefused: refused }),
       };
     }
     const routed = relay.pickActiveSession();

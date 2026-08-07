@@ -57,6 +57,12 @@ export class Relay {
   private readonly pending = new Map<string, Pending>();
   private heartbeatDeferrals = 0;
   private lastRequestAtMs = 0;
+  /**
+   * The message from the most recent plugin turned away at `$hello`, cleared as soon as any plugin
+   * is accepted. It is what a tool call answers with while nothing is connected, so the agent can
+   * tell the user to update their plugin instead of reporting a timeout.
+   */
+  private lastRefusal: string | null = null;
 
   constructor(opts: RelayOptions) {
     this.opts = {
@@ -154,10 +160,23 @@ export class Relay {
       const session = this.pickActiveSession();
       if (session !== undefined && session.socket !== null) {
         this.dispatchPending(id, entry, session);
+      } else if (this.lastRefusal !== null) {
+        // A plugin *did* reach this server and was turned away for being too old. Queueing here
+        // would spend the whole timeout and then report "plugin request timeout", which reads as
+        // "the plugin isn't open" — sending the agent, and the user it is advising, after the wrong
+        // problem entirely. The refusal is the answer, so give it now.
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(new Error(this.lastRefusal));
       } else {
         this.opts.log(`[relay] queued ${method} (no plugin connected)`);
       }
     });
+  }
+
+  /** The most recent `$hello` refusal, or null if a plugin has since been accepted. */
+  refusalReason(): string | null {
+    return this.lastRefusal;
   }
 
   pendingCount(): number {
@@ -308,9 +327,14 @@ export class Relay {
       return null;
     }
 
-    // Two gates, two different questions — both settled once here, at the handshake, the way MCP's
-    // `initialize` settles version before any operation runs. The envelope schema deliberately no
-    // longer enforces either per-message, so a rejected peer can still decode the rejection.
+    // Two gates, two different questions, both settled at the handshake because this relay is a
+    // stateful session — the plugin connects once and is dispatched to for as long as the panel is
+    // open, so there is no per-request point at which to answer them.
+    //
+    // Both rejections carry structured `data` beside the prose, matching the shape MCP specifies for
+    // the same situation (`{ supported, requested }` on its version error). The text is written for
+    // the panel, since the spec's own note applies here too: for a peer with no way to fall forward,
+    // this message may be the only diagnostic a user ever sees.
     //
     // Wire format: can we understand each other's envelopes at all?
     if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
@@ -318,7 +342,11 @@ export class Relay {
         `protocol mismatch: server speaks ${PROTOCOL_VERSION}, plugin speaks ${parsed.data.protocolVersion} — ` +
         'update the older Figwright component so both match (server: @figwright/mcp, plugin: re-import the latest release)';
       this.opts.log(`[relay] rejecting plugin — ${message}`);
-      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
+      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message, {
+        reason: 'protocol',
+        supported: PROTOCOL_VERSION,
+        requested: parsed.data.protocolVersion,
+      });
       return null;
     }
 
@@ -330,14 +358,29 @@ export class Relay {
     if (!compat.compatible) {
       const message =
         `plugin too old: this server (v${this.opts.serverVersion}) needs the Figwright plugin at ` +
-        `v${compat.required} or newer, but the connected plugin reports v${parsed.data.clientVersion}. ` +
+        // Quoted, not `v`-prefixed: this value is whatever the peer claimed, and an unreadable one
+        // (which is refused too) renders as `vnightly` if it is dressed up as a version.
+        `v${compat.required} or newer, but the connected plugin reports "${parsed.data.clientVersion}". ` +
         'An older plugin ignores arguments it predates and still reports success, so it is refused ' +
         'rather than served. Re-import the plugin from the latest release ' +
         '(https://github.com/awdr74100/figwright/releases/latest), then reopen it in Figma.';
+      // Remember it: the plugin now stops retrying (see the client's `refused` flag), so this is the
+      // only trace that a too-old plugin tried. Without it a later tool call reports a generic
+      // timeout and the agent tells the user to check that the plugin is open.
+      this.lastRefusal = message;
       this.opts.log(`[relay] rejecting plugin — ${message}`);
-      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
+      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message, {
+        reason: 'pluginTooOld',
+        required: compat.required,
+        actual: parsed.data.clientVersion,
+        serverVersion: this.opts.serverVersion,
+      });
       return null;
     }
+
+    // Accepted, so any earlier refusal is stale — a second Figma file on a current plugin must not
+    // keep answering for one the user has since replaced.
+    this.lastRefusal = null;
 
     const { session, resumed } = this.sessions.register({
       id: env.sessionId,
@@ -440,7 +483,13 @@ export class Relay {
     socket.send(encodeEnvelope(createResponse({ id: req.id, sessionId: req.sessionId, result })));
   }
 
-  private sendError(socket: WebSocket, req: Envelope, code: string, message: string): void {
+  private sendError(
+    socket: WebSocket,
+    req: Envelope,
+    code: string,
+    message: string,
+    data?: unknown,
+  ): void {
     socket.send(
       encodeEnvelope(
         createError({
@@ -448,6 +497,7 @@ export class Relay {
           sessionId: req.sessionId || newId(),
           code,
           message,
+          ...(data === undefined ? {} : { data }),
         }),
       ),
     );

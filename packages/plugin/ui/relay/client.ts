@@ -88,6 +88,17 @@ export class RelayClient {
    * true reconnect.
    */
   private hasConnected = false;
+  /**
+   * True once a server has refused this build outright (a version floor it does not meet). Unlike
+   * every other connection failure, retrying cannot change the answer — the plugin has to be
+   * replaced — so the back-off loop stops instead of running forever.
+   *
+   * Without this the cost is not theoretical: a refused plugin never sets `hasConnected`, so the
+   * loop takes the cold-start ceiling of 150ms and re-offers the same rejected handshake about
+   * seven times a second, for as long as the panel is open, writing a rejection line into the
+   * server's log each time.
+   */
+  private refused = false;
   private toolHandler: ToolHandler | null = null;
 
   constructor(opts: RelayClientOptions) {
@@ -175,7 +186,8 @@ export class RelayClient {
         `no Figwright server on :${this.opts.ports.join(', ')} yet — it connects automatically once ` +
           `the MCP server starts; if it never does, another process may be holding that port`,
     });
-    if (!this.stopped) void this.runReconnectLoop();
+    // A refusal is terminal: the way out is re-importing the plugin, which builds a fresh client.
+    if (!this.stopped && !this.refused) void this.runReconnectLoop();
   }
 
   /**
@@ -291,12 +303,12 @@ export class RelayClient {
           // A hello rejection (e.g. a protocol-version mismatch) is a concrete, actionable reason.
           // Record it so the UI surfaces "update your plugin" rather than the generic "no server
           // found", and so the reconnect path can preserve it (see connect()).
+          if (envelope.error.code === ErrorCode.ProtocolMismatch) this.refused = true;
           this.update({
             lastError: envelope.error.message,
             // A version refusal cannot be retried away, so it is held separately from the churn of
             // an ordinary failed attempt and surfaced in the header until the plugin is replaced.
-            blockedReason:
-              envelope.error.code === ErrorCode.ProtocolMismatch ? envelope.error.message : null,
+            blockedReason: this.refused ? envelope.error.message : null,
           });
           fail(`hello rejected: ${envelope.error.message}`);
           return;
@@ -309,6 +321,9 @@ export class RelayClient {
         const result = envelope.result as HelloResult;
         cleanup();
         this.hasConnected = true;
+        // A server that accepts this build clears the refusal: the user may have downgraded the
+        // server, or a newer leader may have taken over the port.
+        this.refused = false;
         this.socket = ws;
         this.startHeartbeat(ws);
         this.bindLiveHandlers(ws);
@@ -425,7 +440,7 @@ export class RelayClient {
   }
 
   private async runReconnectLoop(): Promise<void> {
-    if (this.reconnecting || this.stopped) return;
+    if (this.reconnecting || this.stopped || this.refused) return;
     this.reconnecting = true;
     // A live socket that dropped is a true reconnect; retrying a never-established cold-start connect
     // is not. Capture the distinction now so a successful retry only bumps `reconnectCount` in the
@@ -447,6 +462,13 @@ export class RelayClient {
           if (countSuccessAsReconnect) {
             this.update({ reconnectCount: this.state.reconnectCount + 1 });
           }
+          return;
+        }
+        // That probe reached a server and was refused for being too old. Retrying re-offers the
+        // same handshake to the same answer, so leave the loop and let the banner stand; a session
+        // that had been live lands here too, when the server it was talking to is upgraded past it.
+        if (this.refused) {
+          this.update({ status: 'disconnected' });
           return;
         }
         // A wake (tab refocus) means the user is back and expecting a live connection — restart the

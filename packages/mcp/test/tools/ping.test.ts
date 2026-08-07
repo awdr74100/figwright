@@ -24,7 +24,7 @@ describe('ping tool', () => {
       getLeader: () =>
         ({
           port: 3055,
-          relay: { sessions: { connected: () => [] } },
+          relay: { sessions: { connected: () => [] }, refusalReason: () => null },
           http: undefined as never,
         }) as unknown as ReturnType<Node['getLeader']>,
     });
@@ -39,6 +39,31 @@ describe('ping tool', () => {
     expect(result.server.version).toBe('1.0.0');
     expect(result.server.role).toBe(NodeRole.Leader);
     expect(result.server.port).toBe(3055);
+    // Nothing connected and nothing refused: no reason to claim one.
+    expect(result.pluginRefused).toBeUndefined();
+  });
+
+  it('reports a refused plugin rather than letting it read as "no plugin open"', async () => {
+    // What an agent asked "why isn't Figma responding" has to see. Without this the empty session
+    // list is indistinguishable from the plugin simply not being open, and the advice that follows
+    // sends the user to check the wrong thing.
+    const node = makeNode({
+      role: NodeRole.Leader,
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          port: 3055,
+          relay: {
+            sessions: { connected: () => [] },
+            refusalReason: () => 'plugin too old: this server (v0.4.0) needs … at v0.4.0 or newer',
+          },
+          http: undefined as never,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+
+    const result = await handlePing({ node, follower: makeFollower({}), serverVersion: '1.0.0' });
+
+    expect(result.pluginRefused).toMatch(/plugin too old/i);
   });
 
   it('surfaces a portConflict warning when the node is conflicted', async () => {
@@ -82,6 +107,7 @@ describe('ping tool', () => {
           port: 3055,
           relay: {
             sessions: { connected: () => [sessA, sessB] },
+            refusalReason: () => null,
             pickActiveSession: () => sessB,
             sendRequest: async () => pluginInfo,
           },
