@@ -162,8 +162,7 @@ const createMcpServer = (): McpServer => {
       });
     // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
     // every tool — generic or special-cased — accepts them without per-handler conversion.
-    const handler: ToolHandler = async args =>
-      run(normalizeIdArgs(args) as Record<string, unknown>);
+    const handler: ToolHandler = async args => run(normalizeIdArgs(args));
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;
     // v2's typing accepts ToolHandler directly, so the result stays checked against CallToolResult.

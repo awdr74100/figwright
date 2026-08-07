@@ -67,8 +67,12 @@ export const STRING_ID_FIELDS = [
  * Normalize the id-bearing fields of a tool's argument object in place of the caller having to do
  * it: every STRING_ID_FIELDS entry (strings) and `nodeIds` (string array). Non-object args pass
  * through.
+ *
+ * Generic in the argument rather than `unknown`, because the result is always the same shape as the
+ * input — either the input itself or a spread copy with some ids rewritten. Saying so lets the one
+ * caller keep the type the SDK handed it instead of casting back to it.
  */
-export const normalizeIdArgs = (args: unknown): unknown => {
+export const normalizeIdArgs = <T>(args: T): T => {
   if (typeof args !== 'object' || args === null) return args;
   const record = args as Record<string, unknown>;
   let out: Record<string, unknown> | null = null;
@@ -94,5 +98,5 @@ export const normalizeIdArgs = (args: unknown): unknown => {
     if (changed) ensure().nodeIds = mapped;
   }
 
-  return out ?? args;
+  return (out ?? args) as T;
 };
