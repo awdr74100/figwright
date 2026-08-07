@@ -42,7 +42,7 @@ Emit code in the detected stack (the profile is returned on component_map / toke
 
 export const figmaToCodePrompt: {
   definition: Prompt;
-  argsSchema: { nodeId: z.ZodOptional<z.ZodString> };
+  argsSchema: z.ZodObject<{ nodeId: z.ZodOptional<z.ZodString> }>;
   build: (args: PromptArgs | undefined) => GetPromptResult;
 } = {
   definition: {
@@ -61,12 +61,12 @@ export const figmaToCodePrompt: {
   },
   // McpServer.registerPrompt builds the advertised `arguments` list from this shape; prompt args are
   // always strings, so an optional string mirrors the `nodeId` argument above.
-  argsSchema: {
+  argsSchema: z.object({
     nodeId: z
       .string()
       .optional()
       .describe('Figma node id to generate from; omit to use the current selection'),
-  },
+  }),
   build: (args): GetPromptResult => ({
     description: 'Figma → code via the three grounded tools (reuse components, reference tokens)',
     messages: [

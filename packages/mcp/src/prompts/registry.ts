@@ -1,5 +1,5 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
-import type { ZodType } from 'zod';
+import type { z, ZodType } from 'zod';
 
 import { codeToFigmaPrompt } from './code-to-figma.js';
 import { figmaToCodePrompt } from './figma-to-code.js';
@@ -12,20 +12,25 @@ import { figmaToCodePrompt } from './figma-to-code.js';
 // pure, transport-free view the unit tests exercise.
 
 /**
- * A prompt's argument shape. MCP prompt arguments are strings on the wire, so every member is a Zod
- * schema over `string` — an optional one simply arrives absent. Typing it this way instead of as a
- * bare `ZodRawShape` is what keeps the shape's meaning: `index.ts` can hand the builder straight to
- * `registerPrompt` with its return type still checked, where a widened shape forced a cast that
- * erased the whole callback signature.
+ * A prompt's arguments as a Zod object, matching how {@link ToolSpec} carries a tool's — one built
+ * instance shared by registration and by anything that needs to inspect it, rather than a raw shape
+ * rebuilt at the boundary.
+ *
+ * MCP prompt arguments are strings on the wire, so every member is a schema over `string`; an
+ * optional one simply arrives absent. Keeping that in the type is what lets `index.ts` hand the
+ * builder straight to `registerPrompt` with its return type still checked — a widened shape forced
+ * a cast that erased the whole callback signature.
  */
-export type PromptArgsShape = Record<string, ZodType<string | undefined, string | undefined>>;
+export type PromptArgsSchema = z.ZodObject<
+  Record<string, ZodType<string | undefined, string | undefined>>
+>;
 
 /** Arguments as they reach a prompt's builder: strings, with omitted optional ones absent. */
 export type PromptArgs = Record<string, string | undefined>;
 
 interface PromptEntry {
   definition: Prompt;
-  argsSchema: PromptArgsShape;
+  argsSchema: PromptArgsSchema;
   build: (args: PromptArgs | undefined) => GetPromptResult;
 }
 

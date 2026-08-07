@@ -1,4 +1,5 @@
 import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 
 import type { PromptArgs } from './registry.js';
 
@@ -29,7 +30,7 @@ Rules: reuse beats regenerate (instance existing components, bind existing varia
 
 export const codeToFigmaPrompt: {
   definition: Prompt;
-  argsSchema: Record<string, never>;
+  argsSchema: z.ZodObject<Record<string, never>>;
   build: (args: PromptArgs | undefined) => GetPromptResult;
 } = {
   definition: {
@@ -41,7 +42,7 @@ export const codeToFigmaPrompt: {
       'create_instance + bind_variable_to_paint / bind_variable_to_node).',
     arguments: [],
   },
-  argsSchema: {},
+  argsSchema: z.object({}),
   build: (): GetPromptResult => ({
     description: 'Code → Figma: build from the design system (reuse components, reference tokens)',
     messages: [

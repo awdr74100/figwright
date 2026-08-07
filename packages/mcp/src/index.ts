@@ -2,7 +2,6 @@ import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from 
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
-import { z } from 'zod';
 
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_ID } from './build-id.js';
@@ -180,7 +179,7 @@ const createMcpServer = (): McpServer => {
       prompt.definition.name,
       {
         description: prompt.definition.description ?? '',
-        argsSchema: z.object(prompt.argsSchema),
+        argsSchema: prompt.argsSchema,
       },
       args => prompt.build(args),
     );
