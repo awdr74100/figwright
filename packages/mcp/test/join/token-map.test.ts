@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { joinTokens, parseTokenMapFile } from '../../src/join/token-map.js';
 import type { FigmaToken } from '../../src/tokens/figma-tokens.js';
-import type { ProjectToken } from '../../src/tokens/tokens.js';
+import { parseCssCustomProperties, type ProjectToken } from '../../src/tokens/tokens.js';
 
 const fig = (
   name: string,
@@ -420,5 +420,46 @@ describe('parseTokenMapFile', () => {
     expect(map.get('顏色次要')).toBe('--color-secondary');
     expect(map.get('顏色危險')).toBe('--color-danger');
     expect(map.has('')).toBe(false); // no all-rows-collide bucket
+  });
+});
+
+describe('joinTokens — themed stylesheets (both scopes reachable)', () => {
+  // End-to-end over the real parser: a stylesheet declaring a light base and a dark override, which
+  // is how most themed projects ship. Until the CSS scanner replaced the regex, parsing collapsed a
+  // repeated name to whichever block came last, so one of these two colors could never value-match
+  // — the light one here, since the dark block is written second.
+  const themed = parseCssCustomProperties(`
+    :root { --color-surface: #FFFFFF; --color-ink: #111111; }
+    .dark { --color-surface: #0B0B0B; --color-ink: #F5F5F5; }
+  `);
+
+  it('value-matches the light value', () => {
+    const [m] = joinTokens([fig('Color/Surface', '#FFFFFF')], themed, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-surface');
+    expect(m?.candidate?.matchedBy).toEqual(['name', 'value']);
+    expect(m?.status).toBe('high');
+  });
+
+  it('value-matches the dark override of the same token', () => {
+    const [m] = joinTokens([fig('Color/Surface', '#0B0B0B')], themed, { threshold: 0.7 });
+    expect(m?.candidate?.token).toBe('color-surface');
+    expect(m?.candidate?.matchedBy).toEqual(['name', 'value']);
+    expect(m?.status).toBe('high');
+  });
+
+  it('does not report a token as ambiguous with itself', () => {
+    // Both scopes carry the same name, so a parser that kept the duplicate pair would surface the
+    // sibling on ambiguousWith and cap confidence at 0.7.
+    const [m] = joinTokens([fig('Color/Ink', '#111111')], themed, { threshold: 0.7 });
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+    expect(m?.candidate?.confidence).toBe(1);
+  });
+
+  it('leads with the base value when only the name matches', () => {
+    // No hex on the Figma side to disambiguate, so the join falls back to the name — which must
+    // resolve to the :root declaration rather than the theme override.
+    const [m] = joinTokens([fig('Color/Surface', 'not-a-hex')], themed, { threshold: 0.7 });
+    expect(m?.candidate?.cssVar).toBe('var(--color-surface)');
+    expect(m?.candidate?.matchedBy).toEqual(['name']);
   });
 });

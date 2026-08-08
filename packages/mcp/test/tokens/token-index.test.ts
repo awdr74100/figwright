@@ -10,7 +10,7 @@ import {
   buildTokenValueIndex,
   loadTokenValueIndex,
 } from '../../src/tokens/token-index.js';
-import type { ProjectToken } from '../../src/tokens/tokens.js';
+import { parseCssCustomProperties, type ProjectToken } from '../../src/tokens/tokens.js';
 
 const proj = (name: string, value: string, utility?: string): ProjectToken => ({
   name,
@@ -171,5 +171,57 @@ describe('loadTokenValueIndex', () => {
     const dir = await mkdtemp(join(tmpdir(), 'tokenidx-empty-'));
     const r = await loadTokenValueIndex(dir);
     expect(r.index.size).toBe(0);
+  });
+});
+
+describe('annotateProjectTokens — themed stylesheets', () => {
+  // A light/dark stylesheet parsed for real. Every declared value now reaches the index, where the
+  // previous parser kept only whichever block came last — so a light-mode color had no entry at all.
+  const themed = parseCssCustomProperties(`
+    :root { --background: #FFFFFF; --foreground: #0A0A0A; --card: #FFFFFF; }
+    .dark { --background: #0A0A0A; --foreground: #FAFAFA; --card: #171717; }
+  `);
+
+  it('annotates a light-mode value that used to have no index entry at all', () => {
+    const index = buildTokenValueIndex(themed);
+    const r = annotateProjectTokens(
+      { nodes: [], globalVars: { styles: { a: [{ type: 'SOLID', color: '#FFFFFF' }] } } },
+      index,
+      false,
+    );
+    // #FFFFFF is --background and --card in light mode; both are surfaced, unranked, as candidates.
+    expect(r.projectTokens).toEqual({
+      '#FFFFFF': {
+        matchedBy: ['value'],
+        candidates: [
+          { ref: 'var(--background)', name: 'background' },
+          { ref: 'var(--card)', name: 'card' },
+        ],
+      },
+    });
+  });
+
+  it('withholds an annotation the old parser answered confidently but wrongly', () => {
+    // #0A0A0A is --foreground in light mode AND --background in dark mode. Collapsing the repeated
+    // names hid the light declarations, leaving exactly one candidate — so the payload used to be
+    // annotated "#0A0A0A is --background", which inverts the color in light mode. Seeing all of them
+    // makes it correctly ambiguous, and an ambiguous color is left to the raw hex rather than bound
+    // to an arbitrary sibling.
+    const index = buildTokenValueIndex(themed);
+    expect(index.get('#0A0A0A')?.map(t => t.name)).toEqual(['foreground', 'background']);
+    const r = annotateProjectTokens(
+      { nodes: [], globalVars: { styles: { a: [{ type: 'SOLID', color: '#0A0A0A' }] } } },
+      index,
+      false,
+    );
+    expect(r.projectTokens).toEqual({
+      '#0A0A0A': {
+        matchedBy: ['value'],
+        candidates: [
+          { ref: 'var(--background)', name: 'background' },
+          { ref: 'var(--foreground)', name: 'foreground' },
+        ],
+      },
+    });
   });
 });
