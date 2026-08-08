@@ -1,5 +1,85 @@
 # Changelog
 
+## v0.4.0
+
+[compare changes](https://github.com/awdr74100/figwright/compare/v0.3.0...v0.4.0)
+
+### 🚀 Enhancements
+
+- Add Figma Motion API tools and animated-frame video export ([#78](https://github.com/awdr74100/figwright/pull/78))
+- **plugin:** Rebuild the panel — theme-aware, component-based, and able to point at the canvas ([#101](https://github.com/awdr74100/figwright/pull/101))
+- **motion:** Expose the Motion playhead on get_node_motion ([#114](https://github.com/awdr74100/figwright/pull/114))
+- **mcp:** ⚠️  Migrate to MCP SDK v2 and gate the wire contract ([#127](https://github.com/awdr74100/figwright/pull/127))
+
+### 🩹 Fixes
+
+- **mcp:** Eliminate zombie leaders via shutdown hardening and newest-build-wins election ([#72](https://github.com/awdr74100/figwright/pull/72))
+- Gate the local relay against cross-site and DNS-rebinding access ([#96](https://github.com/awdr74100/figwright/pull/96))
+- Make @figwright/mcp bin-only so a stray import can't seize the relay port ([#98](https://github.com/awdr74100/figwright/pull/98))
+- **plugin:** Let an in-flight call be opened to see what it was asked to do ([#104](https://github.com/awdr74100/figwright/pull/104))
+- **plugin:** Rework the panel's window controls — resize grip and run-in-background ([#105](https://github.com/awdr74100/figwright/pull/105))
+- **screenshot:** Cap exports at what a vision model resolves ([#115](https://github.com/awdr74100/figwright/pull/115))
+- Enable plugin to run in Dev Mode handoff panel ([#116](https://github.com/awdr74100/figwright/pull/116))
+- **plugin:** Honour what each editor's API actually allows ([#118](https://github.com/awdr74100/figwright/pull/118))
+- **join:** Ground component reuse in what the code actually declares ([#125](https://github.com/awdr74100/figwright/pull/125))
+- **mcp:** Cap the bytes get_screenshot inlines in one batch ([#128](https://github.com/awdr74100/figwright/pull/128))
+- **mcp:** Exit when the stdio transport dies instead of lingering deaf ([#129](https://github.com/awdr74100/figwright/pull/129))
+- **variables:** Read EASING values as curves instead of a fabricated color ([#131](https://github.com/awdr74100/figwright/pull/131))
+- **relay:** ⚠️  Warn the agent when the Figma plugin is out of date ([#134](https://github.com/awdr74100/figwright/pull/134))
+- **release:** Back out of a prompt without a stack trace ([8a15234](https://github.com/awdr74100/figwright/commit/8a15234))
+- **tokens:** Read CSS custom properties with a scanner instead of a regex ([#137](https://github.com/awdr74100/figwright/pull/137))
+- **tools:** ⚠️  Scope find_replace_text with root, not rootId ([#138](https://github.com/awdr74100/figwright/pull/138))
+- **plugin:** Restore the Activity list's bottom gap and make the whole row open ([#139](https://github.com/awdr74100/figwright/pull/139))
+
+### 💅 Refactors
+
+- Read the plugin version via a JSON import attribute ([#99](https://github.com/awdr74100/figwright/pull/99))
+- **plugin:** Draw the panel's module boundaries around responsibility ([#102](https://github.com/awdr74100/figwright/pull/102))
+- **plugin:** Move the iframe bridge protocol out of shared ([#103](https://github.com/awdr74100/figwright/pull/103))
+- **plugin:** Hoist the required prop key out of the `in` check ([#113](https://github.com/awdr74100/figwright/pull/113))
+
+### 📖 Documentation
+
+- Sync glama.json to canonical description, refresh AGENTS.md facts ([#82](https://github.com/awdr74100/figwright/pull/82))
+- Add security policy with private reporting channel and security model ([#83](https://github.com/awdr74100/figwright/pull/83))
+
+### 🏡 Chore
+
+- **github:** Add issue and PR templates ([#70](https://github.com/awdr74100/figwright/pull/70))
+- **github:** Add social preview images ([#71](https://github.com/awdr74100/figwright/pull/71))
+- Drop renovate schedule, lower minimumReleaseAge to 1 day ([#85](https://github.com/awdr74100/figwright/pull/85))
+- Switch renovate to recommended + rangeStrategy bump ([#88](https://github.com/awdr74100/figwright/pull/88))
+- Pin node in renovate, drop redundant engines.pnpm ([#89](https://github.com/awdr74100/figwright/pull/89))
+- **mcp:** Drop sourcemap output from the published build ([#106](https://github.com/awdr74100/figwright/pull/106))
+- **plugin:** Raise build target from es2017 to Vite's baseline default ([#107](https://github.com/awdr74100/figwright/pull/107))
+- **plugin:** Align tsconfig target with its own lib array ([#108](https://github.com/awdr74100/figwright/pull/108))
+- Point oxfmt's Tailwind sorter at the panel's own stylesheet ([#109](https://github.com/awdr74100/figwright/pull/109))
+- Normalise line endings to LF for every clone ([#121](https://github.com/awdr74100/figwright/pull/121))
+- **release:** Pick the version from a menu instead of typing it by hand ([#132](https://github.com/awdr74100/figwright/pull/132))
+- **skills:** Drop the vendored create-readme and skill-creator ([#133](https://github.com/awdr74100/figwright/pull/133))
+
+### ✅ Tests
+
+- **relay:** De-flake heartbeat close test, add deterministic ping coverage ([#79](https://github.com/awdr74100/figwright/pull/79))
+- **mcp:** Cover the two server-local tool handlers ([#130](https://github.com/awdr74100/figwright/pull/130))
+
+### 🤖 CI
+
+- Add actionlint workflow ([#74](https://github.com/awdr74100/figwright/pull/74))
+- Capitalize actionlint workflow name ([#75](https://github.com/awdr74100/figwright/pull/75))
+- Harden workflows per zizmor audit, add zizmor and renovate ([#76](https://github.com/awdr74100/figwright/pull/76))
+
+#### ⚠️ Breaking Changes
+
+- **mcp:** ⚠️  Migrate to MCP SDK v2 and gate the wire contract ([#127](https://github.com/awdr74100/figwright/pull/127))
+- **relay:** ⚠️  Warn the agent when the Figma plugin is out of date ([#134](https://github.com/awdr74100/figwright/pull/134))
+- **tools:** ⚠️  Scope find_replace_text with root, not rootId ([#138](https://github.com/awdr74100/figwright/pull/138))
+
+### ❤️ Contributors
+
+- Roya ([@awdr74100](https://github.com/awdr74100))
+- Yueyuemuzi <605181746@qq.com>
+
 ## v0.3.0
 
 [compare changes](https://github.com/awdr74100/figwright/compare/v0.2.0...v0.3.0)
