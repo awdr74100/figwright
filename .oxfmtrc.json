@@ -6,6 +6,7 @@
     "**/build/**",
     "**/coverage/**",
     "**/*.tsbuildinfo",
+    "**/CHANGELOG.md",
     "pnpm-lock.yaml",
     ".claude/skills/**"
   ],
