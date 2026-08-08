@@ -30,12 +30,38 @@ describe('parseCssCustomProperties', () => {
     expect(t?.category).toBeUndefined();
   });
 
-  it('ignores comments and lets later declarations win', () => {
+  it('ignores commented-out declarations', () => {
     const css = `:root { --color-x: #111; }
-      /* --color-x: #999; should be ignored (commented) */
-      @theme { --color-x: #222; }`;
+      /* --color-x: #999; should be ignored (commented) */`;
     const tokens = parseCssCustomProperties(css);
     expect(tokens.filter(t => t.name === 'color-x')).toHaveLength(1);
-    expect(tokens.find(t => t.name === 'color-x')?.value).toBe('#222');
+    expect(tokens.find(t => t.name === 'color-x')?.value).toBe('#111');
+  });
+
+  it('keeps every distinct value of a repeated name, @theme leading', () => {
+    const css = `:root { --color-x: #111; }
+      @theme { --color-x: #222; }`;
+    const tokens = parseCssCustomProperties(css).filter(t => t.name === 'color-x');
+    // Both are real values the project declares; collapsing them is what used to make a light
+    // theme's colors unmatchable once a dark theme redeclared them.
+    expect(tokens.map(t => t.value)).toEqual(['#222', '#111']);
+  });
+
+  it('leads with the base :root value rather than a theme override', () => {
+    const css = `:root { --bg: #FFFFFF; }
+      .dark { --bg: #000000; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #010101; } }`;
+    const tokens = parseCssCustomProperties(css).filter(t => t.name === 'bg');
+    // The unconditional :root leads; the class override and the media-nested :root follow in
+    // document order — a :root inside @media is an override, not the base declaration.
+    expect(tokens.map(t => t.value)).toEqual(['#FFFFFF', '#000000', '#010101']);
+  });
+
+  it('collapses a name+value repeated across blocks', () => {
+    const css = ':root { --a: 1px; } .x { --a: 1px; } .y { --a: 2px; }';
+    const tokens = parseCssCustomProperties(css).filter(t => t.name === 'a');
+    // Same value in three places is one token — reporting it twice would make token_map call it
+    // ambiguous with itself.
+    expect(tokens.map(t => t.value)).toEqual(['1px', '2px']);
   });
 });

@@ -4,6 +4,11 @@
 // two. Tailwind v3's JS config (theme.colors etc.) needs evaluating/AST-parsing JS and is deferred.
 // For v4, the @theme namespaces (--color-*, --spacing-*, …) map to utility base names, so the join
 // can suggest `primary-500` (a Tailwind utility) and not just the raw custom property.
+//
+// Delimiting the declarations is `css-scan.ts`; everything here is the token-level meaning built on
+// top of them — the Tailwind namespace derivation, and which block's value leads for a given name.
+
+import { scanCustomProperties } from './css-scan.js';
 
 export interface ProjectToken {
   /** Custom property name without the leading `--`, e.g. "color-primary-500". */
@@ -45,29 +50,66 @@ const deriveNamespace = (name: string): { utility?: string; category?: string } 
   return {};
 };
 
-const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+// Selectors that declare a token's base value rather than an override of it. `html` is included
+// because plain-CSS projects routinely use it in place of `:root`, and `:host` because component
+// libraries shipping a shadow-DOM build declare both (Pico writes `:host,:root`).
+const BASE_SELECTOR = /(^|[\s,])(:root\b|:host\b|html\b)/i;
 
-const CUSTOM_PROP = /--([a-zA-Z0-9-]+)\s*:\s*([^;]+);/g;
+// At-rules that make everything inside them conditional. A `:root` nested in one is a responsive or
+// theme *override*, not the base declaration — `@media (prefers-color-scheme: dark) { :root { … } }`
+// is how a large share of real stylesheets ship their dark theme. `@layer` is deliberately absent:
+// it scopes cascade priority without making its contents conditional, and `@layer base { :root { … } }`
+// is an ordinary way to write base tokens.
+const CONDITIONAL_AT_RULE = /^@(media|supports|container)\b/i;
 
 /**
- * Parse every `--name: value` custom property out of a CSS string. Later declarations win (a token
- * redefined in @theme after :root takes the @theme value). Pure — no filesystem.
+ * Rank a declaration by how well it represents the token's _primary_ value. Lower wins.
+ *
+ * This replaces the previous "later declarations win" rule, which was not a choice between values
+ * so much as an accident of document order: in any stylesheet with a light and a dark theme, the
+ * theme declared second overwrote the other, so half the project's real token values could never be
+ * matched. Both are kept now (see {@linkcode parseCssCustomProperties}); this only decides which
+ * one leads, and so which one a name-match or an override ref resolves to.
+ */
+const scopeRank = (scope: string, ancestors: readonly string[]): number => {
+  const chain = [...ancestors, scope];
+  // Tailwind v4's @theme is the project's declared token source, so it outranks a plain :root even
+  // when :root comes later — the CSS a build emits from @theme is exactly those :root variables.
+  if (chain.some(s => /^@theme\b/i.test(s))) return 0;
+  if (BASE_SELECTOR.test(scope) && !ancestors.some(a => CONDITIONAL_AT_RULE.test(a))) return 1;
+  return 2;
+};
+
+/**
+ * Parse every `--name: value` custom property out of a CSS string.
+ *
+ * A name declared with different values in different blocks yields one token per distinct value — a
+ * light and a dark theme both contribute, so the value-match join can recognise either. The same
+ * name and value repeated across blocks collapses to one entry: leaving those duplicated would make
+ * `token_map` report a token as ambiguous with itself.
+ *
+ * Order is by {@linkcode scopeRank}, then document order, so the first entry for a name is its base
+ * declaration — what `bestNameMatch` and override refs resolve to. Pure — no filesystem.
  */
 export const parseCssCustomProperties = (css: string): ProjectToken[] => {
-  const body = stripComments(css);
-  const byName = new Map<string, ProjectToken>();
-  for (const match of body.matchAll(CUSTOM_PROP)) {
-    const name = match[1];
-    const value = match[2]?.trim();
-    if (name === undefined || value === undefined || value.length === 0) continue;
-    const { utility, category } = deriveNamespace(name);
-    byName.set(name, {
-      name,
-      value,
-      cssVar: `var(--${name})`,
+  const declarations = scanCustomProperties(css)
+    .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
+    .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
+
+  const seen = new Set<string>();
+  const out: ProjectToken[] = [];
+  for (const { decl } of declarations) {
+    const key = `${decl.name}\u0000${decl.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const { utility, category } = deriveNamespace(decl.name);
+    out.push({
+      name: decl.name,
+      value: decl.value,
+      cssVar: `var(--${decl.name})`,
       ...(utility === undefined ? {} : { utility }),
       ...(category === undefined ? {} : { category }),
     });
   }
-  return [...byName.values()];
+  return out;
 };
