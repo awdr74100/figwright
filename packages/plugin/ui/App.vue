@@ -77,10 +77,20 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>
 
-    <section class="flex-1 overflow-x-hidden overflow-y-auto px-2 py-2">
+    <!-- The bottom gap belongs to the scrolled panel, not to this scroller: Chromium leaves
+         `padding-bottom` out of a scroll container's scrollable overflow, so a `py-2` here reads as
+         three-sided the moment the list is long enough to scroll — the last row ends up flush
+         against the footer.
+
+         The panel is `min-h-full`, not `h-full`, for a second reason that looks identical until it
+         isn't: under border-box `h-full` pins the panel to the viewport height, so its padding is
+         carved out of the content box rather than trailing the content, and overflowing content
+         scrolls straight past it. `min-h-full` still fills a short panel (the empty states center
+         against it) but lets a long one grow, which is what puts the padding after the last row. -->
+    <section class="flex-1 overflow-x-hidden overflow-y-auto px-2 pt-2">
       <!-- `leave: 0` keeps a tab switch instant; only the incoming panel animates. -->
       <Transition name="tab" mode="out-in" :duration="{ enter: 150, leave: 0 }">
-        <div :key="tab" class="h-full">
+        <div :key="tab" class="flex min-h-full flex-col pb-2">
           <TabActivity
             v-if="tab === 'activity'"
             :activity="state.activity"
