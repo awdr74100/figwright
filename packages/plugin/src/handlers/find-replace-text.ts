@@ -20,7 +20,7 @@ export const createFindReplaceTextHandler =
     const p = (params ?? {}) as {
       find?: unknown;
       replace?: unknown;
-      rootId?: unknown;
+      root?: unknown;
       caseSensitive?: unknown;
     };
     if (typeof p.find !== 'string' || p.find === '') {
@@ -30,10 +30,10 @@ export const createFindReplaceTextHandler =
       throw new TypeError('find_replace_text: replace must be a string');
 
     let root: BaseNode;
-    if (typeof p.rootId === 'string') {
-      const node = await figmaCtx.getNodeByIdAsync(p.rootId);
+    if (typeof p.root === 'string') {
+      const node = await figmaCtx.getNodeByIdAsync(p.root);
       if (node === null || !('findAllWithCriteria' in node)) {
-        throw new Error(`find_replace_text: root ${p.rootId} not found or cannot be searched`);
+        throw new Error(`find_replace_text: root ${p.root} not found or cannot be searched`);
       }
       root = node;
     } else {
