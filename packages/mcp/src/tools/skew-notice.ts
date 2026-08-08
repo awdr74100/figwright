@@ -16,6 +16,16 @@ import type { ToolKind } from './spec.js';
  */
 const store = new AsyncLocalStorage<{ notice: string | null }>();
 
+/**
+ * The block appended to whatever a tool call produced.
+ *
+ * The leading break and the heading are why it is a block rather than a bare sentence: clients
+ * concatenate content blocks, so appended raw it runs straight on from the payload's closing brace
+ * and reads as part of it. One definition for both the success and the failure path — they carry
+ * the same words, and having written it twice is how a heading drifts between them.
+ */
+const asBlock = (notice: string): string => `\n\n⚠️ FIGWRIGHT PLUGIN OUT OF DATE\n${notice}`;
+
 /** Run a tool call with skew capture armed, then hand what was captured to `finish`. */
 export const captureSkew = async (
   run: () => Promise<CallToolResult>,
@@ -33,9 +43,7 @@ export const captureSkew = async (
     // go; `finish` never runs on this path.
     if (box.notice === null) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`${message}\n\n⚠️ FIGWRIGHT PLUGIN OUT OF DATE\n${box.notice}`, {
-      cause: err,
-    });
+    throw new Error(`${message}${asBlock(box.notice)}`, { cause: err });
   }
 };
 
@@ -73,16 +81,6 @@ export const withSkewNotice = (
   if (kind === 'local' || notice === null) return result;
   return {
     ...result,
-    content: [
-      ...result.content,
-      {
-        type: 'text' as const,
-        // Break + heading because clients concatenate content blocks: appended bare, the sentence
-        // runs straight on from the result's closing brace and reads as payload rather than as a
-        // warning about it (seen against a real client). The notice itself stays unadorned — the
-        // plugin's own panel renders the same string as a banner.
-        text: `\n\n⚠️ FIGWRIGHT PLUGIN OUT OF DATE\n${notice}`,
-      },
-    ],
+    content: [...result.content, { type: 'text' as const, text: asBlock(notice) }],
   };
 };

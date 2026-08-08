@@ -5,6 +5,7 @@ import {
   compareVersions,
   MIN_PLUGIN_VERSION,
   pluginSkewNotice,
+  pluginSkewSummary,
   requiredPluginVersion,
 } from '../src/version.js';
 
@@ -60,13 +61,29 @@ describe('pluginSkewNotice', () => {
     expect(notice).toContain('v0.3.0');
     expect(notice).toContain('v0.4.0');
     expect(notice).toMatch(/silently ignored/i);
-    expect(notice).toMatch(/report success/i);
+    expect(notice).toMatch(/only part of what was asked/i);
     expect(notice).toMatch(/unverified/i);
     // The action, stated directly. Never in the third person: this same string is rendered in the
     // plugin's own panel, where "tell the user to…" addresses the person already reading it.
     expect(notice).toMatch(/Update the plugin/);
     expect(notice).not.toMatch(/tell the user/i);
     expect(notice).toContain('releases/latest');
+  });
+
+  it('opens with the summary, so the two forms cannot drift apart', () => {
+    // The long form is the short one plus the explanation and the how-to-update. Building it that
+    // way is what keeps a session's first warning and its later ones saying the same thing.
+    expect(pluginSkewNotice('0.3.0', '0.4.0')).toContain(pluginSkewSummary('0.3.0', '0.4.0'));
+  });
+
+  it('states the consequence and both versions in the short form too', () => {
+    // Every call after the first in a session carries only this, so it has to stand alone.
+    const summary = pluginSkewSummary('0.3.0', '0.4.0');
+    expect(summary).toContain('v0.3.0');
+    expect(summary).toContain('v0.4.0');
+    expect(summary).toMatch(/unverified/i);
+    // And it has to be worth shortening to.
+    expect(summary.length).toBeLessThan(pluginSkewNotice('0.3.0', '0.4.0').length / 2);
   });
 
   it('quotes a version it cannot parse instead of dressing it up', () => {

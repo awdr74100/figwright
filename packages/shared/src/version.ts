@@ -123,15 +123,31 @@ export const compareVersions = (a: string, b: string): number | null => {
  * where the reader _is_ the user. Caught by looking at it in Figma.
  */
 export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): string =>
+  `${pluginSkewSummary(pluginVersion, serverVersion)} ` +
+  'Arguments added after it was built are silently ignored, which is why nothing in the result ' +
+  'itself looks wrong. Update the plugin: download the latest release from ' +
+  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
+  '(Plugins → Development → Import plugin from manifest).';
+
+/**
+ * The one-line form, for every call after the first in a session.
+ *
+ * The full notice is ~120 tokens and the connected plugin does not change between calls, so
+ * repeating it on all fifty calls of a codegen session spends thousands of tokens restating one
+ * fact. Worse than the cost: identical text repeated every turn is what teaches a model to skim
+ * past it, so paying it would also blunt it.
+ *
+ * This still carries everything an agent needs to act — both versions, the consequence, and that
+ * the result is unverified — so a session that only ever sees this one is not misinformed, just not
+ * re-taught. It deliberately omits the how-to-update instructions: those are relayed to the user
+ * once, and the long form has already been shown by the time this is used.
+ */
+export const pluginSkewSummary = (pluginVersion: string, serverVersion: string): string =>
   // `v`-prefixed only when it is really a version. Whatever the peer claimed is echoed as-is
   // otherwise, because an unreadable one dressed up as a version reads as `vnightly`.
   `Figwright plugin ${parse(pluginVersion) === null ? `"${pluginVersion}"` : `v${pluginVersion}`} ` +
-  `is older than this server (v${serverVersion}). ` +
-  'Arguments added after the plugin was built are silently ignored by it, so an edit can report ' +
-  'success having applied only part of what was asked, and results can be incomplete — treat this ' +
-  'result as unverified. Update the plugin: download the latest release from ' +
-  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
-  '(Plugins → Development → Import plugin from manifest).';
+  `is older than this server (v${serverVersion}), so this result is unverified — an edit may have ` +
+  'applied only part of what was asked, and reads can be incomplete.';
 
 /**
  * The threshold this server can honestly apply: never newer than the server itself.

@@ -17,6 +17,7 @@ import {
   type HelloResult,
   newId,
   pluginSkewNotice,
+  pluginSkewSummary,
   PROTOCOL_VERSION,
   SystemMethod,
 } from '@figwright/shared';
@@ -202,9 +203,17 @@ export class Relay {
     if (sessionId === undefined) return null;
     const session = this.sessions.get(sessionId);
     if (session === undefined) return null;
-    return checkPluginCompatibility(session.clientVersion, this.opts.serverVersion)
-      ? null
-      : pluginSkewNotice(session.clientVersion, this.opts.serverVersion);
+    if (checkPluginCompatibility(session.clientVersion, this.opts.serverVersion)) return null;
+    // Full once per session, then the one-liner. The plugin cannot change under a session, so
+    // restating ~120 tokens on every call of a fifty-call codegen run spends thousands of them on
+    // one unchanging fact — and identical text repeated every turn is what teaches a model to skim
+    // past it, so paying that cost would also blunt the warning. The short form still carries both
+    // versions and the consequence, so a caller that only ever sees it is not misinformed.
+    if (session.skewExplained) {
+      return pluginSkewSummary(session.clientVersion, this.opts.serverVersion);
+    }
+    session.skewExplained = true;
+    return pluginSkewNotice(session.clientVersion, this.opts.serverVersion);
   }
 
   pendingCount(): number {

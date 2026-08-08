@@ -304,6 +304,39 @@ describe('Relay hello loop', () => {
     expect(seen.get('new')).toBeNull();
   });
 
+  it('explains the skew once, then keeps saying it in one line', async () => {
+    // The full text is ~120 tokens and the plugin cannot change under a session, so restating it on
+    // every call of a fifty-call run spends thousands of tokens on one unchanging fact — and
+    // identical text every turn is what teaches a model to skim past it.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+
+    const first = b.relay.skewNotice(sessionId);
+    const second = b.relay.skewNotice(sessionId);
+    const third = b.relay.skewNotice(sessionId);
+
+    expect(first).toMatch(/releases\/latest/);
+    // Still says what it is and what it means — a caller seeing only this is not misinformed.
+    expect(second).toMatch(/older than this server/i);
+    expect(second).toMatch(/unverified/i);
+    expect(second).not.toMatch(/releases\/latest/);
+    expect(second?.length ?? 0).toBeLessThan((first?.length ?? 0) / 2);
+    expect(third).toBe(second);
+    ws.close();
+  });
+
   it('says nothing about skew for a current plugin', async () => {
     // The warning only means anything if it stays quiet when there is nothing to warn about.
     const b = await startRelay();

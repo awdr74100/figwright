@@ -18,6 +18,12 @@ export interface Session {
   pageName: string | null;
   heartbeat: HeartbeatMonitor | null;
   disconnectTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Whether this session has already been told, in full, that its plugin predates the server. The
+   * explanation is ~120 tokens and the answer cannot change while the session lives, so every call
+   * after the first carries the one-line form instead — see `Relay.skewNotice`.
+   */
+  skewExplained: boolean;
 }
 
 export const DEFAULT_DISCONNECT_GRACE_MS = 30_000;
@@ -66,6 +72,9 @@ export class SessionManager {
       pageName: existing?.pageName ?? null,
       heartbeat: null,
       disconnectTimer: null,
+      // A reconnect of the same session keeps it: the plugin on the other end has not changed, so
+      // re-explaining would be the repetition this avoids. A genuinely new plugin gets a new id.
+      skewExplained: existing?.skewExplained ?? false,
     };
 
     this.sessions.set(input.id, session);
