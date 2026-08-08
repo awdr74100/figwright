@@ -16,7 +16,10 @@ defineProps<{
     <TabActivityRow v-for="entry in activity" :key="entry.id" :entry="entry" />
   </TransitionGroup>
 
-  <div v-else class="flex h-full flex-col items-center justify-center gap-1.5 px-6 text-center">
+  <!-- `flex-1`, not `h-full`: the scrolled panel this sits in is `min-h-full` so that a long list
+       can grow past the viewport, and a percentage height resolves against nothing under a parent
+       whose height is only a minimum. Filling the flex line centers this against the same box. -->
+  <div v-else class="flex flex-1 flex-col items-center justify-center gap-1.5 px-6 text-center">
     <Radio class="mb-0.5 size-6 text-faint" />
     <p class="font-medium text-dim">
       {{ connected ? 'Connected and idle' : 'Waiting for the MCP client' }}
