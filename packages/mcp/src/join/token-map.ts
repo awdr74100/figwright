@@ -194,7 +194,14 @@ const bestNameMatch = (
 ): NameMatch | null => {
   const target = splitScale(figmaName);
   let best: NameMatch | null = null;
+  // One name scored once. A custom property declared in several blocks arrives as several tokens
+  // that differ only in value, and nameScore reads nothing but the name and the utility derived
+  // from it — so the repeats always score identically and, not being strictly greater, could never
+  // displace the first. Skipping them is free of any effect on the result.
+  const scored = new Set<string>();
   for (const token of projectTokens) {
+    if (scored.has(token.name)) continue;
+    scored.add(token.name);
     const score = nameScore(target, token, typography);
     if (best === null || score > best.score) best = { token, score };
   }
@@ -424,8 +431,12 @@ const joinTokenScan = (
       (top.score >= 0.5 && (runnerUp === undefined || top.score > runnerUp.score));
 
     if (nameDisambiguates) {
+      // Compared by name, not by object identity: one custom property declared in several blocks
+      // (a light `:root` value and its `.dark` override) arrives as several ProjectTokens that are
+      // the same token. Identity here would read those as two different tokens and withhold the
+      // name evidence whenever the value-match landed on a scope the name-match didn't pick.
       const nameAgrees =
-        nameMatch !== null && nameMatch.token === top.token && nameMatch.score >= 0.5;
+        nameMatch !== null && nameMatch.token.name === top.token.name && nameMatch.score >= 0.5;
       const confidence = nameAgrees ? 1 : 0.9;
       const matchedBy: ('name' | 'value')[] =
         nameAgrees || (scored.length > 1 && top.score >= 0.5) ? ['name', 'value'] : ['value'];
