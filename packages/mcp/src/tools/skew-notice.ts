@@ -2,8 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { CallToolResult } from '@modelcontextprotocol/server';
 
-import type { ToolKind } from './spec.js';
-
 /**
  * Per-tool-call capture of the skew warning, so the warning belongs to the call it is appended to.
  *
@@ -68,17 +66,17 @@ export const reportSkew = (notice: string | null): void => {
  * handler drops arguments it predates and still answers `{ ok: true }`, so nothing in the payload
  * hints that anything is missing, and an agent with no reason to ask never asks.
  *
- * Extracted from the registration loop so it is reachable by a test; the live path is otherwise
- * only exercised by running the server against a genuinely old plugin.
+ * A non-null `notice` is itself the proof that this call reached the plugin: it can only have been
+ * set by a dispatch. Filtering on the spec's `kind` as well was both redundant and wrong — `local`
+ * marks a tool whose _handler_ runs on the server, not one that never talks to Figma, and eight of
+ * the ten wear that label while dispatching (`component_map`, `token_map`, `icon_map`,
+ * `design_diff`, the export and save tools). Those are the grounding tools, so suppressing their
+ * warning hid it on exactly the results most likely to be built on. `analyze_project` and
+ * `scan_components` really are filesystem-only and stay silent for the reason that actually holds:
+ * nothing dispatched, so there is nothing to attribute.
  */
-export const withSkewNotice = (
-  result: CallToolResult,
-  kind: ToolKind,
-  notice: string | null,
-): CallToolResult => {
-  // `local` tools read the filesystem and never reach the plugin, so its version says nothing about
-  // their result. Warning there would train an agent to discount the warning where it matters.
-  if (kind === 'local' || notice === null) return result;
+export const withSkewNotice = (result: CallToolResult, notice: string | null): CallToolResult => {
+  if (notice === null) return result;
   return {
     ...result,
     content: [...result.content, { type: 'text' as const, text: asBlock(notice) }],

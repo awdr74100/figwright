@@ -170,7 +170,7 @@ const createMcpServer = (): McpServer => {
     const handler: ToolHandler = async args =>
       captureSkew(
         () => run(normalizeIdArgs(args)),
-        (result, notice) => withSkewNotice(result, spec.kind, notice),
+        (result, notice) => withSkewNotice(result, notice),
       );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;

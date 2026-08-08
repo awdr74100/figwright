@@ -19,7 +19,7 @@ describe('captureSkew', () => {
         reportSkew(NOTICE);
         return result('{}');
       },
-      (r, notice) => withSkewNotice(r, 'read', notice),
+      (r, notice) => withSkewNotice(r, notice),
     );
 
     expect(captured.content).toHaveLength(2);
@@ -119,7 +119,7 @@ describe('captureSkew', () => {
 
 describe('withSkewNotice', () => {
   it('appends the warning without disturbing the result the agent asked for', () => {
-    const out = withSkewNotice(result('{"nodes":[]}'), 'read', NOTICE);
+    const out = withSkewNotice(result('{"nodes":[]}'), NOTICE);
 
     expect(out.content).toHaveLength(2);
     expect(out.content[0]).toEqual({ type: 'text', text: '{"nodes":[]}' });
@@ -130,26 +130,26 @@ describe('withSkewNotice', () => {
     // Clients concatenate content blocks. Appended bare, the sentence runs straight on from the
     // result's closing brace and reads as part of the payload — seen against a real client, which
     // is why the separation is asserted rather than left to look right.
-    const out = withSkewNotice(result('{"ok":true}'), 'write', NOTICE);
+    const out = withSkewNotice(result('{"ok":true}'), NOTICE);
     const appended = textOf(out, 1);
 
     expect(appended.startsWith('\n\n')).toBe(true);
     expect(appended).toMatch(/OUT OF DATE/);
   });
 
-  it('carries the warning on writes, where a silent partial apply is the actual risk', () => {
-    expect(withSkewNotice(result('{"ok":true}'), 'write', NOTICE).content).toHaveLength(2);
+  it('warns regardless of how the tool is labelled, since a notice means it dispatched', () => {
+    // The spec's `kind` used to gate this, which was wrong: `local` marks a tool whose handler runs
+    // on the server, not one that never talks to Figma, and eight of the ten dispatch —
+    // component_map, token_map, icon_map, design_diff, the exports. Those are the grounding tools,
+    // so the label was hiding the warning on the results most likely to be built on.
+    expect(withSkewNotice(result('{"ok":true}'), NOTICE).content).toHaveLength(2);
+    expect(withSkewNotice(result('{"components":[]}'), NOTICE).content).toHaveLength(2);
   });
 
-  it('leaves a local tool alone — it never reaches the plugin', () => {
-    // Warning on a filesystem read would teach an agent to discount the warning that matters.
+  it('leaves a result alone when nothing dispatched', () => {
+    // A filesystem-only tool never sets a notice, so it stays silent for the reason that holds —
+    // nothing was asked of the plugin — rather than because of what it is called.
     const untouched = result('{"framework":"vue"}');
-    expect(withSkewNotice(untouched, 'local', NOTICE)).toBe(untouched);
-  });
-
-  it('leaves every result alone when the plugin is current', () => {
-    const untouched = result('{"nodes":[]}');
-    expect(withSkewNotice(untouched, 'read', null)).toBe(untouched);
-    expect(withSkewNotice(untouched, 'write', null)).toBe(untouched);
+    expect(withSkewNotice(untouched, null)).toBe(untouched);
   });
 });
