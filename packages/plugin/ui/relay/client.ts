@@ -88,6 +88,18 @@ export class RelayClient {
    * true reconnect.
    */
   private hasConnected = false;
+  /**
+   * True once a server has refused this build outright — which now means only one thing: a
+   * `PROTOCOL_VERSION` mismatch, an envelope format the two sides cannot exchange at all. (Being
+   * _older_ than the server is not refused; it connects and every result carries a warning.)
+   * Retrying cannot change that answer, so the back-off loop stops instead of running forever.
+   *
+   * The cost of not stopping is not theoretical: a refused plugin never sets `hasConnected`, so the
+   * loop takes the 150ms cold-start ceiling and re-offers the same rejected handshake about seven
+   * times a second for as long as the panel is open. Measured at 195 sockets in TIME_WAIT, steady
+   * state, from a single tab — which is what ruled out refusing on version skew.
+   */
+  private refused = false;
   private toolHandler: ToolHandler | null = null;
 
   constructor(opts: RelayClientOptions) {
@@ -175,7 +187,8 @@ export class RelayClient {
         `no Figwright server on :${this.opts.ports.join(', ')} yet — it connects automatically once ` +
           `the MCP server starts; if it never does, another process may be holding that port`,
     });
-    if (!this.stopped) void this.runReconnectLoop();
+    // A refusal is terminal: the way out is re-importing the plugin, which builds a fresh client.
+    if (!this.stopped && !this.refused) void this.runReconnectLoop();
   }
 
   /**
@@ -291,7 +304,13 @@ export class RelayClient {
           // A hello rejection (e.g. a protocol-version mismatch) is a concrete, actionable reason.
           // Record it so the UI surfaces "update your plugin" rather than the generic "no server
           // found", and so the reconnect path can preserve it (see connect()).
-          this.update({ lastError: envelope.error.message });
+          if (envelope.error.code === ErrorCode.ProtocolMismatch) this.refused = true;
+          this.update({
+            lastError: envelope.error.message,
+            // A refusal cannot be retried away, so it is held apart from the churn of an ordinary
+            // failed attempt and surfaced in the header until the plugin is replaced.
+            versionNotice: this.refused ? envelope.error.message : null,
+          });
           fail(`hello rejected: ${envelope.error.message}`);
           return;
         }
@@ -303,6 +322,10 @@ export class RelayClient {
         const result = envelope.result as HelloResult;
         cleanup();
         this.hasConnected = true;
+        // Defensive: a build that got in is not refused. Unreachable while `connect()` is called
+        // once on mount (a refusal stops the loop, so nothing probes again), but it keeps the flag
+        // truthful for any future caller that reconnects a live client.
+        this.refused = false;
         this.socket = ws;
         this.startHeartbeat(ws);
         this.bindLiveHandlers(ws);
@@ -312,6 +335,10 @@ export class RelayClient {
           sessionResumed: result.sessionResumed,
           serverVersion: result.serverVersion,
           lastError: null,
+          // Connected, but the server may have said this build is behind it. That is not a failure
+          // — every call still runs — so it belongs in the banner rather than as an error, and it
+          // has to survive the successful connect that clears everything else.
+          versionNotice: result.skewNotice ?? null,
           connectedAt: Date.now(),
         });
         this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);
@@ -418,7 +445,7 @@ export class RelayClient {
   }
 
   private async runReconnectLoop(): Promise<void> {
-    if (this.reconnecting || this.stopped) return;
+    if (this.reconnecting || this.stopped || this.refused) return;
     this.reconnecting = true;
     // A live socket that dropped is a true reconnect; retrying a never-established cold-start connect
     // is not. Capture the distinction now so a successful retry only bumps `reconnectCount` in the
@@ -440,6 +467,13 @@ export class RelayClient {
           if (countSuccessAsReconnect) {
             this.update({ reconnectCount: this.state.reconnectCount + 1 });
           }
+          return;
+        }
+        // That probe reached a server that cannot exchange envelopes with this build at all.
+        // Retrying re-offers the same handshake to the same answer, so leave the loop and let the
+        // banner stand until the plugin is replaced.
+        if (this.refused) {
+          this.update({ status: 'disconnected' });
           return;
         }
         // A wake (tab refocus) means the user is back and expecting a live connection — restart the

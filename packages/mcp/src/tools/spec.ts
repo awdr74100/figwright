@@ -27,4 +27,16 @@ export interface ToolSpec {
    * `delete_*` tool carries it. Omitted = non-destructive (creates / property sets).
    */
   destructive?: true;
+  /**
+   * Arguments the server adds to the dispatch that are not in `inputSchema` — the agent never sends
+   * them and no JSON Schema mentions them, so they are invisible to every other check here. They
+   * are still arguments an older sandbox handler can silently drop, and the two that exist do real
+   * work (`forVision` caps a raster to what fits a model's context; `budget` arms the node-count
+   * bail), so `test/plugin-contract.test.ts` has to see them. Declared on the spec for the same
+   * reason `destructive` is — it cannot drift from the tool it describes, and a test asserts the
+   * declarations match the injection sites in `index.ts`.
+   *
+   * `requestId` is not listed: it is derived from `kind === 'write'` at the dispatch site.
+   */
+  injectedArgs?: readonly string[];
 }

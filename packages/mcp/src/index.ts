@@ -29,6 +29,7 @@ import { ALL_TOOL_SPECS } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
+import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 
 const SERVER_NAME = 'figwright';
@@ -162,7 +163,15 @@ const createMcpServer = (): McpServer => {
       });
     // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
     // every tool — generic or special-cased — accepts them without per-handler conversion.
-    const handler: ToolHandler = async args => run(normalizeIdArgs(args));
+    // An older plugin drops arguments it predates and still answers `{ ok: true }`, so the result
+    // cannot be trusted on its face and nothing in it says so. Saying it here, on every affected
+    // call, is what replaces the refusal this used to be: the agent is told before it reports
+    // success to the user.
+    const handler: ToolHandler = async args =>
+      captureSkew(
+        () => run(normalizeIdArgs(args)),
+        (result, notice) => withSkewNotice(result, notice),
+      );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;
     // v2's typing accepts ToolHandler directly, so the result stays checked against CallToolResult.

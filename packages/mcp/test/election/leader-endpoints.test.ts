@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   encodeEnvelope,
   ErrorCode,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   type HelloParams,
@@ -57,10 +58,10 @@ const startLeader = async (
   const http = createServer();
   await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
   const port = (http.address() as AddressInfo).port;
-  const relay = new Relay({ serverVersion: 'test-1.0.0', server: http });
+  const relay = new Relay({ serverVersion: '1.0.0', server: http });
   const detach = attachLeaderEndpoints(http, {
     relay,
-    serverVersion: 'test-1.0.0',
+    serverVersion: '1.0.0',
     rpcTimeoutMs,
     ...extraDeps,
   });
@@ -84,6 +85,7 @@ const postAbdicate = async (
 const attachFakePlugin = async (
   b: Bound,
   handle: (method: string, params: unknown) => Promise<unknown>,
+  clientVersion: string = MIN_PLUGIN_VERSION,
 ): Promise<WebSocket> => {
   const ws = new WebSocket(`ws://127.0.0.1:${b.port}`);
   ws.binaryType = 'arraybuffer';
@@ -114,7 +116,7 @@ const attachFakePlugin = async (
 
   const helloParams: HelloParams = {
     clientType: 'plugin',
-    clientVersion: '0.0.0',
+    clientVersion,
     protocolVersion: PROTOCOL_VERSION,
   };
   ws.send(
@@ -144,7 +146,7 @@ describe('leader endpoints', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; serverVersion: string; plugins: number };
     expect(body.ok).toBe(true);
-    expect(body.serverVersion).toBe('test-1.0.0');
+    expect(body.serverVersion).toBe('1.0.0');
     expect(body.plugins).toBe(0);
 
     await attachFakePlugin(b, async () => ({ noop: true }));
@@ -205,6 +207,31 @@ describe('leader endpoints', () => {
     expect(resp.result).toEqual({ ids: ['1:1', '1:2'] });
   });
 
+  it('POST /rpc carries the skew warning back to the follower that asked', async () => {
+    // The production half of the warning for anyone whose MCP server is a follower — a normal
+    // state, since several servers share one plugin and only one of them holds the relay. Faking
+    // this response in the dispatch test proves the follower *reads* it; nothing proved the leader
+    // ever *writes* it. Deleting the attachment left all 1387 tests green.
+    const b = await startLeader();
+    await attachFakePlugin(b, async () => ({ ok: true }), '0.0.1');
+
+    const resp = await callRpc(b.port, { requestId: 'r-skew', toolName: 'set_fills', args: {} });
+
+    if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
+    expect(resp.notice).toMatch(/older than this server/i);
+    expect(resp.notice).toMatch(/unverified/i);
+  });
+
+  it('POST /rpc attaches no warning for a current plugin', async () => {
+    const b = await startLeader();
+    await attachFakePlugin(b, async () => ({ ok: true }));
+
+    const resp = await callRpc(b.port, { requestId: 'r-ok', toolName: 'set_fills', args: {} });
+
+    if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
+    expect(resp.notice).toBeUndefined();
+  });
+
   it('POST /rpc queues request and surfaces Timeout when no plugin ever connects', async () => {
     const b = await startLeader(50);
     const resp = await callRpc(b.port, {
@@ -251,7 +278,7 @@ describe('leader endpoints', () => {
           method: SystemMethod.Hello,
           params: {
             clientType: 'plugin',
-            clientVersion: '0.0.0',
+            clientVersion: MIN_PLUGIN_VERSION,
             protocolVersion: PROTOCOL_VERSION,
           } satisfies HelloParams,
         }),

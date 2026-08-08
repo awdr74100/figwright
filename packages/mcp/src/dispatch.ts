@@ -2,6 +2,7 @@ import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared'
 
 import type { Follower } from './election/follower.js';
 import type { Node } from './election/node.js';
+import { reportSkew } from './tools/skew-notice.js';
 
 export const DEFAULT_DISPATCH_MAX_ATTEMPTS = 3;
 export const DEFAULT_DISPATCH_RETRY_DELAY_MS = 1_500;
@@ -68,12 +69,16 @@ export const dispatchTool = async (
       try {
         // Relay→plugin budget = B + one margin (see getRelayBudget) so the inner sandbox-bridge timer
         // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
-        return await leader.relay.sendRequest(
+        // Attribution is captured as the request is answered, not read afterwards: two concurrent
+        // calls to plugins on different builds would otherwise both see whichever finished last.
+        const result = await leader.relay.sendRequest(
           toolName,
           args,
           opts.perCallTimeoutMs ?? getRelayBudget(toolName),
           opts.sessionId,
+          served => reportSkew(leader.relay.skewNotice(served)),
         );
+        return result;
       } catch (err) {
         lastError = err as Error;
         break;
@@ -89,7 +94,10 @@ export const dispatchTool = async (
       opts.sessionId,
       opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
     );
-    if (resp.kind === 'ok') return resp.result;
+    if (resp.kind === 'ok') {
+      reportSkew(resp.notice ?? null);
+      return resp.result;
+    }
 
     // 'relay stopping' is the leader rejecting the call because it's shutting down or abdicating —
     // by the retry delay a new leader (possibly this very node) has the port, so it's as transient

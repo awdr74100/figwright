@@ -12,6 +12,7 @@ import {
   type ErrorEnvelope,
   type HelloParams,
   type HelloResult,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   type ResponseEnvelope,
@@ -51,7 +52,7 @@ const startRelay = async (
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
   const port = (server.address() as AddressInfo).port;
   const relay = new Relay({
-    serverVersion: 'test-1.0.0',
+    serverVersion: '1.0.0',
     server,
     heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? 60_000,
     heartbeatMaxMisses: overrides.heartbeatMaxMisses ?? 2,
@@ -78,7 +79,7 @@ const nextMessage = (ws: WebSocket): Promise<ArrayBuffer> =>
 
 const helloParams = (overrides: Partial<HelloParams> = {}): HelloParams => ({
   clientType: 'plugin',
-  clientVersion: '0.0.0',
+  clientVersion: MIN_PLUGIN_VERSION,
   protocolVersion: PROTOCOL_VERSION,
   ...overrides,
 });
@@ -139,7 +140,7 @@ describe('Relay hello loop', () => {
     expect(res.kind).toBe('res');
     expect(res.id).toBe('h1');
     const result = res.result as HelloResult;
-    expect(result.serverVersion).toBe('test-1.0.0');
+    expect(result.serverVersion).toBe('1.0.0');
     expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(result.sessionResumed).toBe(false);
     ws.close();
@@ -191,6 +192,224 @@ describe('Relay hello loop', () => {
     expect(res.error.code).toBe(ErrorCode.ProtocolMismatch);
     expect(res.error.message).toMatch(/protocol mismatch/i);
     await new Promise(r => ws.once('close', r));
+  });
+
+  it('serves a plugin below the floor, and marks its session as skewed', async () => {
+    // Refusing was built, measured against a real v0.3.0 plugin, and abandoned: the "stop retrying"
+    // half can only live in a plugin new enough never to be refused, so an old one re-offered the
+    // rejected handshake ~7x a second forever. The server serves it and says so instead.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect(res.kind).toBe('res');
+    expect(b.relay.sessions.connected()).toHaveLength(1);
+    // Told on the handshake, so a plugin new enough to render it can, before any call is made.
+    const result = res.result as HelloResult;
+    expect(result.skewNotice).toMatch(/older than this server/i);
+    expect(result.skewNotice).toMatch(/silently ignored/i);
+    expect(result.skewNotice).toMatch(/Update the plugin/);
+    // And available per session, which is what a call attributes its result to.
+    const [session] = b.relay.sessions.connected();
+    expect(b.relay.skewNotice(session?.id)).toMatch(/older than this server/i);
+    ws.close();
+  });
+
+  it('serves a plugin whose version cannot be identified, and warns about it', async () => {
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: 'nightly' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect(res.kind).toBe('res');
+    expect((res.result as HelloResult).skewNotice).toMatch(/older than this server/i);
+    ws.close();
+  });
+
+  it('attributes each concurrent call to the plugin that answered it', async () => {
+    // Two Figma files open on different builds, calls in flight against both. Attribution has to
+    // follow the request, not the relay's current routing: an implementation that asked "who is
+    // most-active?" would give both calls the same answer and mislabel one of them.
+    const b = await startRelay();
+    const oldPlugin = await connect(b.port);
+    const staleId = newId();
+    oldPlugin.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: staleId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(oldPlugin);
+
+    const newPlugin = await connect(b.port);
+    const currentId = newId();
+    newPlugin.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h2',
+          sessionId: currentId,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(newPlugin);
+
+    // Each plugin answers whatever it is asked, back to back.
+    const answer = (ws: WebSocket, sessionId: string): void => {
+      ws.on('message', data => {
+        const env = decodeEnvelope(data as ArrayBuffer);
+        if (env.kind === 'req' && env.method === 'get_document') {
+          ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })));
+        }
+      });
+    };
+    answer(oldPlugin, staleId);
+    answer(newPlugin, currentId);
+
+    const seen = new Map<string, string | null>();
+    await Promise.all([
+      b.relay.sendRequest('get_document', {}, 5000, staleId, served =>
+        seen.set('old', b.relay.skewNotice(served)),
+      ),
+      b.relay.sendRequest('get_document', {}, 5000, currentId, served =>
+        seen.set('new', b.relay.skewNotice(served)),
+      ),
+    ]);
+
+    expect(seen.get('old')).toMatch(/older than this server/i);
+    expect(seen.get('new')).toBeNull();
+  });
+
+  it('explains the skew once, then keeps saying it in one line', async () => {
+    // The full text is ~120 tokens and the plugin cannot change under a session, so restating it on
+    // every call of a fifty-call run spends thousands of tokens on one unchanging fact — and
+    // identical text every turn is what teaches a model to skim past it.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+
+    const first = b.relay.skewNotice(sessionId);
+    const second = b.relay.skewNotice(sessionId);
+    const third = b.relay.skewNotice(sessionId);
+
+    expect(first).toMatch(/releases\/latest/);
+    // Still says what it is and what it means — a caller seeing only this is not misinformed.
+    expect(second).toMatch(/older than this server/i);
+    expect(second).toMatch(/unverified/i);
+    expect(second).not.toMatch(/releases\/latest/);
+    expect(second?.length ?? 0).toBeLessThan((first?.length ?? 0) / 2);
+    expect(third).toBe(second);
+    ws.close();
+  });
+
+  it('attributes a timeout, which an old plugin can itself cause', async () => {
+    // The four ways a request ends were not attributed alike: resolve and error were, timeout was
+    // not. It is not a bystander case — `get_design_context` arms its pre-serialization bail with
+    // `budget`, an argument an old plugin drops, so a tree it would have refused up front is
+    // serialized in full and runs long. A bare timeout sends the agent after the file's size.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+    // The plugin receives the request and never answers.
+
+    let attributed: string | null = 'unset';
+    await expect(
+      b.relay.sendRequest('get_design_context', {}, 60, undefined, served => {
+        attributed = b.relay.skewNotice(served);
+      }),
+    ).rejects.toThrow(/timeout/i);
+
+    expect(attributed).toMatch(/older than this server/i);
+    ws.close();
+  });
+
+  it('says nothing about skew for a current plugin', async () => {
+    // The warning only means anything if it stays quiet when there is nothing to warn about.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect((res.result as HelloResult).skewNotice).toBeUndefined();
+    const [session] = b.relay.sessions.connected();
+    expect(b.relay.skewNotice(session?.id)).toBeNull();
+    ws.close();
+  });
+
+  it('admits a plugin newer than the server without warning', async () => {
+    // Skew this way is safe: a newer plugin understands every argument an older server sends.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId: newId(),
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '99.0.0' }),
+        }),
+      ),
+    );
+    const res = decodeEnvelope(await nextMessage(ws)) as ResponseEnvelope;
+
+    expect(res.kind).toBe('res');
+    expect((res.result as HelloResult).skewNotice).toBeUndefined();
+    ws.close();
   });
 
   it('responds to client-initiated $ping with ok result', async () => {

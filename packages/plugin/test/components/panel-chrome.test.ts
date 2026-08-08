@@ -22,6 +22,7 @@ const state: RelayClientState = {
   sessionResumed: false,
   serverVersion: '0.3.0',
   lastError: null,
+  versionNotice: null,
   connectedAt: Date.now(),
   reconnectCount: 0,
   totalCalls: 0,
@@ -81,6 +82,45 @@ describe('App window chrome', () => {
   // default to the floating case: a plugin window flashing its own chrome away is worse than the
   // Inspect panel showing it for one frame, and the floating window is the overwhelmingly common
   // case.
+  it('states an out-of-date plugin in the header, as a warning it can still work through', () => {
+    // A skew notice cannot be cleared by reconnecting — only by updating the plugin — so it belongs
+    // where the user already is rather than in the Debug tab. It is amber, not red: every call
+    // still runs, and dressing a survivable state as a failure teaches people to ignore the colour.
+    contextRef.value = context('default');
+    state.status = 'connected';
+    state.versionNotice = 'Figwright plugin v0.3.0 is older than this server (v0.4.0).';
+
+    const wrapper = mount(App);
+    const banner = wrapper.find('p.wrap-break-word');
+
+    expect(banner.text()).toContain('older than this server');
+    expect(banner.classes()).toContain('text-warning');
+    state.versionNotice = null;
+  });
+
+  it('states a refusal in the header as an error, since nothing works', () => {
+    // The remaining hard refusal: a wire format the two sides cannot exchange at all. Severity is
+    // read off the connection — a refused plugin never reaches 'connected'.
+    contextRef.value = context('default');
+    state.status = 'disconnected';
+    state.versionNotice = 'protocol mismatch: server speaks 0.1.0, plugin speaks 9.9.9';
+
+    const wrapper = mount(App);
+    const banner = wrapper.find('p.wrap-break-word');
+
+    expect(banner.classes()).toContain('text-danger');
+    state.versionNotice = null;
+    state.status = 'connected';
+  });
+
+  it('shows no banner when there is nothing to say about the version', () => {
+    contextRef.value = context('default');
+
+    const wrapper = mount(App);
+
+    expect(wrapper.find('p.wrap-break-word').exists()).toBe(false);
+  });
+
   it('assumes a floating window until the sandbox has said otherwise', () => {
     contextRef.value = null;
 

@@ -312,6 +312,106 @@ describe('RelayClient', () => {
     await client.disconnect();
   });
 
+  it('stops retrying once a server refuses this build, instead of re-offering it forever', async () => {
+    // The refusal is terminal — the plugin has to be replaced — and a refused client never sets
+    // hasConnected, so the back-off loop would take the 150ms cold-start ceiling and re-offer the
+    // same rejected handshake ~7x a second for as long as the panel is open, writing a rejection
+    // into the server's log every time. Counting sockets is the point of this test: the banner
+    // looked correct while that was happening.
+    const { WS, sockets } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createError({
+          id: req.id,
+          sessionId: req.sessionId,
+          code: ErrorCode.ProtocolMismatch,
+          message: 'plugin too old: this server (v0.4.0) needs the Figwright plugin at v0.4.0',
+        }),
+      );
+    });
+    const client = new RelayClient({
+      ports: [3055],
+      clientVersion: '0.3.0',
+      WS,
+      reconnectInitialDelayMs: 1,
+    });
+
+    await client.connect();
+    const afterConnect = sockets.length;
+    // Well past several cold-start intervals: an unbounded loop would have opened many more.
+    await new Promise(resolve => setTimeout(resolve, 250));
+
+    expect(sockets.length).toBe(afterConnect);
+    expect(client.getState().versionNotice).toMatch(/plugin too old/i);
+    expect(client.getState().status).toBe('disconnected');
+    await client.disconnect();
+  });
+
+  it('shows the skew warning from a successful hello without treating it as a failure', async () => {
+    // The plugin is served — status must reach connected — but the panel has to say the results
+    // coming back may be incomplete. Carried on the hello so it is visible before any call is made.
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({
+          id: req.id,
+          sessionId: req.sessionId,
+          result: helloResult({
+            skewNotice: 'Figwright plugin v0.3.0 is older than this server (v0.4.0).',
+          }),
+        }),
+      );
+    });
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.3.0', WS });
+
+    await client.connect();
+
+    expect(client.getState().status).toBe('connected');
+    expect(client.getState().versionNotice).toMatch(/older than this server/i);
+    expect(client.getState().lastError).toBeNull();
+    await client.disconnect();
+  });
+
+  it('leaves the banner clear when the server reports no skew', async () => {
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+    });
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.4.0', WS });
+
+    await client.connect();
+
+    expect(client.getState().versionNotice).toBeNull();
+    await client.disconnect();
+  });
+
+  it('keeps retrying when the server is merely absent', async () => {
+    // The counterpart the fix must not break: no server yet is the ordinary cold start, and it has
+    // to keep probing so the plugin connects on its own once the MCP server launches.
+    const { WS, sockets } = buildFakeFactory(sock => {
+      sock.fireServerClose(1006);
+    });
+    const client = new RelayClient({
+      ports: [3055],
+      clientVersion: '0.4.0',
+      WS,
+      reconnectInitialDelayMs: 1,
+    });
+
+    await client.connect();
+    const afterConnect = sockets.length;
+    await new Promise(resolve => setTimeout(resolve, 250));
+
+    expect(sockets.length).toBeGreaterThan(afterConnect);
+    expect(client.getState().versionNotice).toBeNull();
+    await client.disconnect();
+  });
+
   it('responds to server-initiated $ping with ok result', async () => {
     let liveSock: FakeSocketControl | undefined;
     const { WS } = buildFakeFactory(sock => {

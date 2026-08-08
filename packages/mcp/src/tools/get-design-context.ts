@@ -50,4 +50,7 @@ export const getDesignContextTool: ToolSpec = {
       .optional(),
   }),
   kind: 'read',
+  // See index.ts: the guarded public path dispatches with budget so the plugin bails before
+  // serializing an oversized tree. Internal dispatches (design_diff, component/icon map) stay raw.
+  injectedArgs: ['budget'],
 };

@@ -15,6 +15,10 @@ export const RpcOkResponseSchema = z.object({
   kind: z.literal('ok'),
   requestId: z.string(),
   result: z.unknown(),
+  // Set by the leader when the plugin that served this call is older than the server. Only the
+  // leader holds the relay, so a follower has no other way to learn it — and the warning has to
+  // reach whoever is actually calling tools, whichever role their process ended up in.
+  notice: z.string().optional(),
 });
 export type RpcOkResponse = z.infer<typeof RpcOkResponseSchema>;
 

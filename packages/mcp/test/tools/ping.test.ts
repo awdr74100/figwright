@@ -39,6 +39,7 @@ describe('ping tool', () => {
     expect(result.server.version).toBe('1.0.0');
     expect(result.server.role).toBe(NodeRole.Leader);
     expect(result.server.port).toBe(3055);
+    expect(result.sessions?.connectedCount).toBe(0);
   });
 
   it('surfaces a portConflict warning when the node is conflicted', async () => {
@@ -83,6 +84,7 @@ describe('ping tool', () => {
           relay: {
             sessions: { connected: () => [sessA, sessB] },
             pickActiveSession: () => sessB,
+            skewNotice: () => null,
             sendRequest: async () => pluginInfo,
           },
           http: undefined as never,

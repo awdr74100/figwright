@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
 import type { Node } from '../src/election/node.js';
+import { captureSkew } from '../src/tools/skew-notice.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
   ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
@@ -17,6 +18,7 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
+            skewNotice: () => null,
             sendRequest: async (name: string, args: unknown) => {
               calls.push({ name, args });
               return { from: 'leader-relay', echoed: args };
@@ -63,6 +65,106 @@ describe('dispatchTool', () => {
     const result = await dispatchTool({ node, follower }, 'remote_tool', { y: 2 });
     expect(result).toEqual({ from: 'follower' });
     expect(received).toEqual({ tool: 'remote_tool', args: { y: 2 } });
+  });
+
+  it('warns on the leader path, attributed to the session that served the call', async () => {
+    // Not the session that is most-active *now*: with two files open on different plugin builds
+    // those differ, and a warning pinned to the wrong plugin is worse than no warning.
+    const asked: (string | undefined)[] = [];
+    const node = makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: {
+            // Models the real relay's timing: the answer arrives on a socket event (a macrotask
+            // away), and onServed fires only after that await — inside sendRequest's own async
+            // context. A fake that called onServed synchronously hid a live bug where the callback
+            // ran in the socket's context and reached nobody.
+            sendRequest: async (
+              _tool: string,
+              _args: unknown,
+              _timeout?: number,
+              _sessionId?: string,
+              onServed?: (served: string | undefined) => void,
+            ): Promise<unknown> => {
+              await new Promise(resolve => setTimeout(resolve, 0));
+              onServed?.('sess-that-served');
+              return { ok: true };
+            },
+            skewNotice: (id?: string) => {
+              asked.push(id);
+              return id === 'sess-that-served' ? 'plugin v0.3.0 is older than this server' : null;
+            },
+          },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+    let seen: string | null = null;
+
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower: makeFollower({}) }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
+
+    expect(asked).toEqual(['sess-that-served']);
+    expect(seen).toMatch(/older than this server/);
+  });
+
+  it('carries the leader’s skew warning back to a follower', async () => {
+    // Only the leader holds the relay, so a follower has no way of its own to know which plugin
+    // build served the call. Without this the warning would reach some users and not others,
+    // depending on which process happened to win the election.
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => ({
+        kind: 'ok',
+        requestId: 'r',
+        result: { ok: true },
+        notice: 'Figwright plugin v0.3.0 is older than this server (v0.4.0).',
+      }),
+    });
+    let seen: string | null = null;
+
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
+
+    expect(seen).toMatch(/older than this server/);
+  });
+
+  it('reports no skew when the leader attaches none', async () => {
+    const node = makeNode({ isLeader: () => false, getLeader: () => null });
+    const follower = makeFollower({
+      sendRpc: async (): Promise<RpcResponse> => ({ kind: 'ok', requestId: 'r', result: {} }),
+    });
+    let seen: string | null = 'unset';
+
+    await captureSkew(
+      async () => {
+        await dispatchTool({ node, follower }, 'set_fills', {});
+        return { content: [] };
+      },
+      (result, notice) => {
+        seen = notice;
+        return result;
+      },
+    );
+
+    expect(seen).toBeNull();
   });
 
   it('throws DispatchError immediately on non-transient follower error', async () => {
@@ -139,6 +241,7 @@ describe('dispatchTool', () => {
         attempts >= 1
           ? ({
               relay: {
+                skewNotice: () => null,
                 sendRequest: async (): Promise<unknown> => leaderResult,
               },
               http: undefined as never,
@@ -191,6 +294,7 @@ describe('dispatchTool', () => {
       getLeader: () =>
         ({
           relay: {
+            skewNotice: () => null,
             sendRequest: async (_n: string, _a: unknown, _t?: number, sessionId?: string) => {
               pinned = sessionId;
               return { ok: true };

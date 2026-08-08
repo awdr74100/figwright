@@ -7,6 +7,7 @@ import {
   createResponse,
   decodeEnvelope,
   encodeEnvelope,
+  checkPluginCompatibility,
   type Envelope,
   ErrorCode,
   HEARTBEAT_INTERVAL_MS,
@@ -15,6 +16,8 @@ import {
   HelloParamsSchema,
   type HelloResult,
   newId,
+  pluginSkewNotice,
+  pluginSkewSummary,
   PROTOCOL_VERSION,
   SystemMethod,
 } from '@figwright/shared';
@@ -45,6 +48,9 @@ interface Pending {
   // The session this request was actually dispatched to (set in dispatchPending). Scanned by
   // sessionHasInflight so a busy plugin's heartbeat timeout is deferred rather than closing the socket.
   dispatchedToSessionId: string | undefined;
+  // Filled with that session as the response lands, and read by the awaiting caller — per request,
+  // so concurrent calls cannot observe each other's. See sendRequest's `onServed`.
+  served: { sessionId: string | undefined };
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
@@ -103,60 +109,118 @@ export class Relay {
     await new Promise<void>(resolve => this.wss.close(() => resolve()));
   }
 
-  sendRequest(
+  async sendRequest(
     method: string,
     params?: unknown,
     timeoutMs: number = DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS,
     sessionId?: string,
+    /**
+     * Called with the session that served this request, once it is answered.
+     *
+     * Recorded per request as the response lands, then invoked here — after the await, inside
+     * `sendRequest`'s own async context, which is the caller's. Both halves of that matter and each
+     * was got wrong once:
+     *
+     * - Recording per request rather than in a shared "who served last?" field means two concurrent
+     *   calls to plugins on different builds cannot read each other's answer.
+     * - Invoking it _here_ rather than from the socket handler is what lets the caller attribute the
+     *   result at all. The handler runs in the socket's async context, so anything context-scoped a
+     *   caller set up (`captureSkew`) is invisible from there — a callback fired at that point
+     *   reaches nobody, which is precisely what shipped until an end-to-end test caught it.
+     */
+    onServed?: (servingSessionId: string | undefined) => void,
   ): Promise<unknown> {
     const id = newId();
     this.lastRequestAtMs = Date.now();
-    return new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`plugin request timeout (method=${method})`));
-      }, timeoutMs);
-      const entry: Pending = {
-        resolve,
-        reject,
-        timer,
-        method,
-        params,
-        dispatched: false,
-        pinnedSessionId: sessionId,
-        dispatchedToSessionId: undefined,
-      };
-      this.pending.set(id, entry);
-
-      if (sessionId !== undefined) {
-        // Pinned: route only to this session. If it's fully gone (not even within the disconnect
-        // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
-        // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
-        // when that same session reconnects (session ids survive resume).
-        const target = this.sessions.get(sessionId);
-        if (target === undefined) {
-          clearTimeout(timer);
+    const served: { sessionId: string | undefined } = { sessionId: undefined };
+    try {
+      return await new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          // Attributed like any other outcome: the call reached a plugin, it just never answered.
+          // An old plugin is a plausible cause rather than a bystander here — `get_design_context`
+          // arms its pre-serialization bail with `budget`, one of the arguments such a plugin drops,
+          // so a large tree it would have refused up front gets serialized in full instead. Without
+          // this the agent reads a bare timeout and blames the size of the file.
+          const pending = this.pending.get(id);
+          if (pending !== undefined) served.sessionId = pending.dispatchedToSessionId;
           this.pending.delete(id);
-          reject(
-            new Error(`pinned session not connected (sessionId=${sessionId}, method=${method})`),
-          );
+          reject(new Error(`plugin request timeout (method=${method})`));
+        }, timeoutMs);
+        const entry: Pending = {
+          resolve,
+          reject,
+          timer,
+          method,
+          params,
+          dispatched: false,
+          pinnedSessionId: sessionId,
+          dispatchedToSessionId: undefined,
+          served,
+        };
+        this.pending.set(id, entry);
+
+        if (sessionId !== undefined) {
+          // Pinned: route only to this session. If it's fully gone (not even within the disconnect
+          // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
+          // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
+          // when that same session reconnects (session ids survive resume).
+          const target = this.sessions.get(sessionId);
+          if (target === undefined) {
+            clearTimeout(timer);
+            this.pending.delete(id);
+            reject(
+              new Error(`pinned session not connected (sessionId=${sessionId}, method=${method})`),
+            );
+            return;
+          }
+          if (target.socket !== null && target.state === 'connected') {
+            this.dispatchPending(id, entry, target);
+          } else {
+            this.opts.log(`[relay] queued ${method} (pinned session ${sessionId} reconnecting)`);
+          }
           return;
         }
-        if (target.socket !== null && target.state === 'connected') {
-          this.dispatchPending(id, entry, target);
-        } else {
-          this.opts.log(`[relay] queued ${method} (pinned session ${sessionId} reconnecting)`);
-        }
-        return;
-      }
 
-      const session = this.pickActiveSession();
-      if (session !== undefined && session.socket !== null) {
-        this.dispatchPending(id, entry, session);
-      } else {
-        this.opts.log(`[relay] queued ${method} (no plugin connected)`);
-      }
-    });
+        const session = this.pickActiveSession();
+        if (session !== undefined && session.socket !== null) {
+          this.dispatchPending(id, entry, session);
+        } else {
+          this.opts.log(`[relay] queued ${method} (no plugin connected)`);
+        }
+      });
+    } finally {
+      // In `finally`, so a failed call is attributed too. The loudest thing an out-of-date plugin
+      // does is answer METHOD_NOT_FOUND for a tool it predates — nine of them for the last shipped
+      // build — and an unattributed one reads as "this tool is broken", which is the same
+      // misdirection as a silent wrong write, just noisier.
+      onServed?.(served.sessionId);
+    }
+  }
+
+  /**
+   * The skew warning for one session, or null when that plugin is current.
+   *
+   * Takes a session id rather than looking up the active one, because with two Figma files open on
+   * different plugin builds "the active session" can differ between dispatching a call and
+   * answering it — and a warning attributed to the wrong plugin is worse than none. Callers that
+   * have just made a request pass the session that served it (see sendRequest's `onServed`); `ping`
+   * passes the one it is reporting on.
+   */
+  skewNotice(sessionId: string | undefined): string | null {
+    if (sessionId === undefined) return null;
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return null;
+    if (checkPluginCompatibility(session.clientVersion, this.opts.serverVersion)) return null;
+    // Full once per session, then the one-liner. The plugin cannot change under a session, so
+    // restating ~120 tokens on every call of a fifty-call codegen run spends thousands of them on
+    // one unchanging fact — and identical text repeated every turn is what teaches a model to skim
+    // past it, so paying that cost would also blunt the warning. The short form still carries both
+    // versions and the consequence, so a caller that only ever sees it is not misinformed.
+    if (session.skewExplained) {
+      return pluginSkewSummary(session.clientVersion, this.opts.serverVersion);
+    }
+    session.skewExplained = true;
+    return pluginSkewNotice(session.clientVersion, this.opts.serverVersion);
   }
 
   pendingCount(): number {
@@ -307,16 +371,45 @@ export class Relay {
       return null;
     }
 
-    // Gate protocol compatibility here (the envelope schema no longer enforces it per-message, so the
-    // mismatched peer can decode this rejection). A skew is realistic: the plugin ships as a manually
-    // imported release while the server updates via `npx @latest`.
+    // Two gates, two different questions, both settled at the handshake because this relay is a
+    // stateful session — the plugin connects once and is dispatched to for as long as the panel is
+    // open, so there is no per-request point at which to answer them.
+    //
+    // Both rejections carry structured `data` beside the prose, matching the shape MCP specifies for
+    // the same situation (`{ supported, requested }` on its version error). The text is written for
+    // the panel, since the spec's own note applies here too: for a peer with no way to fall forward,
+    // this message may be the only diagnostic a user ever sees.
+    //
+    // Wire format: can we understand each other's envelopes at all?
     if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
       const message =
         `protocol mismatch: server speaks ${PROTOCOL_VERSION}, plugin speaks ${parsed.data.protocolVersion} — ` +
-        'update the older Figwright component so both match (server: @figwright/mcp, plugin: re-import the latest release)';
+        'update the older Figwright half so both match (server: @figwright/mcp, plugin: re-import ' +
+        // The reopen matters: a refused plugin stops retrying (retrying cannot fix it, and a plugin
+        // old enough to be refused is old enough to lack any graceful handling of the refusal), so
+        // fixing the *server* side leaves the panel sitting on this message until it is reopened.
+        'the latest release), then reopen this plugin in Figma';
       this.opts.log(`[relay] rejecting plugin — ${message}`);
-      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message);
+      this.sendError(socket, env, ErrorCode.ProtocolMismatch, message, {
+        reason: 'protocol',
+        supported: PROTOCOL_VERSION,
+        requested: parsed.data.protocolVersion,
+      });
       return null;
+    }
+
+    // Feature set: does this plugin still act on everything this server sends? A plugin below the
+    // floor silently drops arguments it predates. It is served anyway — refusing it was built,
+    // measured against a real v0.3.0 plugin, and abandoned when it produced ~7 rejected handshakes a
+    // second forever, because the "stop retrying" half can only ever live in a plugin new enough not
+    // to be refused. What the server can do is make sure nobody is misled: every result this session
+    // serves carries the notice below.
+    const compatible = checkPluginCompatibility(parsed.data.clientVersion, this.opts.serverVersion);
+    if (!compatible) {
+      this.opts.log(
+        `[relay] plugin "${parsed.data.clientVersion}" predates this server (v${this.opts.serverVersion}); ` +
+          'serving it, and marking every result as unverified',
+      );
     }
 
     const { session, resumed } = this.sessions.register({
@@ -352,6 +445,9 @@ export class Relay {
       serverVersion: this.opts.serverVersion,
       protocolVersion: PROTOCOL_VERSION,
       sessionResumed: resumed,
+      ...(compatible
+        ? {}
+        : { skewNotice: pluginSkewNotice(parsed.data.clientVersion, this.opts.serverVersion) }),
     };
     this.sendResponse(socket, env, result);
     this.opts.log(`[relay] session ${session.id} hello (resumed=${resumed})`);
@@ -385,6 +481,10 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        // Recorded, not dispatched: this runs in the socket's async context, where anything the
+        // caller scoped to its own tool call is out of reach. sendRequest reports it after the
+        // await instead.
+        p.served.sessionId = p.dispatchedToSessionId;
         p.resolve(env.result);
       }
       return;
@@ -394,6 +494,9 @@ export class Relay {
       if (p !== undefined) {
         clearTimeout(p.timer);
         this.pending.delete(env.id);
+        // Recorded on the error path too: a plugin that answers METHOD_NOT_FOUND for a tool it
+        // predates is the most visible thing an out-of-date one does, and the least self-explaining.
+        p.served.sessionId = p.dispatchedToSessionId;
         p.reject(new Error(`${env.error.code}: ${env.error.message}`));
       }
       return;
@@ -420,7 +523,13 @@ export class Relay {
     socket.send(encodeEnvelope(createResponse({ id: req.id, sessionId: req.sessionId, result })));
   }
 
-  private sendError(socket: WebSocket, req: Envelope, code: string, message: string): void {
+  private sendError(
+    socket: WebSocket,
+    req: Envelope,
+    code: string,
+    message: string,
+    data?: unknown,
+  ): void {
     socket.send(
       encodeEnvelope(
         createError({
@@ -428,6 +537,7 @@ export class Relay {
           sessionId: req.sessionId || newId(),
           code,
           message,
+          ...(data === undefined ? {} : { data }),
         }),
       ),
     );

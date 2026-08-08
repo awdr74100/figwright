@@ -11,6 +11,7 @@ import { PROMPT_DEFINITIONS } from '../../src/prompts/registry.js';
 import { annotationsFor } from '../../src/tools/annotations.js';
 import { ALL_TOOL_SPECS } from '../../src/tools/registry.js';
 import { toToolDefinition } from '../tool-schema.js';
+import { closeSocket, connectFakePlugin } from './_helpers.js';
 
 // The wire gate. Everything else in this repo checks the server from the inside: `tool-schema.ts`
 // re-derives JSON Schema with Zod, the other e2e tests drive the relay and never start an MCP
@@ -52,9 +53,12 @@ class WireClient {
   private readonly pending = new Map<number, (r: JsonRpcResponse) => void>();
   private nextId = 1;
   stderr = '';
+  /** Relay port this server owns, so a test can attach a plugin to the process it is driving. */
+  port = 0;
 
   async start(): Promise<void> {
     const port = await freePort();
+    this.port = port;
     this.child = spawn(process.execPath, [DIST_ENTRY], {
       env: { ...process.env, FIGWRIGHT_PORT: String(port) },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -271,6 +275,83 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       server: { role: 'leader' },
     });
   });
+
+  it('warns on a real tools/call when the connected plugin is out of date', async () => {
+    // The assembled product, over real stdio, against a real plugin socket. Every piece of this had
+    // unit coverage and the wiring in index.ts had none: deleting the append there left all 1387
+    // tests green. A warning that is not actually attached reaches nobody.
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      clientVersion: '0.0.1',
+      handlers: { get_selection: () => ({ pageId: '1:1', pageName: 'Page 1', nodes: [] }) },
+    });
+
+    try {
+      const res = await server.send('tools/call', { name: 'get_selection', arguments: {} });
+      const content = res.result?.content as { type: string; text: string }[];
+
+      // The result the agent asked for is untouched and still first.
+      expect(JSON.parse(content[0]?.text ?? '{}')).toMatchObject({ pageName: 'Page 1' });
+      // The warning rides alongside it, not inside it.
+      expect(content).toHaveLength(2);
+      expect(content[1]?.text).toMatch(/OUT OF DATE/);
+      expect(content[1]?.text).toMatch(/older than this server/i);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
+  it('explains a METHOD_NOT_FOUND from an out-of-date plugin instead of leaving it bare', async () => {
+    // What an old plugin does loudest: nine tools in the last shipped build have no handler in it.
+    // Bare, that error reads as "this tool is broken" and the agent goes looking for another way
+    // round; attributed, the user gets told to update.
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      clientVersion: '0.0.1',
+      // No handler for the tool called below — exactly what a plugin that predates it does.
+      handlers: {},
+    });
+
+    try {
+      const res = await server.send('tools/call', { name: 'get_selection', arguments: {} });
+
+      expect(res.result?.isError).toBe(true);
+      const content = res.result?.content as { type: string; text: string }[];
+      const text = content.map(c => c.text).join('');
+      expect(text).toMatch(/OUT OF DATE/);
+      expect(text).toMatch(/older than this server/i);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
+  it('leaves a real tools/call alone when the plugin is current', async () => {
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      handlers: { get_selection: () => ({ pageId: '1:1', pageName: 'Page 1', nodes: [] }) },
+    });
+
+    try {
+      const res = await server.send('tools/call', { name: 'get_selection', arguments: {} });
+      const content = res.result?.content as { type: string; text: string }[];
+
+      expect(content).toHaveLength(1);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
 
   it('surfaces a bad-argument call as a tool error the model can read, not a transport failure', async () => {
     const res = await client.send('tools/call', {

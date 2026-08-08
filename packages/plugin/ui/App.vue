@@ -60,6 +60,20 @@ const embedded = computed(() => context.value !== null && isEmbeddedInPanel(cont
         />
         <PanelBackgroundButton v-if="!embedded" />
       </div>
+      <!-- Something about this build's version that no reconnect will change: it is behind the
+           server (still works, results may be incomplete), or the server refused it outright over
+           the wire format (nothing works). Both are only fixed by updating the plugin, so both are
+           stated where the user already is rather than in the Debug tab.
+
+           Severity is read off the connection rather than stored: a refusal never reaches
+           'connected', so a notice on a live connection is the survivable one. -->
+      <p
+        v-if="state.versionNotice !== null"
+        class="mt-2 rounded-md bg-raised p-1.5 text-meta wrap-break-word"
+        :class="state.status === 'connected' ? 'text-warning' : 'text-danger'"
+      >
+        {{ state.versionNotice }}
+      </p>
       <PanelTabs v-model="tab" class="mt-2.5" />
     </header>
 

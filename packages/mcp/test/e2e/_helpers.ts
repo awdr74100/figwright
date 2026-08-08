@@ -2,11 +2,14 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import {
+  createError,
   createRequest,
   createResponse,
   decodeEnvelope,
   encodeEnvelope,
   type Envelope,
+  ErrorCode,
+  MIN_PLUGIN_VERSION,
   newId,
   PROTOCOL_VERSION,
   SystemMethod,
@@ -53,6 +56,8 @@ export interface FakePluginOptions {
   port: number;
   sessionId?: string;
   handlers: Record<string, (params: unknown) => unknown>;
+  /** Defaults to a version the server is happy with; override to exercise the skew warning. */
+  clientVersion?: string;
 }
 
 export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSocket> => {
@@ -81,7 +86,9 @@ export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSoc
             method: SystemMethod.Hello,
             params: {
               clientType: 'plugin',
-              clientVersion: 'fake-0.0.0',
+              // MIN_PLUGIN_VERSION is always accepted without a warning: the threshold actually
+              // applied is capped at the server's own version, so this is never below it.
+              clientVersion: opts.clientVersion ?? MIN_PLUGIN_VERSION,
               protocolVersion: PROTOCOL_VERSION,
             },
           }),
@@ -102,7 +109,22 @@ export const connectFakePlugin = async (opts: FakePluginOptions): Promise<WebSoc
       return;
     }
     const handler = opts.handlers[env.method];
-    if (handler === undefined) return;
+    if (handler === undefined) {
+      // What the real sandbox does for a method it has no handler for (see plugin dispatcher) —
+      // the defining behaviour of a plugin older than the server's tool set. Staying silent here
+      // would turn that case into a 15s timeout and hide whatever it was meant to prove.
+      ws.send(
+        encodeEnvelope(
+          createError({
+            id: env.id,
+            sessionId: env.sessionId,
+            code: ErrorCode.MethodNotFound,
+            message: `no sandbox handler (method=${env.method})`,
+          }),
+        ),
+      );
+      return;
+    }
     const result = handler(env.params);
     ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
   });

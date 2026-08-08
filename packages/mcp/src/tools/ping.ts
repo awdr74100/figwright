@@ -64,6 +64,12 @@ export interface PingSessionInfo {
   fileName: string | null;
   pageName: string | null;
   lastActivityAt: number;
+  /**
+   * The plugin build on the other end. Nothing is refused for being old, so this is how "which
+   * halves is this session actually made of" becomes answerable outside Figma's own panel. The
+   * prose warning rides on the tool result itself; this is the fact behind it.
+   */
+  pluginVersion: string;
 }
 
 export interface PingSessionsInfo {
@@ -148,6 +154,7 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         fileName: s.fileName,
         pageName: s.pageName,
         lastActivityAt: s.lastActivityAt,
+        pluginVersion: s.clientVersion,
       }));
     const sessions: PingSessionsInfo = {
       connectedCount: connected.length,
@@ -167,6 +174,9 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         'ping',
         {},
       );
+      // No skew warning in here on purpose: every tool result already carries one when it applies,
+      // ping included, and repeating the same paragraph inside the payload it is appended to reads
+      // as two separate problems. `pluginVersion` above is the fact; the warning is the prose.
       return { ok: true, hop: 'e2e', server, sessions, plugin };
     } catch (err) {
       const dispatchError = err instanceof Error ? err.message : String(err);

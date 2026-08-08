@@ -38,6 +38,9 @@ export const getScreenshotTool: ToolSpec = {
       .optional(),
   }),
   kind: 'read',
+  // See index.ts: the public path dispatches with forVision so the sandbox caps an oversized scale
+  // to what a vision model resolves. save_screenshots dispatches the same tool without it.
+  injectedArgs: ['forVision'],
 };
 /** A subset of MCP tool-result content blocks this tool emits. */
 export type ScreenshotContent =
