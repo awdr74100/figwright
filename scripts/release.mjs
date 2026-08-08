@@ -35,6 +35,19 @@ function fail(message) {
   process.exit(1);
 }
 
+/**
+ * Walking away from a release is a decision, not a failure — so it says so quietly and exits 130,
+ * the conventional code for "ended by SIGINT", rather than looking like something went wrong.
+ *
+ * Every prompt routes here. `readline/promises` rejects `question()` with an `AbortError` on
+ * Ctrl+C, which unhandled prints a stack trace at someone who only meant to back out.
+ */
+function abort() {
+  process.stdout.write('\n');
+  console.error(styleText('dim', '  release aborted'));
+  process.exit(130);
+}
+
 function git(...args) {
   const { status, stdout } = spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
   if (status !== 0) fail(`git ${args.join(' ')} failed`);
@@ -85,7 +98,7 @@ async function selectFromMenu(items, initial) {
       if (key.name === 'return') return done();
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
         process.stdin.setRawMode(false);
-        fail('aborted');
+        abort();
       } else if (key.name === 'up' || key.name === 'k') {
         index = (index - 1 + items.length) % items.length;
       } else if (key.name === 'down' || key.name === 'j') {
@@ -107,7 +120,20 @@ async function selectFromMenu(items, initial) {
 async function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    return ((await rl.question(question)) ?? '').trim();
+    const answer = await rl.question(question);
+    // Ctrl+D closes the stream and resolves with nothing. Backing out that way means the same as
+    // Ctrl+C, and an empty string here would otherwise be read as a version or as "not yes".
+    if (answer === undefined) abort();
+    return answer.trim();
+  } catch (err) {
+    // Ctrl+C. `readline/promises` rejects the question rather than emitting SIGINT, so this is the
+    // only place it can be caught — unhandled it prints a stack trace at someone who only meant to
+    // back out. Matched on `code`, the documented identifier, with `name` as the fallback.
+    const aborted =
+      err instanceof Error &&
+      (('code' in err && err.code === 'ABORT_ERR') || err.name === 'AbortError');
+    if (aborted) abort();
+    throw err;
   } finally {
     rl.close();
   }
@@ -207,7 +233,7 @@ console.log(`  commits and tags ${styleText('bold', tag)} locally — nothing is
 console.log();
 
 const confirmed = await ask(`  Continue? ${styleText('dim', '(y/N)')} `);
-if (!/^y(es)?$/i.test(confirmed)) fail('aborted');
+if (!/^y(es)?$/i.test(confirmed)) abort();
 
 const { status } = spawnSync('pnpm', args, { cwd: repoRoot, stdio: 'inherit' });
 if (status !== 0) process.exit(status ?? 1);
