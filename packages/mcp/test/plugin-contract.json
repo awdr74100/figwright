@@ -391,7 +391,7 @@
     "ungroup_nodes": ["nodeIds", "requestId"],
     "reparent_nodes": ["index", "newParentId", "nodeIds", "requestId"],
     "reorder_nodes": ["index", "nodeIds", "requestId"],
-    "find_replace_text": ["caseSensitive", "find", "replace", "requestId", "rootId"],
+    "find_replace_text": ["caseSensitive", "find", "replace", "requestId", "root"],
     "batch_rename_nodes": ["renames", "renames[].name", "renames[].nodeId", "requestId"],
     "add_page": ["name", "requestId"],
     "delete_page": ["pageId", "requestId"],

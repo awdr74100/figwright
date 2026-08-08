@@ -57,7 +57,6 @@ export const STRING_ID_FIELDS = [
   'newParentId',
   'pageId',
   'root',
-  'rootId',
   'componentId',
   'instanceId',
   'fromNodeId',
