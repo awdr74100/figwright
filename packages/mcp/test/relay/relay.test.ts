@@ -337,6 +337,38 @@ describe('Relay hello loop', () => {
     ws.close();
   });
 
+  it('attributes a timeout, which an old plugin can itself cause', async () => {
+    // The four ways a request ends were not attributed alike: resolve and error were, timeout was
+    // not. It is not a bystander case — `get_design_context` arms its pre-serialization bail with
+    // `budget`, an argument an old plugin drops, so a tree it would have refused up front is
+    // serialized in full and runs long. A bare timeout sends the agent after the file's size.
+    const b = await startRelay();
+    const ws = await connect(b.port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h1',
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: '0.0.1' }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+    // The plugin receives the request and never answers.
+
+    let attributed: string | null = 'unset';
+    await expect(
+      b.relay.sendRequest('get_design_context', {}, 60, undefined, served => {
+        attributed = b.relay.skewNotice(served);
+      }),
+    ).rejects.toThrow(/timeout/i);
+
+    expect(attributed).toMatch(/older than this server/i);
+    ws.close();
+  });
+
   it('says nothing about skew for a current plugin', async () => {
     // The warning only means anything if it stays quiet when there is nothing to warn about.
     const b = await startRelay();

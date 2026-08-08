@@ -136,6 +136,13 @@ export class Relay {
     try {
       return await new Promise<unknown>((resolve, reject) => {
         const timer = setTimeout(() => {
+          // Attributed like any other outcome: the call reached a plugin, it just never answered.
+          // An old plugin is a plausible cause rather than a bystander here — `get_design_context`
+          // arms its pre-serialization bail with `budget`, one of the arguments such a plugin drops,
+          // so a large tree it would have refused up front gets serialized in full instead. Without
+          // this the agent reads a bare timeout and blames the size of the file.
+          const pending = this.pending.get(id);
+          if (pending !== undefined) served.sessionId = pending.dispatchedToSessionId;
           this.pending.delete(id);
           reject(new Error(`plugin request timeout (method=${method})`));
         }, timeoutMs);
