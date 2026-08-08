@@ -24,7 +24,10 @@
 //
 // So the server acts by removing the *silence*, which was the actual defect — the call still runs,
 // and every result carries {@linkcode pluginSkewNotice} telling the agent the result is unverified
-// and the user should update. A wrong write is still possible; it is no longer unattributable.
+// and the user should update. Failures carry it too: an old plugin answers METHOD_NOT_FOUND for
+// every tool it predates, and unattributed that reads as "this tool is broken" rather than "your
+// plugin is old" — the same misdirection as a silent wrong write, just noisier. A wrong write is
+// still possible; it is no longer unattributable.
 //
 // This is also what MCP does at the equivalent seam, once you follow it past the version handshake:
 // for optional behaviour a peer may not have, "the supporting party MUST either revert to core
@@ -87,7 +90,7 @@ const comparePre = (a: string, b: string): number => {
 /**
  * Compare two semver strings: negative if `a` precedes `b`, 0 if equal, positive if `a` follows.
  * Returns `null` when either side is not a version this product could have produced — the caller
- * decides what an unidentifiable peer means (the relay refuses it).
+ * decides what an unidentifiable peer means (the relay treats it as skewed and warns).
  */
 export const compareVersions = (a: string, b: string): number | null => {
   const left = parse(a);
