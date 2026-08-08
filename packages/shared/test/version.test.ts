@@ -62,8 +62,10 @@ describe('pluginSkewNotice', () => {
     expect(notice).toMatch(/silently ignored/i);
     expect(notice).toMatch(/report success/i);
     expect(notice).toMatch(/unverified/i);
-    // And the action, aimed at the agent's user rather than at a developer.
-    expect(notice).toMatch(/tell the user to update/i);
+    // The action, stated directly. Never in the third person: this same string is rendered in the
+    // plugin's own panel, where "tell the user to…" addresses the person already reading it.
+    expect(notice).toMatch(/Update the plugin/);
+    expect(notice).not.toMatch(/tell the user/i);
     expect(notice).toContain('releases/latest');
   });
 

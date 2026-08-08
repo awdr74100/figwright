@@ -218,7 +218,7 @@ describe('Relay hello loop', () => {
     const result = res.result as HelloResult;
     expect(result.skewNotice).toMatch(/older than this server/i);
     expect(result.skewNotice).toMatch(/silently ignored/i);
-    expect(result.skewNotice).toMatch(/update the Figma plugin/i);
+    expect(result.skewNotice).toMatch(/Update the plugin/);
     // And available per session, which is what a call attributes its result to.
     const [session] = b.relay.sessions.connected();
     expect(b.relay.skewNotice(session?.id)).toMatch(/older than this server/i);

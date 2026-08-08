@@ -108,23 +108,29 @@ export const compareVersions = (a: string, b: string): number | null => {
 };
 
 /**
- * The warning shown when a plugin predates the server, worded for whoever reads it — which is an
- * agent about to report a result to its user, not a developer reading a log.
+ * The warning shown when a plugin predates the server.
  *
  * It has to say what may be wrong rather than only that versions differ, because the failure it
  * describes has no symptom: a handler that predates an argument ignores it and still answers `{ ok:
- * true }`, so a write can report success having done something else. Telling the agent exactly that
- * is the whole mechanism — nothing here blocks the call.
+ * true }`, so a write can report success having done something else. Saying exactly that is the
+ * whole mechanism — nothing here blocks the call.
+ *
+ * Written for an agent **and** for a person, because it is shown to both: appended to tool results,
+ * and rendered in the plugin's own panel. One audience-neutral string rather than two, following
+ * `editorLimitation` — the repo's existing warning of this shape, which manages the same trick by
+ * stating the consequence and then the action, and never referring to its reader in the third
+ * person. An earlier draft said "tell the user to update", which reads as nonsense in the panel,
+ * where the reader _is_ the user. Caught by looking at it in Figma.
  */
 export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): string =>
   // `v`-prefixed only when it is really a version. Whatever the peer claimed is echoed as-is
   // otherwise, because an unreadable one dressed up as a version reads as `vnightly`.
   `Figwright plugin ${parse(pluginVersion) === null ? `"${pluginVersion}"` : `v${pluginVersion}`} ` +
   `is older than this server (v${serverVersion}). ` +
-  'Arguments added after the plugin was built are silently ignored by it — a write can report ' +
-  'success having applied only part of what was asked, and results can be incomplete. Treat this ' +
-  "call's result as unverified, and tell the user to update the Figma plugin: download the latest " +
-  'release from https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
+  'Arguments added after the plugin was built are silently ignored by it, so an edit can report ' +
+  'success having applied only part of what was asked, and results can be incomplete — treat this ' +
+  'result as unverified. Update the plugin: download the latest release from ' +
+  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
   '(Plugins → Development → Import plugin from manifest).';
 
 /**
