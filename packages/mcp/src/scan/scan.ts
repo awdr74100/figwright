@@ -4,6 +4,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import { parseSync } from 'oxc-parser';
 
 import { walkRepoFiles } from '../repo-walk.js';
+import { type ScriptLang, scanSfcScripts } from './sfc-blocks.js';
 
 // Component scanner — finds the project's existing components so component_map can join Figma names
 // against them. The guiding principle: never pattern-match the directory layout (feature-based, atomic,
@@ -764,26 +765,14 @@ const sveltePropNames = (program: any, table: TypeTable): PropsResult => {
 
 const REACT_EXTS = new Set(['.tsx', '.jsx']);
 
-// Pull every <script> / <script setup> body out of an SFC. lang="ts" (or its absence) decides the
-// parser dialect; a .vue/.svelte file with no script block is a genuinely prop-less template.
-const SCRIPT_BLOCK = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
-// Whether the file opens a script at all. "No blocks extracted" only means "prop-less template"
-// when this is false; when it's true the block exists but didn't close (or closed inside a string),
-// so its props are unread rather than absent.
-const SCRIPT_OPEN = /<script\b/i;
-
-interface ScriptBlock {
-  body: string;
-  ts: boolean;
-}
-
-const extractScriptBlocks = (code: string): ScriptBlock[] => {
-  const out: ScriptBlock[] = [];
-  for (const m of code.matchAll(SCRIPT_BLOCK)) {
-    const attrs = m[1] ?? '';
-    out.push({ body: m[2] ?? '', ts: /\blang=["']ts["']/.test(attrs) });
-  }
-  return out;
+// The virtual source name handed to oxc: it is what selects the dialect, so a block's `lang` has to
+// reach it intact. `sfc.tsx` parses both `defineProps<{…}>()` and JSX, which is why lang="tsx" gets
+// its own entry rather than collapsing onto `ts`.
+const VIRTUAL_SOURCE: Record<ScriptLang, string> = {
+  js: 'sfc.js',
+  jsx: 'sfc.jsx',
+  ts: 'sfc.ts',
+  tsx: 'sfc.tsx',
 };
 
 /**
@@ -794,10 +783,14 @@ const extractScriptBlocks = (code: string): ScriptBlock[] => {
  * PropsExtracted distinguishes "[] = genuinely no props" from "[] = unknown" so the join won't
  * invent extension TODOs. It's true when we read the props, or the file is a script-less (so
  * genuinely prop-less) template. It stays false when a script is present but the props couldn't be
- * fully read — a parse error, a prop type imported from another file, or a declaration style we
+ * fully read — a parse error, a prop type imported from another file, a `lang` we have no parser
+ * for, a `src=` block whose source is another file, an unclosed block, or a declaration style we
  * don't recognize (conservative: the join then suppresses matched/unmatched rather than asserting
- * prop gaps we can't actually see). oxc doesn't throw on bad input, so a parse failure surfaces
- * here simply as "no props found".
+ * prop gaps we can't actually see).
+ *
+ * A block that fails to parse still contributes whatever oxc recovered — dropping it would narrow
+ * detection — but it flips propsExtracted to false, because a recovered AST is exactly the case
+ * where claiming a complete list would be the false claim the field exists to prevent.
  */
 export const extractSfcComponent = (
   filePath: string,
@@ -810,22 +803,36 @@ export const extractSfcComponent = (
     exportKind: 'default' as const,
     framework,
   };
-  const scripts = extractScriptBlocks(code);
-  if (scripts.length === 0) {
-    // A template with no script really has no props; a script we failed to delimit has props we
-    // simply didn't read, and saying "none" there is the same false claim as an empty parse.
-    return [{ ...base, propNames: [], propsExtracted: !SCRIPT_OPEN.test(code) }];
+  const { blocks, unterminated } = scanSfcScripts(code, { templateIsBlock: framework === 'vue' });
+  // Set when a props declaration was found but couldn't be fully resolved (an imported type), so an
+  // empty/partial list is never reported as a complete one. A file the scanner could not fully
+  // delimit starts it true: content went unread, and saying "none" there is the same false claim
+  // as an empty parse.
+  let unresolved = unterminated;
+
+  if (blocks.length === 0) {
+    // A template with no script really has no props.
+    return [{ ...base, propNames: [], propsExtracted: !unresolved }];
   }
 
   // Parse every block first: a type is routinely declared in `<script>` and consumed in `<script
   // setup>`, so the type table has to span the whole SFC before any block is read for props.
   const programs: any[] = [];
-  for (const script of scripts) {
-    try {
-      // Name the virtual source so oxc picks the right dialect (TS enables defineProps<...>()).
-      programs.push(parseSync(`sfc.${script.ts ? 'ts' : 'js'}`, script.body).program);
-    } catch {
+  for (const block of blocks) {
+    // `src` puts the real source in another file and `lang: null` is a dialect we have no parser
+    // for. Either way the block's props are unread, and its (empty) body would say "none".
+    if (block.external || block.lang === null) {
+      unresolved = true;
       continue;
+    }
+    try {
+      const parsed = parseSync(VIRTUAL_SOURCE[block.lang], block.body);
+      if (parsed.errors.length > 0) unresolved = true;
+      programs.push(parsed.program);
+    } catch {
+      // oxc recovers rather than throwing, but this reads other people's repositories — a block we
+      // cannot parse at all is unread, never "prop-less".
+      unresolved = true;
     }
   }
   const table: TypeTable = new Map();
@@ -833,9 +840,6 @@ export const extractSfcComponent = (
     for (const [name, decl] of collectTypeDeclarations(program)) table.set(name, decl);
 
   const names = new Set<string>();
-  // Set when a props declaration was found but couldn't be fully resolved (an imported type), so an
-  // empty/partial list is never reported as a complete one.
-  let unresolved = false;
   for (const program of programs) {
     if (framework === 'vue') {
       for (const call of collectCalls(program)) {

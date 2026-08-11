@@ -393,6 +393,66 @@ describe('extractSfcComponent (Vue / Svelte props)', () => {
     const [s] = extractSfcComponent('C.svelte', svelte, 'svelte');
     expect(s?.propsExtracted).toBe(false);
   });
+
+  // Four ways the block-delimiting regex this replaced lost or invented props. Each was confirmed
+  // end-to-end before it was fixed; the first is the only one observed in shipped library code.
+  it('reads the props of a Vue generic component whose type parameter contains `>`', () => {
+    const code =
+      '<script setup lang="ts" generic="T extends Record<string, unknown>">\nconst p = defineProps<{ items: T[]; label: string }>()\n</script>';
+    const [c] = extractSfcComponent('List.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['items', 'label']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it.each([
+    ['lang="tsx"', '<script setup lang="tsx">const p = defineProps<{ size: string }>()</script>'],
+    ['lang="jsx"', `<script setup lang="jsx">const p = defineProps(['size'])</script>`],
+    [
+      'an unquoted lang=ts',
+      '<script setup lang=ts>const p = defineProps<{ size: string }>()</script>',
+    ],
+  ])('reads the props of a block declaring %s', (_label, code) => {
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['size']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it('does not take props from a commented-out script block', () => {
+    // The worst of the four: a phantom prop reported with propsExtracted: true, so the join reads
+    // a Figma variant axis as already supported and codegen emits an attribute that does nothing.
+    const code =
+      '<!--\n<script setup lang="ts">const old = defineProps<{ ghost: string }>()</script>\n-->\n<script setup lang="ts">const p = defineProps<{ real: string }>()</script>';
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['real']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it("does not take props from a <script> nested in Vue's <template>", () => {
+    const code =
+      '<script setup lang="ts">const p = defineProps<{ title: string }>()</script>\n<template><script type="application/ld+json">{"@context":"https://schema.org"}</script></template>';
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['title']);
+    expect(c?.propsExtracted).toBe(true);
+  });
+
+  it.each([
+    ['a src= block, whose source is another file', '<script src="./C.ts" lang="ts"></script>'],
+    ['a lang we have no parser for', '<script lang="coffee">a = 1</script>'],
+    ['a file that could not be delimited', '<!-- <script setup lang="ts">defineProps<{ a: 1 }>()'],
+  ])('marks props NOT extracted for %s', (_label, code) => {
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propsExtracted).toBe(false);
+  });
+
+  it('keeps a partially recovered block honest without narrowing what it found', () => {
+    // A block oxc could only recover from still contributes its names — dropping them would lose
+    // detection — but the result stops claiming the list is complete.
+    const code =
+      '<script setup lang="ts">const p = defineProps<{ size: string }>()</script>\n<script lang="ts">const = = =</script>';
+    const [c] = extractSfcComponent('C.vue', code, 'vue');
+    expect(c?.propNames).toEqual(['size']);
+    expect(c?.propsExtracted).toBe(false);
+  });
 });
 
 describe('extractAngularComponents (pure)', () => {
