@@ -35,7 +35,7 @@
     "@types/node": "^24.13.3",
     "@vitest/coverage-v8": "^4.1.10",
     "changelogen": "^0.6.2",
-    "knip": "^6.32.1",
+    "knip": "^6.32.2",
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
     "typescript": "^6.0.3",
