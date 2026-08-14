@@ -189,6 +189,18 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect(initResult.capabilities).toMatchObject({ tools: {}, prompts: {} });
   });
 
+  it('answers the transport-level ping this era still defines', async () => {
+    // The protocol method, not the `ping` tool this server also exposes — clients use it as a
+    // liveness probe, and the spec has the receiver answer promptly or risk being dropped. It is
+    // also the cleanest probe for era dispatch: the SDK's 2025 method registry lists `ping` and its
+    // 2026 one deletes it, so this assertion and its counterpart in the 2026 test below are the
+    // only things here that prove `serveStdio` serves two different method sets rather than one
+    // superset. Every other method this file exercises exists in both eras.
+    const res = await client.send('ping');
+    expect(res.error).toBeUndefined();
+    expect(res.result).toEqual({});
+  });
+
   it('sends instructions a client can fold into the model prompt', () => {
     // The only channel that reaches every client. Claude Code users get this guidance from the
     // skills; Cursor and Codex users get it from nowhere else, and without it the likeliest first
@@ -403,6 +415,13 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       // The same registrations must serve both eras — a modern client sees the identical tool set.
       const res = await modern.send('tools/list', { _meta: meta });
       expect((res.result?.tools as unknown[] | undefined)?.length).toBe(ALL_TOOL_SPECS.length);
+
+      // ...but the method set is not the same: 2026-07-28 deleted `ping`, so the era has to
+      // withhold it. Serving it here would mean era selection degraded into a union of both
+      // registries — a change `tsc` cannot see, since neither registry is a type this repo names.
+      const gone = await modern.send('ping', { _meta: meta });
+      expect(gone.result).toBeUndefined();
+      expect(gone.error?.code).toBe(-32_601);
     } finally {
       await modern.stop();
     }
