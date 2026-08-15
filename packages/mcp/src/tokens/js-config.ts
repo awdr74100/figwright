@@ -437,9 +437,26 @@ const readThemeScales = (
 export const parseTailwindConfig = (filePath: string, code: string): JsConfigTokens =>
   readThemeScales(filePath, code, () => TAILWIND_V3_SCALES);
 
+/**
+ * Keys that appear in one scale table but still exist in the other vocabulary's theme under a
+ * different _shape_, so their presence proves nothing. `container` is the whole list: a scale in
+ * wind4, an options object (`{ center, padding }`) in wind3 and Tailwind alike. Counting it as a
+ * wind4 marker flipped a wind3 config whose presets happened to be unreadable, and then read those
+ * options as tokens — `container-padding`, whose ref composes to `max-w-padding`.
+ *
+ * Every other difference between the two tables is a genuine marker: wind3's theme has no `text`,
+ * `font`, `radius`, `shadow`, `tracking`, `leading`, `breakpoint` or `ease` key (it spells them
+ * `fontSize`, `fontFamily`, `borderRadius`, `boxShadow`, `letterSpacing`, `lineHeight`,
+ * `breakpoints`, `easing`), and wind4's has none of those longer spellings.
+ */
+const AMBIGUOUS_KEYS: ReadonlySet<string> = new Set(['container']);
+
 /** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */
-const wind4Only = UNO_WIND4_SCALES.filter(s => !UNO_WIND3_SCALES.some(o => o.key === s.key));
-const wind3Only = UNO_WIND3_SCALES.filter(s => !UNO_WIND4_SCALES.some(o => o.key === s.key));
+const discriminators = (mine: readonly Scale[], other: readonly Scale[]): readonly Scale[] =>
+  mine.filter(s => !AMBIGUOUS_KEYS.has(s.key) && !other.some(o => o.key === s.key));
+
+const wind4Only = discriminators(UNO_WIND4_SCALES, UNO_WIND3_SCALES);
+const wind3Only = discriminators(UNO_WIND3_SCALES, UNO_WIND4_SCALES);
 
 /** How many of a scale set's keys the theme (or its `extend`) actually declares. */
 const declaredCount = (scopes: readonly any[], scales: readonly Scale[]): number =>

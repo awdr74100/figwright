@@ -503,6 +503,16 @@ describe('parseUnoConfig', () => {
       expect([...wind3ish.byName.keys()].toSorted()).toEqual(['radius-blob', 'text-huge']);
     });
 
+    it('does not let `container` discriminate, since both vocabularies have it', () => {
+      // A scale in wind4, an options object in wind3/Tailwind. Counting it as a wind4 marker flipped
+      // a wind3 config whose presets were unreadable, and then read those options as tokens —
+      // `container-padding`, whose ref composes to `max-w-padding`.
+      const { tokens } = parseUno(
+        `export default { presets: sharedPresets, theme: { container: { center: true, padding: '1rem' } } }`,
+      );
+      expect(tokens).toEqual([]);
+    });
+
     it('keeps a readable presets array authoritative over the theme shape', () => {
       // A plain presetUno() config that happens to declare `container` must not be re-judged by its
       // keys — `container` is a scale in wind4 but an options object here, so flipping the
