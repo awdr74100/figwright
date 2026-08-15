@@ -46,8 +46,11 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `underline`/`line-through` — a link with no underline is the classic miss), `lineHeight`
   (`{unit,value}` → `leading-*`; absent = font default), `letterSpacing` (`{unit,value}` →
   `tracking-*`; absent = 0), `paragraphSpacing` (px between the paragraphs `characters` splits into
-  at `\n` → margin between the `<p>`s you emit; absent = 0, the paragraphs butt together), and
-  `paragraphIndent` (px first-line indent → `text-indent`). Per-node (inline, not in the bundle):
+  at `\n` → margin between the `<p>`s you emit; absent = 0, the paragraphs butt together),
+  `paragraphIndent` (px first-line indent → `text-indent`), and `textWrapStyle` — Figma's values are
+  CSS `text-wrap`'s verbatim, so `BALANCE` → `text-wrap: balance` (even line lengths; a designer sets
+  it on headings and pull quotes) and `PRETTY` → `text-wrap: pretty` (no orphan last word); absent =
+  `auto`, the browser default. Per-node (inline, not in the bundle):
   `textAlignHorizontal`/`Vertical` (`CENTER`/`RIGHT`/`JUSTIFIED` → `text-center`/`text-right`/
   `text-justify`; absent = left/top), `textTruncation: 'ENDING'` + `maxLines` (→ `line-clamp-N` /
   `truncate`), and `textAutoResize` — how the text box sizes, the signal for whether its
@@ -56,6 +59,10 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   it), `NONE` = fixed box (emit both, mind clipping); inside auto-layout trust
   `layoutSizingHorizontal/Vertical` instead. Each is omitted when it's
   the no-op default, so anything present is real intent — translate it, don't drop it.
+  - **`textWrapStyle` is per paragraph, not per node.** When a node's paragraphs disagree the
+    node-level field is absent and the real values ride in `segments` (a run carries it only when it
+    is not `auto`) — so a `segments` array whose runs differ only in `textWrapStyle` is one text
+    block with per-paragraph wrapping, not inline rich text.
   - **Mixed (inline) styling → read `segments`.** When a value reads `"mixed"` (e.g. `fontSize` or
     `textDecoration`), the node carries `segments` — each a run of uniform styling with its own
     `characters`, `fontName`, `fontSize`, `fills` (hex), `textDecoration`, `textCase` over offsets

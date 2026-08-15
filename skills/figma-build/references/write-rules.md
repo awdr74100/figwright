@@ -136,3 +136,9 @@ legal copy): keep the paragraphs in one `TEXT` node separated by `\n` and set th
 `p + p { margin }` / `text-indent` as `paragraphSpacing` / `paragraphIndent` via
 `set_text_properties` — don't fake the rhythm by splitting each paragraph into its own node in an
 auto-layout stack (that turns one flowing text into N boxes and reads back as unrelated nodes).
+A source `text-wrap: balance` / `pretty` carries over as `textWrapStyle` on the same call (Figma uses
+the CSS value names): `BALANCE` for headings and pull quotes, `PRETTY` for body copy. It is applied
+per paragraph, so to vary it within one node use `set_text_range` with a range inside the paragraph
+you mean — that range selects the paragraph, not the characters. A text style can carry it too
+(`create_text_style` / `update_text_style`), which is the right home when every node bound to
+"Heading/H1" should balance.
