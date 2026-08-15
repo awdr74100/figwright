@@ -18,6 +18,7 @@ export const createUpdateTextStyleHandler =
       fontSize?: unknown;
       lineHeight?: unknown;
       letterSpacing?: unknown;
+      textWrapStyle?: unknown;
       description?: unknown;
     };
     if (typeof p.styleId !== 'string') {
@@ -43,6 +44,14 @@ export const createUpdateTextStyleHandler =
     if (p.letterSpacing !== undefined) {
       const ls = p.letterSpacing as SerializedLetterSpacing;
       ts.letterSpacing = { unit: ls.unit as 'PIXELS' | 'PERCENT', value: ls.value };
+    }
+    // Unlike fontSize / lineHeight / letterSpacing, this one *does* need the font loaded — it
+    // writes through to the style's text runs, so Figma rejects it against an unloaded font even
+    // when the font itself is not changing. Load the style's current font (already the new one if
+    // fontName was assigned above; loadFontAsync is cached, so the repeat is free).
+    if (typeof p.textWrapStyle === 'string') {
+      await figmaCtx.loadFontAsync(ts.fontName);
+      ts.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
     if (typeof p.description === 'string') ts.description = p.description;
 

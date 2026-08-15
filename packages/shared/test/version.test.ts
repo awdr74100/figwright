@@ -41,7 +41,10 @@ describe('compareVersions', () => {
 
 describe('requiredPluginVersion', () => {
   it('is the floor once the server has caught up to it', () => {
-    expect(requiredPluginVersion('0.4.0')).toBe(MIN_PLUGIN_VERSION);
+    // Exactly at the floor is the boundary the cap has to get right (`<`, not `<=`). Written
+    // against the constant rather than a literal so raising the floor cannot silently turn this
+    // into a test of the wrong case.
+    expect(requiredPluginVersion(MIN_PLUGIN_VERSION)).toBe(MIN_PLUGIN_VERSION);
     expect(requiredPluginVersion('9.9.9')).toBe(MIN_PLUGIN_VERSION);
   });
 
@@ -49,6 +52,7 @@ describe('requiredPluginVersion', () => {
     // The window this exists for: the floor is raised in the change that breaks compatibility, which
     // is always ahead of the release carrying it. Both halves built from that tree report the older
     // version, and a server that demanded a plugin newer than itself would reject its own build.
+    expect(requiredPluginVersion('0.4.0')).toBe('0.4.0');
     expect(requiredPluginVersion('0.3.0')).toBe('0.3.0');
     expect(requiredPluginVersion('0.1.0')).toBe('0.1.0');
   });

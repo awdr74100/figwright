@@ -39,6 +39,17 @@ describe('create_text_style handler', () => {
     expect(result).toEqual({ ok: true, styleId: 'S:0', name: 'Heading/H1' });
   });
 
+  it("loads the style's own font before setting textWrapStyle (Figma rejects it otherwise)", async () => {
+    // Live Figma answers `Cannot write to node with unloaded font "Inter Regular"` here: unlike
+    // fontSize / lineHeight / letterSpacing, this writes through to the style's text runs. With
+    // fontName omitted the face is Figma's default on a fresh style, which nothing has loaded yet.
+    const { figma: f, loaded, style } = fakeFigma();
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    await createCreateTextStyleHandler(f)({ name: 'Heading/H1', textWrapStyle: 'BALANCE' });
+    expect(style.textWrapStyle).toBe('BALANCE');
+    expect(loaded).toEqual([{ family: 'Inter', style: 'Regular' }]);
+  });
+
   it('throws when name is missing', async () => {
     const { figma: f } = fakeFigma();
     const handler = createCreateTextStyleHandler(f);

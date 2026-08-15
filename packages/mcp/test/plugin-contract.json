@@ -1,5 +1,5 @@
 {
-  "minPluginVersion": "0.4.0",
+  "minPluginVersion": "0.5.0",
   "tools": {
     "ping": [],
     "get_selection": [],
@@ -64,7 +64,8 @@
       "textAutoResize",
       "textCase",
       "textDecoration",
-      "textTruncation"
+      "textTruncation",
+      "textWrapStyle"
     ],
     "set_text_range": [
       "nodeId",
@@ -107,6 +108,7 @@
       "ranges[].textCase",
       "ranges[].textDecoration",
       "ranges[].textStyleId",
+      "ranges[].textWrapStyle",
       "requestId"
     ],
     "create_frame": ["height", "name", "parentId", "requestId", "width", "x", "y"],
@@ -260,7 +262,8 @@
       "lineHeight.unit",
       "lineHeight.value",
       "name",
-      "requestId"
+      "requestId",
+      "textWrapStyle"
     ],
     "create_effect_style": [
       "description",
@@ -329,7 +332,8 @@
       "lineHeight.value",
       "name",
       "requestId",
-      "styleId"
+      "styleId",
+      "textWrapStyle"
     ],
     "update_effect_style": [
       "description",

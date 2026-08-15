@@ -131,7 +131,7 @@ const createComponentInverse: BatchInverse = {
 // breaking the all-or-nothing contract. Restore order matters at the tail: maxLines only takes
 // effect once textTruncation is ENDING, so truncation is restored before maxLines (mirrors the
 // handler's apply order).
-const TEXT_PROPERTY_KEYS = [
+export const TEXT_PROPERTY_KEYS = [
   'fontName',
   'fontSize',
   'lineHeight',
@@ -140,6 +140,7 @@ const TEXT_PROPERTY_KEYS = [
   'textDecoration',
   'paragraphSpacing',
   'paragraphIndent',
+  'textWrapStyle',
   'textAutoResize',
   'textTruncation',
   'maxLines',

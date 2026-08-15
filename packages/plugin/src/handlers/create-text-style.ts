@@ -17,6 +17,7 @@ export const createCreateTextStyleHandler =
       fontSize?: unknown;
       lineHeight?: unknown;
       letterSpacing?: unknown;
+      textWrapStyle?: unknown;
       description?: unknown;
     };
     if (typeof p.name !== 'string') throw new TypeError('create_text_style: name must be a string');
@@ -34,6 +35,13 @@ export const createCreateTextStyleHandler =
     if (p.letterSpacing !== undefined) {
       const ls = p.letterSpacing as SerializedLetterSpacing;
       style.letterSpacing = { unit: ls.unit as 'PIXELS' | 'PERCENT', value: ls.value };
+    }
+    // Needs the font loaded (it writes through to the style's text runs), unlike the numeric
+    // fields above. When fontName was omitted this is Figma's default face on a fresh style, which
+    // nothing has loaded yet — so load whatever the style ended up with rather than assuming.
+    if (typeof p.textWrapStyle === 'string') {
+      await figmaCtx.loadFontAsync(style.fontName);
+      style.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
     if (typeof p.description === 'string') style.description = p.description;
 

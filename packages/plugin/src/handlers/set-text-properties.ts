@@ -23,6 +23,7 @@ export const createSetTextPropertiesHandler =
       textDecoration?: unknown;
       paragraphSpacing?: unknown;
       paragraphIndent?: unknown;
+      textWrapStyle?: unknown;
       textTruncation?: unknown;
       maxLines?: unknown;
       textAutoResize?: unknown;
@@ -40,6 +41,9 @@ export const createSetTextPropertiesHandler =
       (typeof p.paragraphIndent !== 'number' || p.paragraphIndent < 0)
     ) {
       throw new TypeError('set_text_properties: paragraphIndent must be a non-negative number');
+    }
+    if (p.textWrapStyle !== undefined && typeof p.textWrapStyle !== 'string') {
+      throw new TypeError('set_text_properties: textWrapStyle must be a string');
     }
     if (p.textAutoResize !== undefined && typeof p.textAutoResize !== 'string') {
       throw new TypeError('set_text_properties: textAutoResize must be a string');
@@ -67,7 +71,8 @@ export const createSetTextPropertiesHandler =
       p.textCase !== undefined ||
       p.textDecoration !== undefined ||
       p.paragraphSpacing !== undefined ||
-      p.paragraphIndent !== undefined;
+      p.paragraphIndent !== undefined ||
+      p.textWrapStyle !== undefined;
     if (settingTypography) {
       const fonts: FontName[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
@@ -85,6 +90,8 @@ export const createSetTextPropertiesHandler =
         text.textDecoration = p.textDecoration as TextNode['textDecoration'];
       if (p.paragraphSpacing !== undefined) text.paragraphSpacing = p.paragraphSpacing as number;
       if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
+      if (p.textWrapStyle !== undefined)
+        text.textWrapStyle = p.textWrapStyle as TextNode['textWrapStyle'];
     }
 
     if (p.textAutoResize !== undefined)
