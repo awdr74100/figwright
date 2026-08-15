@@ -162,17 +162,83 @@ describe('handleTokenMap', () => {
     }
   });
 
-  it('returns a note (and no source) when only a Tailwind v3 JS config is present', async () => {
-    const v3 = await mkdtemp(join(tmpdir(), 'tokenmap-v3-'));
+  /** A Tailwind v3 project: package.json pinning v3 plus whatever files the case needs. */
+  const v3Project = async (files: Record<string, string>): Promise<string> => {
+    const root = await mkdtemp(join(tmpdir(), 'tokenmap-v3-'));
     await writeFile(
-      join(v3, 'package.json'),
+      join(root, 'package.json'),
       JSON.stringify({ devDependencies: { tailwindcss: '^3.4.0' } }),
     );
-    await writeFile(join(v3, 'tailwind.config.js'), 'module.exports = {};');
-    const result = await handleTokenMap(dispatch, { rootDir: v3 });
-    expect(result.tokenSource).toBeNull();
-    expect(result.note).toMatch(/v3/i);
-    await rm(v3, { recursive: true, force: true });
+    for (const [rel, body] of Object.entries(files)) {
+      await mkdir(join(root, rel, '..'), { recursive: true });
+      await writeFile(join(root, rel), body);
+    }
+    return root;
+  };
+
+  it('reads a Tailwind v3 JS config as the token source and maps by utility base', async () => {
+    const v3 = await v3Project({
+      'tailwind.config.js':
+        "module.exports = { theme: { extend: { colors: { primary: { 500: '#6266F0' } } } } };",
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.tokenSource).toBe('tailwind.config.js');
+      expect(result.profile.styling.tailwindVersion).toBe(3);
+
+      const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+      // Same ref a v4 project's --color-primary-500 produces — the two versions are one vocabulary.
+      expect(primary?.candidate?.ref).toBe('primary-500');
+      expect(primary?.candidate?.token).toBe('color-primary-500');
+      expect(primary?.status).toBe('high');
+      // v3 inlines theme values into its utilities, so there is no var() form to offer.
+      expect(primary?.candidate?.cssVar).toBeUndefined();
+      expect(result.note).toMatch(/utilities/i);
+
+      expect(result.unmapped).toContain('Accent/Teal');
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
+  it('pools the repo CSS alongside a v3 config rather than replacing it', async () => {
+    // Before the config could be read, a v3 project fell through to the repo-wide CSS aggregation,
+    // so a token declared only as a custom property was already matched. Reading the config must
+    // add to that pool, never trade one set of matches for the other.
+    const v3 = await v3Project({
+      'tailwind.config.js':
+        "module.exports = { theme: { extend: { colors: { primary: { 500: '#6266F0' } } } } };",
+      'src/theme.css': ':root { --accent-teal: #14B8A6; }',
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.mappings.find(m => m.figmaName === 'Primary/500')?.candidate?.ref).toBe(
+        'primary-500',
+      );
+      // The CSS-only token keeps its var() ref — a custom property is real on a v3 project too.
+      const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
+      expect(teal?.candidate?.ref).toBe('var(--accent-teal)');
+      expect(teal?.status).toBe('high');
+      expect(result.unmapped).toEqual([]);
+      expect(result.note).toMatch(/src\/theme\.css/);
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
+  it('degrades to the CSS pool (with a note) when a v3 theme is not statically readable', async () => {
+    const v3 = await v3Project({
+      'tailwind.config.js': "module.exports = require('./theme/build.js');",
+      'src/theme.css': ':root { --color-primary-500: #6266F0; }',
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.note).toMatch(/could not be read statically/i);
+      // Whatever the config hides, the CSS the project does declare still joins.
+      expect(result.mappings.find(m => m.figmaName === 'Primary/500')?.status).toBe('high');
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
   });
 
   it('joins a pre-variables file (zero variables) via its shared paint styles', async () => {

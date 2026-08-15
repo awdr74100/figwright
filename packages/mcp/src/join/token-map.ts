@@ -1,6 +1,6 @@
 import type { FigmaToken } from '../tokens/figma-tokens.js';
 import { normHex } from '../tokens/hex.js';
-import type { ProjectToken } from '../tokens/tokens.js';
+import { type ProjectToken, refOf } from '../tokens/tokens.js';
 import { casefold } from './casefold.js';
 import { diceSimilarity, type MappingStatus, parseMapLine } from './component-map.js';
 import { statusFor } from './status.js';
@@ -32,7 +32,12 @@ export interface TokenMapping {
     token: string;
     /** Recommended literal: the Tailwind utility base when present, else the CSS var reference. */
     ref: string;
-    cssVar: string;
+    /**
+     * The token's `var()` reference. Absent when the token declares no custom property — a Tailwind
+     * v3 config's theme scales are inlined into the generated utilities, so there is no var() form
+     * and `ref` (the utility base) is the only way to reference it.
+     */
+    cssVar?: string;
     utility?: string;
     confidence: number;
     /**
@@ -208,15 +213,6 @@ const bestNameMatch = (
   return best;
 };
 
-// The literal codegen should emit. A Tailwind utility base (primary-500) is only a real, usable
-// class on a Tailwind project — `token.utility` is derived purely from the name's prefix and so is
-// populated even on non-Tailwind projects (where it's just the name minus a category prefix, and no
-// `primary-500` class exists). So the utility is only surfaced as the ref when the project is
-// Tailwind; otherwise the var() reference is the correct literal. (utility still aids name-matching
-// regardless — that's matchNames, separate from this output.)
-const refOf = (token: ProjectToken, tailwind: boolean): string =>
-  tailwind ? (token.utility ?? token.cssVar) : token.cssVar;
-
 const candidateFrom = (
   token: ProjectToken,
   confidence: number,
@@ -226,7 +222,7 @@ const candidateFrom = (
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
   ref: refOf(token, tailwind),
-  cssVar: token.cssVar,
+  ...(token.cssVar === undefined ? {} : { cssVar: token.cssVar }),
   ...(tailwind && token.utility !== undefined ? { utility: token.utility } : {}),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
