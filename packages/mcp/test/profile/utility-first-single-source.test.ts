@@ -29,8 +29,10 @@ const sourceFiles = (dir: string): string[] =>
     return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
   });
 
-// `styling.system === 'tailwind'` / `=== 'unocss'`, however it is spelled or wrapped.
-const DIRECT_COMPARISON = /styling\??\.system\s*===\s*['"](tailwind|unocss)['"]/;
+// Any comparison of a styling system to a utility framework, however it reaches the value. Matching
+// on `styling.system` alone left `const { system } = profile.styling` free to bypass the whole
+// guard, which is the shape someone reaches for precisely when they are writing several of these.
+const DIRECT_COMPARISON = /\bsystem\s*===\s*['"](tailwind|unocss)['"]/;
 
 /**
  * Files allowed to compare the literal, each with the reason it is asking a different question from
@@ -38,9 +40,7 @@ const DIRECT_COMPARISON = /styling\??\.system\s*===\s*['"](tailwind|unocss)['"]/
  * is the whole point, since the two questions look identical at the call site.
  */
 const ALLOWED: ReadonlyMap<string, string> = new Map([
-  // profile.ts itself is deliberately absent: isUtilityFirst takes a StylingSystem, not a profile,
-  // so it never spells `styling.system ===` and needs no exemption. The second test below is what
-  // caught that — the entry was added on assumption and was never true.
+  ['profile/profile.ts', 'declares isUtilityFirst — the predicate every other file should call'],
   [
     'tokens/load.ts',
     'picks which config vocabulary to parse (Tailwind keys vs UnoCSS keys), which is not the same ' +
