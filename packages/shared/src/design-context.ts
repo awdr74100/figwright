@@ -62,6 +62,9 @@ export interface DesignContextTextSegment {
   hyperlink?: SerializedHyperlink;
   listOptions?: string;
   indentation?: number;
+  // Wrap balancing is paragraph-scoped, so it only reaches a run when the node's paragraphs
+  // disagree — the node-level value is `mixed` there and these are the real values.
+  textWrapStyle?: string;
   // Per-run design-system bindings (ids resolved to names in the top-level `styles` / `variables`
   // maps, like a node's own). A run's shared text/fill style + variable bindings — the only place a
   // token survives on a mixed TEXT node, whose node-level fills read `mixed`.
@@ -197,6 +200,13 @@ export interface DesignContextNode {
    */
   paragraphSpacing?: number;
   paragraphIndent?: number;
+  /**
+   * Line-break balancing per paragraph: BALANCE (even line lengths — headings, pull quotes) or
+   * PRETTY (no orphan last word). Figma's values are CSS `text-wrap`'s verbatim, so this maps
+   * straight through instead of being eyeballed off the raster. Style-level (a Figma text style
+   * carries it), so dedup folds it into the textStyle bundle. Omitted at the AUTO default.
+   */
+  textWrapStyle?: string;
   // Per-node text behaviour (not part of the shared style) — stays inline: the same heading style is
   // centered here, left there; truncation/maxLines vary per instance. → text-align / line-clamp.
   textAlignHorizontal?: string;
@@ -361,6 +371,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     textDecoration: z.union([z.string(), z.literal(MIXED)]).optional(),
     paragraphSpacing: z.number().optional(),
     paragraphIndent: z.number().optional(),
+    textWrapStyle: z.string().optional(),
     textAlignHorizontal: z.string().optional(),
     textAlignVertical: z.string().optional(),
     textTruncation: z.string().optional(),
@@ -384,6 +395,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
           hyperlink: SerializedHyperlinkSchema.optional(),
           listOptions: z.string().optional(),
           indentation: z.number().optional(),
+          textWrapStyle: z.string().optional(),
           styleIds: SerializedStyleIdsSchema.optional(),
           boundVariables: z.record(z.string(), z.array(z.string())).optional(),
         }),

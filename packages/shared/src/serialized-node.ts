@@ -295,6 +295,10 @@ export const SerializedTextSegmentSchema = z.object({
   hyperlink: SerializedHyperlinkSchema.optional(),
   listOptions: z.string().optional(),
   indentation: z.number().optional(),
+  // Paragraph-level wrap balancing (AUTO | BALANCE | PRETTY). Per-run because a node whose
+  // paragraphs disagree reports `mixed` at node level, and the runs are the only place the real
+  // per-paragraph values survive. Omitted at the AUTO default so an ordinary run stays lean.
+  textWrapStyle: z.string().optional(),
   // Per-run design-system bindings: a run may link a shared text style (`text`) / fill style
   // (`fill`) or bind variables (a colour token on `fills`, a size token on `fontSize`). A mixed TEXT
   // node's node-level fills are `mixed`, so this is the only place a run's token binding survives —
@@ -427,6 +431,12 @@ export interface SerializedNode {
   paragraphSpacing?: number;
   paragraphIndent?: number;
   /**
+   * How each paragraph balances its line breaks: AUTO | BALANCE | PRETTY — Figma's values are CSS
+   * `text-wrap`'s verbatim. Omitted when the node's paragraphs disagree (`mixed`), in which case
+   * the real per-paragraph values ride in `segments`.
+   */
+  textWrapStyle?: string;
+  /**
    * A node-level hyperlink (the whole text is a link → `<a href>`). Present only when the entire
    * node carries one uniform link; a link on only part of the text surfaces per-run in `segments`
    * instead.
@@ -524,6 +534,7 @@ export const SerializedNodeSchema = z.lazy(() =>
     maxLines: z.number().nullable().optional(),
     paragraphSpacing: z.number().optional(),
     paragraphIndent: z.number().optional(),
+    textWrapStyle: z.string().optional(),
     hyperlink: SerializedHyperlinkSchema.optional(),
     segments: z.array(SerializedTextSegmentSchema).optional(),
     children: z.array(SerializedNodeSchema).optional(),

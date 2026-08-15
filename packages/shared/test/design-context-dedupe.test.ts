@@ -194,23 +194,26 @@ describe('dedupeStyles', () => {
     });
   });
 
-  it('folds paragraphSpacing / paragraphIndent into the textStyle bundle (style-level, like lineHeight)', () => {
+  it('folds paragraphSpacing / paragraphIndent / textWrapStyle into the textStyle bundle (style-level, like lineHeight)', () => {
     const body: DesignContextNode = {
       ...textNode('body', 'Inter', 'Regular', 16),
       paragraphSpacing: 12,
       paragraphIndent: 24,
+      textWrapStyle: 'PRETTY',
     };
     const { nodes, globalVars } = dedupeStyles([body]);
 
     // folded into the bundle, inline copies dropped
     expect(nodes[0]?.paragraphSpacing).toBeUndefined();
     expect(nodes[0]?.paragraphIndent).toBeUndefined();
+    expect(nodes[0]?.textWrapStyle).toBeUndefined();
     expect(globalVars.styles[nodes[0]!.textStyle!]).toEqual({
       fontFamily: 'Inter',
       fontStyle: 'Regular',
       fontSize: 16,
       paragraphSpacing: 12,
       paragraphIndent: 24,
+      textWrapStyle: 'PRETTY',
     });
   });
 

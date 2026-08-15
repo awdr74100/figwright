@@ -132,6 +132,7 @@ interface TextStyleBundle {
   textDecoration?: string;
   paragraphSpacing?: number;
   paragraphIndent?: number;
+  textWrapStyle?: string;
 }
 
 /**
@@ -220,6 +221,12 @@ export const dedupeStyles = (
       if (typeof n.paragraphIndent === 'number') {
         bundle.paragraphIndent = n.paragraphIndent;
         delete out.paragraphIndent;
+      }
+      // Wrap balancing is style-level as well, and the projection already dropped both the AUTO
+      // default and the `mixed` case — so present means one real value → fold unconditionally.
+      if (typeof n.textWrapStyle === 'string') {
+        bundle.textWrapStyle = n.textWrapStyle;
+        delete out.textWrapStyle;
       }
       out.textStyle = register(bundle, 'text');
       delete out.fontSize;
