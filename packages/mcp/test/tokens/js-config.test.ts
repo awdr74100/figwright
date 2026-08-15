@@ -14,11 +14,19 @@ const parseUno = (code: string, file = 'uno.config.ts') => {
   return { skipped, themeFound, tokens, byName: new Map(tokens.map(t => [t.name, t])) };
 };
 
-/** Wrap a theme body in the shape a real uno.config.ts uses, with the given presets expression. */
-const unoConfig = (presets: string, theme: string): string =>
-  `import { defineConfig, presetUno } from 'unocss'
-   import presetWind4 from '@unocss/preset-wind4'
+/**
+ * Wrap a theme body in the shape a real uno.config.ts uses. Imports only the preset it actually
+ * references — a config carrying an import it never uses is not a thing anyone writes, and having
+ * the helper emit one hid a preset-detection bug behind an unrealistic fixture.
+ */
+const unoConfig = (presets: string, theme: string): string => {
+  const wind4 = presets.includes('presetWind4');
+  const imports = wind4
+    ? "import { defineConfig } from 'unocss'\nimport presetWind4 from '@unocss/preset-wind4'"
+    : "import { defineConfig, presetUno } from 'unocss'";
+  return `${imports}
    export default defineConfig({ presets: [${presets}], theme: { ${theme} } })`;
+};
 
 describe('parseTailwindConfig', () => {
   describe('locating the config object', () => {
@@ -393,6 +401,19 @@ describe('parseUnoConfig', () => {
       expect(parseUno(unoConfig('presetUno()', "container: { prose2: '65ch' }")).tokens).toEqual(
         [],
       );
+    });
+
+    it('switches on the import source, so a renamed binding still resolves', () => {
+      // Reading only the call's callee name missed every aliased import — silently, since wind4's
+      // keys are absent from the wind3 table and the result is just empty.
+      const theme = `theme: { radius: { blob: '14px' }, text: { huge: { fontSize: '48px' } } }`;
+      for (const code of [
+        `import w4 from '@unocss/preset-wind4'\nexport default { presets: [w4()], ${theme} }`,
+        `import { presetWind4 as wind } from 'unocss'\nexport default { presets: [wind()], ${theme} }`,
+        `import presetWind4 from '@unocss/preset-wind4'\nexport default { presets: [presetWind4], ${theme} }`,
+      ]) {
+        expect([...parseUno(code).byName.keys()].toSorted()).toEqual(['radius-blob', 'text-huge']);
+      }
     });
 
     it('defaults to the wind3 vocabulary when the presets cannot be read', () => {

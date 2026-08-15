@@ -30,6 +30,36 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('reads a detected UnoCSS config with the UnoCSS reader', () => {
+    expect(
+      resolveTokenSource(profileWith({ system: 'unocss', configPath: 'uno.config.ts' }), undefined),
+    ).toEqual({ source: { path: 'uno.config.ts', kind: 'unocss' } });
+  });
+
+  it('recognises both UnoCSS config basenames in an override', () => {
+    // `uno.config.*` is the commoner of the two and was the one a too-clever `unocss?` pattern
+    // missed — it means "unocs" + an optional "s", so it matched a name nobody writes.
+    const tw = profileWith({ system: 'tailwind', configPath: 'tailwind.config.ts' });
+    for (const path of [
+      'uno.config.ts',
+      'unocss.config.ts',
+      'uno.config.mjs',
+      'app/uno.config.ts',
+    ]) {
+      expect(resolveTokenSource(tw, path).source).toEqual({ path, kind: 'unocss' });
+    }
+  });
+
+  it('falls back to the detected framework for a JS override whose name says nothing', () => {
+    // An override usually corrects *where* the tokens live, not which framework wrote them.
+    expect(resolveTokenSource(profileWith({ system: 'unocss' }), 'config/theme.ts').source).toEqual(
+      { path: 'config/theme.ts', kind: 'unocss' },
+    );
+    expect(
+      resolveTokenSource(profileWith({ system: 'tailwind' }), 'config/theme.ts').source,
+    ).toEqual({ path: 'config/theme.ts', kind: 'tailwind-v3' });
+  });
+
   it('picks the reader for an override from its extension, not from detection', () => {
     // The override exists to correct detection, so it must not inherit the detected kind: pointing
     // a v4 project at a config file reads a config, and a v3 project at a stylesheet reads CSS.

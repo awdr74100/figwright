@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { walkRepoFiles } from '../repo-walk.js';
@@ -135,9 +135,13 @@ const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS, ...UNOCSS_CONFIGS];
 const CSS_TAILWIND_IMPORT = /@import\s+["']tailwindcss["']/;
 const CSS_THEME_BLOCK = /@theme\b/;
 
+// stat, not readFile: this only asks whether the path is there, and the probe list below grew from
+// 4 entries to 17 when UnoCSS's six extensions × two basenames were added. Reading each candidate's
+// whole contents to answer a yes/no was affordable at 4 and is not on a path every grounding call
+// runs through (token_map and the design-context annotation both profile the project).
 const fileExists = async (path: string): Promise<boolean> => {
   try {
-    await readFile(path);
+    await stat(path);
     return true;
   } catch {
     return false;
@@ -176,11 +180,10 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
   const packageJson = await readJson<PackageJson>(join(root, 'package.json'));
   const hasTsconfig = await fileExists(join(root, 'tsconfig.json'));
 
-  const presentConfigFiles: string[] = [];
-  for (const name of PROBE_CONFIG_FILES) {
-    // eslint-disable-next-line no-await-in-loop -- small fixed list, clarity over micro-parallelism
-    if (await fileExists(join(root, name))) presentConfigFiles.push(name);
-  }
+  // In parallel, and order-preserving via the index — detectStyling's cascade picks the first match
+  // from this list, so the result must not depend on which stat resolved first.
+  const probed = await Promise.all(PROBE_CONFIG_FILES.map(name => fileExists(join(root, name))));
+  const presentConfigFiles = PROBE_CONFIG_FILES.filter((_, i) => probed[i] === true);
 
   const tailwindCssEntry = await findTailwindCssEntry(root);
 

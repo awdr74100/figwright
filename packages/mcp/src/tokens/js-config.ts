@@ -330,7 +330,7 @@ const flattenScale = (
 const readThemeScales = (
   filePath: string,
   code: string,
-  pickScales: (config: any) => readonly Scale[],
+  pickScales: (config: any, program: any) => readonly Scale[],
 ): JsConfigTokens => {
   let program: any;
   try {
@@ -356,7 +356,7 @@ const readThemeScales = (
   // would otherwise read as a token ambiguous with itself.
   const byName = new Map<string, ProjectToken>();
 
-  for (const scale of pickScales(config)) {
+  for (const scale of pickScales(config, program)) {
     for (const scope of [theme, extend]) {
       const source = scope === null ? null : unwrapObject(propertyNamed(scope, scale.key), program);
       if (source === null) continue;
@@ -398,11 +398,39 @@ export const parseTailwindConfig = (filePath: string, code: string): JsConfigTok
  * default when the presets can't be read: `presetUno` re-exports it, and a config whose presets
  * come from elsewhere is far likelier to be on the long-standing vocabulary than the new one.
  */
-const unoScalesFor = (config: any): readonly Scale[] => {
+const unoScalesFor = (config: any, program: any): readonly Scale[] => {
+  // Local binding name → the module it was imported from, so a preset can be identified by what it
+  // *is* rather than by what it happens to be called. Reading only the callee name missed every
+  // renamed import (`import w4 from '@unocss/preset-wind4'`) — silently, since wind4's keys are
+  // absent from the wind3 table and the result was simply empty. Scanning the file's imports for
+  // the string instead would over-fire: a config that imports both presets, or imports one it does
+  // not end up using, would be misread. Only what the `presets` array actually references counts.
+  // Both halves of an import matter. A default import carries its identity in the module specifier
+  // (`import w4 from '@unocss/preset-wind4'`); a named one carries it in the imported name, since
+  // the specifier is just the umbrella package (`import { presetWind4 as wind } from 'unocss'`).
+  const bindings = new Map<string, { from: string; imported: string }>();
+  for (const stmt of program?.body ?? []) {
+    if (stmt?.type !== 'ImportDeclaration' || typeof stmt.source?.value !== 'string') continue;
+    for (const spec of stmt.specifiers ?? []) {
+      const local = spec?.local?.name;
+      if (typeof local !== 'string') continue;
+      const imported = typeof spec.imported?.name === 'string' ? spec.imported.name : local;
+      bindings.set(local, { from: stmt.source.value, imported });
+    }
+  }
+
   const presets = propertyNamed(config, 'presets');
   for (const el of presets?.elements ?? []) {
     const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
-    if (typeof name === 'string' && /wind4/i.test(name)) return UNO_WIND4_SCALES;
+    if (typeof name !== 'string') continue;
+    const binding = bindings.get(name);
+    if (
+      /wind4/i.test(name) ||
+      /wind4/i.test(binding?.imported ?? '') ||
+      /preset-wind4/i.test(binding?.from ?? '')
+    ) {
+      return UNO_WIND4_SCALES;
+    }
   }
   return UNO_WIND3_SCALES;
 };

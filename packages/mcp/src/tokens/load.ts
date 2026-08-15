@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { ProjectProfile } from '../profile/profile.js';
+import type { ProjectProfile, StylingSystem } from '../profile/profile.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
 import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
@@ -26,18 +26,21 @@ export interface TokenSource {
 
 // .js / .cjs / .mjs / .ts / .cts / .mts — every extension either framework's config may use.
 const JS_CONFIG_EXT = /\.[cm]?[jt]s$/i;
-// UnoCSS's two config basenames; anything else JS-ish is read as a Tailwind config.
-const UNO_CONFIG_BASENAME = /(^|\/)unocss?\.config\.[cm]?[jt]s$/i;
+// UnoCSS's two config basenames. Spelled as an alternation rather than an optional letter: the
+// tempting `unocss?` reads right and is not — it means "unocs" + an optional "s", so it matches a
+// name nobody writes and misses `uno.config.ts`, the commoner of the two.
+const UNO_CONFIG_BASENAME = /(^|\/)(uno|unocss)\.config\.[cm]?[jt]s$/i;
 
 /**
- * Which reader a path needs, from the path alone. Used for an explicit `tokenSource` override,
- * where the caller's intent has to be inferred from what they pointed at rather than from detection
- * — pointing at a stylesheet reads CSS, at `uno.config.ts` reads an UnoCSS config, at any other
- * JS/TS file reads a Tailwind config.
+ * Which reader an explicit `tokenSource` override needs. The caller's intent has to come from what
+ * they pointed at: a stylesheet reads CSS, an `uno.config.*` reads an UnoCSS config. For any other
+ * JS/TS file the name says nothing, so fall back to what detection actually found — an override is
+ * usually correcting _where_ the tokens live, not which framework wrote them.
  */
-const kindOfPath = (path: string): TokenSourceKind => {
+const kindOfOverride = (path: string, system: StylingSystem): TokenSourceKind => {
   if (!JS_CONFIG_EXT.test(path)) return 'css';
-  return UNO_CONFIG_BASENAME.test(path) ? 'unocss' : 'tailwind-v3';
+  if (UNO_CONFIG_BASENAME.test(path)) return 'unocss';
+  return system === 'unocss' ? 'unocss' : 'tailwind-v3';
 };
 
 /** Pick the token source: explicit override, else the detected styling config. */
@@ -46,7 +49,9 @@ export const resolveTokenSource = (
   profile: Pick<ProjectProfile, 'styling'>,
   override: string | undefined,
 ): { source: TokenSource | null; note?: string } => {
-  if (override !== undefined) return { source: { path: override, kind: kindOfPath(override) } };
+  if (override !== undefined) {
+    return { source: { path: override, kind: kindOfOverride(override, profile.styling.system) } };
+  }
 
   const configPath = profile.styling.configPath;
   if (configPath === undefined)

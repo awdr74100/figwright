@@ -215,6 +215,28 @@ describe('gatherProjectInput + analyzeProject (real fs)', () => {
     expect(input.tailwindCssEntry).toBe('src/app.css');
   });
 
+  it('reports present config files in probe order, not stat-completion order', async () => {
+    // The probes run in parallel, and detectStyling picks the *first* match out of this list, so a
+    // project with more than one config present must not get a different answer run to run.
+    const multi = await mkdtemp(join(tmpdir(), 'profile-order-'));
+    try {
+      await writeFile(join(multi, 'package.json'), '{}');
+      for (const name of ['tailwind.config.ts', 'tailwind.config.js', 'uno.config.ts']) {
+        await writeFile(join(multi, name), 'module.exports = {};');
+      }
+      const input = await gatherProjectInput(multi);
+      // .js before .ts is the declared probe order; whichever file the filesystem answered for
+      // first must not change it.
+      expect(input.presentConfigFiles).toEqual([
+        'tailwind.config.js',
+        'tailwind.config.ts',
+        'uno.config.ts',
+      ]);
+    } finally {
+      await rm(multi, { recursive: true, force: true });
+    }
+  });
+
   it('analyzeProject end-to-end yields a react + tailwind-v4 + ts profile', async () => {
     const p = await analyzeProject(dir);
     expect(p.framework).toBe('react');
