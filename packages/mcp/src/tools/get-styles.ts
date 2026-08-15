@@ -8,7 +8,7 @@ export const getStylesTool: ToolSpec = {
   name: GET_STYLES_TOOL_NAME,
   description:
     "Return the document's local styles grouped as { paints, texts, effects, grids }. " +
-    'Paint styles carry their paints; text styles carry fontName / fontSize / lineHeight / letterSpacing; ' +
+    'Paint styles carry their paints; text styles carry fontName / fontSize / lineHeight / letterSpacing / textWrapStyle; ' +
     'effect styles carry their effects; grid styles carry their layout grids.',
   inputSchema: z.object({}),
   kind: 'read',
