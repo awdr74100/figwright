@@ -166,6 +166,12 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (typeof flat.paragraphIndent === 'number' && flat.paragraphIndent !== 0) {
     out.paragraphIndent = flat.paragraphIndent;
   }
+  // Wrap balancing — style-level like the paragraph fields, omitted at the AUTO default so only a
+  // deliberately balanced heading / pretty-wrapped paragraph shows. Figma's three values are CSS
+  // `text-wrap`'s, so this reaches codegen as a value to emit, not one to infer.
+  if (typeof flat.textWrapStyle === 'string' && flat.textWrapStyle !== 'AUTO') {
+    out.textWrapStyle = flat.textWrapStyle;
+  }
   if (flat.textAutoResize !== undefined && flat.textAutoResize !== 'WIDTH_AND_HEIGHT') {
     out.textAutoResize = flat.textAutoResize;
   }
@@ -193,6 +199,7 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
       if (s.hyperlink !== undefined) seg.hyperlink = s.hyperlink;
       if (s.listOptions !== undefined) seg.listOptions = s.listOptions;
       if (s.indentation !== undefined) seg.indentation = s.indentation;
+      if (s.textWrapStyle !== undefined) seg.textWrapStyle = s.textWrapStyle;
       // Per-run token bindings — same shape (and trailing-comma cleaning) as a node's own, so
       // collectRefs / resolveTokens resolve them to names alongside the node-level ones.
       if (s.styleIds !== undefined)
