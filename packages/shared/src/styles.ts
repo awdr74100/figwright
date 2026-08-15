@@ -30,6 +30,9 @@ export const SerializedTextStyleSchema = z.object({
   fontSize: z.number(),
   lineHeight: SerializedLineHeightSchema,
   letterSpacing: SerializedLetterSpacingSchema,
+  // AUTO | BALANCE | PRETTY — a text style carries its own wrap balancing, so a style named
+  // "Heading/H1" can mean `text-wrap: balance` for every node bound to it.
+  textWrapStyle: z.string(),
 });
 export type SerializedTextStyle = z.infer<typeof SerializedTextStyleSchema>;
 

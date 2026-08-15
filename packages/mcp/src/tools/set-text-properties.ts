@@ -22,8 +22,9 @@ export const setTextPropertiesTool: ToolSpec = {
     "Set a TEXT node's typography and layout/overflow properties. Typography: fontName " +
     '({ family, style }), fontSize, lineHeight, letterSpacing, textCase, textDecoration, ' +
     'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
-    'into at "\\n" — the write half of the same fields get_design_context reads) — these load the ' +
-    'required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
+    'into at "\\n" — the write half of the same fields get_design_context reads), textWrapStyle ' +
+    '(BALANCE evens the line lengths of a heading, PRETTY avoids an orphan last word — the same ' +
+    'three values as CSS text-wrap) — these load the required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
     'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
     'textTruncation is ENDING. Returns { ok, nodeId }.',
   inputSchema: z.object({
@@ -46,6 +47,10 @@ export const setTextPropertiesTool: ToolSpec = {
       .min(0)
       .optional()
       .describe('First-line indent of each paragraph in px'),
+    textWrapStyle: z
+      .enum(['AUTO', 'BALANCE', 'PRETTY'])
+      .optional()
+      .describe('How each paragraph balances its line breaks; maps 1:1 to CSS text-wrap'),
     textCase: z
       .enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS', 'SMALL_CAPS_FORCED'])
       .optional(),

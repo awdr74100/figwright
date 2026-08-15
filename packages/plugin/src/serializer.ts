@@ -311,6 +311,9 @@ const SEGMENT_FIELDS = [
   'hyperlink',
   'listOptions',
   'indentation',
+  // Paragraph-level, but requested per run for the same reason as listOptions/indentation: a node
+  // whose paragraphs disagree reports `mixed` at node level, and only the runs carry the real values.
+  'textWrapStyle',
   // Per-run design-system bindings — the token grounding that a mixed node's node-level `mixed` fills
   // would otherwise lose (an inline link bound to Primary/500 + Body/Bold).
   'textStyleId',
@@ -344,6 +347,9 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
     if (s.listOptions != null && s.listOptions.type !== 'NONE')
       out.listOptions = s.listOptions.type;
     if (typeof s.indentation === 'number' && s.indentation > 0) out.indentation = s.indentation;
+    if (typeof s.textWrapStyle === 'string' && s.textWrapStyle !== 'AUTO') {
+      out.textWrapStyle = s.textWrapStyle;
+    }
     // Per-run design-system bindings (mirrors collectStyleLinks for a node): a run's shared fill/text
     // style ids + variable bindings. Ids are carried raw here and resolved to token names downstream
     // (get_design_context's resolveTokens), exactly like a node's own styleIds / boundVariables.
@@ -626,6 +632,11 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     out.maxLines = text.maxLines;
     if (typeof text.paragraphSpacing === 'number') out.paragraphSpacing = text.paragraphSpacing;
     if (typeof text.paragraphIndent === 'number') out.paragraphIndent = text.paragraphIndent;
+    // Wrap balancing is per paragraph, so it is `mixed` (a symbol) as soon as two paragraphs
+    // disagree. Emit the uniform case node-level; the mixed case drives needsSegments below so the
+    // per-paragraph values survive in `segments` rather than vanishing.
+    const wrapMixed = typeof text.textWrapStyle === 'symbol';
+    if (typeof text.textWrapStyle === 'string') out.textWrapStyle = text.textWrapStyle;
     // Node-level hyperlink: a uniform link over the whole node → <a href>. `hyperlink` is an object
     // when uniform, figma.mixed (a symbol) when only part of the text links (surfaced per-run in
     // segments), null when none. Emit only the uniform-object case; mixed drives needsSegments below.
@@ -658,6 +669,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       out.textCase === MIXED ||
       out.textDecoration === MIXED ||
       linkMixed ||
+      wrapMixed ||
       hasList;
     if (needsSegments && typeof text.getStyledTextSegments === 'function') {
       out.segments = serializeTextSegments(text);

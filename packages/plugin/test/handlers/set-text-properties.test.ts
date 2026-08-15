@@ -109,6 +109,24 @@ describe('set_text_properties handler', () => {
     expect(node).toMatchObject({ paragraphSpacing: 12, paragraphIndent: 24 });
   });
 
+  it('sets textWrapStyle after loading fonts (Figma requires it for this paragraph prop)', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'A heading long enough to wrap',
+      fontName: { family: 'Inter', style: 'Bold' },
+      textWrapStyle: 'AUTO',
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      textWrapStyle: 'BALANCE',
+    });
+
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Bold' });
+    expect(node.textWrapStyle).toBe('BALANCE');
+  });
+
   it('does not load fonts when only layout/overflow props change', async () => {
     const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
     const node = { id: '1:1', type: 'TEXT', textAutoResize: 'NONE' };
@@ -150,5 +168,11 @@ describe('set_text_properties handler', () => {
         paragraphIndent: -1,
       }),
     ).rejects.toThrow(/paragraphIndent/);
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma({ id: '1:1', type: 'TEXT' }))({
+        nodeId: '1:1',
+        textWrapStyle: 3,
+      }),
+    ).rejects.toThrow(/textWrapStyle/);
   });
 });

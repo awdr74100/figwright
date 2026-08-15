@@ -17,6 +17,7 @@ interface RangeInput {
   hyperlink?: { type: string; value: string } | null;
   listOptions?: string;
   indentation?: number;
+  textWrapStyle?: string;
   textStyleId?: string;
   fillStyleId?: string;
   boundVariables?: Record<string, string | null>;
@@ -105,6 +106,11 @@ export const createSetTextRangeHandler =
         text.setRangeListOptions(start, end, { type: r.listOptions as TextListOptions['type'] });
       }
       if (r.indentation !== undefined) text.setRangeIndentation(start, end, r.indentation);
+      // Paragraph-scoped, unlike every other field here: Figma applies it to whole paragraphs the
+      // range touches, so a range covering one character still restyles that character's paragraph.
+      if (r.textWrapStyle !== undefined) {
+        text.setRangeTextWrapStyle(start, end, r.textWrapStyle as TextWrapStyle);
+      }
       // Design-system bindings: shared styles (async setters), then variable bindings last so a bound
       // variable wins over a direct value set on the same field above.
       if (r.textStyleId !== undefined)

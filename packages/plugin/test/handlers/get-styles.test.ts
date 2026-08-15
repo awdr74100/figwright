@@ -34,6 +34,7 @@ describe('get_styles handler', () => {
             fontSize: 16,
             lineHeight: { unit: 'PIXELS', value: 24 },
             letterSpacing: { unit: 'PERCENT', value: 0 },
+            textWrapStyle: 'BALANCE',
           },
         ],
         effects: [
@@ -83,6 +84,9 @@ describe('get_styles handler', () => {
       fontName: { family: 'Inter', style: 'Regular' },
       fontSize: 16,
       lineHeight: { unit: 'PIXELS', value: 24 },
+      // A text style carries its own wrap balancing, so "Body" can mean text-wrap: balance for
+      // every node bound to it — pass it through rather than making codegen guess per node.
+      textWrapStyle: 'BALANCE',
     });
     expect(result.effects[0]?.effects[0]?.type).toBe('DROP_SHADOW');
     expect(result.grids[0]?.grids[0]?.count).toBe(12);

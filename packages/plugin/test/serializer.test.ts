@@ -1,5 +1,5 @@
 import { MIXED } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   serializeEffect,
@@ -872,6 +872,89 @@ describe('serializeFlat — typography', () => {
       }),
     );
     expect(out.segments).toBeUndefined();
+  });
+
+  it('asks Figma for every per-run field the segment output can carry', () => {
+    // Every other segment test stubs getStyledTextSegments and ignores what was requested, so a
+    // field dropped from the request list stays green here while real Figma silently stops
+    // returning it. This is the only assertion on the request itself.
+    const getStyledTextSegments = vi.fn<(fields: readonly string[]) => unknown[]>(() => []);
+    serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'AB',
+        fontSize: Symbol('figma.mixed'),
+        fontName: { family: 'Inter', style: 'Regular' },
+        getStyledTextSegments,
+      }),
+    );
+    expect(getStyledTextSegments.mock.calls[0]?.[0]).toEqual([
+      'fontName',
+      'fontSize',
+      'fills',
+      'textDecoration',
+      'textCase',
+      'lineHeight',
+      'letterSpacing',
+      'hyperlink',
+      'listOptions',
+      'indentation',
+      'textWrapStyle',
+      'textStyleId',
+      'fillStyleId',
+      'boundVariables',
+    ]);
+  });
+
+  it('emits a uniform textWrapStyle node-level, without expanding segments', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'A balanced heading',
+        fontSize: 24,
+        fontName: { family: 'Inter', style: 'Bold' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        textWrapStyle: 'BALANCE',
+        getStyledTextSegments: () => [],
+      }),
+    );
+    expect(out.textWrapStyle).toBe('BALANCE');
+    expect(out.segments).toBeUndefined();
+  });
+
+  it('expands segments when textWrapStyle alone is mixed, and drops the node-level value', () => {
+    // Wrap style is paragraph-scoped, so two paragraphs disagreeing is enough to make the node-level
+    // read `mixed` while every other dimension stays uniform — nothing else would trip
+    // needsSegments, so without its own gate the real per-paragraph values would vanish entirely.
+    const uniform = {
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 14,
+      fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+      textDecoration: 'NONE',
+      textCase: 'ORIGINAL',
+    };
+    const segments = [
+      { ...uniform, characters: 'One\n', start: 0, end: 4, textWrapStyle: 'AUTO' },
+      { ...uniform, characters: 'Two', start: 4, end: 7, textWrapStyle: 'BALANCE' },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'One\nTwo',
+        fontSize: 14,
+        fontName: { family: 'Inter', style: 'Regular' },
+        textCase: 'ORIGINAL',
+        textDecoration: 'NONE',
+        textWrapStyle: Symbol('figma.mixed'),
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    expect(out.textWrapStyle).toBeUndefined();
+    expect(out.segments).toHaveLength(2);
+    // AUTO is the no-op → left off the run; only the deliberate value is carried.
+    expect(out.segments?.[0]?.textWrapStyle).toBeUndefined();
+    expect(out.segments?.[1]?.textWrapStyle).toBe('BALANCE');
   });
 
   it('surfaces a node-level uniform hyperlink (whole text is one link)', () => {

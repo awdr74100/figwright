@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
+
 import type { BatchResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxHandlers } from '../../src/dispatcher.js';
 import { createApplyAnimationStyleHandler } from '../../src/handlers/apply-animation-style.js';
 import { createApplyManualKeyframeTrackHandler } from '../../src/handlers/apply-manual-keyframe-track.js';
-import { createBatchHandler } from '../../src/handlers/batch.js';
+import { createBatchHandler, TEXT_PROPERTY_KEYS } from '../../src/handlers/batch.js';
 import { createCreateComponentHandler } from '../../src/handlers/create-component.js';
 import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
@@ -350,6 +352,20 @@ describe('batch handler', () => {
     });
     // The undo reloads the captured (pre-op) font before restoring — it's the final font load.
     expect(loadFontAsync.mock.calls.at(-1)).toEqual([{ family: 'Inter', style: 'Regular' }]);
+  });
+
+  it('snapshots every property set_text_properties can write (all-or-nothing rollback)', async () => {
+    // The list and the handler are two hand-kept copies of one fact, and drift between them is
+    // silent: a rollback would restore everything except the newest field and still report success.
+    // Derived from the handler's own assignments so adding a property there fails here until the
+    // snapshot learns about it.
+    const handlerSrc = readFileSync(
+      new URL('../../src/handlers/set-text-properties.ts', import.meta.url),
+      'utf8',
+    );
+    const written = [...handlerSrc.matchAll(/\btext\.([A-Za-z]+) = /g)].map(m => m[1]!);
+    expect(written.length).toBeGreaterThan(10); // the regex still matches something
+    expect([...new Set(written)].toSorted()).toEqual([...TEXT_PROPERTY_KEYS].toSorted());
   });
 
   it('replays as a unit under idempotency: same requestId applies its ops once', async () => {

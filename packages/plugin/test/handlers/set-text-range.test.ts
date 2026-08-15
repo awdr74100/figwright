@@ -26,6 +26,7 @@ const makeText = (characters = 'Agree to Terms') => ({
   setRangeHyperlink: vi.fn<Spy>(),
   setRangeListOptions: vi.fn<Spy>(),
   setRangeIndentation: vi.fn<Spy>(),
+  setRangeTextWrapStyle: vi.fn<Spy>(),
   setRangeTextStyleIdAsync: vi.fn<AsyncSpy>(async () => {}),
   setRangeFillStyleIdAsync: vi.fn<AsyncSpy>(async () => {}),
   setRangeBoundVariable: vi.fn<Spy>(),
@@ -108,6 +109,17 @@ describe('set_text_range handler', () => {
     });
     expect(text.setRangeListOptions).toHaveBeenCalledWith(9, 14, { type: 'ORDERED' });
     expect(text.setRangeIndentation).toHaveBeenCalledWith(9, 14, 1);
+  });
+
+  it('applies textWrapStyle to the range (paragraph-scoped, unlike the per-character props)', async () => {
+    const text = makeText();
+    await createSetTextRangeHandler(makeFigma(text))({
+      nodeId: 'T:1',
+      ranges: [{ start: 9, end: 14, textWrapStyle: 'BALANCE' }],
+    });
+    // Passed through verbatim: Figma widens it to every paragraph the range touches, so the range
+    // selects paragraphs here rather than characters.
+    expect(text.setRangeTextWrapStyle).toHaveBeenCalledWith(9, 14, 'BALANCE');
   });
 
   it('clears a hyperlink when passed null', async () => {

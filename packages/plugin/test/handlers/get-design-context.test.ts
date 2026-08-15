@@ -108,6 +108,7 @@ describe('get_design_context handler', () => {
       maxLines: 2,
       paragraphSpacing: 12,
       paragraphIndent: 24,
+      textWrapStyle: 'BALANCE',
       textAutoResize: 'HEIGHT',
     });
     const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
@@ -129,6 +130,7 @@ describe('get_design_context handler', () => {
       textDecoration: 'UNDERLINE',
       paragraphSpacing: 12,
       paragraphIndent: 24,
+      textWrapStyle: 'BALANCE',
     });
     // per-node behaviour stays inline; the TOP vertical default is dropped as noise
     expect(n?.textAlignHorizontal).toBe('CENTER');
@@ -156,6 +158,7 @@ describe('get_design_context handler', () => {
       maxLines: null,
       paragraphSpacing: 0,
       paragraphIndent: 0,
+      textWrapStyle: 'AUTO',
       textAutoResize: 'WIDTH_AND_HEIGHT',
     });
     const full = (await createGetDesignContextHandler(fakeFigma({ selection: [text] }))({
@@ -173,6 +176,7 @@ describe('get_design_context handler', () => {
     // 0 spacing/indent and the WIDTH_AND_HEIGHT (hug) default are no-ops → omitted
     expect(n?.paragraphSpacing).toBeUndefined();
     expect(n?.paragraphIndent).toBeUndefined();
+    expect(n?.textWrapStyle).toBeUndefined();
     expect(n?.textAutoResize).toBeUndefined();
     // bundle is just the font — no default typography baked in
     expect(full.globalVars?.styles[n!.textStyle!]).toEqual({

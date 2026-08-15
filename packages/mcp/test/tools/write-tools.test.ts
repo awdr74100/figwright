@@ -199,7 +199,10 @@ describe('M2 write tool definitions', () => {
     expect(createInstanceToolDefinition.inputSchema.required).toBeUndefined();
   });
 
-  it('set_text_properties requires nodeId; truncation/maxLines/autoResize/paragraph optional', () => {
+  it('set_text_properties requires nodeId; truncation/maxLines/autoResize/paragraph/wrap optional', () => {
+    // The enums are pinned here on purpose: widening one to a bare string is invisible to the other
+    // gates — plugin-contract.json records argument *names*, and the wire test derives the advertised
+    // schema from this same spec, so both stay green while the model loses the value list.
     expect(setTextPropertiesToolDefinition.name).toBe(SET_TEXT_PROPERTIES_TOOL_NAME);
     expect(setTextPropertiesToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId'],
@@ -209,6 +212,7 @@ describe('M2 write tool definitions', () => {
         textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
         paragraphSpacing: { type: 'number', minimum: 0 },
         paragraphIndent: { type: 'number', minimum: 0 },
+        textWrapStyle: { enum: ['AUTO', 'BALANCE', 'PRETTY'] },
       },
     });
   });

@@ -33,6 +33,7 @@ export const createGetStylesHandler =
         fontSize: s.fontSize,
         lineHeight: serializeLineHeight(s.lineHeight),
         letterSpacing: { unit: s.letterSpacing.unit, value: s.letterSpacing.value },
+        textWrapStyle: s.textWrapStyle,
       })),
       effects: effectStyles.map(s => ({
         id: s.id,

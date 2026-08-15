@@ -41,6 +41,13 @@ const rangeSchema = z.object({
     .optional()
     .describe('Turn the run into an ordered/unordered list item; NONE clears it'),
   indentation: z.number().optional().describe('List / block indentation depth'),
+  textWrapStyle: z
+    .enum(['AUTO', 'BALANCE', 'PRETTY'])
+    .optional()
+    .describe(
+      'Line-break balancing (CSS text-wrap). Paragraph-scoped, unlike the other fields here: it ' +
+        'applies to every paragraph the range touches, not just the selected characters',
+    ),
   textStyleId: z.string().optional().describe('Bind the run to a shared text style (its id)'),
   fillStyleId: z.string().optional().describe('Bind the run to a shared fill style (its id)'),
   boundVariables: z
@@ -60,7 +67,7 @@ export const setTextRangeTool: ToolSpec = {
     'inline rich text (a link inside a sentence, a bold word, a coloured span, a bulleted list, a ' +
     "smaller /mo after a price). Each range gives start/end (char offsets into the node's characters) " +
     'plus any subset of run properties: fontName / fontSize / fills / textDecoration / textCase / ' +
-    'lineHeight / letterSpacing / hyperlink / listOptions / indentation, and design-system bindings ' +
+    'lineHeight / letterSpacing / hyperlink / listOptions / indentation / textWrapStyle, and design-system bindings ' +
     'textStyleId / fillStyleId / boundVariables. Ranges apply in order (a later range overrides an ' +
     'earlier one on overlap). Fonts are loaded automatically. Set the whole node first with create_text ' +
     '/ set_text; use set_text_properties for node-level typography & overflow. Returns { ok, nodeId }.',
