@@ -368,16 +368,27 @@ const readThemeScales = (
   // held in a local `const` — including the `{ theme }` shorthand — resolves like an inline literal.
   const theme = unwrapObject(propertyNamed(config, 'theme'), program);
   if (theme === null) return NO_THEME;
-  const extend = unwrapObject(propertyNamed(theme, 'extend'), program);
 
   let skipped = 0;
   const onSkip = (): void => {
     skipped += 1;
   };
+
+  const declaredExtend = propertyNamed(theme, 'extend');
+  const extend = unwrapObject(declaredExtend, program);
+  // An `extend` that is declared but unreadable (`extend: mkTheme({ … })`) is the whole of most
+  // configs' theme. Left uncounted, a config with everything inside it reported "its theme declares
+  // no scales that map to design tokens" — which is the opposite of true, and points the reader
+  // away from the one thing that went wrong.
+  if (declaredExtend !== null && extend === null) onSkip();
   // Keyed by token name so `theme.extend` overwrites the base scale's entry for the same name,
   // matching the frameworks' own merge — and so one name can never be emitted twice, which the join
   // would otherwise read as a token ambiguous with itself.
   const byName = new Map<string, ProjectToken>();
+  // Scales already reported unreadable. A config can declare the same one in both `theme` and
+  // `theme.extend`, and counting each declaration would say "2 entries skipped" for one missing
+  // palette — the number exists to tell someone how much is gone, not how many ways it is gone.
+  const reportedUnreadable = new Set<string>();
 
   for (const scale of pickScales({ config, program, scopes: [theme, extend] })) {
     for (const scope of [theme, extend]) {
@@ -388,7 +399,10 @@ const readThemeScales = (
         // function of the theme — counts as skipped. It is the single commonest unreadable shape
         // and the loudest: a whole palette goes missing. Counting only unreadable entries *inside*
         // a scale meant the note said "read 3 theme token(s)" with no hint that colours were gone.
-        if (declared !== null) onSkip();
+        if (declared !== null && !reportedUnreadable.has(scale.key)) {
+          reportedUnreadable.add(scale.key);
+          onSkip();
+        }
         continue;
       }
       flattenScale(

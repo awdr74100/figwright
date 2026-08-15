@@ -325,6 +325,26 @@ module.exports = {
       expect(skipped).toBe(1);
     });
 
+    it('counts an unreadable extend, which is where most configs keep everything', () => {
+      // Left uncounted, `extend: mkTheme({ … })` reported "its theme declares no scales that map to
+      // design tokens" — the opposite of true, and it points the reader away from the one problem.
+      const { tokens, skipped, themeFound } = parseTailwindConfig(
+        'tailwind.config.js',
+        "module.exports = { theme: { extend: mkTheme({ colors: { a: '#111111' } }) } };",
+      );
+      expect(tokens).toEqual([]);
+      expect(themeFound).toBe(true);
+      expect(skipped).toBe(1);
+    });
+
+    it('counts one unreadable scale once, even when both theme and extend declare it', () => {
+      // The number says how much is gone, not how many ways it is gone.
+      const { skipped } = parse(
+        "export default { theme: { colors: require('a'), extend: { colors: require('b') } } };",
+      );
+      expect(skipped).toBe(1);
+    });
+
     it('does not count a scale the config never declared', () => {
       // Absent is not unreadable: almost no config declares all fifteen scales, and counting the
       // gaps would make `skipped` meaningless noise on every project.
