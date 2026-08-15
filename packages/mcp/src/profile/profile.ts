@@ -286,7 +286,16 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: `found ${v3Config}`,
     };
   }
-  // Dep-only signal (config not located): trust the version, default to v4 for the v4-only packages.
+  // UnoCSS's config file, and note where it sits: **every** config-file check precedes **every**
+  // dep-only one. A dependency entry is the weaker signal — `tailwindcss` turns up in UnoCSS repos
+  // for prettier-plugin-tailwindcss, editor tooling, or a half-finished migration — so letting the
+  // dep-only Tailwind branch run first meant a repo with a real `uno.config.ts` was called Tailwind
+  // *and* reported no configPath, leaving its actual token source unread.
+  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
+  if (unoConfig !== undefined)
+    return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
+
+  // Dep-only signals (no config located): trust the version, default to v4 for the v4-only packages.
   if (depVersion !== undefined || hasV4Pkg) {
     return {
       system: 'tailwind',
@@ -294,14 +303,8 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: hasV4Pkg ? '@tailwindcss/* package in dependencies' : 'tailwindcss in dependencies',
     };
   }
-  // UnoCSS after Tailwind: a project migrating between them can carry both deps for a while, and
-  // the Tailwind cascade above already demands a config file or a real tailwindcss dependency, so
-  // reaching here means Tailwind produced no signal at all. The config file leads the dependency
-  // because it is also the token source; `unocss` is the umbrella package and `@unocss/*` covers a
-  // project that installs only the pieces it uses (the Nuxt and Vite modules both do).
-  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
-  if (unoConfig !== undefined)
-    return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
+  // `unocss` is the umbrella package; `@unocss/*` covers a project that installs only the pieces it
+  // uses (the Nuxt and Vite modules both do).
   const unoDep = Object.keys(deps).find(d => d === 'unocss' || d.startsWith('@unocss/'));
   if (unoDep !== undefined) return { system: 'unocss', reason: `${unoDep} in dependencies` };
 

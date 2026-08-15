@@ -127,6 +127,20 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.configPath).toBeUndefined();
   });
 
+  it('lets an UnoCSS config file beat a bare tailwindcss dependency', () => {
+    // `tailwindcss` turns up in UnoCSS repos for prettier-plugin-tailwindcss, editor tooling, or a
+    // half-finished migration. Letting that dep-only branch run first called the project Tailwind
+    // *and* reported no configPath, so the uno.config.ts at the root was never read as a source.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^3.4.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
   it('keeps Tailwind ahead of UnoCSS when a project carries both', () => {
     // Mid-migration projects do. Tailwind's cascade already demands a config file or a real
     // tailwindcss dependency, so it only wins here on a positive signal of its own.

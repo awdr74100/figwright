@@ -50,6 +50,16 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('recognises a Tailwind config basename in an override even on an UnoCSS project', () => {
+    // A monorepo whose app is UnoCSS can still keep its tokens in a shared package's Tailwind
+    // config. Reading that with the UnoCSS vocabulary drops screens / transitionTimingFunction /
+    // aspectRatio / animation while hunting for breakpoints and easing, which aren't there.
+    expect(
+      resolveTokenSource(profileWith({ system: 'unocss' }), 'packages/ui/tailwind.config.js')
+        .source,
+    ).toEqual({ path: 'packages/ui/tailwind.config.js', kind: 'tailwind-v3' });
+  });
+
   it('falls back to the detected framework for a JS override whose name says nothing', () => {
     // An override usually corrects *where* the tokens live, not which framework wrote them.
     expect(resolveTokenSource(profileWith({ system: 'unocss' }), 'config/theme.ts').source).toEqual(

@@ -30,16 +30,22 @@ const JS_CONFIG_EXT = /\.[cm]?[jt]s$/i;
 // tempting `unocss?` reads right and is not — it means "unocs" + an optional "s", so it matches a
 // name nobody writes and misses `uno.config.ts`, the commoner of the two.
 const UNO_CONFIG_BASENAME = /(^|\/)(uno|unocss)\.config\.[cm]?[jt]s$/i;
+const TAILWIND_CONFIG_BASENAME = /(^|\/)tailwind\.config\.[cm]?[jt]s$/i;
 
 /**
  * Which reader an explicit `tokenSource` override needs. The caller's intent has to come from what
- * they pointed at: a stylesheet reads CSS, an `uno.config.*` reads an UnoCSS config. For any other
- * JS/TS file the name says nothing, so fall back to what detection actually found — an override is
- * usually correcting _where_ the tokens live, not which framework wrote them.
+ * they pointed at: a stylesheet reads CSS, and **either** framework's config basename identifies it
+ * outright. Recognising only UnoCSS's names was asymmetric — a monorepo whose app is UnoCSS may
+ * well keep its tokens in a shared package's `tailwind.config.js`, and reading that with the UnoCSS
+ * vocabulary silently drops `screens`, `transitionTimingFunction`, `aspectRatio` and `animation`
+ * while hunting for `breakpoints`/`easing`, which aren't there. Only when the name identifies
+ * neither does detection break the tie — an override usually corrects _where_ the tokens live, not
+ * which framework wrote them.
  */
 const kindOfOverride = (path: string, system: StylingSystem): TokenSourceKind => {
   if (!JS_CONFIG_EXT.test(path)) return 'css';
   if (UNO_CONFIG_BASENAME.test(path)) return 'unocss';
+  if (TAILWIND_CONFIG_BASENAME.test(path)) return 'tailwind-v3';
   return system === 'unocss' ? 'unocss' : 'tailwind-v3';
 };
 

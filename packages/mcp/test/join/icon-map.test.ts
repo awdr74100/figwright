@@ -115,7 +115,7 @@ const opts = (
 ): Parameters<typeof joinIcons>[2] => ({
   threshold: 0.7,
   svg: svgP,
-  tailwind: true,
+  utilityFirst: true,
 });
 
 describe('joinIcons', () => {

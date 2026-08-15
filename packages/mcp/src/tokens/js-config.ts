@@ -134,16 +134,26 @@ export interface JsConfigTokens {
    */
   themeFound: boolean;
   /**
-   * Theme entries inside a mapped scale that could not be evaluated by reading them — a spread of
-   * an imported palette, a computed key, a function value, a template literal with an expression.
-   * They are reported rather than guessed so the caller can say why a token it expected is
-   * missing.
+   * Mapped theme entries — or whole mapped scales — that could not be evaluated by reading them: a
+   * spread of an imported palette, a computed key, a function value, a template literal with an
+   * expression, or a scale assigned from something this cannot see through. Reported rather than
+   * guessed, so the caller can say why a token someone expected is missing. Counting only entries
+   * _inside_ a scale left the loudest case silent: `colors: require('tailwindcss/colors')` drops a
+   * whole palette while the note still reads "read N theme token(s)".
    */
   skipped: number;
 }
 
 /** Nothing was reachable — no config object, or no `theme` on it. */
 const NO_THEME: JsConfigTokens = { tokens: [], skipped: 0, themeFound: false };
+
+/** What a framework needs in order to choose which scale table its config speaks. */
+interface ScalePickContext {
+  config: any;
+  program: any;
+  /** The `theme` object and its `extend`, either of which may be null. */
+  scopes: readonly any[];
+}
 
 /** An object property key that can be read literally: `primary`, `'4.5'`, `500`. */
 const keyName = (node: any): string | null => {
@@ -195,11 +205,19 @@ const leafValue = (node: any): string | null => {
 
 /**
  * Reduce an expression to the object literal it stands for: `satisfies Config` / `as Config`
- * wrappers, a `defineConfig({ … })` call, and an identifier pointing at a `const config = { … }` in
- * the same file (the shape almost every TypeScript config uses). Returns null when the config is
- * built somewhere this can't see — imported, spread, computed.
+ * wrappers, and an identifier pointing at a `const config = { … }` in the same file (the shape
+ * almost every TypeScript config uses). Returns null when the value is built somewhere this can't
+ * see — imported, spread, computed.
+ *
+ * `allowCall` unwraps a single-object-argument call to that argument, and is passed **only** at the
+ * config level, for `defineConfig({ … })`. It must not reach a theme scale: `colors: withOpacity({
+ * primary: '#6266F0' })` would then read the function's _input_ as the resolved palette, and a
+ * function wrapping a scale exists precisely to transform it (that one usually emits `rgb(var(--x)
+ * / <alpha-value>)`). The name would survive but the value would be whatever went in, which is a
+ * guess — and this reader's contract is that it skips what it cannot evaluate rather than
+ * guessing.
  */
-const unwrapObject = (node: any, program: any, depth = 0): any => {
+const unwrapObject = (node: any, program: any, allowCall = false, depth = 0): any => {
   if (node == null || depth > MAX_UNWRAP) return null;
   switch (node.type) {
     case 'ObjectExpression':
@@ -210,11 +228,11 @@ const unwrapObject = (node: any, program: any, depth = 0): any => {
     // The angle-bracket cast — `export default <Partial<Config>>{ … }`, which is what Nuxt UI's own
     // config uses. Handling only `as`/`satisfies` silently dropped the entire config.
     case 'TSTypeAssertion':
-      return unwrapObject(node.expression, program, depth + 1);
+      return unwrapObject(node.expression, program, allowCall, depth + 1);
     case 'CallExpression': {
-      // defineConfig({ … }) and any other single-object-argument wrapper.
+      if (!allowCall) return null;
       const arg = node.arguments?.find((a: any) => a?.type === 'ObjectExpression');
-      return arg === undefined ? null : unwrapObject(arg, program, depth + 1);
+      return arg === undefined ? null : unwrapObject(arg, program, allowCall, depth + 1);
     }
     case 'Identifier': {
       for (const stmt of program.body ?? []) {
@@ -227,7 +245,7 @@ const unwrapObject = (node: any, program: any, depth = 0): any => {
               : null;
         for (const d of decl?.declarations ?? []) {
           if (d?.id?.type === 'Identifier' && d.id.name === node.name && d.init != null) {
-            return unwrapObject(d.init, program, depth + 1);
+            return unwrapObject(d.init, program, allowCall, depth + 1);
           }
         }
       }
@@ -242,7 +260,7 @@ const unwrapObject = (node: any, program: any, depth = 0): any => {
 const findConfigObject = (program: any): any => {
   for (const stmt of program.body ?? []) {
     if (stmt?.type === 'ExportDefaultDeclaration') {
-      const obj = unwrapObject(stmt.declaration, program);
+      const obj = unwrapObject(stmt.declaration, program, true);
       if (obj !== null) return obj;
     }
     if (stmt?.type === 'ExpressionStatement' && stmt.expression?.type === 'AssignmentExpression') {
@@ -252,7 +270,7 @@ const findConfigObject = (program: any): any => {
         left.object?.name === 'module' &&
         left.property?.name === 'exports';
       if (isModuleExports || left?.name === 'exports') {
-        const obj = unwrapObject(stmt.expression.right, program);
+        const obj = unwrapObject(stmt.expression.right, program, true);
         if (obj !== null) return obj;
       }
     }
@@ -335,7 +353,7 @@ const flattenScale = (
 const readThemeScales = (
   filePath: string,
   code: string,
-  pickScales: (config: any, program: any) => readonly Scale[],
+  pickScales: (ctx: ScalePickContext) => readonly Scale[],
 ): JsConfigTokens => {
   let program: any;
   try {
@@ -361,10 +379,18 @@ const readThemeScales = (
   // would otherwise read as a token ambiguous with itself.
   const byName = new Map<string, ProjectToken>();
 
-  for (const scale of pickScales(config, program)) {
+  for (const scale of pickScales({ config, program, scopes: [theme, extend] })) {
     for (const scope of [theme, extend]) {
-      const source = scope === null ? null : unwrapObject(propertyNamed(scope, scale.key), program);
-      if (source === null) continue;
+      const declared = scope === null ? null : propertyNamed(scope, scale.key);
+      const source = declared === null ? null : unwrapObject(declared, program);
+      if (source === null) {
+        // A scale that is *declared* but unreadable — `colors: require('tailwindcss/colors')`, or a
+        // function of the theme — counts as skipped. It is the single commonest unreadable shape
+        // and the loudest: a whole palette goes missing. Counting only unreadable entries *inside*
+        // a scale meant the note said "read 3 theme token(s)" with no hint that colours were gone.
+        if (declared !== null) onSkip();
+        continue;
+      }
       flattenScale(
         source,
         [],
@@ -397,13 +423,28 @@ const readThemeScales = (
 export const parseTailwindConfig = (filePath: string, code: string): JsConfigTokens =>
   readThemeScales(filePath, code, () => TAILWIND_V3_SCALES);
 
+/** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */
+const wind4Only = UNO_WIND4_SCALES.filter(s => !UNO_WIND3_SCALES.some(o => o.key === s.key));
+const wind3Only = UNO_WIND3_SCALES.filter(s => !UNO_WIND4_SCALES.some(o => o.key === s.key));
+
+/** How many of a scale set's keys the theme (or its `extend`) actually declares. */
+const declaredCount = (scopes: readonly any[], scales: readonly Scale[]): number =>
+  scales.filter(s => scopes.some(scope => scope !== null && propertyNamed(scope, s.key) !== null))
+    .length;
+
 /**
- * Which UnoCSS theme vocabulary a config speaks, read off its `presets`. The two are incompatible
- * (see {@linkcode UNO_WIND4_SCALES}), so this cannot be skipped by merging the tables. wind3 is the
- * default when the presets can't be read: `presetUno` re-exports it, and a config whose presets
- * come from elsewhere is far likelier to be on the long-standing vocabulary than the new one.
+ * Which UnoCSS theme vocabulary a config speaks. The two are incompatible (see
+ * {@linkcode UNO_WIND4_SCALES}), so this cannot be skipped by merging the tables.
+ *
+ * `presets` is authoritative when it can be read. When it can't — `presets: sharedPresets`, a
+ * spread, a helper — the theme's own key set decides, because the vocabularies are largely
+ * disjoint: `radius`/`text`/`shadow` belong to wind4 alone, `borderRadius`/`fontSize`/`boxShadow`
+ * to wind3 alone. That is evidence, not a guess, and it closes the case where a genuine wind4
+ * config was read with the wind3 table and quietly lost every wind4-only scale with `skipped` still
+ * at zero. Ties and no-evidence both fall to wind3: `presetUno` re-exports it, and it is the
+ * long-standing vocabulary.
  */
-const unoScalesFor = (config: any, program: any): readonly Scale[] => {
+const unoScalesFor = ({ config, program, scopes }: ScalePickContext): readonly Scale[] => {
   // Local binding name → the module it was imported from, so a preset can be identified by what it
   // *is* rather than by what it happens to be called. Reading only the callee name missed every
   // renamed import (`import w4 from '@unocss/preset-wind4'`) — silently, since wind4's keys are
@@ -425,9 +466,11 @@ const unoScalesFor = (config: any, program: any): readonly Scale[] => {
   }
 
   const presets = propertyNamed(config, 'presets');
+  let identified = false;
   for (const el of presets?.elements ?? []) {
     const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
     if (typeof name !== 'string') continue;
+    identified = true;
     const binding = bindings.get(name);
     if (
       /wind4/i.test(name) ||
@@ -437,7 +480,14 @@ const unoScalesFor = (config: any, program: any): readonly Scale[] => {
       return UNO_WIND4_SCALES;
     }
   }
-  return UNO_WIND3_SCALES;
+  // A readable presets array that named no wind4 preset has answered the question — it is wind3.
+  // Only when nothing in it could be read (`presets: sharedPresets`, a spread, a helper) does the
+  // theme's own shape get a say; otherwise a plain `presetUno()` config would be re-judged by its
+  // keys, and `container` — an options object there, a scale in wind4 — would flip it.
+  if (identified) return UNO_WIND3_SCALES;
+  return declaredCount(scopes, wind4Only) > declaredCount(scopes, wind3Only)
+    ? UNO_WIND4_SCALES
+    : UNO_WIND3_SCALES;
 };
 
 /** Read a `uno.config.*` / `unocss.config.*`, in whichever preset vocabulary it declares. */

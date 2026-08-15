@@ -286,7 +286,33 @@ module.exports = {
       expect(skipped).toBe(4);
     });
 
-    it('counts an unreadable scale without losing the readable ones beside it', () => {
+    it('declines a scale wrapped in a function call rather than reading its argument', () => {
+      // `withOpacity({ primary: … })` exists to transform the palette (typically into
+      // `rgb(var(--x) / <alpha-value>)`), so its *input* is not the resolved scale. Reading the
+      // argument would keep the name — a real class — while attaching a value that never ships.
+      const { tokens } = parse(`export default {
+        theme: { colors: withOpacity({ primary: '#6266F0' }) },
+      };`);
+      expect(tokens).toEqual([]);
+    });
+
+    it('still unwraps a call at the config level, where it is the config itself', () => {
+      // The same unwrapping is required one level up — defineConfig({ … }) and friends.
+      for (const code of [
+        "export default defineConfig({ theme: { colors: { a: '#111111' } } });",
+        "module.exports = withTV({ theme: { colors: { a: '#111111' } } });",
+      ]) {
+        expect(parse(code).byName.get('color-a')?.value).toBe('#111111');
+      }
+    });
+
+    it('resolves a scale held in a local const, which is not a guess', () => {
+      const { byName } = parse(`const shared = { primary: '#111111' };
+        export default { theme: { colors: shared } };`);
+      expect(byName.get('color-primary')?.value).toBe('#111111');
+    });
+
+    it('counts a whole unreadable scale, without losing the readable ones beside it', () => {
       const { byName, skipped } = parse(`export default {
         theme: { extend: {
           colors: theme => ({ brand: theme('colors.blue.500') }),
@@ -294,7 +320,16 @@ module.exports = {
         } },
       };`);
       expect([...byName.keys()]).toEqual(['radius-lg']);
-      expect(skipped).toBe(0); // a non-object scale isn't walked at all — nothing inside was hidden
+      // The loudest unreadable shape there is — a whole palette gone. Counting only entries *inside*
+      // a scale left the note saying "read 1 theme token(s)" with no hint that colours were missing.
+      expect(skipped).toBe(1);
+    });
+
+    it('does not count a scale the config never declared', () => {
+      // Absent is not unreadable: almost no config declares all fifteen scales, and counting the
+      // gaps would make `skipped` meaningless noise on every project.
+      const { skipped } = parse("export default { theme: { borderRadius: { lg: '0.5rem' } } };");
+      expect(skipped).toBe(0);
     });
   });
 });
@@ -432,14 +467,38 @@ describe('parseUnoConfig', () => {
       }
     });
 
-    it('defaults to the wind3 vocabulary when the presets cannot be read', () => {
-      // presetUno re-exports wind3, and a config whose presets come from elsewhere is likelier to
-      // be on the long-standing vocabulary than the new one.
-      const { byName } = parseUno(
-        `export default { presets: [...sharedPresets], theme: { fontSize: { huge: '48px' }, radius: { blob: '14px' } } }`,
+    it("lets the theme's own keys decide when the presets cannot be read", () => {
+      // `presets: sharedPresets` / a spread / a helper. The vocabularies are largely disjoint, so
+      // the theme's shape is evidence rather than a guess — and reading a genuine wind4 config with
+      // the wind3 table dropped every wind4-only scale with `skipped` still at zero, which is the
+      // same silent failure the renamed-import case had.
+      const wind4ish = parseUno(
+        `export default { presets: [...sharedPresets], theme: { radius: { blob: '14px' }, shadow: { card: '0 0 1px #000' } } }`,
       );
-      expect(byName.has('text-huge')).toBe(true);
-      expect(byName.has('radius-blob')).toBe(false);
+      expect([...wind4ish.byName.keys()].toSorted()).toEqual(['radius-blob', 'shadow-card']);
+
+      const wind3ish = parseUno(
+        `export default { presets: sharedPresets, theme: { fontSize: { huge: '48px' }, borderRadius: { blob: '14px' } } }`,
+      );
+      expect([...wind3ish.byName.keys()].toSorted()).toEqual(['radius-blob', 'text-huge']);
+    });
+
+    it('keeps a readable presets array authoritative over the theme shape', () => {
+      // A plain presetUno() config that happens to declare `container` must not be re-judged by its
+      // keys — `container` is a scale in wind4 but an options object here, so flipping the
+      // vocabulary would emit container-center / container-padding.
+      const { tokens } = parseUno(
+        unoConfig('presetUno()', "container: { center: true, padding: '1rem' }"),
+      );
+      expect(tokens).toEqual([]);
+    });
+
+    it('falls to wind3 when neither the presets nor the theme identify a vocabulary', () => {
+      // presetUno re-exports wind3, and it is the long-standing vocabulary.
+      const { byName } = parseUno(
+        `export default { presets: [...sharedPresets], theme: { colors: { brand: '#6266F0' } } }`,
+      );
+      expect(byName.get('color-brand')?.value).toBe('#6266F0');
     });
   });
 });

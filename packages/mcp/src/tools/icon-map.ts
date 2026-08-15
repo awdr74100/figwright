@@ -3,7 +3,12 @@ import { z } from 'zod';
 
 import { detectIconLibraries, scanRepoSvgs } from '../icons/repo-icons.js';
 import { collectFigmaIcons, type IconMapping, joinIcons } from '../join/icon-map.js';
-import { analyzeProject, type ProjectProfile, readProjectDeps } from '../profile/profile.js';
+import {
+  analyzeProject,
+  isUtilityFirst,
+  type ProjectProfile,
+  readProjectDeps,
+} from '../profile/profile.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
 import type { ToolSpec } from './spec.js';
 
@@ -86,7 +91,7 @@ export const handleIconMap = async (
   const mappings = joinIcons(icons, svgs, {
     threshold,
     svg: profile.svg,
-    tailwind: profile.styling.system === 'tailwind',
+    utilityFirst: isUtilityFirst(profile.styling.system),
   });
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.name);
 
