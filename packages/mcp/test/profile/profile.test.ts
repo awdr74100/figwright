@@ -106,6 +106,40 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.configPath).toBeUndefined();
   });
 
+  it('detects UnoCSS from its config file and points configPath at it', () => {
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
+  it('detects UnoCSS from a scoped package when no config file was located', () => {
+    // The Nuxt and Vite integrations install only the pieces they use, so the umbrella `unocss`
+    // package is not always present.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/nuxt': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBeUndefined();
+  });
+
+  it('keeps Tailwind ahead of UnoCSS when a project carries both', () => {
+    // Mid-migration projects do. Tailwind's cascade already demands a config file or a real
+    // tailwindcss dependency, so it only wins here on a positive signal of its own.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^3.4.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['tailwind.config.ts', 'uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('tailwind.config.ts');
+  });
+
   it('falls back to scss / unknown styling', () => {
     expect(
       detectProfile(baseInput({ packageJson: { dependencies: { sass: '^1' } } })).styling.system,

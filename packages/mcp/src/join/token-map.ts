@@ -217,13 +217,13 @@ const candidateFrom = (
   token: ProjectToken,
   confidence: number,
   matchedBy: ('name' | 'value' | 'map-file')[],
-  tailwind: boolean,
+  utilityFirst: boolean,
   ambiguousWith?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
-  ref: refOf(token, tailwind),
+  ref: refOf(token, utilityFirst),
   ...(token.cssVar === undefined ? {} : { cssVar: token.cssVar }),
-  ...(tailwind && token.utility !== undefined ? { utility: token.utility } : {}),
+  ...(utilityFirst && token.utility !== undefined ? { utility: token.utility } : {}),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0
@@ -233,8 +233,13 @@ const candidateFrom = (
 
 export interface TokenJoinOptions {
   threshold: number;
-  /** The project is a Tailwind project — enables the framework built-in scale fallback below. */
-  tailwind?: boolean;
+  /**
+   * The project generates utility classes from a Tailwind-compatible vocabulary — Tailwind itself,
+   * or UnoCSS, whose wind3 and wind4 presets were both confirmed to generate `p-4` / `leading-7` /
+   * `font-bold` / `rounded-lg` / `text-sm` from the same built-in scales. Enables the framework
+   * built-in scale fallback below, and makes a token's utility base the ref to emit.
+   */
+  utilityFirst?: boolean;
   /**
    * Explicit figmaName → project-token ref overrides from docs/figma-token-map.md (raw + normalized
    * keys, like the component map). Highest authority when the ref still resolves to a project
@@ -380,7 +385,7 @@ const joinOne = (
     if (token !== undefined) {
       return {
         ...base,
-        candidate: candidateFrom(token, 1, ['map-file'], opts.tailwind === true),
+        candidate: candidateFrom(token, 1, ['map-file'], opts.utilityFirst === true),
         status: 'high',
       };
     }
@@ -438,7 +443,7 @@ const joinTokenScan = (
         nameAgrees || (scored.length > 1 && top.score >= 0.5) ? ['name', 'value'] : ['value'];
       return {
         ...base,
-        candidate: candidateFrom(top.token, confidence, matchedBy, opts.tailwind === true),
+        candidate: candidateFrom(top.token, confidence, matchedBy, opts.utilityFirst === true),
         status: statusFor(confidence, opts.threshold),
       };
     }
@@ -452,7 +457,7 @@ const joinTokenScan = (
         top.token,
         confidence,
         ['value'],
-        opts.tailwind === true,
+        opts.utilityFirst === true,
         scored.slice(1).map(s => s.token.name),
       ),
       status: statusFor(confidence, opts.threshold),
@@ -468,7 +473,7 @@ const joinTokenScan = (
     const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.tailwind === true),
+      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.utilityFirst === true),
       status: statusFor(confidence, opts.threshold),
     };
   }
@@ -476,7 +481,7 @@ const joinTokenScan = (
   // Fallback (B1): nothing in the project matched, but on a Tailwind project a built-in scale step
   // (spacing/N) is still a usable utility — flag it framework-builtin instead of a false gap. This is
   // reached only here, after every project-token path declined, so it can never shadow a real reuse.
-  if (opts.tailwind === true) {
+  if (opts.utilityFirst === true) {
     const builtin = tailwindBuiltinScale(figma.name);
     if (builtin !== null) return { ...base, builtin, status: 'framework-builtin' };
   }

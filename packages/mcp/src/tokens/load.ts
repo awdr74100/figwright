@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { ProjectProfile } from '../profile/profile.js';
+import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
 import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
-import { parseTailwindConfig } from './tw-config.js';
 
 // The one place that decides where a project's design tokens come from and reads them — shared by
 // token_map (the explicit join tool) and the design-context value-reverse annotation, so the two
@@ -12,10 +12,11 @@ import { parseTailwindConfig } from './tw-config.js';
 
 /**
  * Which reader a token source needs. `css` covers Tailwind v4's `@theme` and plain custom
- * properties alike (both are CSS declarations); `tailwind-v3` is the JS/TS config object, which
- * holds the same scales in a form no CSS parser can see.
+ * properties alike (both are CSS declarations); the other two are JS/TS config objects, which hold
+ * the same scales in a form no CSS parser can see. They are separate kinds rather than one
+ * "js-config" because the frameworks name their theme keys differently.
  */
-export type TokenSourceKind = 'css' | 'tailwind-v3';
+export type TokenSourceKind = 'css' | 'tailwind-v3' | 'unocss';
 
 export interface TokenSource {
   /** Repo-relative path. */
@@ -23,30 +24,40 @@ export interface TokenSource {
   kind: TokenSourceKind;
 }
 
-// .js / .cjs / .mjs / .ts / .cts / .mts — every extension a Tailwind config is allowed to use.
+// .js / .cjs / .mjs / .ts / .cts / .mts — every extension either framework's config may use.
 const JS_CONFIG_EXT = /\.[cm]?[jt]s$/i;
+// UnoCSS's two config basenames; anything else JS-ish is read as a Tailwind config.
+const UNO_CONFIG_BASENAME = /(^|\/)unocss?\.config\.[cm]?[jt]s$/i;
 
 /**
- * Pick the token source: explicit override, else the detected styling config. The reader is chosen
- * by extension, which is also how an override is honoured — pointing `tokenSource` at a config file
- * reads it as a config, at a stylesheet reads it as CSS.
+ * Which reader a path needs, from the path alone. Used for an explicit `tokenSource` override,
+ * where the caller's intent has to be inferred from what they pointed at rather than from detection
+ * — pointing at a stylesheet reads CSS, at `uno.config.ts` reads an UnoCSS config, at any other
+ * JS/TS file reads a Tailwind config.
  */
+const kindOfPath = (path: string): TokenSourceKind => {
+  if (!JS_CONFIG_EXT.test(path)) return 'css';
+  return UNO_CONFIG_BASENAME.test(path) ? 'unocss' : 'tailwind-v3';
+};
+
+/** Pick the token source: explicit override, else the detected styling config. */
 export const resolveTokenSource = (
   // Only the styling half of the profile decides this, so that's all it asks for.
   profile: Pick<ProjectProfile, 'styling'>,
   override: string | undefined,
 ): { source: TokenSource | null; note?: string } => {
-  if (override !== undefined) {
-    return {
-      source: { path: override, kind: JS_CONFIG_EXT.test(override) ? 'tailwind-v3' : 'css' },
-    };
-  }
+  if (override !== undefined) return { source: { path: override, kind: kindOfPath(override) } };
+
   const configPath = profile.styling.configPath;
   if (configPath === undefined)
     return { source: null, note: 'no token source detected; pass tokenSource' };
   if (configPath.endsWith('.css')) return { source: { path: configPath, kind: 'css' } };
-  // The only non-CSS styling config detection reports is a Tailwind v3 JS/TS config.
-  if (JS_CONFIG_EXT.test(configPath)) return { source: { path: configPath, kind: 'tailwind-v3' } };
+  // Detection knows which framework it matched, so trust it over the filename here: an UnoCSS
+  // project is free to name its config anything its loader accepts.
+  if (JS_CONFIG_EXT.test(configPath)) {
+    const kind = profile.styling.system === 'unocss' ? 'unocss' : 'tailwind-v3';
+    return { source: { path: configPath, kind } };
+  }
   return {
     source: null,
     note: `styling config ${configPath} is not a readable token source; pass tokenSource`,
@@ -84,7 +95,7 @@ export const loadProjectTokens = async (
 ): Promise<LoadedProjectTokens> => {
   const { source, note } = resolveTokenSource(profile, tokenSourceOverride);
 
-  if (source?.kind === 'tailwind-v3') return loadTailwindV3Tokens(rootDir, source.path);
+  if (source !== null && source.kind !== 'css') return loadJsConfigTokens(rootDir, source);
 
   if (source !== null) {
     const body = await readOr(rootDir, source.path);
@@ -115,23 +126,25 @@ export const loadProjectTokens = async (
 };
 
 /**
- * Tailwind v3: the config's theme scales **plus** the repo's CSS custom properties.
+ * A JS/TS framework config: its theme scales **plus** the repo's CSS custom properties.
  *
- * The union is not a nicety, it's the no-regression condition. Before the config could be read, a
- * v3 project fell through to the repo-wide CSS aggregation, so any token it declared as a plain
+ * The union is not a nicety, it's the no-regression condition. Before these configs could be read,
+ * such a project fell through to the repo-wide CSS aggregation, so any token it declared as a plain
  * custom property (`:root { --brand: … }` alongside the config — extremely common, since that's how
- * v3 projects do runtime theming) was already being matched. Reading the config _instead_ of that
- * pool would have traded one set of matches for another; reading it _in addition_ can only add.
+ * these projects do runtime theming) was already being matched. Reading the config _instead_ of
+ * that pool would have traded one set of matches for another; reading it _in addition_ can only
+ * add.
  *
- * Config tokens lead: on a Tailwind project their utility base is the better ref, and the join
+ * Config tokens lead: on a utility-first project their utility base is the better ref, and the join
  * scores each name once in encounter order. A name+value present in both pools is emitted once, so
  * a token can never be reported ambiguous with itself; the same name at a _different_ value is kept
  * (two real declarations, exactly as a light/dark pair is kept within one stylesheet).
  */
-const loadTailwindV3Tokens = async (
+const loadJsConfigTokens = async (
   rootDir: string,
-  configPath: string,
+  source: TokenSource,
 ): Promise<LoadedProjectTokens> => {
+  const configPath = source.path;
   const body = await readOr(rootDir, configPath);
   if (body === null) {
     return {
@@ -141,7 +154,8 @@ const loadTailwindV3Tokens = async (
       files: [],
     };
   }
-  const config = parseTailwindConfig(configPath, body);
+  const parse = source.kind === 'unocss' ? parseUnoConfig : parseTailwindConfig;
+  const config = parse(configPath, body);
   const css = await aggregateRepoCssTokens(rootDir);
 
   const seen = new Set(config.tokens.map(t => `${t.name} ${t.value}`));
@@ -173,9 +187,11 @@ const loadTailwindV3Tokens = async (
       `also pooled ${css.tokens.length} CSS custom propert(ies) from ${css.files.length} file(s): ${css.files.join(', ')}`,
     );
   }
-  // Tailwind v3 inlines theme values into its utilities, so these tokens have no var() form — the
-  // ref a caller should emit is the utility base (bg-primary-500), not var(--color-primary-500).
-  notes.push('Tailwind v3 declares no CSS custom properties; reference theme tokens as utilities');
+  // Both frameworks inline theme values into the utilities they generate, so these tokens have no
+  // var() form — the ref to emit is the utility base (bg-primary-500), not var(--color-primary-500).
+  notes.push(
+    `${source.kind === 'unocss' ? 'UnoCSS' : 'Tailwind v3'} declares no CSS custom properties; reference theme tokens as utilities`,
+  );
 
   return {
     tokens,

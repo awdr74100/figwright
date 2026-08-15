@@ -242,6 +242,42 @@ describe('handleTokenMap', () => {
     }
   });
 
+  it('reads an UnoCSS config, in its own theme vocabulary, and pools the repo CSS too', async () => {
+    const uno = await mkdtemp(join(tmpdir(), 'tokenmap-uno-'));
+    try {
+      await writeFile(
+        join(uno, 'package.json'),
+        JSON.stringify({ devDependencies: { unocss: '^66.0.0' } }),
+      );
+      await writeFile(
+        join(uno, 'uno.config.ts'),
+        `import { defineConfig, presetUno } from 'unocss'
+         export default defineConfig({
+           presets: [presetUno()],
+           theme: { colors: { primary: { 500: '#6266F0' } }, breakpoints: { tablet: '768px' } },
+         })`,
+      );
+      await mkdir(join(uno, 'src'), { recursive: true });
+      await writeFile(join(uno, 'src', 'theme.css'), ':root { --accent-teal: #14B8A6; }');
+
+      const result = await handleTokenMap(dispatch, { rootDir: uno });
+      expect(result.profile.styling.system).toBe('unocss');
+      expect(result.tokenSource).toBe('uno.config.ts');
+
+      const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+      // Utility base, exactly as a Tailwind project would get — and no fabricated var().
+      expect(primary?.candidate?.ref).toBe('primary-500');
+      expect(primary?.candidate?.cssVar).toBeUndefined();
+      expect(primary?.status).toBe('high');
+
+      const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
+      expect(teal?.candidate?.ref).toBe('var(--accent-teal)');
+      expect(result.note).toMatch(/UnoCSS declares no CSS custom properties/);
+    } finally {
+      await rm(uno, { recursive: true, force: true });
+    }
+  });
+
   it('says an empty theme is empty rather than unreadable', async () => {
     // `theme: { extend: {} }` was read perfectly well. Reporting it as unreadable would send the
     // caller hunting for a parsing problem instead of concluding the project has no theme tokens.

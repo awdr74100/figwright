@@ -39,17 +39,18 @@ export type ProjectToken = {
 /**
  * The literal codegen should emit for a token.
  *
- * A Tailwind utility base (primary-500) is only a real, usable class on a Tailwind project —
- * `utility` is derived purely from the name's prefix and so is populated even on non-Tailwind
- * projects (where it's just the name minus a category prefix, and no `primary-500` class exists).
- * So the utility only leads on a Tailwind project; otherwise the `var()` reference is correct.
- * (`utility` still aids name-matching either way — that's a separate concern from this output.)
+ * A utility base (primary-500) is only a real, usable class on a project whose framework generates
+ * one — `utility` is derived purely from the name's prefix and so is populated even on projects
+ * with no such framework (where it's just the name minus a category prefix, and no `primary-500`
+ * class exists). So the utility only leads when `utilityFirst` says the project has that
+ * vocabulary; otherwise the `var()` reference is the correct literal. (`utility` still aids
+ * name-matching either way — that's a separate concern from this output.)
  *
  * Shared by the forward join and the design-context value annotation so the two can never disagree
  * about how a token is written.
  */
-export const refOf = (token: ProjectToken, tailwind: boolean): string => {
-  if (tailwind && token.utility !== undefined) return token.utility;
+export const refOf = (token: ProjectToken, utilityFirst: boolean): string => {
+  if (utilityFirst && token.utility !== undefined) return token.utility;
   // Narrowing on the union: no `cssVar` means the token came from a source that declares none,
   // which is the arm that guarantees a `utility`.
   return token.cssVar === undefined ? token.utility : token.cssVar;

@@ -5,7 +5,7 @@ import type { GetStylesResult, GetVariableDefsResult } from '@figwright/shared';
 import { z } from 'zod';
 
 import { joinTokens, parseTokenMapFile, type TokenMapping } from '../join/token-map.js';
-import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
+import { analyzeProject, isUtilityFirst, type ProjectProfile } from '../profile/profile.js';
 import { resolveFigmaTokens, resolvePaintStyleTokens } from '../tokens/figma-tokens.js';
 import { loadProjectTokens } from '../tokens/load.js';
 import { GET_STYLES_TOOL_NAME } from './get-styles.js';
@@ -30,8 +30,8 @@ const inputSchema = z.object({
   tokenSource: z
     .string()
     .describe(
-      'Path (relative to rootDir) to the file holding the tokens — a CSS file, or a Tailwind ' +
-        'config (.js/.cjs/.mjs/.ts), read according to its extension; overrides detection',
+      'Path (relative to rootDir) to the file holding the tokens — a CSS file, or a Tailwind / ' +
+        'UnoCSS config (.js/.cjs/.mjs/.ts), read according to its name; overrides detection',
     )
     .optional(),
   threshold: z
@@ -78,8 +78,8 @@ export const tokenMapTool: ToolSpec = {
     "project's design tokens, so generated code references " +
     'existing tokens instead of hard-coded values. Joins the grounded Figma names + values ' +
     "against the project's design tokens — parsed from its CSS (Tailwind v4 @theme or :root custom " +
-    'properties) and, on a Tailwind v3 project, from the theme scales in its JS/TS config (whose ' +
-    'tokens have no var() form: reference them by candidate.ref, the utility base). The ' +
+    'properties) and, on a Tailwind v3 or UnoCSS project, from the theme scales in its JS/TS config ' +
+    '(whose tokens have no var() form: reference them by candidate.ref, the utility base). The ' +
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
     "below 'high' and candidate.ambiguousWith lists the other same-value tokens — verify that pick " +
@@ -93,9 +93,10 @@ export const tokenMapTool: ToolSpec = {
     "the non-default values wired through the project's dark-mode mechanism), never just the " +
     'default-mode literal. tokenSource ' +
     'overrides the ' +
-    'detected styling config; rootDir defaults to the server cwd. A v3 theme built at runtime ' +
-    '(spread from an imported palette, or computed) is only partly readable — the note says how ' +
-    'much was skipped, and the project CSS is pooled alongside it either way. ' +
+    'detected styling config; rootDir defaults to the server cwd. A JS-config theme built at ' +
+    'runtime (spread from an imported palette, computed, or living in a preset) is only partly ' +
+    'readable — the note says how much was skipped or whether the theme was reachable at all, and ' +
+    'the project CSS is pooled alongside it either way. ' +
     'An explicit docs/figma-token-map.md row ' +
     '(FigmaName | ref) overrides the fuzzy join with matchedBy ["map-file"] — this file is the ' +
     'durable record a verified token mapping is written back to, so the next run reuses it instead ' +
@@ -143,7 +144,7 @@ export const handleTokenMap = async (
   const figmaTokens = [...resolveFigmaTokens(defs), ...resolvePaintStyleTokens(styles.paints)];
   const mappings = joinTokens(figmaTokens, loaded.tokens, {
     threshold,
-    tailwind: profile.styling.system === 'tailwind',
+    utilityFirst: isUtilityFirst(profile.styling.system),
     ...(overrides.size > 0 ? { overrides } : {}),
   });
   const unmapped = mappings.filter(m => m.status === 'unmapped').map(m => m.figmaName);

@@ -152,7 +152,7 @@ describe('loadTokenValueIndex', () => {
     await writeFile(css, ':root { --primary: #6266F0; }');
 
     const first = await loadTokenValueIndex(dir);
-    expect(first.tailwind).toBe(false);
+    expect(first.utilityFirst).toBe(false);
     expect(first.index.get('#6266F0')?.[0]?.name).toBe('primary');
 
     // Cached: same map instance while the file is untouched.

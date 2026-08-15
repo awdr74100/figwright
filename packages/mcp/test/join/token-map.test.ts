@@ -34,7 +34,7 @@ describe('joinTokens', () => {
   it('matches by name + value as high confidence, recommending the Tailwind utility', () => {
     const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, {
       threshold: 0.7,
-      tailwind: true,
+      utilityFirst: true,
     });
     expect(m?.candidate?.token).toBe('color-primary-500');
     expect(m?.candidate?.ref).toBe('primary-500');
@@ -148,7 +148,7 @@ describe('joinTokens', () => {
       // project token — but spacing/4 is still a usable utility step (p-4 / gap-4 / m-4).
       const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       });
       expect(m?.status).toBe('framework-builtin');
       expect(m?.builtin).toEqual({ scale: 'spacing', step: '4' });
@@ -159,14 +159,14 @@ describe('joinTokens', () => {
       // Figma can't put a dot in a name segment, so 1.5 is authored as "1-5" (value confirms: 6px).
       const half = joinTokens([fig('spacing/1-5', 6, 'FLOAT')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       })[0];
       expect(half?.status).toBe('framework-builtin');
       expect(half?.builtin?.step).toBe('1.5');
 
       const px = joinTokens([fig('spacing/px', 1, 'FLOAT')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       })[0];
       expect(px?.status).toBe('framework-builtin');
       expect(px?.builtin?.step).toBe('px');
@@ -176,7 +176,7 @@ describe('joinTokens', () => {
       const spacing = [proj('spacing-4', '16px', '4', 'spacing')];
       const [m] = joinTokens([fig('spacing/4', 16, 'FLOAT')], spacing, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       });
       expect(m?.status).toBe('high');
       expect(m?.candidate?.token).toBe('spacing-4');
@@ -188,7 +188,7 @@ describe('joinTokens', () => {
       // dash must not be mistaken for a half-step separator — split on "/" first.
       const [m] = joinTokens([fig('line-height/7', 28, 'FLOAT')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       });
       expect(m?.status).toBe('framework-builtin');
       expect(m?.builtin).toEqual({ scale: 'line-height', step: '7' });
@@ -197,21 +197,21 @@ describe('joinTokens', () => {
     it('maps weight/* to a font-weight built-in, renaming Regular → normal', () => {
       const bold = joinTokens([fig('weight/Bold', 'Bold', 'STRING')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       })[0];
       expect(bold?.status).toBe('framework-builtin');
       expect(bold?.builtin).toEqual({ scale: 'font-weight', step: 'bold' });
 
       const regular = joinTokens([fig('weight/Regular', 'Regular', 'STRING')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       })[0];
       expect(regular?.builtin).toEqual({ scale: 'font-weight', step: 'normal' });
 
       // Tolerates spacing/casing variants of the style name.
       const semi = joinTokens([fig('weight/Semi Bold', 'Semi Bold', 'STRING')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       })[0];
       expect(semi?.builtin?.step).toBe('semibold');
     });
@@ -219,7 +219,7 @@ describe('joinTokens', () => {
     it('leaves an unknown weight name unmapped (conservative)', () => {
       const [m] = joinTokens([fig('weight/Condensed', 'Condensed', 'STRING')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
       });
       expect(m?.status).toBe('unmapped');
     });
@@ -234,12 +234,12 @@ describe('joinTokens', () => {
       expect(
         joinTokens([fig('spacing/banner', 16, 'FLOAT')], tokens, {
           threshold: 0.7,
-          tailwind: true,
+          utilityFirst: true,
         })[0]?.status,
       ).toBe('unmapped');
       // size/* is overloaded (font size vs dimension), so it is deliberately not treated as a built-in.
       expect(
-        joinTokens([fig('size/68', 68, 'FLOAT')], tokens, { threshold: 0.7, tailwind: true })[0]
+        joinTokens([fig('size/68', 68, 'FLOAT')], tokens, { threshold: 0.7, utilityFirst: true })[0]
           ?.status,
       ).toBe('unmapped');
     });
@@ -252,7 +252,7 @@ describe('joinTokens', () => {
     };
     const [m] = joinTokens([themed], [proj('color-surface', '#FFFFFF', 'surface', 'color')], {
       threshold: 0.7,
-      tailwind: true,
+      utilityFirst: true,
     });
     // Matching still runs on the default-mode value; the per-theme values ride along verbatim.
     expect(m?.candidate?.token).toBe('color-surface');
@@ -343,7 +343,7 @@ describe('joinTokens — map-file overrides (write-back loop)', () => {
     for (const ref of ['primary-500', 'var(--color-primary-500)', 'color-primary-500']) {
       const [m] = joinTokens([fig('Brand/Accent', '#123456')], tokens, {
         threshold: 0.7,
-        tailwind: true,
+        utilityFirst: true,
         overrides: new Map([...overrides, ['Brand/Accent', ref]]),
       });
       expect(m?.candidate?.token).toBe('color-primary-500');
@@ -361,7 +361,7 @@ describe('joinTokens — map-file overrides (write-back loop)', () => {
     const overrides = new Map([['Primary/500', 'color-deleted-500']]);
     const [m] = joinTokens([fig('Primary/500', '#6266F0')], tokens, {
       threshold: 0.7,
-      tailwind: true,
+      utilityFirst: true,
       overrides,
     });
     expect(m?.candidate?.token).toBe('color-primary-500'); // recovered the real match

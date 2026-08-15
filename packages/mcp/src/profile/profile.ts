@@ -24,6 +24,7 @@ export type Framework = (typeof FRAMEWORKS)[number];
 
 export const STYLING_SYSTEMS = [
   'tailwind',
+  'unocss',
   'css-variables',
   'scss',
   'css-modules',
@@ -31,6 +32,22 @@ export const STYLING_SYSTEMS = [
   'unknown',
 ] as const;
 export type StylingSystem = (typeof STYLING_SYSTEMS)[number];
+
+/**
+ * Whether the styling system generates utility classes from a Tailwind-compatible vocabulary, so a
+ * token's utility base (`primary-500`) is the literal to emit rather than its `var()` reference,
+ * and a Figma variable hitting a built-in scale is a usable utility rather than a gap.
+ *
+ * UnoCSS qualifies on both counts: its wind3 and wind4 presets were each confirmed, by generating
+ * CSS from the installed package, to produce `p-4` / `leading-7` / `font-bold` / `rounded-lg` /
+ * `text-sm` from the same built-in scales, and `bg-primary-500` from a theme colour.
+ *
+ * One predicate rather than a comparison at each site: the forward join and the design-context
+ * value annotation both need it, and them disagreeing would mean the same token is written one way
+ * in `token_map` and another inside the grounding payload.
+ */
+export const isUtilityFirst = (system: StylingSystem): boolean =>
+  system === 'tailwind' || system === 'unocss';
 
 // How the project consumes `import X from './icon.svg'`: `component` when a loader turns the svg into
 // a renderable component (svgr / vite-svg-loader / …) so codegen can emit `<Icon/>`; `url` otherwise
@@ -104,8 +121,14 @@ const TAILWIND_CONFIGS = [
   'tailwind.config.ts',
 ];
 
+// UnoCSS reads either basename, in any of the JS/TS extensions. Both are listed by @unocss/config
+// as the config it loads; a project uses one or the other, never both.
+const UNOCSS_CONFIGS = ['uno.config', 'unocss.config'].flatMap(base =>
+  ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map(ext => `${base}.${ext}`),
+);
+
 /** Config files worth probing for at the project root; presence feeds styling detection. */
-const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS];
+const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS, ...UNOCSS_CONFIGS];
 
 // Tailwind v4 marks its CSS-first config inline: `@import "tailwindcss"` pulls the framework in and
 // `@theme { ... }` declares tokens. Either marker identifies the v4 token source.
@@ -268,6 +291,17 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: hasV4Pkg ? '@tailwindcss/* package in dependencies' : 'tailwindcss in dependencies',
     };
   }
+  // UnoCSS after Tailwind: a project migrating between them can carry both deps for a while, and
+  // the Tailwind cascade above already demands a config file or a real tailwindcss dependency, so
+  // reaching here means Tailwind produced no signal at all. The config file leads the dependency
+  // because it is also the token source; `unocss` is the umbrella package and `@unocss/*` covers a
+  // project that installs only the pieces it uses (the Nuxt and Vite modules both do).
+  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
+  if (unoConfig !== undefined)
+    return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
+  const unoDep = Object.keys(deps).find(d => d === 'unocss' || d.startsWith('@unocss/'));
+  if (unoDep !== undefined) return { system: 'unocss', reason: `${unoDep} in dependencies` };
+
   if ('sass' in deps || 'node-sass' in deps)
     return { system: 'scss', reason: 'sass in dependencies' };
   return { system: 'unknown', reason: 'no styling signal in manifest' };

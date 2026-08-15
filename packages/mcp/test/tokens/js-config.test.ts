@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseTailwindConfig } from '../../src/tokens/tw-config.js';
+import { parseTailwindConfig, parseUnoConfig } from '../../src/tokens/js-config.js';
 
 /** Parse a config and index the tokens by name, which is how every assertion below reads them. */
 const parse = (code: string, file = 'tailwind.config.ts') => {
   const { tokens, skipped } = parseTailwindConfig(file, code);
   return { skipped, tokens, byName: new Map(tokens.map(t => [t.name, t])) };
 };
+
+/** Same, for an UnoCSS config. */
+const parseUno = (code: string, file = 'uno.config.ts') => {
+  const { tokens, skipped, themeFound } = parseUnoConfig(file, code);
+  return { skipped, themeFound, tokens, byName: new Map(tokens.map(t => [t.name, t])) };
+};
+
+/** Wrap a theme body in the shape a real uno.config.ts uses, with the given presets expression. */
+const unoConfig = (presets: string, theme: string): string =>
+  `import { defineConfig, presetUno } from 'unocss'
+   import presetWind4 from '@unocss/preset-wind4'
+   export default defineConfig({ presets: [${presets}], theme: { ${theme} } })`;
 
 describe('parseTailwindConfig', () => {
   describe('locating the config object', () => {
@@ -107,11 +119,13 @@ describe('parseTailwindConfig', () => {
         'leading-snug',
         'radius-lg',
         'shadow-card',
-        'breakpoint-tablet',
         'container-prose',
         'blur-xs',
-        'aspect-golden',
+        // The scales UnoCSS names differently come after the ones both frameworks share, so the
+        // emitted order is stable regardless of how the config happens to declare them.
+        'breakpoint-tablet',
         'ease-swift',
+        'aspect-golden',
         'animate-shimmer',
       ]);
       // A numeric leaf is still a value (fontWeight: 700).
@@ -273,6 +287,122 @@ module.exports = {
       };`);
       expect([...byName.keys()]).toEqual(['radius-lg']);
       expect(skipped).toBe(0); // a non-object scale isn't walked at all — nothing inside was hidden
+    });
+  });
+});
+
+describe('parseUnoConfig', () => {
+  // Every expectation below was first confirmed by generating CSS from an installed UnoCSS — the
+  // family resemblance to Tailwind is close enough to be misleading, and four of these differ.
+  describe('wind3-era vocabulary (presetUno / presetWind3 / presetMini)', () => {
+    it('emits the same token vocabulary as the equivalent Tailwind config', () => {
+      const { byName } = parseUno(
+        unoConfig('presetUno()', "colors: { primary: { 500: '#6266F0' } }"),
+      );
+      expect(byName.get('color-primary-500')).toEqual({
+        name: 'color-primary-500',
+        value: '#6266F0',
+        utility: 'primary-500',
+        category: 'color',
+      });
+    });
+
+    it('reads breakpoints and easing, which Tailwind calls screens and transitionTimingFunction', () => {
+      const { byName } = parseUno(
+        unoConfig(
+          'presetUno()',
+          `breakpoints: { tablet: '768px' },
+           easing: { swift: 'cubic-bezier(0.4,0,0.2,1)' },`,
+        ),
+      );
+      expect(byName.get('breakpoint-tablet')?.value).toBe('768px');
+      expect(byName.get('ease-swift')?.utility).toBe('swift');
+    });
+
+    it("ignores the Tailwind spellings, which UnoCSS's own theme has no keys for", () => {
+      const { tokens } = parseUno(
+        unoConfig(
+          'presetUno()',
+          `screens: { desktop: '1400px' },
+           transitionTimingFunction: { swifty: 'linear' },
+           aspectRatio: { golden: '1.618' },`,
+        ),
+      );
+      // Reading these would emit breakpoint-desktop / ease-swifty / aspect-golden, none of which
+      // UnoCSS generates a class for — the exact "confidently wrong ref" this must not produce.
+      expect(tokens).toEqual([]);
+    });
+
+    it('leaves the structured animation and container objects alone', () => {
+      const { tokens } = parseUno(
+        unoConfig(
+          'presetUno()',
+          `animation: { keyframes: { spin: 'from{}' }, durations: { spin: '1s' } },
+           container: { center: true, padding: '1rem' },`,
+        ),
+      );
+      // Both are options objects, not scales. Walking them would emit animate-keyframes-spin and
+      // container-center.
+      expect(tokens).toEqual([]);
+    });
+  });
+
+  describe('wind4 vocabulary', () => {
+    const wind4Theme = `colors: { primary: { 500: '#6266F0', DEFAULT: '#111' } },
+       text: { huge: { fontSize: '48px', lineHeight: '1.1' } },
+       font: { display: 'Inter' },
+       tracking: { loose2: '0.1em' },
+       leading: { tall2: '2.5' },
+       radius: { blob: '14px' },
+       shadow: { card: '0 1px 2px #0001' },
+       breakpoint: { tablet: '768px' },
+       container: { prose2: '65ch' },
+       ease: { swift: 'linear' },`;
+
+    it('switches vocabulary when the presets name wind4', () => {
+      const { byName } = parseUno(unoConfig('presetWind4()', wind4Theme));
+      expect([...byName.keys()].toSorted()).toEqual([
+        'breakpoint-tablet',
+        'color-primary',
+        'color-primary-500',
+        'container-prose2',
+        'ease-swift',
+        'font-display',
+        'leading-tall2',
+        'radius-blob',
+        'shadow-card',
+        'text-huge',
+        'tracking-loose2',
+      ]);
+    });
+
+    it('takes fontSize out of a text entry rather than descending into it', () => {
+      const { byName } = parseUno(unoConfig('presetWind4()', wind4Theme));
+      // wind4's `text` leaves are option objects; descending would emit text-huge-fontSize, a name
+      // for nothing, and lose the size entirely.
+      expect(byName.get('text-huge')?.value).toBe('48px');
+      expect(byName.has('text-huge-fontSize')).toBe(false);
+      expect(byName.has('text-huge-lineHeight')).toBe(false);
+    });
+
+    it('reads container as a scale here, unlike in wind3 where it is an options object', () => {
+      expect(
+        parseUno(unoConfig('presetWind4()', wind4Theme)).byName.get('container-prose2')?.value,
+      ).toBe('65ch');
+      // This is the collision that stops the two vocabularies being merged into one table.
+      expect(parseUno(unoConfig('presetUno()', "container: { prose2: '65ch' }")).tokens).toEqual(
+        [],
+      );
+    });
+
+    it('defaults to the wind3 vocabulary when the presets cannot be read', () => {
+      // presetUno re-exports wind3, and a config whose presets come from elsewhere is likelier to
+      // be on the long-standing vocabulary than the new one.
+      const { byName } = parseUno(
+        `export default { presets: [...sharedPresets], theme: { fontSize: { huge: '48px' }, radius: { blob: '14px' } } }`,
+      );
+      expect(byName.has('text-huge')).toBe(true);
+      expect(byName.has('radius-blob')).toBe(false);
     });
   });
 });
