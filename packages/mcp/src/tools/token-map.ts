@@ -29,7 +29,10 @@ const inputSchema = z.object({
   rootDir: z.string().describe('Project root; defaults to the server cwd').optional(),
   tokenSource: z
     .string()
-    .describe('Path (relative to rootDir) to a CSS file holding the tokens; overrides detection')
+    .describe(
+      'Path (relative to rootDir) to the file holding the tokens — a CSS file, or a Tailwind ' +
+        'config (.js/.cjs/.mjs/.ts), read according to its extension; overrides detection',
+    )
     .optional(),
   threshold: z
     .number()
@@ -59,7 +62,11 @@ export interface TokenMapResult {
    * Present only when at least one row is stale.
    */
   staleOverrides?: { figmaName: string; ref: string }[];
-  /** Set when the token source couldn't be used (e.g. a Tailwind v3 JS config). */
+  /**
+   * How the token pool was assembled, when that isn't just "read the detected source": which files
+   * were aggregated, how much of a Tailwind config could not be read statically, or why no source
+   * was usable at all.
+   */
   note?: string;
 }
 
@@ -70,7 +77,9 @@ export const tokenMapTool: ToolSpec = {
     "the design-token mechanism of pre-variables files; such rows carry source: 'style') — to the " +
     "project's design tokens, so generated code references " +
     'existing tokens instead of hard-coded values. Joins the grounded Figma names + values ' +
-    'against tokens parsed from the project CSS (Tailwind v4 @theme or :root custom properties); the ' +
+    "against the project's design tokens — parsed from its CSS (Tailwind v4 @theme or :root custom " +
+    'properties) and, on a Tailwind v3 project, from the theme scales in its JS/TS config (whose ' +
+    'tokens have no var() form: reference them by candidate.ref, the utility base). The ' +
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
     "below 'high' and candidate.ambiguousWith lists the other same-value tokens — verify that pick " +
@@ -84,8 +93,10 @@ export const tokenMapTool: ToolSpec = {
     "the non-default values wired through the project's dark-mode mechanism), never just the " +
     'default-mode literal. tokenSource ' +
     'overrides the ' +
-    'detected styling config; rootDir defaults to the server cwd. Tailwind v3 JS configs are not yet ' +
-    'parsed (pass tokenSource to a CSS file). An explicit docs/figma-token-map.md row ' +
+    'detected styling config; rootDir defaults to the server cwd. A v3 theme built at runtime ' +
+    '(spread from an imported palette, or computed) is only partly readable — the note says how ' +
+    'much was skipped, and the project CSS is pooled alongside it either way. ' +
+    'An explicit docs/figma-token-map.md row ' +
     '(FigmaName | ref) overrides the fuzzy join with matchedBy ["map-file"] — this file is the ' +
     'durable record a verified token mapping is written back to, so the next run reuses it instead ' +
     'of re-guessing an ambiguous or value-only match. A row whose ref no longer resolves to a ' +

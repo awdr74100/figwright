@@ -10,18 +10,50 @@
 
 import { scanCustomProperties } from './css-scan.js';
 
-export interface ProjectToken {
-  /** Custom property name without the leading `--`, e.g. "color-primary-500". */
+/**
+ * How a project token can be referenced in generated code. Which forms exist is a property of the
+ * _source_, not of the individual token:
+ *
+ * - Every CSS source (Tailwind v4 `@theme`, plain `:root` custom properties) declares a custom
+ *   property, so `cssVar` is always there; `utility` is derived from the name's namespace when it
+ *   has one.
+ * - A Tailwind v3 JS config declares no custom property at all — v3 inlines theme values into the
+ *   utilities it generates — so those tokens are utility-only.
+ *
+ * Modelled as a union rather than two independent optionals so that {@linkcode refOf} is total by
+ * construction: a token with neither reference form is not representable, and the compiler proves
+ * it. Reaching for `token.name` as a last-resort ref would be exactly the failure this guards — a
+ * bare name is not a usable literal in any styling system.
+ */
+type TokenRef = { cssVar: string; utility?: string } | { cssVar?: undefined; utility: string };
+
+export type ProjectToken = {
+  /** Token name; for a CSS source, the custom property without `--`, e.g. "color-primary-500". */
   name: string;
   /** Raw declared value as written, e.g. "#6266F0", "oklch(0.6 0.2 270)", "0.875rem". */
   value: string;
-  /** CSS reference literal, e.g. "var(--color-primary-500)". */
-  cssVar: string;
-  /** Tailwind v4 utility base (namespace stripped), e.g. "primary-500"; absent for plain CSS vars. */
-  utility?: string;
-  /** Tailwind v4 token category derived from the namespace, e.g. "color"; absent for plain CSS vars. */
+  /** Tailwind token category derived from the namespace, e.g. "color"; absent for plain CSS vars. */
   category?: string;
-}
+} & TokenRef;
+
+/**
+ * The literal codegen should emit for a token.
+ *
+ * A Tailwind utility base (primary-500) is only a real, usable class on a Tailwind project —
+ * `utility` is derived purely from the name's prefix and so is populated even on non-Tailwind
+ * projects (where it's just the name minus a category prefix, and no `primary-500` class exists).
+ * So the utility only leads on a Tailwind project; otherwise the `var()` reference is correct.
+ * (`utility` still aids name-matching either way — that's a separate concern from this output.)
+ *
+ * Shared by the forward join and the design-context value annotation so the two can never disagree
+ * about how a token is written.
+ */
+export const refOf = (token: ProjectToken, tailwind: boolean): string => {
+  if (tailwind && token.utility !== undefined) return token.utility;
+  // Narrowing on the union: no `cssVar` means the token came from a source that declares none,
+  // which is the arm that guarantees a `utility`.
+  return token.cssVar === undefined ? token.utility : token.cssVar;
+};
 
 // Tailwind v4 @theme namespaces → category. Ordered most-specific-first so "font-weight-" wins over
 // "font-". The utility base is whatever follows the matched prefix.
