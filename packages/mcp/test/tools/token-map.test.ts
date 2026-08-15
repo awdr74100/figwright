@@ -226,16 +226,32 @@ describe('handleTokenMap', () => {
     }
   });
 
-  it('degrades to the CSS pool (with a note) when a v3 theme is not statically readable', async () => {
+  it('degrades to the CSS pool (with a note) when a v3 theme is not reachable', async () => {
+    // The majority shape in a monorepo: the theme lives in a preset or a shared package.
     const v3 = await v3Project({
       'tailwind.config.js': "module.exports = require('./theme/build.js');",
       'src/theme.css': ':root { --color-primary-500: #6266F0; }',
     });
     try {
       const result = await handleTokenMap(dispatch, { rootDir: v3 });
-      expect(result.note).toMatch(/could not be read statically/i);
+      expect(result.note).toMatch(/no theme object was reachable/i);
       // Whatever the config hides, the CSS the project does declare still joins.
       expect(result.mappings.find(m => m.figmaName === 'Primary/500')?.status).toBe('high');
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
+  it('says an empty theme is empty rather than unreadable', async () => {
+    // `theme: { extend: {} }` was read perfectly well. Reporting it as unreadable would send the
+    // caller hunting for a parsing problem instead of concluding the project has no theme tokens.
+    const v3 = await v3Project({
+      'tailwind.config.js': 'module.exports = { theme: { extend: {} } };',
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.note).toMatch(/declares no scales/i);
+      expect(result.note).not.toMatch(/reachable/i);
     } finally {
       await rm(v3, { recursive: true, force: true });
     }

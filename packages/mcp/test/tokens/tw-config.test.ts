@@ -38,22 +38,26 @@ describe('parseTailwindConfig', () => {
       expect(brand(`export default defineConfig(${theme});`)).toBe('#6266F0');
     });
 
-    it('returns nothing for a config it cannot see, and never throws', () => {
+    it('reports themeFound: false for a config whose theme it cannot see, and never throws', () => {
+      const unreachable = { tokens: [], skipped: 0, themeFound: false };
+      // The theme is in another file (a required base, or a `presets` entry).
       expect(
         parseTailwindConfig('tailwind.config.js', "module.exports = require('./theme')"),
-      ).toEqual({
-        tokens: [],
-        skipped: 0,
-      });
-      expect(parseTailwindConfig('tailwind.config.ts', 'export default {};')).toEqual({
-        tokens: [],
-        skipped: 0,
-      });
+      ).toEqual(unreachable);
+      expect(parseTailwindConfig('tailwind.config.ts', 'export default {};')).toEqual(unreachable);
       // Malformed input degrades rather than taking down the grounding call that asked for it.
-      expect(parseTailwindConfig('tailwind.config.js', 'module.exports = { theme: {')).toEqual({
-        tokens: [],
-        skipped: 0,
-      });
+      expect(parseTailwindConfig('tailwind.config.js', 'module.exports = { theme: {')).toEqual(
+        unreachable,
+      );
+    });
+
+    it('distinguishes an empty theme from an unreachable one', () => {
+      // `theme: { extend: {} }` is one of the commonest real shapes (usebruno, refine's examples).
+      // It was read perfectly well and simply declares nothing — reporting it as unreadable would
+      // send someone looking for a parser bug that isn't there.
+      expect(
+        parseTailwindConfig('tailwind.config.js', 'module.exports = { theme: { extend: {} } };'),
+      ).toEqual({ tokens: [], skipped: 0, themeFound: true });
     });
   });
 
@@ -239,6 +243,7 @@ module.exports = {
       expect(parseTailwindConfig('tailwind.config.cjs', shadcn)).toEqual({
         tokens: [],
         skipped: 0,
+        themeFound: false,
       });
     });
   });

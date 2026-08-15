@@ -70,6 +70,15 @@ const MAX_UNWRAP = 8;
 export interface TailwindConfigTokens {
   tokens: ProjectToken[];
   /**
+   * Whether a `theme` object was located at all. Zero tokens means two very different things and
+   * the caller has to tell a user which: a config whose theme this could not reach (built at
+   * runtime, or living in a `presets` entry / shared package it never opens — the majority shape in
+   * a monorepo) versus one that was read fine and simply declares no scales this maps (`theme: {
+   * extend: {} }` is extremely common). Reporting the first message for the second case sends
+   * someone hunting for a parsing problem that isn't there.
+   */
+  themeFound: boolean;
+  /**
    * Theme entries inside a mapped scale that could not be evaluated by reading them — a spread of
    * an imported palette, a computed key, a function value, a template literal with an expression.
    * They are reported rather than guessed so the caller can say why a token it expected is
@@ -78,7 +87,8 @@ export interface TailwindConfigTokens {
   skipped: number;
 }
 
-const EMPTY: TailwindConfigTokens = { tokens: [], skipped: 0 };
+/** Nothing was reachable — no config object, or no `theme` on it. */
+const NO_THEME: TailwindConfigTokens = { tokens: [], skipped: 0, themeFound: false };
 
 /** An object property key that can be read literally: `primary`, `'4.5'`, `500`. */
 const keyName = (node: any): string | null => {
@@ -258,15 +268,15 @@ export const parseTailwindConfig = (filePath: string, code: string): TailwindCon
   try {
     program = parseSync(filePath, code).program;
   } catch {
-    return EMPTY;
+    return NO_THEME;
   }
 
   const config = findConfigObject(program);
-  if (config === null) return EMPTY;
+  if (config === null) return NO_THEME;
   // Every lookup goes through unwrapObject, not a bare type check, so a theme (or a single scale)
   // held in a local `const` — including the `{ theme }` shorthand — resolves like an inline literal.
   const theme = unwrapObject(propertyNamed(config, 'theme'), program);
-  if (theme === null) return EMPTY;
+  if (theme === null) return NO_THEME;
   const extend = unwrapObject(propertyNamed(theme, 'extend'), program);
 
   let skipped = 0;
@@ -306,5 +316,5 @@ export const parseTailwindConfig = (filePath: string, code: string): TailwindCon
     }
   }
 
-  return { tokens: [...byName.values()], skipped };
+  return { tokens: [...byName.values()], skipped, themeFound: true };
 };

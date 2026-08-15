@@ -154,10 +154,15 @@ const loadTailwindV3Tokens = async (
   }
 
   const notes = [`read ${config.tokens.length} theme token(s) from ${configPath}`];
-  if (config.tokens.length === 0) {
+  // Zero tokens has two causes that must not share a message. Telling someone whose config simply
+  // says `theme: { extend: {} }` that it "could not be read" sends them hunting for a parsing bug;
+  // telling someone whose theme lives in a preset that it "declares no scales" hides where to look.
+  if (!config.themeFound) {
     notes.push(
-      'its theme could not be read statically (computed or imported); pass tokenSource to a CSS file if the tokens live there',
+      'no theme object was reachable in it — the theme is built at runtime, or lives in a preset / shared package this does not open; pass tokenSource to the file that declares the tokens',
     );
+  } else if (config.tokens.length === 0) {
+    notes.push('its theme declares no scales that map to design tokens');
   } else if (config.skipped > 0) {
     notes.push(
       `${config.skipped} theme entr(ies) were skipped because they are not statically readable (spread of an imported palette, computed key, or function value)`,
