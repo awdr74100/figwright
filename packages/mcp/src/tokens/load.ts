@@ -85,6 +85,16 @@ export interface LoadedProjectTokens {
   files: string[];
 }
 
+// A note is a diagnostic, not an inventory. The CSS walk caps at 200 files, and naming every one of
+// them buries the sentence that matters ("N theme entries were skipped") under a wall of paths in
+// the middle of a tool result. Enough to recognise where the tokens came from, then a count.
+const NAMED_FILES = 6;
+
+const listFiles = (files: readonly string[]): string =>
+  files.length <= NAMED_FILES
+    ? files.join(', ')
+    : `${files.slice(0, NAMED_FILES).join(', ')} (+${files.length - NAMED_FILES} more)`;
+
 /** Read one file, or null when it isn't readable — a missing token source is a note, not a throw. */
 const readOr = async (rootDir: string, rel: string): Promise<string | null> => {
   try {
@@ -129,7 +139,7 @@ export const loadProjectTokens = async (
     return {
       tokens,
       source: null,
-      note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${files.join(', ')}`,
+      note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
       files,
     };
   }
@@ -195,7 +205,7 @@ const loadJsConfigTokens = async (
   }
   if (css.files.length > 0) {
     notes.push(
-      `also pooled ${css.tokens.length} CSS custom propert(ies) from ${css.files.length} file(s): ${css.files.join(', ')}`,
+      `also pooled ${css.tokens.length} CSS custom propert(ies) from ${css.files.length} file(s): ${listFiles(css.files)}`,
     );
   }
   // Both frameworks inline theme values into the utilities they generate, so these tokens have no

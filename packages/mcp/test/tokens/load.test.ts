@@ -1,7 +1,11 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import type { ProjectProfile } from '../../src/profile/profile.js';
-import { resolveTokenSource } from '../../src/tokens/load.js';
+import { analyzeProject, type ProjectProfile } from '../../src/profile/profile.js';
+import { loadProjectTokens, resolveTokenSource } from '../../src/tokens/load.js';
 
 /** A profile carrying only what resolveTokenSource reads. */
 const profileWith = (
@@ -83,6 +87,25 @@ describe('resolveTokenSource', () => {
       path: 'styles/tokens.css',
       kind: 'css',
     });
+  });
+
+  it('caps the file list in a note instead of naming up to 200 paths', async () => {
+    // A note is a diagnostic; naming every contributor buries the sentence that matters under a
+    // wall of paths in the middle of a tool result.
+    const many = await mkdtemp(join(tmpdir(), 'load-many-'));
+    try {
+      await writeFile(join(many, 'package.json'), '{}');
+      await mkdir(join(many, 'src'), { recursive: true });
+      for (let i = 0; i < 9; i += 1) {
+        await writeFile(join(many, 'src', `t${i}.css`), `:root { --c${i}: #00000${i}; }`);
+      }
+      const loaded = await loadProjectTokens(many, await analyzeProject(many), undefined);
+      expect(loaded.note).toMatch(/\(\+3 more\)/);
+      // The full list is still available structurally, for cache invalidation and callers.
+      expect(loaded.files).toHaveLength(9);
+    } finally {
+      await rm(many, { recursive: true, force: true });
+    }
   });
 
   it('asks for a tokenSource when nothing was detected', () => {
