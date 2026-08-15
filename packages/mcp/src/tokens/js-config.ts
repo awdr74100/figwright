@@ -300,11 +300,16 @@ const flattenScale = (
     }
     const next = [...path, key];
     if (prop.value?.type === 'ObjectExpression') {
-      // A scale whose leaves are option objects stops here, at the sub-key that holds the value.
-      const inner = scale.leafKey === undefined ? null : propertyNamed(prop.value, scale.leafKey);
-      const innerValue = inner === null ? null : leafValue(inner);
-      if (innerValue !== null) {
-        out(next, innerValue);
+      if (scale.leafKey !== undefined) {
+        // This scale's leaves ARE option objects: the object is the terminus, not a nesting level.
+        // Falling through to the recursive walk when the sub-key is missing would flatten the other
+        // options into names — a wind4 `text: { sm: { lineHeight } }` (every field of that entry is
+        // optional in UnoCSS's own type) became `text-sm-lineHeight`, which is not a class. Skip
+        // and count instead: an entry this scale can't read is unreadable, not deeper.
+        const inner = propertyNamed(prop.value, scale.leafKey);
+        const innerValue = inner === null ? null : leafValue(inner);
+        if (innerValue === null) onSkip();
+        else out(next, innerValue);
         continue;
       }
       flattenScale(prop.value, next, scale, out, onSkip, depth + 1);

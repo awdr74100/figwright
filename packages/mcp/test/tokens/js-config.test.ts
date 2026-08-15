@@ -393,6 +393,22 @@ describe('parseUnoConfig', () => {
       expect(byName.has('text-huge-lineHeight')).toBe(false);
     });
 
+    it('skips a text entry with no fontSize instead of flattening its other options', () => {
+      // Every field of a wind4 `text` entry is optional in UnoCSS's own type, so this is a legal
+      // config. Descending emitted text-huge-lineHeight / text-huge-letterSpacing — refs that
+      // compose to classes which do not exist, the exact failure this reader must never produce.
+      const { tokens, skipped } = parseUno(
+        unoConfig('presetWind4()', "text: { huge: { lineHeight: '1.1', letterSpacing: '0.1em' } }"),
+      );
+      expect(tokens).toEqual([]);
+      expect(skipped).toBe(1);
+    });
+
+    it('still reads a text entry written as a bare size string', () => {
+      const { byName } = parseUno(unoConfig('presetWind4()', "text: { huge: '48px' }"));
+      expect(byName.get('text-huge')?.value).toBe('48px');
+    });
+
     it('reads container as a scale here, unlike in wind3 where it is an options object', () => {
       expect(
         parseUno(unoConfig('presetWind4()', wind4Theme)).byName.get('container-prose2')?.value,
