@@ -66,6 +66,35 @@ describe('joinTokens', () => {
     expect(m?.candidate?.cssVar).toBeUndefined();
   });
 
+  it('points `from` at the file whose token actually matched, not the first seen', () => {
+    // Per-component variable files (Vuetify ships ~90) repeat names across files. If `from` did not
+    // follow the winning token, the caller would @use a file that does not declare the value it was
+    // given — a compile error that looks like a token problem.
+    const perComponent: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'src/_a.scss' },
+      { name: 'primary', value: '#FF0000', scssVar: '$primary', from: 'src/_b.scss' },
+    ];
+    const [m] = joinTokens([fig('Primary', '#FF0000')], perComponent, { threshold: 0.7 });
+    expect(m?.candidate?.from).toBe('src/_b.scss');
+  });
+
+  it('resolves a map-file override against a SCSS variable, with or without the sigil', () => {
+    const scssOnly: ProjectToken[] = [
+      { name: 'brand-blue', value: '#6266F0', scssVar: '$brand-blue', from: 'src/_t.scss' },
+    ];
+    for (const ref of ['$brand-blue', 'brand-blue']) {
+      const overrides = parseTokenMapFile(`| Accent/Blue | ${ref} |`);
+      const [m] = joinTokens([fig('Accent/Blue', '#123456')], scssOnly, {
+        threshold: 0.7,
+        overrides,
+      });
+      expect(m?.candidate?.matchedBy).toEqual(['map-file']);
+      // The recorded row still has to come back with everything needed to emit it.
+      expect(m?.candidate?.from).toBe('src/_t.scss');
+      expect(m?.staleOverride).toBeUndefined();
+    }
+  });
+
   it('recommends the var() reference (not a bogus utility) on a non-Tailwind project', () => {
     // token.utility is derived from the name prefix and so is set even off-Tailwind, where no
     // `primary-500` class exists. With the flag off, ref must be the CSS var and utility not surfaced.
