@@ -375,8 +375,12 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
   if (unoDep !== undefined && unoGeneratesUtilities)
     return { system: 'unocss', reason: `${unoDep} in dependencies` };
 
-  if ('sass' in deps || 'node-sass' in deps)
-    return { system: 'scss', reason: 'sass in dependencies' };
+  // `sass-embedded` is the compiler Vite documents alongside `sass`, and the common choice on a
+  // modern Vite/Vue/Nuxt project — missing it meant the SCSS token source silently never ran on
+  // exactly the projects it was built for. `node-sass` is the long-dead original, kept for repos
+  // that still pin it.
+  const sassDep = ['sass', 'sass-embedded', 'node-sass'].find(d => d in deps);
+  if (sassDep !== undefined) return { system: 'scss', reason: `${sassDep} in dependencies` };
   return { system: 'unknown', reason: 'no styling signal in manifest' };
 };
 

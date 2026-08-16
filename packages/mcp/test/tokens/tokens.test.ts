@@ -164,6 +164,17 @@ describe('parseScssFile', () => {
     ]);
   });
 
+  it('collapses duplicates that only resolving the interpolation creates', () => {
+    // `--brand: #{$brand}` in :root and a literal `--brand: #6266F0` in a theme class are the same
+    // token once the interpolation is resolved — but the CSS parser deduped before that happened,
+    // so both survived and made the join report the token ambiguous with itself.
+    const tokens = parseScssFile(
+      '$brand: #6266F0;\n:root { --brand: #{$brand}; }\n.theme-light { --brand: #6266F0; }',
+      'f.scss',
+    );
+    expect(tokens).toEqual([{ name: 'brand', value: '#6266F0', cssVar: 'var(--brand)' }]);
+  });
+
   it('drops a custom property declared inside a mixin body', () => {
     // It only exists wherever the mixin is included, so `var(--brand)` resolves to nothing in a
     // component that never includes it — the asymmetric twin of the rule-scoped `$var` case.

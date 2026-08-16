@@ -254,9 +254,12 @@ describe('scanScssVariables', () => {
   });
 
   it('strips every trailing flag, not just the last', () => {
-    // `!default !global` on one declaration is legal Sass; leaving one on makes the value a
-    // non-value that can never match anything on the Figma side.
+    // `!default !global` on one declaration is legal Sass, and `!important` is legal in a Sass
+    // variable value too — leaving any of them on makes the value a non-value that can never match
+    // its Figma counterpart or its `--spacer: 1rem` CSS twin.
     expect(flat('$b: 4px !default !global;')).toEqual(['b=4px']);
+    expect(flat('$c: red !important;')).toEqual(['c=red']);
+    expect(flat('$d: 1rem !important !default;')).toEqual(['d=1rem']);
   });
 
   it('keeps a value whose interpolation braces would otherwise end it', () => {

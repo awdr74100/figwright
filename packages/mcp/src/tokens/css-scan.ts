@@ -111,7 +111,7 @@ const SCSS_DIALECT: Dialect = {
   // `!default` is how a SCSS variable declares itself overridable; `!global` how a scoped one
   // escapes its block. Both are flags on the declaration, not part of the value, and Sass accepts
   // both on one declaration (`4px !default !global`) — so the strip repeats.
-  flags: /(\s*!\s*(default|global))+\s*$/i,
+  flags: /(\s*!\s*(default|global|important))+\s*$/i,
 };
 
 /**
