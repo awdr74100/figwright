@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { ProjectProfile, StylingSystem } from '../profile/profile.js';
+import { type ProjectProfile, readProjectDeps, type StylingSystem } from '../profile/profile.js';
+import { detectTokenBuildTool, findGeneratedStylesheets } from './generated-tokens.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
 import { aggregateRepoScssTokens } from './repo-scss.js';
@@ -304,10 +305,35 @@ export const loadProjectTokens = async (
       refusal,
     );
   }
+  // Nothing anywhere. Before giving up, say whether this project *generates* its tokens: a build
+  // tool writes readable CSS/SCSS into build/ or dist/, which every walk here prunes, so the pool
+  // is empty for a project that has tokens and has committed them. The generic "pass tokenSource"
+  // does not say that, and this note is read by an agent that can act on it — naming the tool and
+  // the candidate files turns a dead end into one more call.
+  const emptyNote = await emptyPoolNote(rootDir, note);
   return withPrefixedNote(
-    { tokens, source: null, ...(note === undefined ? {} : { note }), files },
+    { tokens, source: null, ...(emptyNote === undefined ? {} : { note: emptyNote }), files },
     refusal,
   );
+};
+
+/**
+ * Why the pool came back empty, in the form most useful to the caller. Falls back to whatever
+ * `resolveTokenSource` said when no token build tool is involved.
+ */
+const emptyPoolNote = async (
+  rootDir: string,
+  detectionNote: string | undefined,
+): Promise<string | undefined> => {
+  const tool = detectTokenBuildTool(await readProjectDeps(rootDir));
+  if (tool === null) return detectionNote;
+
+  const candidates = await findGeneratedStylesheets(rootDir);
+  const where =
+    candidates.length === 0
+      ? 'its output directory (commonly build/ or dist/) holds no committed .css or .scss — run its build, or commit the generated stylesheet'
+      : `its generated stylesheet is not scanned, because build/, dist/ and out/ are skipped as build artefacts. Re-run this tool with tokenSource set to the right one: ${candidates.join(', ')}`;
+  return `${tool} generates this project's design tokens, and ${where}`;
 };
 
 /**
