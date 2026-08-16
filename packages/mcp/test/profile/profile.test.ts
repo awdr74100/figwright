@@ -127,6 +127,43 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.configPath).toBeUndefined();
   });
 
+  it('lets an UnoCSS config file beat a leftover Tailwind CSS marker', () => {
+    // tailwindCssEntry is whichever file *anywhere* in the repo still contains `@import
+    // "tailwindcss"` or `@theme` — in a half-migrated repo that is residue, while a root
+    // uno.config.ts is a current statement of what builds the CSS.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+        tailwindCssEntry: 'src/legacy.css',
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
+  it('still detects Tailwind v4 from its CSS marker when no root config file exists', () => {
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^4.0.0' } },
+        tailwindCssEntry: 'src/app.css',
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('src/app.css');
+    expect(p.styling.tailwindVersion).toBe(4);
+  });
+
+  it('does not treat @unocss/reset as evidence of UnoCSS', () => {
+    // It is a bundle of stylesheets (normalize / eric-meyer / a Tailwind-compat reset) any project
+    // can import without UnoCSS generating a class. Counting it flipped a plain-CSS project to
+    // utility-first, whose refs and framework-builtin rows would name classes that don't exist.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/reset': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unknown');
+  });
+
   it('lets an UnoCSS config file beat a bare tailwindcss dependency', () => {
     // `tailwindcss` turns up in UnoCSS repos for prettier-plugin-tailwindcss, editor tooling, or a
     // half-finished migration. Letting that dep-only branch run first called the project Tailwind

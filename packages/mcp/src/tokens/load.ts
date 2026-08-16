@@ -196,9 +196,14 @@ const loadJsConfigTokens = async (
     notes.push(
       'no theme object was reachable in it — the theme is built at runtime, or lives in a preset / shared package this does not open; pass tokenSource to the file that declares the tokens',
     );
-  } else if (config.tokens.length === 0) {
+  } else if (config.tokens.length === 0 && config.skipped === 0) {
     notes.push('its theme declares no scales that map to design tokens');
-  } else if (config.skipped > 0) {
+  }
+  // Deliberately not an `else if`. Chained onto the zero-token branch, the skip count was
+  // unreachable in exactly the case it was added for: a config whose only colour scale is
+  // `require('tailwindcss/colors')` yields zero tokens *and* one skip, and reported "its theme
+  // declares no scales" — the message this very chain exists to stop being wrong.
+  if (config.themeFound && config.skipped > 0) {
     notes.push(
       `${config.skipped} theme entr(ies) were skipped because they are not statically readable (spread of an imported palette, computed key, or function value)`,
     );

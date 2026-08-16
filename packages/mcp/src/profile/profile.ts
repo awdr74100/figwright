@@ -268,15 +268,15 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
   const hasV4Pkg = '@tailwindcss/vite' in deps || '@tailwindcss/postcss' in deps;
   const v3Config = input.presentConfigFiles.find(name => TAILWIND_CONFIGS.includes(name));
 
-  // Tailwind v4: CSS-first config (no JS config file). Strongest when a CSS entry was found.
-  if (input.tailwindCssEntry !== undefined && v3Config === undefined) {
-    return {
-      system: 'tailwind',
-      configPath: input.tailwindCssEntry,
-      tailwindVersion: depVersion ?? 4,
-      reason: `Tailwind v4 CSS config: ${input.tailwindCssEntry}`,
-    };
-  }
+  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
+
+  // Order of evidence, strongest first: a config file named at the project root, then the
+  // repo-wide CSS marker scan, then a dependency entry. The root config files go together and
+  // ahead of the rest — `tailwindCssEntry` is whichever file *anywhere* in the repo still contains
+  // `@import "tailwindcss"` or `@theme`, which in a half-migrated repo is residue, while a root
+  // `uno.config.ts` is a deliberate, current statement of what builds the CSS. Getting this
+  // backwards labelled such a repo Tailwind and left its real token source unread.
+
   // Tailwind v3: JS/TS config file at the root.
   if (v3Config !== undefined) {
     return {
@@ -286,14 +286,18 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: `found ${v3Config}`,
     };
   }
-  // UnoCSS's config file, and note where it sits: **every** config-file check precedes **every**
-  // dep-only one. A dependency entry is the weaker signal — `tailwindcss` turns up in UnoCSS repos
-  // for prettier-plugin-tailwindcss, editor tooling, or a half-finished migration — so letting the
-  // dep-only Tailwind branch run first meant a repo with a real `uno.config.ts` was called Tailwind
-  // *and* reported no configPath, leaving its actual token source unread.
-  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
   if (unoConfig !== undefined)
     return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
+
+  // Tailwind v4: CSS-first config, which has no JS config file to find.
+  if (input.tailwindCssEntry !== undefined) {
+    return {
+      system: 'tailwind',
+      configPath: input.tailwindCssEntry,
+      tailwindVersion: depVersion ?? 4,
+      reason: `Tailwind v4 CSS config: ${input.tailwindCssEntry}`,
+    };
+  }
 
   // Dep-only signals (no config located): trust the version, default to v4 for the v4-only packages.
   if (depVersion !== undefined || hasV4Pkg) {
@@ -304,8 +308,14 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
     };
   }
   // `unocss` is the umbrella package; `@unocss/*` covers a project that installs only the pieces it
-  // uses (the Nuxt and Vite modules both do).
-  const unoDep = Object.keys(deps).find(d => d === 'unocss' || d.startsWith('@unocss/'));
+  // uses (the Nuxt and Vite modules both do). `@unocss/reset` is excluded: it is a bundle of
+  // stylesheets (normalize, eric-meyer, a Tailwind-compat reset) that any project can import
+  // without UnoCSS generating a single class, and treating it as evidence would flip a plain-CSS
+  // project to utility-first — bare `primary-500` refs and `framework-builtin` spacing steps that
+  // do not exist there.
+  const unoDep = Object.keys(deps).find(
+    d => d === 'unocss' || (d.startsWith('@unocss/') && d !== '@unocss/reset'),
+  );
   if (unoDep !== undefined) return { system: 'unocss', reason: `${unoDep} in dependencies` };
 
   if ('sass' in deps || 'node-sass' in deps)

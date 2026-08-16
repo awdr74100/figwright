@@ -46,6 +46,13 @@ interface Scale {
    * descending blindly would emit `text-sm-fontSize`, a name for nothing.
    */
   leafKey?: string;
+  /**
+   * Whether an array value is one value written in parts (a font stack) rather than a value plus
+   * its options. Only the font-family scales are; everything else that accepts an array uses it for
+   * `[value, …options]`, and Tailwind documents `fontSize: { sm: ['0.875rem', '1.25rem'] }` — a
+   * size and a line-height — which joined into "0.875rem, 1.25rem" and could then match nothing.
+   */
+  joinArray?: boolean;
 }
 
 // Scales that Tailwind v3 and UnoCSS's Tailwind-v3-compatible presets (wind3, and `presetUno`,
@@ -61,7 +68,7 @@ const V3_SHARED_SCALES: readonly Scale[] = [
   { key: 'colors', prefix: 'color-', category: 'color' },
   { key: 'spacing', prefix: 'spacing-', category: 'spacing' },
   { key: 'fontSize', prefix: 'text-', category: 'font-size' },
-  { key: 'fontFamily', prefix: 'font-', category: 'font-family' },
+  { key: 'fontFamily', prefix: 'font-', category: 'font-family', joinArray: true },
   { key: 'fontWeight', prefix: 'font-weight-', category: 'font-weight' },
   { key: 'letterSpacing', prefix: 'tracking-', category: 'letter-spacing' },
   { key: 'lineHeight', prefix: 'leading-', category: 'line-height' },
@@ -103,7 +110,7 @@ const UNO_WIND4_SCALES: readonly Scale[] = [
   { key: 'colors', prefix: 'color-', category: 'color' },
   { key: 'spacing', prefix: 'spacing-', category: 'spacing' },
   { key: 'text', prefix: 'text-', category: 'font-size', leafKey: 'fontSize' },
-  { key: 'font', prefix: 'font-', category: 'font-family' },
+  { key: 'font', prefix: 'font-', category: 'font-family', joinArray: true },
   { key: 'fontWeight', prefix: 'font-weight-', category: 'font-weight' },
   { key: 'tracking', prefix: 'tracking-', category: 'letter-spacing' },
   { key: 'leading', prefix: 'leading-', category: 'line-height' },
@@ -170,16 +177,21 @@ const keyName = (node: any): string | null => {
  * A theme leaf's value as written. Arrays carry two different meanings in a theme and both are
  * real: `fontFamily.sans: ['Inter', 'sans-serif']` is one font stack (join it, which is exactly the
  * CSS it compiles to, and what a v4 `--font-sans` custom property would hold), while `fontSize.sm:
- * ['0.875rem', { lineHeight: … }]` is a size plus its options (take the size — the companion values
- * are separate scales the design side tokenizes on their own). The two are told apart by whether
- * every element is a literal string.
+ * ['0.875rem', …]` is a size plus its options (take the size — the companions are separate scales
+ * the design side tokenizes on their own).
  *
- * The same rule truncates a stack that ends in something unreadable — Nuxt UI's real config writes
- * `sans: ['DM Sans', ...defaultTheme.fontFamily.sans]`, which yields "DM Sans". That is the primary
- * family, which is what a Figma font token actually names, so the partial read is still the useful
- * one; the alternative (dropping the token) would lose a match the design side can make.
+ * Which one it is comes from the **scale**, not from the array's shape. Telling them apart by
+ * "every element is a literal string" looked equivalent and was not: Tailwind documents `fontSize:
+ * { sm: ['0.875rem', '1.25rem'] }` — size and line-height, both strings — which joined into
+ * "0.875rem, 1.25rem", a value that can never match Figma's 14px and, if the name matched anyway,
+ * was reported as a candidate carrying garbage. A silently wrong read, not a counted skip.
+ *
+ * Taking element 0 also truncates a stack that ends in something unreadable — Nuxt UI's real config
+ * writes `sans: ['DM Sans', ...defaultTheme.fontFamily.sans]`, which yields "DM Sans". That is the
+ * primary family, which is what a Figma font token actually names, so the partial read is still the
+ * useful one; dropping the token would lose a match the design side can make.
  */
-const leafValue = (node: any): string | null => {
+const leafValue = (node: any, joinArray = false): string | null => {
   if (node?.type === 'Literal') {
     const { value } = node;
     if (typeof value === 'string') return value;
@@ -198,7 +210,14 @@ const leafValue = (node: any): string | null => {
       parts.push(el.value);
     }
     if (parts.length === 0) return null;
-    return parts.length === (node.elements?.length ?? 0) ? parts.join(', ') : (parts[0] as string);
+    // A stack is joined only when it is complete; a spread or a computed entry truncates it, and
+    // half a font stack read as CSS would be wrong where the primary family alone is useful.
+    if (joinArray) {
+      return parts.length === (node.elements?.length ?? 0)
+        ? parts.join(', ')
+        : (parts[0] as string);
+    }
+    return parts[0] as string;
   }
   return null;
 };
@@ -333,7 +352,7 @@ const flattenScale = (
       flattenScale(prop.value, next, scale, out, onSkip, depth + 1);
       continue;
     }
-    const value = leafValue(prop.value);
+    const value = leafValue(prop.value, scale.joinArray === true);
     if (value === null) {
       onSkip();
       continue;
@@ -423,6 +442,8 @@ const readThemeScales = (
             value,
             utility,
             category: scale.category,
+            // A scale declared in the framework's own config is exactly what it generates classes from.
+            utilityIsClass: true,
           });
         },
         onSkip,

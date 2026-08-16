@@ -223,7 +223,11 @@ const candidateFrom = (
   token: token.name,
   ref: refOf(token, utilityFirst),
   ...(token.cssVar === undefined ? {} : { cssVar: token.cssVar }),
-  ...(utilityFirst && token.utility !== undefined ? { utility: token.utility } : {}),
+  // Gated on utilityIsClass for the same reason refOf is: a namespace-shaped custom property
+  // outside `@theme` has a `utility` stem that no framework turns into a class.
+  ...(utilityFirst && token.utilityIsClass === true && token.utility !== undefined
+    ? { utility: token.utility }
+    : {}),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0

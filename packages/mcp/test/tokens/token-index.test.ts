@@ -16,7 +16,7 @@ const proj = (name: string, value: string, utility?: string): ProjectToken => ({
   name,
   value,
   cssVar: `var(--${name})`,
-  ...(utility === undefined ? {} : { utility }),
+  ...(utility === undefined ? {} : { utility, utilityIsClass: true }),
 });
 
 describe('buildTokenValueIndex', () => {

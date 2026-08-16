@@ -91,6 +91,8 @@ describe('parseTailwindConfig', () => {
         value: '#6266F0',
         utility: 'primary-500',
         category: 'color',
+        // A config-declared scale is exactly what the framework generates classes from.
+        utilityIsClass: true,
       });
     });
 
@@ -196,6 +198,17 @@ describe('parseTailwindConfig', () => {
       expect(byName.get('font-sans')?.value).toBe('Inter, ui-sans-serif');
     });
 
+    it('takes the size from a [size, lineHeight] pair, which is two plain strings', () => {
+      // Tailwind documents this form. Telling stacks from tuples by "every element is a string"
+      // looked equivalent and was not: it joined into "0.875rem, 1.25rem", a value that can never
+      // match Figma's 14px and, if the name matched anyway, was reported as a candidate carrying
+      // garbage — a silently wrong read rather than a counted skip.
+      const { byName } = parse(
+        "export default { theme: { fontSize: { sm: ['0.875rem', '1.25rem'] } } };",
+      );
+      expect(byName.get('text-sm')?.value).toBe('0.875rem');
+    });
+
     it('takes the size from a [size, options] font-size entry', () => {
       const { byName } = parse(
         "export default { theme: { fontSize: { sm: ['0.875rem', { lineHeight: '1.25rem' }] } } };",
@@ -239,6 +252,7 @@ export default <Partial<Config>>{
         value: '#00DC82',
         utility: 'green-400',
         category: 'color',
+        utilityIsClass: true,
       });
       expect(byName.get('color-green-50')?.value).toBe('#EFFDF5');
       // A stack truncated by a spread keeps its primary family — the name a Figma font token uses.
@@ -367,6 +381,8 @@ describe('parseUnoConfig', () => {
         value: '#6266F0',
         utility: 'primary-500',
         category: 'color',
+        // A config-declared scale is exactly what the framework generates classes from.
+        utilityIsClass: true,
       });
     });
 

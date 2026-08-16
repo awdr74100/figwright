@@ -16,11 +16,14 @@ const fig = (
   ...(collection === undefined ? {} : { collection }),
 });
 
+// A token as a Tailwind v4 `@theme` block produces it: a custom property whose namespace-derived
+// utility is a class the framework really generates (utilityIsClass). A loose `:root` variable
+// elsewhere in the repo carries the same shape *without* that flag — see the test below.
 const proj = (name: string, value: string, utility?: string, category?: string): ProjectToken => ({
   name,
   value,
   cssVar: `var(--${name})`,
-  ...(utility === undefined ? {} : { utility }),
+  ...(utility === undefined ? {} : { utility, utilityIsClass: true }),
   ...(category === undefined ? {} : { category }),
 });
 

@@ -278,6 +278,41 @@ describe('handleTokenMap', () => {
     }
   });
 
+  it('reports the skip count even when nothing at all could be read', async () => {
+    // The chained note left this unreachable in exactly the case counting was added for: a config
+    // whose only colour scale is `require('tailwindcss/colors')` yields zero tokens *and* one skip,
+    // and said "its theme declares no scales" — the message the chain exists to stop being wrong.
+    const v3 = await v3Project({
+      'tailwind.config.js':
+        "module.exports = { theme: { colors: require('tailwindcss/colors') } };",
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.note).toMatch(/1 theme entr\(ies\) were skipped/);
+      expect(result.note).not.toMatch(/declares no scales/);
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
+  it('does not offer a utility ref for a custom property outside @theme', async () => {
+    // `utility` is derived from the name alone, so a loose `:root { --color-brand }` yields
+    // `brand` — but nothing generates `bg-brand` from a stray custom property. Pooled beside a
+    // config on a utility-first project, it must still be referenced as the var().
+    const v3 = await v3Project({
+      'tailwind.config.js': 'module.exports = { theme: { extend: {} } };',
+      'src/theme.css': ':root { --color-primary-500: #6266F0; }',
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+      expect(primary?.candidate?.ref).toBe('var(--color-primary-500)');
+      expect(primary?.candidate?.utility).toBeUndefined();
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
   it('says an empty theme is empty rather than unreadable', async () => {
     // `theme: { extend: {} }` was read perfectly well. Reporting it as unreadable would send the
     // caller hunting for a parsing problem instead of concluding the project has no theme tokens.
