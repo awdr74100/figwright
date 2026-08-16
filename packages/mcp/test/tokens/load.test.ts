@@ -89,6 +89,43 @@ describe('resolveTokenSource', () => {
     });
   });
 
+  it('does not let a foreign @theme block claim to generate a class', async () => {
+    // The CSS reader marks a declaration inside `@theme` as utility-generating, which is true of
+    // Tailwind v4 and of nothing else. A repo migrated from v4 to UnoCSS (or to v3) can still carry
+    // such a block, and pooling it kept the flag — so `--color-leftover` was offered to codegen as
+    // `leftover`, i.e. `bg-leftover`, which neither framework compiles.
+    for (const [configName, config, dep] of [
+      [
+        'uno.config.ts',
+        "import { defineConfig, presetUno } from 'unocss'\nexport default defineConfig({ presets: [presetUno()], theme: { colors: { brand: '#111111' } } })",
+        { unocss: '^66.0.0' },
+      ],
+      [
+        'tailwind.config.js',
+        "module.exports = { theme: { colors: { brand: '#111111' } } };",
+        { tailwindcss: '^3.4.0' },
+      ],
+    ] as const) {
+      const dir = await mkdtemp(join(tmpdir(), 'load-residue-'));
+      try {
+        await writeFile(join(dir, 'package.json'), JSON.stringify({ devDependencies: dep }));
+        await writeFile(join(dir, configName), config);
+        await mkdir(join(dir, 'src'), { recursive: true });
+        await writeFile(join(dir, 'src', 'legacy.css'), '@theme { --color-leftover: #6266F0; }');
+
+        const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+        const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+        // The config's own scale still generates a class…
+        expect(byName.get('color-brand')?.utilityIsClass).toBe(true);
+        // …the foreign one does not, so it falls back to its var() reference.
+        expect(byName.get('color-leftover')?.utilityIsClass).toBeUndefined();
+        expect(byName.get('color-leftover')?.cssVar).toBe('var(--color-leftover)');
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
   it('caps the file list in a note instead of naming up to 200 paths', async () => {
     // A note is a diagnostic; naming every contributor buries the sentence that matters under a
     // wall of paths in the middle of a tool result.

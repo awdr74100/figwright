@@ -185,7 +185,15 @@ const loadJsConfigTokens = async (
     const key = `${token.name} ${token.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    tokens.push(token);
+    // The CSS reader marks a declaration inside `@theme` as generating a utility class, which is
+    // true of Tailwind v4 and of nothing else. On a project whose tokens come from a JS config,
+    // `@theme` is a foreign syntax that nothing compiles — leftover v4 residue in a repo since
+    // migrated to UnoCSS, or to v3 — so a pooled custom property never generates a class here
+    // whatever scope it sits in. Carrying the flag through emitted `bg-leftover` for a token that
+    // resolves to nothing, the one outcome this whole reader exists to avoid.
+    const pooled = { ...token };
+    delete pooled.utilityIsClass;
+    tokens.push(pooled);
   }
 
   const notes = [`read ${config.tokens.length} theme token(s) from ${configPath}`];
