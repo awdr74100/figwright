@@ -57,16 +57,21 @@ export const resolveTokenSource = (
   // Only the styling half of the profile decides this, so that's all it asks for.
   profile: Pick<ProjectProfile, 'styling'>,
   override: string | undefined,
-): { source: TokenSource | null; note?: string } => {
+): { source: TokenSource | null; note?: string; refusal?: string } => {
   if (override !== undefined) {
     // `.sass` is the indented syntax: newline-terminated declarations that this scanner's value
     // reader would run straight past, so repo-scss deliberately never walks it. Pointed at one
     // explicitly it must say so — read as CSS it returns nothing and then falls through to the
     // repo pool, whose note never mentions the file the caller actually asked for.
     if (/\.sass$/i.test(override)) {
+      // `refusal`, not `note`: this is an answer to what the *caller asked for*, so it must survive
+      // into whatever the loader falls back to. The plain `note` below is a description of the
+      // project, which the fallback replaces with its own — forwarding that one unconditionally
+      // produced "no token source detected; pass tokenSource; aggregated 1192 token(s) …", a
+      // sentence that contradicts itself in its own second clause.
       return {
         source: null,
-        note: `token source ${override} is the indented .sass syntax, which is not readable here; pass a .scss or CSS file`,
+        refusal: `token source ${override} is the indented .sass syntax, which is not readable here; pass a .scss or CSS file`,
       };
     }
     return { source: { path: override, kind: kindOfOverride(override, profile.styling.system) } };
@@ -186,7 +191,7 @@ export const loadProjectTokens = async (
   profile: ProjectProfile,
   tokenSourceOverride: string | undefined,
 ): Promise<LoadedProjectTokens> => {
-  const { source, note } = resolveTokenSource(profile, tokenSourceOverride);
+  const { source, note, refusal } = resolveTokenSource(profile, tokenSourceOverride);
 
   if (source !== null && source.kind === 'scss') {
     // An explicit `tokenSource` pointing at one .scss file: read exactly that, so a caller can
@@ -262,7 +267,7 @@ export const loadProjectTokens = async (
   // that walk does not visit; without this the whole styling system read nothing.
   if (profile.styling.system === 'scss') {
     const pooled = await loadScssPool(rootDir);
-    if (pooled.files.length > 0) return withPrefixedNote(pooled, note);
+    if (pooled.files.length > 0) return withPrefixedNote(pooled, refusal);
   }
 
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
@@ -277,7 +282,7 @@ export const loadProjectTokens = async (
         note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
         files,
       },
-      note,
+      refusal,
     );
   }
   return { tokens, source: null, ...(note === undefined ? {} : { note }), files };

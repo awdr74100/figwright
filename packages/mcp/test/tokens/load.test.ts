@@ -389,6 +389,29 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('does not tell a SCSS project that no token source was detected', async () => {
+    // `resolveTokenSource` says "no token source detected; pass tokenSource" for any project with no
+    // config file — true of every SCSS project, since there is no such thing to detect. Forwarded
+    // into the pool's own note it produced a sentence contradicting itself in its second clause:
+    // "no token source detected; pass tokenSource; aggregated 1192 token(s) from 22 .scss file(s)".
+    const dir = await mkdtemp(join(tmpdir(), 'load-note-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.note).not.toMatch(/no token source detected/);
+      expect(loaded.note).toMatch(/^aggregated 1 token/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('carries a refused override into the note of whatever it fell back to', async () => {
     // The refusal was computed and then dropped whenever a pool was found — which is every real
     // repo — so the answer described files the caller never asked about with no hint of a refusal.
@@ -414,9 +437,11 @@ describe('resolveTokenSource', () => {
     // The indented syntax is newline-terminated, which the value reader would run past — so the
     // walk never visits it. Pointed at one explicitly, saying so beats returning an empty pool
     // under a note that never mentions the file the caller asked for.
-    const { source, note } = resolveTokenSource(profileWith({ system: 'scss' }), 'src/_v.sass');
+    const { source, refusal } = resolveTokenSource(profileWith({ system: 'scss' }), 'src/_v.sass');
     expect(source).toBeNull();
-    expect(note).toMatch(/indented \.sass syntax/);
+    // A refusal of what the caller asked for, distinct from the ordinary "nothing detected" note —
+    // only the refusal survives into whatever the loader falls back to.
+    expect(refusal).toMatch(/indented \.sass syntax/);
   });
 
   it('does not report a token ambiguous with itself when both walks see it', async () => {
