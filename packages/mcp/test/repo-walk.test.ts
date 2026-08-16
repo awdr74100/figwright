@@ -89,3 +89,68 @@ describe('walkRepoFiles', () => {
     expect((await collect(root)).length).toBe(3);
   });
 });
+
+// The existing helper above sorts, which is why none of those tests could see the order the walk
+// actually produced. These use the raw sequence.
+const rawCollect = async (
+  root: string,
+  opts?: Parameters<typeof walkRepoFiles>[1],
+): Promise<string[]> => {
+  const out: string[] = [];
+  for await (const rel of walkRepoFiles(root, opts)) out.push(rel);
+  return out;
+};
+
+describe('walkRepoFiles ordering', () => {
+  it('returns the same sequence on every run over an unchanged repo', async () => {
+    // fdir crawls concurrently, so without an explicit order the same repo yields the same *set* in
+    // a different sequence each time — measured on Bulma, where consecutive runs disagreed on the
+    // first three files. It reached the output: token_map's note sampled different files each call,
+    // and where several files declare one token name the `from` handed back changed run to run.
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 60; i += 1) {
+      files[`pkg${i}/a.css`] = 'x';
+      files[`pkg${i}/nested/b.css`] = 'x';
+    }
+    const root = await make(files);
+    const runs: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
+      runs.push((await rawCollect(root, { extensions: ['.css'] })).join('\n'));
+    }
+    expect(new Set(runs).size).toBe(1);
+  });
+
+  it('orders shallowest first, then by code unit', async () => {
+    // Depth leads as a tie-break preference for the one caller that takes the *first* match rather
+    // than aggregating (findTailwindCssEntry): a Tailwind v4 entry is conventionally shallow, and
+    // plain a-z would rank `src/a/b/deep.css` above `src/index.css`.
+    const root = await make({
+      'src/a/b/deep.css': 'x',
+      'src/index.css': 'x',
+      'zz/later.css': 'x',
+      'root.css': 'x',
+    });
+    expect(await rawCollect(root, { extensions: ['.css'] })).toEqual([
+      'root.css',
+      'src/index.css',
+      'zz/later.css',
+      'src/a/b/deep.css',
+    ]);
+  });
+
+  it('orders by code unit rather than locale collation', async () => {
+    // localeCompare is environment-dependent, which is the property this ordering exists to remove.
+    // These are names an ICU collation orders differently from their code units: it folds case
+    // (`a` before `B`) and treats `ä` as a variant of `a` (before `z`), while the code units run
+    // B (0x42) < a (0x61) < z (0x7A) < ä (0xE4). Deliberately no case-only pair — a
+    // case-insensitive filesystem would collapse the two into one file.
+    const root = await make({ 'a.css': 'x', 'B.css': 'x', 'z.css': 'x', 'ä.css': 'x' });
+    expect(await rawCollect(root, { extensions: ['.css'] })).toEqual([
+      'B.css',
+      'a.css',
+      'z.css',
+      'ä.css',
+    ]);
+  });
+});

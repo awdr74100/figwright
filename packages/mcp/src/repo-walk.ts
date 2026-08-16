@@ -87,5 +87,39 @@ export async function* walkRepoFiles(
     .crawl(rootDir)
     .withPromise();
 
-  yield* files;
+  yield* files.toSorted(byDepthThenPath);
 }
+
+/**
+ * Canonical order for a repo listing: shallowest path first, then by code unit.
+ *
+ * Deterministic is the point, and the disorder was measured rather than assumed: fdir crawls
+ * directories concurrently, so two runs over the same unchanged repo return the same _set_ of files
+ * in a different order. On Bulma the first three differed between consecutive runs. That reached
+ * the output — `token_map`'s note listed a different sample of files each time, and on a repo where
+ * several files declare one token name the `from` handed back changed run to run. Same input,
+ * different answer.
+ *
+ * Depth leads rather than plain a-z as a tie-break _preference_, not as a fix for a proven bug: one
+ * caller takes the first match rather than aggregating (`findTailwindCssEntry`), and a Tailwind v4
+ * entry is conventionally shallow (`src/index.css`), so ranking `src/index.css` above
+ * `src/a/b/c.css` is the better guess where plain a-z would invert them. Note the limits — this
+ * does not disambiguate two candidates at the _same_ depth, and no fixture made that caller vary
+ * between runs in the first place, so its stability is a by-product here, not a repair.
+ *
+ * Compared with `<` rather than localeCompare on purpose — locale-aware collation varies by
+ * environment, which is the property this function exists to remove.
+ */
+const byDepthThenPath = (a: string, b: string): number => {
+  const byDepth = pathDepth(a) - pathDepth(b);
+  if (byDepth !== 0) return byDepth;
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+};
+
+/** How many directories deep a repo-relative posix path sits. */
+const pathDepth = (path: string): number => {
+  let n = 0;
+  for (const ch of path) if (ch === '/') n += 1;
+  return n;
+};
