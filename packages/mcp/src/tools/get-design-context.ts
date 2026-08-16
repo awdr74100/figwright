@@ -27,8 +27,10 @@ export const getDesignContextTool: ToolSpec = {
     "equal a project design token are annotated in projectTokens ({ '#6266F0': { ref, name, " +
     "matchedBy: ['value'] } }, or { matchedBy, candidates: [...] } when several tokens share the " +
     'value). An entry carrying `from` is a SCSS variable whose ref does NOT resolve on its own — ' +
-    "the file you write must @use that path first (`@use '<from>' as *` keeps the ref as given, a " +
-    'plain @use namespaces it); emitting the ref without that import is a compile error. ' +
+    'the file you write must @use it first, and `from` is REPO-relative while Sass resolves @use ' +
+    'against the importing file, so re-resolve it from where you are writing ' +
+    "(src/components/x.scss imports '../styles/tokens'). `as *` keeps the ref as given, a " +
+    'namespaced @use requires prefixing it; emitting the ref without the import is a compile error. ' +
     "matchedBy: ['value'] marks every entry as name-blind value-equality evidence — a " +
     'hypothesis to verify, not a resolved binding: emit the ref only when the token fits the ' +
     'context semantically, keep the raw value otherwise, and let a bound Figma variable win over ' +

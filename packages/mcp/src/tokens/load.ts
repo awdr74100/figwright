@@ -97,12 +97,31 @@ const NAMED_FILES = 6;
 // namespaces that import. Verified against dart-sass — under a plain `@use './tokens'` the bare
 // name does not compile and the reference is `tokens.$color-primary-500`.
 const SCSS_USE_NOTE =
-  "a SCSS ref only resolves once the consuming file imports its `from` file — add `@use '<from>' as *` to keep the ref as written, or follow the project's existing @use style and prefix the ref with that namespace";
+  "a SCSS ref only resolves once the consuming file imports its `from` file. `from` is repo-relative and Sass resolves @use against the *importing* file, so re-resolve it from wherever the code is being written (a file in src/components imports '../styles/tokens', not the repo-relative path verbatim). `@use '<resolved>' as *` keeps the ref as written; a namespaced @use instead requires prefixing the ref with that namespace";
 
 const listFiles = (files: readonly string[]): string =>
   files.length <= NAMED_FILES
     ? files.join(', ')
     : `${files.slice(0, NAMED_FILES).join(', ')} (+${files.length - NAMED_FILES} more)`;
+
+/**
+ * Drop entries that are the same token seen twice — identical in name, value _and_ reference form.
+ * A `:root { --brand }` block in a `.scss` file and the compiled `.css` committed beside it are one
+ * declaration read through two walks, and leaving both makes the join report the token ambiguous
+ * with itself: an exact name+value hit degrades to `medium` with `ambiguousWith: ['brand']`.
+ *
+ * Identity includes the declaring file, so two `.scss` files declaring the same name are _not_
+ * collapsed — those are genuinely different declarations, and which one a ref points at matters.
+ */
+const dedupeTokens = (tokens: readonly ProjectToken[]): ProjectToken[] => {
+  const seen = new Set<string>();
+  return tokens.filter(t => {
+    const key = [t.name, t.value, t.cssVar ?? '', t.scssVar ?? '', t.from ?? ''].join('\u0000');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 /** Read one file, or null when it isn't readable — a missing token source is a note, not a throw. */
 const readOr = async (rootDir: string, rel: string): Promise<string | null> => {
@@ -138,7 +157,7 @@ export const loadProjectTokens = async (
       };
     }
     return {
-      tokens: [...parseScssVariables(body, source.path), ...parseCssCustomProperties(body)],
+      tokens: [...parseScssVariables(body, source.path), ...parseCssCustomProperties(body, true)],
       source: source.path,
       files: [source.path],
       note: SCSS_USE_NOTE,
@@ -201,7 +220,7 @@ export const loadProjectTokens = async (
           ? ''
           : `; also pooled ${css.tokens.length} custom propert(ies) from ${css.files.length} .css file(s): ${listFiles(css.files)}`;
       return {
-        tokens: [...scss.tokens, ...css.tokens],
+        tokens: dedupeTokens([...scss.tokens, ...css.tokens]),
         source: null,
         note: `aggregated ${scss.tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
         files: [...scss.files, ...css.files],

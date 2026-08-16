@@ -78,6 +78,27 @@ describe('joinTokens', () => {
     expect(m?.candidate?.from).toBe('src/_b.scss');
   });
 
+  it('caps a name-only match that cannot say which file declared the name', () => {
+    // Repeats of a CSS name differ only in value and share a ref, so picking the first was free.
+    // A SCSS ref resolves through its declaring file, so the same shortcut claims a certainty the
+    // name does not carry — the Figma side here is a FLOAT, so no value-match can break the tie.
+    const twoFiles: ProjectToken[] = [
+      { name: 'radius-lg', value: '4px', scssVar: '$radius-lg', from: 'src/_a.scss' },
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_b.scss' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], twoFiles, { threshold: 0.7 });
+    expect(m?.candidate?.confidence).toBeLessThan(1);
+    expect(m?.status).not.toBe('high');
+  });
+
+  it('does not cap a name-only match when one file declares the name', () => {
+    const oneFile: ProjectToken[] = [
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_a.scss' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], oneFile, { threshold: 0.7 });
+    expect(m?.status).toBe('high');
+  });
+
   it('resolves a map-file override against a SCSS variable, with or without the sigil', () => {
     const scssOnly: ProjectToken[] = [
       { name: 'brand-blue', value: '#6266F0', scssVar: '$brand-blue', from: 'src/_t.scss' },

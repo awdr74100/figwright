@@ -487,7 +487,18 @@ const joinTokenScan = (
     // below the high bar so it reads as "name match, verify the value" rather than a confirmed reuse.
     const candHex = normHex(nameMatch.token.value);
     const valueDisagrees = figmaHex !== null && candHex !== null && candHex !== figmaHex;
-    const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
+    // A name matched by name alone cannot say *which* file declared it when several do. That was
+    // harmless while repeats of a name differed only in value — the ref was identical either way —
+    // but a SCSS token's ref only resolves through its declaring file, so picking the first and
+    // reporting confidence 1 claims a certainty the name does not carry. Cap it to the same
+    // "verify me" level the value-ambiguous path uses, rather than invent a winner.
+    const fileAmbiguous =
+      nameMatch.token.from !== undefined &&
+      projectTokens.some(t => t.name === nameMatch.token.name && t.from !== nameMatch.token.from);
+    const confidence = Math.min(
+      valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score,
+      fileAmbiguous ? 0.7 : 1,
+    );
     return {
       ...base,
       candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.utilityFirst === true),

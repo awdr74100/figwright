@@ -158,9 +158,13 @@ const scopeRank = (scope: string, ancestors: readonly string[]): number => {
  *
  * Order is by {@linkcode scopeRank}, then document order, so the first entry for a name is its base
  * declaration — what `bestNameMatch` and override refs resolve to. Pure — no filesystem.
+ *
+ * `scssSyntax` when the text came from a `.scss` file. The declarations are identical, but the
+ * syntax around them is Sass: without it a `//` comment swallows the following declaration, and one
+ * containing a `}` swallows the whole file.
  */
-export const parseCssCustomProperties = (css: string): ProjectToken[] => {
-  const declarations = scanCustomProperties(css)
+export const parseCssCustomProperties = (css: string, scssSyntax = false): ProjectToken[] => {
+  const declarations = scanCustomProperties(css, scssSyntax)
     .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
     .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
 

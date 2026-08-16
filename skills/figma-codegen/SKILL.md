@@ -73,10 +73,13 @@ Run the grounded tools against the selection, then generate — **trust them ove
      — compose the utility (`p-4`/`gap-4`, `leading-7`, `font-bold`), **not** an arbitrary
      `p-[16px]`. This is **not** a gap.
    - `from` (a SCSS variable): the ref does **not** resolve on its own. The file you write must
-     import the declaring file — `@use '<from>' as *` keeps the ref as given, or follow the
-     project's existing `@use` style and prefix the ref with that namespace (a plain
-     `@use './tokens'` makes `$color-primary-500` into `tokens.$color-primary-500`). Emitting the
-     ref without the import is a **compile error**, not a style nit.
+     import the declaring file, and `from` is **repo-relative** while Sass resolves `@use` against
+     the _importing_ file — so re-resolve it from where you are writing: from
+     `src/components/card.scss`, `from: src/styles/_tokens.scss` becomes
+     `@use '../styles/tokens' as *`, never the repo-relative path verbatim. `as *` keeps the ref as
+     given; the project's own `@use` style may namespace it instead (`@use '../styles/tokens'` makes
+     `$color-primary-500` into `tokens.$color-primary-500`). Emitting the ref without the import is
+     a **compile error**, not a style nit.
    - `unmapped`: use the value but call out the gap (offer to add it to the token source); don't
      hardcode silently.
    - `figmaModes` (`{ Light: …, Dark: … }`, with the file's theme axes on `themedCollections`): the

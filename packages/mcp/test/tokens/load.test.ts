@@ -295,6 +295,27 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('does not report a token ambiguous with itself when both walks see it', async () => {
+    // A `:root` block in a .scss file and the compiled .css committed beside it are one
+    // declaration read through two walks. Left duplicated, an exact name+value hit degrades to
+    // 'medium' with ambiguousWith naming the token itself.
+    const dir = await mkdtemp(join(tmpdir(), 'load-dup-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), ':root { --brand: #6266F0; }');
+      await writeFile(join(dir, 'src', 'compiled.css'), ':root { --brand: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens.filter(t => t.name === 'brand')).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reads a single .scss file when tokenSource names one', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'load-scss-one-'));
     try {

@@ -52,7 +52,7 @@ export const aggregateRepoScssTokens = async (rootDir: string): Promise<Aggregat
     } catch {
       continue;
     }
-    const parsed = [...parseScssVariables(body, rel), ...parseCssCustomProperties(body)];
+    const parsed = [...parseScssVariables(body, rel), ...parseCssCustomProperties(body, true)];
     if (parsed.length > 0) {
       tokens.push(...parsed);
       files.push(rel);

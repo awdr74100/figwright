@@ -160,6 +160,24 @@ describe('scanCustomProperties', () => {
   });
 });
 
+describe('scanCustomProperties in a .scss file', () => {
+  const flatCss = (src: string): string[] =>
+    scanCustomProperties(src, true).map(d => `${d.name}=${d.value}`);
+
+  it('skips // comments, which the plain-CSS dialect does not recognise', () => {
+    // A `.scss` file's custom properties are ordinary CSS, but the syntax around them is Sass.
+    // Read with the CSS dialect the comment stays in the prelude and the next declaration is lost.
+    expect(
+      flatCss(':root {\n  // brand palette\n  --brand: #6266F0;\n  --accent: #FF0000;\n}'),
+    ).toEqual(['brand=#6266F0', 'accent=#FF0000']);
+    // Worse when the comment contains a brace: the phantom `}` pops the block and everything after
+    // it fails the "must be inside a block" rule.
+    expect(flatCss(':root { // dark theme uses } here\n --brand: #6266F0; }')).toEqual([
+      'brand=#6266F0',
+    ]);
+  });
+});
+
 describe('scanScssVariables', () => {
   /** `name=value` per declaration, in scan order. */
   const flat = (scss: string): string[] => scanScssVariables(scss).map(d => `${d.name}=${d.value}`);
@@ -210,6 +228,41 @@ describe('scanScssVariables', () => {
       ['top', ''],
       ['inner', '.card'],
     ]);
+  });
+
+  it('does not read `//` inside an unquoted url() as a comment', () => {
+    // Stylesheets are full of these, and dart-sass parses unquoted url contents raw. Read as a
+    // comment, the phantom comment eats the rest of the line including its `)` and `;`: the rule
+    // never closes, so every later variable is tagged rule-scoped and dropped by the caller.
+    expect(flat('.hero { background: url(http://cdn.io/a.png); }\n$primary: #6266F0;')).toEqual([
+      'primary=#6266F0',
+    ]);
+    // A url in prelude position — the commonest first line of a real .scss file.
+    expect(flat('@import url(https://fonts.googleapis.com/css2?family=Inter);\n$a: 1px;')).toEqual([
+      'a=1px',
+    ]);
+    // Protocol-relative, where the `//` opens the url's own value.
+    expect(flat('$cdn: url(//cdn.io/a.png);\n$other: 4px;')).toEqual([
+      'cdn=url(//cdn.io/a.png)',
+      'other=4px',
+    ]);
+    // Nested parens and quotes inside a url survive whole.
+    expect(flat('$n: url(data:image/svg+xml,%3Csvg(x)%3E);\n$after: 2px;')).toEqual([
+      'n=url(data:image/svg+xml,%3Csvg(x)%3E)',
+      'after=2px',
+    ]);
+  });
+
+  it('strips every trailing flag, not just the last', () => {
+    // `!default !global` on one declaration is legal Sass; leaving one on makes the value a
+    // non-value that can never match anything on the Figma side.
+    expect(flat('$b: 4px !default !global;')).toEqual(['b=4px']);
+  });
+
+  it('keeps a value whose interpolation braces would otherwise end it', () => {
+    // `}` at paren depth 0 ends a declaration, but an interpolation's `}` closes the interpolation.
+    expect(flat('$c: #{$half} 0;')).toEqual(['c=#{$half} 0']);
+    expect(flat('$d: 0 #{$a} 0 #{$b};\n$e: 1px;')).toEqual(['d=0 #{$a} 0 #{$b}', 'e=1px']);
   });
 
   it('degrades on malformed input rather than throwing', () => {

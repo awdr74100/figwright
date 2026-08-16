@@ -81,9 +81,11 @@ export const tokenMapTool: ToolSpec = {
     'properties), on a Tailwind v3 or UnoCSS project from the theme scales in its JS/TS config ' +
     '(whose tokens have no var() form: reference them by candidate.ref, the utility base), and on a ' +
     'SCSS project from its $variables. A SCSS candidate carries candidate.from, the file declaring ' +
-    'it: candidate.ref does NOT resolve on its own — the consuming file must @use that file, and ' +
-    "how it is written decides the ref's final form (`@use '<from>' as *` keeps $name; a plain " +
-    "`@use './tokens'` makes it tokens.$name). Emitting the ref without the import is a compile " +
+    'it: candidate.ref does NOT resolve on its own — the consuming file must @use that file. from ' +
+    'is REPO-relative and Sass resolves @use against the importing file, so re-resolve it from the ' +
+    "file being written (from src/components/card.scss it is '../styles/tokens', never the " +
+    'repo-relative path verbatim). `as *` keeps the ref as written; a namespaced @use requires ' +
+    'prefixing the ref with that namespace. Emitting the ref without the import is a compile ' +
     'error. The ' +
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
