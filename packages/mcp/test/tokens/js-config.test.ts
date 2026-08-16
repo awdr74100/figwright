@@ -198,6 +198,16 @@ describe('parseTailwindConfig', () => {
       expect(byName.get('font-sans')?.value).toBe('Inter, ui-sans-serif');
     });
 
+    it('joins an array-valued shadow, which is a comma-separated CSS list', () => {
+      // Both frameworks type boxShadow as `string | string[]`, and Tailwind compiles the array to
+      // both shadows — verified against the compiler. Taking element 0 would drop every layer but
+      // the first, so the token's value would no longer be the shadow the design actually has.
+      const { byName } = parse(
+        "export default { theme: { boxShadow: { multi: ['0 1px 2px #0001', '0 4px 8px #0002'] } } };",
+      );
+      expect(byName.get('shadow-multi')?.value).toBe('0 1px 2px #0001, 0 4px 8px #0002');
+    });
+
     it('takes the size from a [size, lineHeight] pair, which is two plain strings', () => {
       // Tailwind documents this form. Telling stacks from tuples by "every element is a string"
       // looked equivalent and was not: it joined into "0.875rem, 1.25rem", a value that can never

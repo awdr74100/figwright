@@ -47,10 +47,14 @@ interface Scale {
    */
   leafKey?: string;
   /**
-   * Whether an array value is one value written in parts (a font stack) rather than a value plus
-   * its options. Only the font-family scales are; everything else that accepts an array uses it for
-   * `[value, …options]`, and Tailwind documents `fontSize: { sm: ['0.875rem', '1.25rem'] }` — a
-   * size and a line-height — which joined into "0.875rem, 1.25rem" and could then match nothing.
+   * Whether an array value is one value written in parts, rather than a value plus its options.
+   * True exactly for the scales whose CSS value is a comma-separated list: a font stack, and a
+   * shadow (both frameworks type `boxShadow` as `string | string[]`, and Tailwind compiles `['0 1px
+   * 2px #0001', '0 4px 8px #0002']` to both shadows — verified against the compiler).
+   *
+   * Everywhere else an array is `[value, …options]`: Tailwind documents `fontSize: { sm:
+   * ['0.875rem', '1.25rem'] }` — a size and a line-height — which joining turned into "0.875rem,
+   * 1.25rem", a value that matches nothing.
    */
   joinArray?: boolean;
 }
@@ -73,7 +77,7 @@ const V3_SHARED_SCALES: readonly Scale[] = [
   { key: 'letterSpacing', prefix: 'tracking-', category: 'letter-spacing' },
   { key: 'lineHeight', prefix: 'leading-', category: 'line-height' },
   { key: 'borderRadius', prefix: 'radius-', category: 'radius' },
-  { key: 'boxShadow', prefix: 'shadow-', category: 'shadow' },
+  { key: 'boxShadow', prefix: 'shadow-', category: 'shadow', joinArray: true },
   { key: 'maxWidth', prefix: 'container-', category: 'container' },
   { key: 'blur', prefix: 'blur-', category: 'blur' },
 ];
@@ -115,7 +119,7 @@ const UNO_WIND4_SCALES: readonly Scale[] = [
   { key: 'tracking', prefix: 'tracking-', category: 'letter-spacing' },
   { key: 'leading', prefix: 'leading-', category: 'line-height' },
   { key: 'radius', prefix: 'radius-', category: 'radius' },
-  { key: 'shadow', prefix: 'shadow-', category: 'shadow' },
+  { key: 'shadow', prefix: 'shadow-', category: 'shadow', joinArray: true },
   { key: 'breakpoint', prefix: 'breakpoint-', category: 'breakpoint' },
   { key: 'container', prefix: 'container-', category: 'container' },
   { key: 'blur', prefix: 'blur-', category: 'blur' },
