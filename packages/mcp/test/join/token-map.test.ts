@@ -91,6 +91,17 @@ describe('joinTokens', () => {
     expect(m?.status).not.toBe('high');
   });
 
+  it('does not cap a name-only match because a pooled custom property has no file', () => {
+    // A custom property carries no `from` at all. Counting that absence as "a different declaring
+    // file" capped every name-only match on the mirror layout, where exactly one file declares it.
+    const mixed: ProjectToken[] = [
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_t.scss' },
+      { name: 'radius-lg', value: '8px', cssVar: 'var(--radius-lg)' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], mixed, { threshold: 0.7 });
+    expect(m?.status).toBe('high');
+  });
+
   it('does not cap a name-only match when one file declares the name', () => {
     const oneFile: ProjectToken[] = [
       { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_a.scss' },

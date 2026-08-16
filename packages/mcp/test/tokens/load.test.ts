@@ -295,6 +295,47 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('collapses the mirror layout into one token with the import-free ref', async () => {
+    // `$brand` plus `:root { --brand: #{$brand} }` in one file is one logical token with two
+    // reference forms — the idiomatic modern layout this reader set out to support. Left as two,
+    // an exact name+value hit degraded to 'medium' and reported the token ambiguous with itself.
+    // The custom property wins because var(--brand) compiles from any consumer with no @use at all.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', '_tokens.scss'),
+        '$brand: #6266F0;\n$only-scss: #FF0000;\n:root { --brand: #6266F0; }',
+      );
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+      expect(loaded.tokens.filter(t => t.name === 'brand')).toHaveLength(1);
+      expect(byName.get('brand')?.cssVar).toBe('var(--brand)');
+      expect(byName.get('brand')?.scssVar).toBeUndefined();
+      // A variable with no mirror keeps its own ref and declaring file.
+      expect(byName.get('only-scss')?.scssVar).toBe('$only-scss');
+      expect(byName.get('only-scss')?.from).toBe('src/_tokens.scss');
+      // The note counts what the result contains, not the raw walks.
+      expect(loaded.note).toMatch(/aggregated 2 token\(s\)/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a .sass override instead of silently reading nothing', () => {
+    // The indented syntax is newline-terminated, which the value reader would run past — so the
+    // walk never visits it. Pointed at one explicitly, saying so beats returning an empty pool
+    // under a note that never mentions the file the caller asked for.
+    const { source, note } = resolveTokenSource(profileWith({ system: 'scss' }), 'src/_v.sass');
+    expect(source).toBeNull();
+    expect(note).toMatch(/indented \.sass syntax/);
+  });
+
   it('does not report a token ambiguous with itself when both walks see it', async () => {
     // A `:root` block in a .scss file and the compiled .css committed beside it are one
     // declaration read through two walks. Left duplicated, an exact name+value hit degrades to

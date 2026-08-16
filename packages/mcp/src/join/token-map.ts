@@ -494,7 +494,15 @@ const joinTokenScan = (
     // "verify me" level the value-ambiguous path uses, rather than invent a winner.
     const fileAmbiguous =
       nameMatch.token.from !== undefined &&
-      projectTokens.some(t => t.name === nameMatch.token.name && t.from !== nameMatch.token.from);
+      projectTokens.some(
+        t =>
+          t.name === nameMatch.token.name &&
+          // Only another *file-bound* token makes the choice ambiguous. A pooled custom property
+          // has no `from` at all, and counting its absence as "a different file" capped every
+          // name-only match on the mirror layout, where exactly one file declares the name.
+          t.from !== undefined &&
+          t.from !== nameMatch.token.from,
+      );
     const confidence = Math.min(
       valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score,
       fileAmbiguous ? 0.7 : 1,

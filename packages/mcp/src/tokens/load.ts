@@ -58,6 +58,16 @@ export const resolveTokenSource = (
   override: string | undefined,
 ): { source: TokenSource | null; note?: string } => {
   if (override !== undefined) {
+    // `.sass` is the indented syntax: newline-terminated declarations that this scanner's value
+    // reader would run straight past, so repo-scss deliberately never walks it. Pointed at one
+    // explicitly it must say so — read as CSS it returns nothing and then falls through to the
+    // repo pool, whose note never mentions the file the caller actually asked for.
+    if (/\.sass$/i.test(override)) {
+      return {
+        source: null,
+        note: `token source ${override} is the indented .sass syntax, which is not readable here; pass a .scss or CSS file`,
+      };
+    }
     return { source: { path: override, kind: kindOfOverride(override, profile.styling.system) } };
   }
 
@@ -105,22 +115,53 @@ const listFiles = (files: readonly string[]): string =>
     : `${files.slice(0, NAMED_FILES).join(', ')} (+${files.length - NAMED_FILES} more)`;
 
 /**
- * Drop entries that are the same token seen twice — identical in name, value _and_ reference form.
- * A `:root { --brand }` block in a `.scss` file and the compiled `.css` committed beside it are one
- * declaration read through two walks, and leaving both makes the join report the token ambiguous
- * with itself: an exact name+value hit degrades to `medium` with `ambiguousWith: ['brand']`.
+ * Collapse entries that describe the same token, keeping the reference a caller can use with the
+ * least ceremony.
  *
- * Identity includes the declaring file, so two `.scss` files declaring the same name are _not_
- * collapsed — those are genuinely different declarations, and which one a ref points at matters.
+ * Two shapes reach here as duplicates. The plain one is a single declaration read through two walks
+ * — a `:root` block in a `.scss` file and the compiled `.css` committed beside it. The interesting
+ * one is the _mirror_, which this reader deliberately set out to support and which is the idiomatic
+ * modern layout:
+ *
+ *     $brand: #6266F0;
+ *     :root { --brand: #{$brand}; }
+ *
+ * That is one logical token with two reference forms, not two tokens — and left as two, an exact
+ * name+value hit degraded to `medium` and reported the token `ambiguousWith` _itself_, the very
+ * failure this function exists to prevent.
+ *
+ * Where both forms exist for one name+value the custom property wins: `var(--brand)` compiles from
+ * any consumer with no import at all, while `$brand` needs an `@use` resolved against the consuming
+ * file. Preferring the self-sufficient ref is the point of having a choice.
+ *
+ * Two _different_ `.scss` files declaring one name are still kept apart — those are genuinely
+ * different declarations, and which one a ref points at decides whether it resolves.
  */
 const dedupeTokens = (tokens: readonly ProjectToken[]): ProjectToken[] => {
-  const seen = new Set<string>();
-  return tokens.filter(t => {
-    const key = [t.name, t.value, t.cssVar ?? '', t.scssVar ?? '', t.from ?? ''].join('\u0000');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const out: ProjectToken[] = [];
+  // name+value → where its winner sits in `out`. A SCSS variable is additionally keyed by its file,
+  // so two files declaring one name both survive; a custom property is keyed by name+value alone,
+  // since it needs no file to resolve.
+  const at = new Map<string, number>();
+  for (const token of tokens) {
+    const identity = `${token.name}\u0000${token.value}`;
+    const key = token.cssVar === undefined ? `${identity}\u0000${token.from ?? ''}` : identity;
+    const seen = at.get(key);
+    if (seen === undefined) {
+      at.set(key, out.length);
+      out.push(token);
+      continue;
+    }
+    // A custom property replaces the SCSS variable it mirrors, and collapses the pair into one.
+    if (token.cssVar !== undefined && out[seen]?.cssVar === undefined) out[seen] = token;
+  }
+
+  // Fold each SCSS variable into the mirroring custom property when one exists for the same
+  // name+value, so the pair is a single token whichever order the walks produced them in.
+  const mirrored = new Set(
+    out.filter(t => t.cssVar !== undefined).map(t => `${t.name}\u0000${t.value}`),
+  );
+  return out.filter(t => t.cssVar !== undefined || !mirrored.has(`${t.name}\u0000${t.value}`));
 };
 
 /** Read one file, or null when it isn't readable — a missing token source is a note, not a throw. */
@@ -215,14 +256,18 @@ export const loadProjectTokens = async (
       // returning only one of them would trade half the matches away. Both walks are already
       // aggregations, so this does not turn a precise source into a fuzzy one.
       const css = await aggregateRepoCssTokens(rootDir);
+      // Counted after collapsing, so the note describes the result rather than the raw walks — a
+      // repo that commits its compiled .css beside the .scss otherwise saw a number larger than
+      // the pool it was handed.
+      const pooled = dedupeTokens([...scss.tokens, ...css.tokens]);
       const cssNote =
         css.files.length === 0
           ? ''
-          : `; also pooled ${css.tokens.length} custom propert(ies) from ${css.files.length} .css file(s): ${listFiles(css.files)}`;
+          : ` and ${css.files.length} .css file(s): ${listFiles(css.files)}`;
       return {
-        tokens: dedupeTokens([...scss.tokens, ...css.tokens]),
+        tokens: pooled,
         source: null,
-        note: `aggregated ${scss.tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
+        note: `aggregated ${pooled.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
         files: [...scss.files, ...css.files],
       };
     }
