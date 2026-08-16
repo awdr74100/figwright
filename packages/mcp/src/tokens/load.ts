@@ -205,8 +205,18 @@ const readOr = async (rootDir: string, rel: string): Promise<string | null> => {
  * Load the project's design tokens: the detected/overridden source when there is one, else the
  * repo-wide custom-property aggregation (whose pool the joins filter — incidental vars never
  * surface on their own). Notes mirror what token_map has always reported.
+ *
+ * Whatever that finds, the answer is then checked against the possibility that the project
+ * _generates_ its tokens somewhere no walk looks — see {@linkcode withGeneratedTokensNote}.
  */
 export const loadProjectTokens = async (
+  rootDir: string,
+  profile: ProjectProfile,
+  tokenSourceOverride: string | undefined,
+): Promise<LoadedProjectTokens> =>
+  withGeneratedTokensNote(rootDir, await readTokenSource(rootDir, profile, tokenSourceOverride));
+
+const readTokenSource = async (
   rootDir: string,
   profile: ProjectProfile,
   tokenSourceOverride: string | undefined,
@@ -305,36 +315,63 @@ export const loadProjectTokens = async (
       refusal,
     );
   }
-  // Nothing anywhere. Before giving up, say whether this project *generates* its tokens: a build
-  // tool writes readable CSS/SCSS into build/ or dist/, which every walk here prunes, so the pool
-  // is empty for a project that has tokens and has committed them. The generic "pass tokenSource"
-  // does not say that, and this note is read by an agent that can act on it — naming the tool and
-  // the candidate files turns a dead end into one more call.
-  const emptyNote = await emptyPoolNote(rootDir, note);
   return withPrefixedNote(
-    { tokens, source: null, ...(emptyNote === undefined ? {} : { note: emptyNote }), files },
+    { tokens, source: null, ...(note === undefined ? {} : { note }), files },
     refusal,
   );
 };
 
 /**
- * Why the pool came back empty, in the form most useful to the caller. Falls back to whatever
- * `resolveTokenSource` said when no token build tool is involved.
+ * Append what the project's token _build tool_ generated, when the result does not already account
+ * for it.
+ *
+ * A build tool writes readable CSS/SCSS into `build/` or `dist/`, which every walk here prunes as a
+ * build artefact — so the file a caller actually wants sits in the one place we skip. This note is
+ * read by an agent that can act on it by calling again with `tokenSource`, which is why it names
+ * the tool and the candidate paths rather than saying "pass tokenSource".
+ *
+ * Applied to _every_ result, not only an empty one. The first version fired only when the pool came
+ * back with nothing, which is the clean-room shape: a Style Dictionary project with one unrelated
+ * stylesheet anywhere returned that stylesheet's incidental `--header-height` and said nothing at
+ * all about the three design tokens in `build/`. Confidently incomplete is worse than empty, since
+ * it looks like an answer.
  */
-const emptyPoolNote = async (
+const withGeneratedTokensNote = async (
   rootDir: string,
-  detectionNote: string | undefined,
-): Promise<string | undefined> => {
+  loaded: LoadedProjectTokens,
+): Promise<LoadedProjectTokens> => {
   const tool = detectTokenBuildTool(await readProjectDeps(rootDir));
-  if (tool === null) return detectionNote;
+  if (tool === null) return loaded;
 
-  const candidates = await findGeneratedStylesheets(rootDir);
-  const where =
-    candidates.length === 0
-      ? 'its output directory (commonly build/ or dist/) holds no committed .css or .scss — run its build, or commit the generated stylesheet'
-      : `its generated stylesheet is not scanned, because build/, dist/ and out/ are skipped as build artefacts. Re-run this tool with tokenSource set to the right one: ${candidates.join(', ')}`;
-  return `${tool} generates this project's design tokens, and ${where}`;
+  // Nothing to say about files this result already read — including an explicit `tokenSource`
+  // pointed straight at the generated stylesheet, which is exactly what the note asks for.
+  const alreadyRead = new Set(loaded.files);
+  const candidates = (await findGeneratedStylesheets(rootDir)).filter(f => !alreadyRead.has(f));
+
+  const found = loaded.tokens.length > 0;
+  if (candidates.length === 0) {
+    // Output already read, or never built. Only the second is worth saying, and only when nothing
+    // else was found — otherwise the caller has an answer and this is noise.
+    if (found) return loaded;
+    return withNote(
+      loaded,
+      `${tool} generates this project's design tokens, and its output directory (commonly build/ or dist/) holds no committed .css or .scss — run its build, or commit the generated stylesheet`,
+    );
+  }
+
+  // "also" and "may be incomplete" only make sense alongside an answer; without one this *is* the
+  // answer, and it replaces the generic "no token source detected" rather than trailing it.
+  const addition = found
+    ? `${tool} also generates design tokens into a directory this does not scan (build/, dist/ and out/ are skipped as build artefacts), so the tokens above may be incomplete. Re-run with tokenSource set to the right one: ${candidates.join(', ')}`
+    : `${tool} generates this project's design tokens, and its generated stylesheet is not scanned, because build/, dist/ and out/ are skipped as build artefacts. Re-run this tool with tokenSource set to the right one: ${candidates.join(', ')}`;
+  return found ? withNote(loaded, addition) : { ...loaded, note: addition };
 };
+
+/** Append a clause to a result's note, or make it the note when there was none. */
+const withNote = (loaded: LoadedProjectTokens, addition: string): LoadedProjectTokens => ({
+  ...loaded,
+  note: loaded.note === undefined ? addition : `${loaded.note}; ${addition}`,
+});
 
 /**
  * A JS/TS framework config: its theme scales **plus** the repo's CSS custom properties.
