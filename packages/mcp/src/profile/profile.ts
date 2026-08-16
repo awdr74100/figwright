@@ -286,7 +286,15 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: `found ${v3Config}`,
     };
   }
-  if (unoConfig !== undefined)
+  // …with one exception, which is what separates residue from a live setup. Tailwind v4 has no JS
+  // config by design, so its only root-level evidence *is* the CSS marker — and a CSS marker backed
+  // by an actual tailwindcss dependency is not leftovers. "UnoCSS for icons alongside Tailwind v4"
+  // is a common layout, and letting the uno config win it read the wrong token source and then told
+  // the caller "UnoCSS declares no CSS custom properties" about a project whose tokens are `@theme`
+  // custom properties.
+  const liveTailwindV4 =
+    input.tailwindCssEntry !== undefined && (depVersion !== undefined || hasV4Pkg);
+  if (unoConfig !== undefined && !liveTailwindV4)
     return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
 
   // Tailwind v4: CSS-first config, which has no JS config file to find.
@@ -308,13 +316,28 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
     };
   }
   // `unocss` is the umbrella package; `@unocss/*` covers a project that installs only the pieces it
-  // uses (the Nuxt and Vite modules both do). `@unocss/reset` is excluded: it is a bundle of
-  // stylesheets (normalize, eric-meyer, a Tailwind-compat reset) that any project can import
-  // without UnoCSS generating a single class, and treating it as evidence would flip a plain-CSS
-  // project to utility-first — bare `primary-500` refs and `framework-builtin` spacing steps that
-  // do not exist there.
+  // uses (the Nuxt and Vite modules both do, and both default to a wind preset). Excluded are the
+  // packages that carry no theme vocabulary and so generate no utility on their own: `reset` is a
+  // bundle of stylesheets any project can import, and the presets below add rules — icons, fonts,
+  // prose, attributify syntax — without a scale. "UnoCSS purely for icons" on an otherwise
+  // plain-CSS project is a real layout, and counting it flipped that project to utility-first,
+  // after which `token_map` answered a Figma `spacing/4` with `framework-builtin` and codegen
+  // emitted `p-4` — a class nothing there generates, so the padding silently vanished.
+  //
+  // Residual gap, deliberately not chased here: an *integration* package (`@unocss/vite`) whose
+  // config loads only non-vocabulary presets still reads as utility-first, because deciding that
+  // needs the config's `presets` array, which detection does not parse. The config-file branch
+  // above has the same limit.
+  const NON_VOCABULARY = new Set([
+    '@unocss/reset',
+    '@unocss/preset-icons',
+    '@unocss/preset-web-fonts',
+    '@unocss/preset-typography',
+    '@unocss/preset-attributify',
+    '@unocss/preset-tagify',
+  ]);
   const unoDep = Object.keys(deps).find(
-    d => d === 'unocss' || (d.startsWith('@unocss/') && d !== '@unocss/reset'),
+    d => d === 'unocss' || (d.startsWith('@unocss/') && !NON_VOCABULARY.has(d)),
   );
   if (unoDep !== undefined) return { system: 'unocss', reason: `${unoDep} in dependencies` };
 

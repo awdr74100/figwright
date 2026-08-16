@@ -472,6 +472,16 @@ export const parseTailwindConfig = (filePath: string, code: string): JsConfigTok
  */
 const AMBIGUOUS_KEYS: ReadonlySet<string> = new Set(['container']);
 
+/**
+ * Whether a preset reference carries a theme vocabulary at all. `presetIcons`, `presetAttributify`,
+ * `presetTypography` and friends add rules without one, so they cannot answer which vocabulary the
+ * theme speaks — and counting them as an answer disabled the key-shape fallback entirely: `presets:
+ * [presetIcons(), ...sharedPresets]` on a wind4 theme was ruled wind3 and dropped every wind4-only
+ * scale, silently.
+ */
+const isVocabularyPreset = (name: string, from: string | undefined): boolean =>
+  /(wind|uno|mini)/i.test(name) || /preset-(wind|uno|mini)/i.test(from ?? '');
+
 /** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */
 const discriminators = (mine: readonly Scale[], other: readonly Scale[]): readonly Scale[] =>
   mine.filter(s => !AMBIGUOUS_KEYS.has(s.key) && !other.some(o => o.key === s.key));
@@ -522,8 +532,9 @@ const unoScalesFor = ({ config, program, scopes }: ScalePickContext): readonly S
   for (const el of presets?.elements ?? []) {
     const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
     if (typeof name !== 'string') continue;
-    identified = true;
     const binding = bindings.get(name);
+    if (!isVocabularyPreset(name, binding?.from)) continue;
+    identified = true;
     if (
       /wind4/i.test(name) ||
       /wind4/i.test(binding?.imported ?? '') ||
@@ -532,10 +543,10 @@ const unoScalesFor = ({ config, program, scopes }: ScalePickContext): readonly S
       return UNO_WIND4_SCALES;
     }
   }
-  // A readable presets array that named no wind4 preset has answered the question — it is wind3.
-  // Only when nothing in it could be read (`presets: sharedPresets`, a spread, a helper) does the
-  // theme's own shape get a say; otherwise a plain `presetUno()` config would be re-judged by its
-  // keys, and `container` — an options object there, a scale in wind4 — would flip it.
+  // A readable vocabulary preset that is not wind4 has answered the question — it is wind3. Only
+  // when none could be read (`presets: sharedPresets`, a spread, a helper) does the theme's own
+  // shape get a say; otherwise a plain `presetUno()` config would be re-judged by its keys, and
+  // `container` — an options object there, a scale in wind4 — would flip it.
   if (identified) return UNO_WIND3_SCALES;
   return declaredCount(scopes, wind4Only) > declaredCount(scopes, wind3Only)
     ? UNO_WIND4_SCALES

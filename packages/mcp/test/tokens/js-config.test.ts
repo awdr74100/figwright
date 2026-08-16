@@ -529,6 +529,18 @@ describe('parseUnoConfig', () => {
       expect(tokens).toEqual([]);
     });
 
+    it('ignores presets that carry no theme vocabulary when reading the presets array', () => {
+      // presetIcons / presetAttributify / presetTypography add rules without a scale, so they
+      // cannot answer which vocabulary the theme speaks. Treating them as an answer disabled the
+      // key-shape fallback: this config was ruled wind3 and lost every wind4-only scale, silently.
+      const { byName } = parseUno(
+        `import presetIcons from '@unocss/preset-icons'
+         export default { presets: [presetIcons(), ...sharedPresets],
+           theme: { radius: { lg: '8px' }, text: { sm: { fontSize: '14px' } } } }`,
+      );
+      expect([...byName.keys()].toSorted()).toEqual(['radius-lg', 'text-sm']);
+    });
+
     it('keeps a readable presets array authoritative over the theme shape', () => {
       // A plain presetUno() config that happens to declare `container` must not be re-judged by its
       // keys — `container` is a scale in wind4 but an options object here, so flipping the

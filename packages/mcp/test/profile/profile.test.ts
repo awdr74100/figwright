@@ -8,6 +8,7 @@ import {
   analyzeProject,
   detectProfile,
   gatherProjectInput,
+  isUtilityFirst,
   type ProjectInput,
 } from '../../src/profile/profile.js';
 
@@ -152,6 +153,33 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.system).toBe('tailwind');
     expect(p.styling.configPath).toBe('src/app.css');
     expect(p.styling.tailwindVersion).toBe(4);
+  });
+
+  it('keeps Tailwind v4 when its CSS marker is backed by a real dependency', () => {
+    // "UnoCSS for icons alongside Tailwind v4" is a common layout, and v4 has no JS config by
+    // design — so its only root-level evidence is the CSS marker. A marker backed by an actual
+    // tailwindcss dependency is a live setup, not the migration residue the uno-first rule exists
+    // for; letting the uno config win read the wrong token source.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^4.0.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+        tailwindCssEntry: 'src/app.css',
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('src/app.css');
+    expect(p.styling.tailwindVersion).toBe(4);
+  });
+
+  it('does not treat an icons-only UnoCSS install as a utility-first project', () => {
+    // presetIcons adds rules without a theme vocabulary. Counted as evidence, a plain-CSS project
+    // became utility-first and codegen was told to write `p-4`, which nothing there generates.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/preset-icons': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unknown');
+    expect(isUtilityFirst(p.styling.system)).toBe(false);
   });
 
   it('does not treat @unocss/reset as evidence of UnoCSS', () => {
