@@ -105,6 +105,61 @@ describe('resolveTokenSource', () => {
     });
   });
 
+  it('falls back to the repo pool when the detected CSS entry declares nothing', async () => {
+    // Tailwind v4's commonest layout: the entry holds `@import "tailwindcss"` and pulls the @theme
+    // block in from a partial. The entry scan stops at the first file carrying either marker, so
+    // reading only that file returned zero tokens — silently, with no note — for a project with a
+    // complete design system.
+    const dir = await mkdtemp(join(tmpdir(), 'load-split-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { tailwindcss: '^4.0.0' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', 'app.css'),
+        '@import "tailwindcss";\n@import "./theme.css";\n',
+      );
+      await writeFile(join(dir, 'src', 'theme.css'), '@theme { --color-primary-500: #6266F0; }');
+
+      const profile = await analyzeProject(dir);
+      expect(profile.styling.configPath).toBe('src/app.css'); // the entry, which declares nothing
+      const loaded = await loadProjectTokens(dir, profile, undefined);
+      const token = loaded.tokens.find(t => t.name === 'color-primary-500');
+      expect(token?.value).toBe('#6266F0');
+      // Still inside @theme in its own file, so the utility is still a real class.
+      expect(token?.utilityIsClass).toBe(true);
+      expect(loaded.note).toMatch(/declares no custom properties/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps reading the detected entry when it does declare tokens', async () => {
+    // The fallback must not fire for a project whose entry is the real token source — pooling there
+    // would put incidental vars into a pool that is currently precise.
+    const dir = await mkdtemp(join(tmpdir(), 'load-entry-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { tailwindcss: '^4.0.0' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', 'app.css'),
+        '@import "tailwindcss";\n@theme { --color-primary-500: #6266F0; }',
+      );
+      await writeFile(join(dir, 'src', 'misc.css'), ':root { --header-height: 64px; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.source).toBe('src/app.css');
+      expect(loaded.tokens.map(t => t.name)).toEqual(['color-primary-500']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the utility ref on a real v4 @theme when the project also has a JS config', async () => {
     // `@config "../tailwind.config.js"` beside `@import "tailwindcss"` is v4's documented upgrade
     // path, so a genuine v4 project can have a root tailwind.config.* — which routes it to the

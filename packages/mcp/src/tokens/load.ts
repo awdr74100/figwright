@@ -129,7 +129,30 @@ export const loadProjectTokens = async (
         files: [],
       };
     }
-    return { tokens: parseCssCustomProperties(body), source: source.path, files: [source.path] };
+    const tokens = parseCssCustomProperties(body);
+    if (tokens.length > 0) return { tokens, source: source.path, files: [source.path] };
+    // The detected entry declares nothing, so it is not where the tokens live. Tailwind v4's
+    // commonest real layout does exactly this — `app.css` holds `@import "tailwindcss"` and pulls
+    // the `@theme` block in from a partial — and the entry scan stops at the first file carrying
+    // either marker. Reading only that file returned zero tokens, silently and with no note, for a
+    // project with a complete design system.
+    //
+    // Falling back to the repo-wide pool is the same mechanism the no-source path below uses, and
+    // it is strictly additive here: the alternative on this branch is nothing at all. (A theme
+    // *split* across the entry and a partial still reads only the entry — it has tokens, so it
+    // never reaches this fallback. That is a narrower miss, and pooling unconditionally would put
+    // incidental vars into a pool that is currently precise, which can cap a real match's
+    // confidence.)
+    const pooled = await aggregateRepoCssTokens(rootDir);
+    if (pooled.files.length > 0) {
+      return {
+        tokens: pooled.tokens,
+        source: null,
+        note: `${source.path} declares no custom properties — the tokens are not in the detected entry; aggregated ${pooled.tokens.length} from ${pooled.files.length} CSS file(s): ${listFiles(pooled.files)}`,
+        files: pooled.files,
+      };
+    }
+    return { tokens, source: source.path, files: [source.path] };
   }
 
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
