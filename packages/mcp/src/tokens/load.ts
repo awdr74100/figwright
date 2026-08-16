@@ -197,8 +197,14 @@ export const loadProjectTokens = async (
         files: [],
       };
     }
+    // Deduped for the same reason the aggregate path is, and it is *more* likely to matter here:
+    // a caller narrows tokenSource to the file that declares the tokens, which is exactly the file
+    // most likely to carry the mirror layout.
     return {
-      tokens: [...parseScssVariables(body, source.path), ...parseCssCustomProperties(body, true)],
+      tokens: dedupeTokens([
+        ...parseScssVariables(body, source.path),
+        ...parseCssCustomProperties(body, true),
+      ]),
       source: source.path,
       files: [source.path],
       note: SCSS_USE_NOTE,

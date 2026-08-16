@@ -327,6 +327,42 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('collapses the mirror on the explicit tokenSource path too', async () => {
+    // More likely to matter here than on the aggregate path: a caller narrows tokenSource to the
+    // file that declares the tokens, which is exactly the file that carries the mirror.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-one-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;\n:root { --brand: #6266F0; }');
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_t.scss');
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.tokens[0]?.cssVar).toBe('var(--brand)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a mirror whose two forms hold different values', async () => {
+    // Not a mirror of one token but two real declarations — the value-match join needs both.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-diff-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;\n:root { --brand: #FF0000; }');
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens.map(t => t.value).toSorted()).toEqual(['#6266F0', '#FF0000']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a .sass override instead of silently reading nothing', () => {
     // The indented syntax is newline-terminated, which the value reader would run past — so the
     // walk never visits it. Pointed at one explicitly, saying so beats returning an empty pool
