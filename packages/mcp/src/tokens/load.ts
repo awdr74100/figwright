@@ -5,7 +5,8 @@ import type { ProjectProfile, StylingSystem } from '../profile/profile.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
 import { aggregateRepoScssTokens } from './repo-scss.js';
-import { parseCssCustomProperties, parseScssVariables, type ProjectToken } from './tokens.js';
+import { parseScssFile } from './scss-file.js';
+import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
 
 // The one place that decides where a project's design tokens come from and reads them — shared by
 // token_map (the explicit join tool) and the design-context value-reverse annotation, so the two
@@ -115,54 +116,56 @@ const listFiles = (files: readonly string[]): string =>
     : `${files.slice(0, NAMED_FILES).join(', ')} (+${files.length - NAMED_FILES} more)`;
 
 /**
- * Collapse entries that describe the same token, keeping the reference a caller can use with the
- * least ceremony.
+ * Drop an entry that is the same declaration seen twice — identical in name, value and reference
+ * form. A `:root` block in a `.scss` file and the compiled `.css` committed beside it are one
+ * declaration read through two walks, and leaving both makes the join report the token ambiguous
+ * with itself.
  *
- * Two shapes reach here as duplicates. The plain one is a single declaration read through two walks
- * — a `:root` block in a `.scss` file and the compiled `.css` committed beside it. The interesting
- * one is the _mirror_, which this reader deliberately set out to support and which is the idiomatic
- * modern layout:
- *
- *     $brand: #6266F0;
- *     :root { --brand: #{$brand}; }
- *
- * That is one logical token with two reference forms, not two tokens — and left as two, an exact
- * name+value hit degraded to `medium` and reported the token `ambiguousWith` _itself_, the very
- * failure this function exists to prevent.
- *
- * Where both forms exist for one name+value the custom property wins: `var(--brand)` compiles from
- * any consumer with no import at all, while `$brand` needs an `@use` resolved against the consuming
- * file. Preferring the self-sufficient ref is the point of having a choice.
- *
- * Two _different_ `.scss` files declaring one name are still kept apart — those are genuinely
- * different declarations, and which one a ref points at decides whether it resolves.
+ * Mirrored `$var` / `--var` pairs are _not_ handled here: that is a per-file idiom and is collapsed
+ * where both halves of one file are in hand (see `parseScssFile`). Doing it across the pool let a
+ * `--x` in an unrelated stylesheet displace a genuinely declared `$x` from another file.
  */
 const dedupeTokens = (tokens: readonly ProjectToken[]): ProjectToken[] => {
-  const out: ProjectToken[] = [];
-  // name+value → where its winner sits in `out`. A SCSS variable is additionally keyed by its file,
-  // so two files declaring one name both survive; a custom property is keyed by name+value alone,
-  // since it needs no file to resolve.
-  const at = new Map<string, number>();
-  for (const token of tokens) {
-    const identity = `${token.name}\u0000${token.value}`;
-    const key = token.cssVar === undefined ? `${identity}\u0000${token.from ?? ''}` : identity;
-    const seen = at.get(key);
-    if (seen === undefined) {
-      at.set(key, out.length);
-      out.push(token);
-      continue;
-    }
-    // A custom property replaces the SCSS variable it mirrors, and collapses the pair into one.
-    if (token.cssVar !== undefined && out[seen]?.cssVar === undefined) out[seen] = token;
-  }
-
-  // Fold each SCSS variable into the mirroring custom property when one exists for the same
-  // name+value, so the pair is a single token whichever order the walks produced them in.
-  const mirrored = new Set(
-    out.filter(t => t.cssVar !== undefined).map(t => `${t.name}\u0000${t.value}`),
-  );
-  return out.filter(t => t.cssVar !== undefined || !mirrored.has(`${t.name}\u0000${t.value}`));
+  const seen = new Set<string>();
+  return tokens.filter(t => {
+    const key = [t.name, t.value, t.cssVar ?? '', t.scssVar ?? '', t.from ?? ''].join('\u0000');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 };
+
+/**
+ * The `.scss` pool plus the repo's `.css`, which is what a SCSS project's tokens are read from:
+ * there is no marker for "the" variables file, and real layouts run from one 952-entry file to ~90
+ * per-component ones.
+ */
+const loadScssPool = async (rootDir: string): Promise<LoadedProjectTokens> => {
+  const scss = await aggregateRepoScssTokens(rootDir);
+  const css = await aggregateRepoCssTokens(rootDir);
+  // Counted after collapsing, so the note describes the result rather than the raw walks.
+  const tokens = dedupeTokens([...scss.tokens, ...css.tokens]);
+  const cssNote =
+    css.files.length === 0 ? '' : ` and ${css.files.length} .css file(s): ${listFiles(css.files)}`;
+  return {
+    tokens,
+    source: null,
+    note: `aggregated ${tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
+    files: [...scss.files, ...css.files],
+  };
+};
+
+/**
+ * Put a reason in front of a result's note. Without this the caller's own diagnostic — "the file
+ * you named is the indented .sass syntax", "the file you named declares nothing" — was computed and
+ * then dropped on the floor whenever a pool was found, which is every real repo: the answer came
+ * back describing files the caller never asked about, with no hint that their request was refused.
+ */
+const withPrefixedNote = (
+  loaded: LoadedProjectTokens,
+  reason: string | undefined,
+): LoadedProjectTokens =>
+  reason === undefined ? loaded : { ...loaded, note: `${reason}; ${loaded.note ?? ''}`.trim() };
 
 /** Read one file, or null when it isn't readable — a missing token source is a note, not a throw. */
 const readOr = async (rootDir: string, rel: string): Promise<string | null> => {
@@ -200,15 +203,18 @@ export const loadProjectTokens = async (
     // Deduped for the same reason the aggregate path is, and it is *more* likely to matter here:
     // a caller narrows tokenSource to the file that declares the tokens, which is exactly the file
     // most likely to carry the mirror layout.
-    return {
-      tokens: dedupeTokens([
-        ...parseScssVariables(body, source.path),
-        ...parseCssCustomProperties(body, true),
-      ]),
-      source: source.path,
-      files: [source.path],
-      note: SCSS_USE_NOTE,
-    };
+    const own = parseScssFile(body, source.path);
+    if (own.length > 0) {
+      return { tokens: own, source: source.path, files: [source.path], note: SCSS_USE_NOTE };
+    }
+    // The named file declares nothing — SCSS's commonest entry shape is a barrel
+    // (`main.scss` = `@use './tokens'; @use './mixins';`), and reading only it returned an empty
+    // pool under a note that never said so, leaving every Figma variable unmapped. Same fallback
+    // the CSS branch below has for the same shape.
+    return withPrefixedNote(
+      await loadScssPool(rootDir),
+      `${source.path} declares no tokens of its own — it looks like an entry that imports them`,
+    );
   }
 
   if (source !== null && source.kind !== 'css')
@@ -255,28 +261,8 @@ export const loadProjectTokens = async (
   // source. Checked before the .css pool because a SCSS project's tokens are in .scss files, which
   // that walk does not visit; without this the whole styling system read nothing.
   if (profile.styling.system === 'scss') {
-    const scss = await aggregateRepoScssTokens(rootDir);
-    if (scss.files.length > 0) {
-      // Pooled with the repo's .css for the same reason the JS-config path pools it: a project can
-      // keep its Sass variables in .scss and a global `:root` block in a plain .css file, and
-      // returning only one of them would trade half the matches away. Both walks are already
-      // aggregations, so this does not turn a precise source into a fuzzy one.
-      const css = await aggregateRepoCssTokens(rootDir);
-      // Counted after collapsing, so the note describes the result rather than the raw walks — a
-      // repo that commits its compiled .css beside the .scss otherwise saw a number larger than
-      // the pool it was handed.
-      const pooled = dedupeTokens([...scss.tokens, ...css.tokens]);
-      const cssNote =
-        css.files.length === 0
-          ? ''
-          : ` and ${css.files.length} .css file(s): ${listFiles(css.files)}`;
-      return {
-        tokens: pooled,
-        source: null,
-        note: `aggregated ${pooled.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
-        files: [...scss.files, ...css.files],
-      };
-    }
+    const pooled = await loadScssPool(rootDir);
+    if (pooled.files.length > 0) return withPrefixedNote(pooled, note);
   }
 
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
@@ -284,12 +270,15 @@ export const loadProjectTokens = async (
   // them — incidental vars stay unmatched, so this can only add real matches, never regress.
   const { tokens, files } = await aggregateRepoCssTokens(rootDir);
   if (files.length > 0) {
-    return {
-      tokens,
-      source: null,
-      note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
-      files,
-    };
+    return withPrefixedNote(
+      {
+        tokens,
+        source: null,
+        note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
+        files,
+      },
+      note,
+    );
   }
   return { tokens, source: null, ...(note === undefined ? {} : { note }), files };
 };

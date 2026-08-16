@@ -165,6 +165,15 @@ const scopeRank = (scope: string, ancestors: readonly string[]): number => {
  */
 export const parseCssCustomProperties = (css: string, scssSyntax = false): ProjectToken[] => {
   const declarations = scanCustomProperties(css, scssSyntax)
+    // A custom property declared inside a `@mixin` or `@function` body only exists wherever that
+    // mixin is included — typically under one specific selector — so `var(--x)` resolves to nothing
+    // in a component that never includes it. The asymmetric twin of the rule-scoped `$var` case:
+    // there the *variable* was unreachable, here the *property* is. Selectors and at-rules that do
+    // emit (`:root`, `.dark`, `@media`) are of course kept.
+    .filter(
+      decl =>
+        !scssSyntax || ![decl.scope, ...decl.ancestors].some(s => /^@(mixin|function)\b/i.test(s)),
+    )
     .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
     .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
 

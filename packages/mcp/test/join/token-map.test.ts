@@ -110,6 +110,37 @@ describe('joinTokens', () => {
     expect(m?.status).toBe('high');
   });
 
+  it('does not list a same-named sibling as an alternative to choose between', () => {
+    // Two files declaring one name+value are the same token, not two to pick between by meaning —
+    // only `from` differs. Listing it named the candidate ambiguous with itself, which reads as a
+    // data error and tells the caller nothing. The cap stays: which file to import is unresolved.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    const [m] = joinTokens([fig('primary', '#6266F0')], twoFiles, { threshold: 0.7 });
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+    expect(m?.status).not.toBe('high');
+  });
+
+  it('caps a map-file override that cannot say which file it meant', () => {
+    // A recorded row names a ref, and a ref cannot name a file — so with two files answering to it
+    // the returned `from` is this join's choice, not the author's.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    const overrides = parseTokenMapFile('| Accent | $primary |');
+    const [m] = joinTokens([fig('Accent', '#123456')], twoFiles, { threshold: 0.7, overrides });
+    expect(m?.status).not.toBe('high');
+    // One file, and a recorded mapping keeps the certainty it earns.
+    const [one] = joinTokens([fig('Accent', '#123456')], [twoFiles[0] as ProjectToken], {
+      threshold: 0.7,
+      overrides,
+    });
+    expect(one?.status).toBe('high');
+  });
+
   it('resolves a map-file override against a SCSS variable, with or without the sigil', () => {
     const scssOnly: ProjectToken[] = [
       { name: 'brand-blue', value: '#6266F0', scssVar: '$brand-blue', from: 'src/_t.scss' },

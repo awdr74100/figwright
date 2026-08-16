@@ -363,6 +363,53 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('falls back when an explicitly named .scss declares nothing itself', async () => {
+    // SCSS's commonest entry shape is a barrel: `main.scss` = `@use './tokens'; @use './mixins';`.
+    // Reading only the named file returned an empty pool under a note that never said so, leaving
+    // every Figma variable unmapped while omitting tokenSource entirely would have worked.
+    const dir = await mkdtemp(join(tmpdir(), 'load-barrel-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src', 'styles'), { recursive: true });
+      await writeFile(join(dir, 'src', 'styles', '_tokens.scss'), '$brand: #6266F0;');
+      await writeFile(join(dir, 'src', 'styles', 'main.scss'), "@use './tokens';");
+
+      const loaded = await loadProjectTokens(
+        dir,
+        await analyzeProject(dir),
+        'src/styles/main.scss',
+      );
+      expect(loaded.tokens.map(t => t.name)).toEqual(['brand']);
+      expect(loaded.note).toMatch(/declares no tokens of its own/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('carries a refused override into the note of whatever it fell back to', async () => {
+    // The refusal was computed and then dropped whenever a pool was found — which is every real
+    // repo — so the answer described files the caller never asked about with no hint of a refusal.
+    const dir = await mkdtemp(join(tmpdir(), 'load-sassnote-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_v.sass'), '$a: 1px');
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_v.sass');
+      expect(loaded.note).toMatch(/indented \.sass syntax/);
+      expect(loaded.tokens.map(t => t.name)).toEqual(['brand']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('refuses a .sass override instead of silently reading nothing', () => {
     // The indented syntax is newline-terminated, which the value reader would run past — so the
     // walk never visits it. Pointed at one explicitly, saying so beats returning an empty pool

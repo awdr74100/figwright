@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { parseScssFile } from '../../src/tokens/scss-file.js';
 import { parseCssCustomProperties, parseScssVariables } from '../../src/tokens/tokens.js';
 
 describe('parseCssCustomProperties', () => {
@@ -141,5 +142,33 @@ describe('parseScssVariables', () => {
     // exact repeat collapses so the join cannot call a token ambiguous with itself.
     const tokens = parseScssVariables('$c: #111;\n$c: #111;\n$c: #222;', 'a.scss');
     expect(tokens.map(t => t.value)).toEqual(['#111', '#222']);
+  });
+});
+
+describe('parseScssFile', () => {
+  it('collapses the mirror in its idiomatic interpolated form', () => {
+    // `--brand: #{$brand}` is how the mirror is actually written. The custom property's value is
+    // the literal text `#{$brand}`, so a repo-wide name+value fold never fired for it — only for
+    // the literal spelling, which is what the tests used. Resolved against the file's own
+    // variables it becomes one token with the ref that needs no import.
+    expect(parseScssFile('$brand: #6266F0;\n:root { --brand: #{$brand}; }', 'f.scss')).toEqual([
+      { name: 'brand', value: '#6266F0', cssVar: 'var(--brand)' },
+    ]);
+  });
+
+  it('keeps a variable the file does not mirror', () => {
+    const tokens = parseScssFile('$a: #111111;\n:root { --b: #222222; }', 'f.scss');
+    expect(tokens.map(t => [t.name, t.scssVar ?? t.cssVar])).toEqual([
+      ['a', '$a'],
+      ['b', 'var(--b)'],
+    ]);
+  });
+
+  it('drops a custom property declared inside a mixin body', () => {
+    // It only exists wherever the mixin is included, so `var(--brand)` resolves to nothing in a
+    // component that never includes it — the asymmetric twin of the rule-scoped `$var` case.
+    expect(parseScssFile('@mixin theme { --brand: #6266F0; }\n$real: 1px;', 'f.scss')).toEqual([
+      { name: 'real', value: '1px', scssVar: '$real', from: 'f.scss' },
+    ]);
   });
 });

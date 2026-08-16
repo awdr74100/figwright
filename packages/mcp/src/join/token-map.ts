@@ -400,10 +400,20 @@ const joinOne = (
     // than the fuzzy fallback — so it degrades to the normal join, tagged stale for cleanup.
     const token = resolveOverrideToken(override, projectTokens);
     if (token !== undefined) {
+      // A recorded row names a ref, and a ref has no way to name a file. When several file-bound
+      // tokens answer to it, the declaring file returned is this join's choice rather than the
+      // author's — so it carries the same cap the name-only path uses, not the certainty a
+      // recorded mapping otherwise earns.
+      const fileAmbiguous =
+        token.from !== undefined &&
+        projectTokens.some(
+          t => t.name === token.name && t.from !== undefined && t.from !== token.from,
+        );
+      const confidence = fileAmbiguous ? 0.7 : 1;
       return {
         ...base,
-        candidate: candidateFrom(token, 1, ['map-file'], opts.utilityFirst === true),
-        status: 'high',
+        candidate: candidateFrom(token, confidence, ['map-file'], opts.utilityFirst === true),
+        status: fileAmbiguous ? statusFor(confidence, opts.threshold) : 'high',
       };
     }
     return { ...joinTokenScan(figma, projectTokens, opts, base), staleOverride: { ref: override } };
@@ -467,7 +477,16 @@ const joinTokenScan = (
 
     // Same-value siblings the name can't split: a deterministic pick (best name score, then token
     // name), capped below the high bar so it reads as "verify me", with the alternatives attached.
+    //
+    // A sibling that shares the winner's *name* is not an alternative to choose between by meaning
+    // — it is the same token declared in another file, which only the `from` distinguishes. Listing
+    // it named the candidate as ambiguous with itself, which reads as a data error and tells the
+    // caller nothing. The cap stays, because which file to import is genuinely unresolved.
     const confidence = 0.7;
+    const alternatives = scored
+      .slice(1)
+      .map(s => s.token.name)
+      .filter(name => name !== top.token.name);
     return {
       ...base,
       candidate: candidateFrom(
@@ -475,7 +494,7 @@ const joinTokenScan = (
         confidence,
         ['value'],
         opts.utilityFirst === true,
-        scored.slice(1).map(s => s.token.name),
+        alternatives,
       ),
       status: statusFor(confidence, opts.threshold),
     };

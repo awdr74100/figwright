@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { walkRepoFiles } from '../repo-walk.js';
-import { parseCssCustomProperties, parseScssVariables, type ProjectToken } from './tokens.js';
+import { parseScssFile } from './scss-file.js';
+import type { ProjectToken } from './tokens.js';
 
 // The token join's right-hand side for a SCSS project, which until now read nothing at all: `scss`
 // has been a detected styling system since before the join existed, but every token source was CSS,
@@ -52,7 +53,7 @@ export const aggregateRepoScssTokens = async (rootDir: string): Promise<Aggregat
     } catch {
       continue;
     }
-    const parsed = [...parseScssVariables(body, rel), ...parseCssCustomProperties(body, true)];
+    const parsed = parseScssFile(body, rel);
     if (parsed.length > 0) {
       tokens.push(...parsed);
       files.push(rel);
