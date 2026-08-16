@@ -578,6 +578,77 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('names the generated stylesheet even when other tokens were found', async () => {
+    // The first version fired only on a completely empty pool — the clean-room shape. A Style
+    // Dictionary project with one unrelated stylesheet anywhere returned that stylesheet's
+    // incidental `--header-height` and said nothing about the design tokens in build/. Confidently
+    // incomplete is worse than empty, because it looks like an answer.
+    const dir = await mkdtemp(join(tmpdir(), 'load-partial-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { 'style-dictionary': '^5.5.1' } }),
+      );
+      await mkdir(join(dir, 'build'), { recursive: true });
+      await writeFile(join(dir, 'build', 'variables.css'), ':root { --color-primary: #6266F0; }');
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', 'layout.css'), ':root { --header-height: 64px; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      // The pool it did find is still returned, unchanged…
+      expect(loaded.tokens.map(t => t.name)).toEqual(['header-height']);
+      // …and the note now says what it missed, and that the answer may be partial.
+      expect(loaded.note).toContain('src/layout.css');
+      expect(loaded.note).toMatch(/Style Dictionary/);
+      expect(loaded.note).toMatch(/may be incomplete/);
+      expect(loaded.note).toContain('build/variables.css');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says nothing when tokenSource already points at the generated stylesheet', async () => {
+    // Telling a caller to pass what they just passed is noise, and this note is read by an agent
+    // that may act on it.
+    const dir = await mkdtemp(join(tmpdir(), 'load-pointed-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { 'style-dictionary': '^5.5.1' } }),
+      );
+      await mkdir(join(dir, 'build'), { recursive: true });
+      await writeFile(join(dir, 'build', 'variables.css'), ':root { --color-primary: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'build/variables.css');
+      expect(loaded.tokens.map(t => t.name)).toEqual(['color-primary']);
+      expect(loaded.note).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says nothing when the tool emits no stylesheet and tokens were found anyway', async () => {
+    // A build tool configured for iOS/Android only has nothing this reader could use, so a project
+    // whose web tokens are already in place should read exactly as it did before.
+    const dir = await mkdtemp(join(tmpdir(), 'load-nonweb-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { 'style-dictionary': '^5.5.1' } }),
+      );
+      await mkdir(join(dir, 'build', 'ios'), { recursive: true });
+      await writeFile(join(dir, 'build', 'ios', 'Colors.swift'), '// generated');
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', 'app.css'), ':root { --brand: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens.map(t => t.name)).toEqual(['brand']);
+      expect(loaded.note).not.toMatch(/Style Dictionary/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('says the build has not run when the tool is there but the output is not', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'load-nobuild-'));
     try {
