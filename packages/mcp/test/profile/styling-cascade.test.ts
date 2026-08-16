@@ -23,9 +23,11 @@ type Signals = {
   uno?: boolean;
   css?: boolean;
   deps?: Record<string, string>;
+  /** What the uno config was found to load; undefined = no config, or its presets were unreadable. */
+  unoVocab?: boolean;
 };
 
-const detect = ({ v3, uno, css, deps }: Signals) => {
+const detect = ({ v3, uno, css, deps, unoVocab }: Signals) => {
   const presentConfigFiles: string[] = [];
   if (v3 === true) presentConfigFiles.push('tailwind.config.ts');
   if (uno === true) presentConfigFiles.push('uno.config.ts');
@@ -35,6 +37,7 @@ const detect = ({ v3, uno, css, deps }: Signals) => {
     hasTsconfig: true,
     presentConfigFiles,
     ...(css === true ? { tailwindCssEntry: 'src/app.css' } : {}),
+    ...(unoVocab === undefined ? {} : { unoConfigDeclaresVocabulary: unoVocab }),
   };
   return detectProfile(input).styling;
 };
@@ -98,6 +101,31 @@ describe('styling cascade matrix', () => {
         { uno: true, css: true, deps: { ...UNO, ...TW3 } },
         'unocss',
         'uno.config.ts',
+      ],
+
+      // — a config that loads no vocabulary preset is UnoCSS-for-icons, not a utility-first project.
+      //   It must overrule the `unocss` umbrella dependency such a project still installs, which is
+      //   why the dependency denylist alone never fixed this shape —
+      [
+        'icons-only uno config, umbrella dep present',
+        { uno: true, deps: UNO, unoVocab: false },
+        'unknown',
+        undefined,
+      ],
+      [
+        'uno config loading a wind preset',
+        { uno: true, deps: UNO, unoVocab: true },
+        'unocss',
+        'uno.config.ts',
+      ],
+      // — unreadable presets are not a "no": assume the setup almost every UnoCSS project has —
+      ['uno config with unreadable presets', { uno: true, deps: UNO }, 'unocss', 'uno.config.ts'],
+      // — and an icons-only config must not fall through to some other framework's evidence —
+      [
+        'icons-only uno config beside sass',
+        { uno: true, deps: { ...UNO, sass: '^1.0.0' }, unoVocab: false },
+        'scss',
+        undefined,
       ],
 
       // — packages that generate no utility are not evidence of UnoCSS —

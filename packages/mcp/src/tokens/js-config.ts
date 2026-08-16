@@ -502,6 +502,79 @@ const isVocabularyPreset = (local: string, imported?: string, from?: string): bo
   VOCABULARY_PRESET_NAME.test(imported ?? '') ||
   /preset-(wind|uno|mini)/i.test(from ?? '');
 
+/**
+ * Read a config's `presets` array: whether any entry is a preset that carries a theme vocabulary,
+ * and whether any of those is wind4.
+ *
+ * A preset is identified by what it _is_, not by what it happens to be called, because each form of
+ * import leaves the answer somewhere different: a default import in the module specifier (`import
+ * w4 from '@unocss/preset-wind4'`), a named one in the imported name (the specifier is just
+ * `unocss`), an unaliased reference in the local name. Only what the array actually references
+ * counts — scanning the file's imports instead would misread a config that imports a preset it does
+ * not use.
+ */
+const scanUnoPresets = (config: any, program: any): { identified: boolean; wind4: boolean } => {
+  const bindings = new Map<string, { from: string; imported: string }>();
+  for (const stmt of program?.body ?? []) {
+    if (stmt?.type !== 'ImportDeclaration' || typeof stmt.source?.value !== 'string') continue;
+    for (const spec of stmt.specifiers ?? []) {
+      const local = spec?.local?.name;
+      if (typeof local !== 'string') continue;
+      const imported = typeof spec.imported?.name === 'string' ? spec.imported.name : local;
+      bindings.set(local, { from: stmt.source.value, imported });
+    }
+  }
+
+  let identified = false;
+  for (const el of propertyNamed(config, 'presets')?.elements ?? []) {
+    const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
+    if (typeof name !== 'string') continue;
+    const binding = bindings.get(name);
+    if (!isVocabularyPreset(name, binding?.imported, binding?.from)) continue;
+    identified = true;
+    if (
+      /wind4/i.test(name) ||
+      /wind4/i.test(binding?.imported ?? '') ||
+      /preset-wind4/i.test(binding?.from ?? '')
+    ) {
+      return { identified: true, wind4: true };
+    }
+  }
+  return { identified, wind4: false };
+};
+
+/**
+ * Whether an UnoCSS config loads a preset that generates the Tailwind utility vocabulary — `null`
+ * when its `presets` could not be read at all.
+ *
+ * UnoCSS is routinely installed _only_ for icons (`presets: [presetIcons()]`) on a project whose
+ * CSS is otherwise hand-written. Such a project generates no `p-4` and no `bg-primary-500`, so
+ * treating it as utility-first makes `token_map` answer a Figma `spacing/4` with
+ * `framework-builtin` and codegen emit a class that does not exist. Detection cannot tell from the
+ * file's _presence_, only from what it loads — which is why this is exported rather than left to a
+ * dependency-name heuristic that a config file overrides anyway.
+ */
+export const declaresVocabularyPreset = (filePath: string, code: string): boolean | null => {
+  let program: any;
+  try {
+    program = parseSync(filePath, code).program;
+  } catch {
+    return null;
+  }
+  const config = findConfigObject(program);
+  if (config === null) return null;
+  // A config with no `presets` key at all inherits UnoCSS's default, which is a wind preset.
+  if (propertyNamed(config, 'presets') === null) return true;
+  const { identified } = scanUnoPresets(config, program);
+  // An array we could read that named no vocabulary preset is a real answer: this project has none.
+  // One we could not read (`presets: shared`, a spread) is not, and must not be reported as "no".
+  if (identified) return true;
+  const readable = (propertyNamed(config, 'presets')?.elements ?? []).some(
+    (el: any) => typeof (el?.type === 'CallExpression' ? el.callee?.name : el?.name) === 'string',
+  );
+  return readable ? false : null;
+};
+
 /** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */
 const discriminators = (mine: readonly Scale[], other: readonly Scale[]): readonly Scale[] =>
   mine.filter(s => !AMBIGUOUS_KEYS.has(s.key) && !other.some(o => o.key === s.key));
@@ -527,42 +600,8 @@ const declaredCount = (scopes: readonly any[], scales: readonly Scale[]): number
  * long-standing vocabulary.
  */
 const unoScalesFor = ({ config, program, scopes }: ScalePickContext): readonly Scale[] => {
-  // Local binding name → the module it was imported from, so a preset can be identified by what it
-  // *is* rather than by what it happens to be called. Reading only the callee name missed every
-  // renamed import (`import w4 from '@unocss/preset-wind4'`) — silently, since wind4's keys are
-  // absent from the wind3 table and the result was simply empty. Scanning the file's imports for
-  // the string instead would over-fire: a config that imports both presets, or imports one it does
-  // not end up using, would be misread. Only what the `presets` array actually references counts.
-  // Both halves of an import matter. A default import carries its identity in the module specifier
-  // (`import w4 from '@unocss/preset-wind4'`); a named one carries it in the imported name, since
-  // the specifier is just the umbrella package (`import { presetWind4 as wind } from 'unocss'`).
-  const bindings = new Map<string, { from: string; imported: string }>();
-  for (const stmt of program?.body ?? []) {
-    if (stmt?.type !== 'ImportDeclaration' || typeof stmt.source?.value !== 'string') continue;
-    for (const spec of stmt.specifiers ?? []) {
-      const local = spec?.local?.name;
-      if (typeof local !== 'string') continue;
-      const imported = typeof spec.imported?.name === 'string' ? spec.imported.name : local;
-      bindings.set(local, { from: stmt.source.value, imported });
-    }
-  }
-
-  const presets = propertyNamed(config, 'presets');
-  let identified = false;
-  for (const el of presets?.elements ?? []) {
-    const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
-    if (typeof name !== 'string') continue;
-    const binding = bindings.get(name);
-    if (!isVocabularyPreset(name, binding?.imported, binding?.from)) continue;
-    identified = true;
-    if (
-      /wind4/i.test(name) ||
-      /wind4/i.test(binding?.imported ?? '') ||
-      /preset-wind4/i.test(binding?.from ?? '')
-    ) {
-      return UNO_WIND4_SCALES;
-    }
-  }
+  const { identified, wind4 } = scanUnoPresets(config, program);
+  if (wind4) return UNO_WIND4_SCALES;
   // A readable vocabulary preset that is not wind4 has answered the question — it is wind3. Only
   // when none could be read (`presets: sharedPresets`, a spread, a helper) does the theme's own
   // shape get a say; otherwise a plain `presetUno()` config would be re-judged by its keys, and
