@@ -550,6 +550,66 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('names the generated stylesheet when a token build tool wrote it somewhere pruned', async () => {
+    // Style Dictionary's own basic example uses `buildPath: "build/"`, which every walk here prunes
+    // as a build artefact — so a project that generates its tokens and commits them gets an empty
+    // pool under "no token source detected", which is true and useless. This note is read by an
+    // agent that can act on it, so it names the tool and the file to pass as tokenSource.
+    const dir = await mkdtemp(join(tmpdir(), 'load-generated-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { 'style-dictionary': '^5.5.1' } }),
+      );
+      await mkdir(join(dir, 'build'), { recursive: true });
+      await writeFile(join(dir, 'build', 'variables.css'), ':root { --brand: #6266F0; }');
+
+      const profile = await analyzeProject(dir);
+      const loaded = await loadProjectTokens(dir, profile, undefined);
+      expect(loaded.tokens).toEqual([]);
+      expect(loaded.note).toMatch(/Style Dictionary/);
+      expect(loaded.note).toContain('build/variables.css');
+
+      // And the advice works: passing what the note names reads the tokens.
+      const followed = await loadProjectTokens(dir, profile, 'build/variables.css');
+      expect(followed.tokens.map(t => t.name)).toEqual(['brand']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('says the build has not run when the tool is there but the output is not', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-nobuild-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { '@tokens-studio/sd-transforms': '^1' } }),
+      );
+      await mkdir(join(dir, 'tokens'), { recursive: true });
+      await writeFile(join(dir, 'tokens', 'color.json'), '{}');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.note).toMatch(/Tokens Studio/);
+      expect(loaded.note).toMatch(/run its build|commit the generated stylesheet/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the plain note when no token build tool is involved', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-plain-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { react: '^18' } }),
+      );
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.note).toBe('no token source detected; pass tokenSource');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('caps the file list in a note instead of naming up to 200 paths', async () => {
     // A note is a diagnostic; naming every contributor buries the sentence that matters under a
     // wall of paths in the middle of a tool result.
