@@ -282,6 +282,30 @@ const scanDeclarations = (css: string, dialect: Dialect): CssDeclaration[] => {
       continue;
     }
 
+    // Interpolation in a *selector* — `.table-#{$state} { … }` — whose braces are not block braces.
+    // Read as structure they open and close a phantom block, which leaves the real rule's contents
+    // looking module-level: Bootstrap's mixin-local `$color` was emitted as a project token, and a
+    // ref to it does not compile anywhere. Consumed whole, like a string.
+    if (dialect.interpolation && c === '#' && css[i + 1] === '{') {
+      // Take the `#{` first so the depth starts at 1 — counting from zero ends the read on the `#`,
+      // which is not a brace.
+      const start = i;
+      i += 2;
+      let depth = 1;
+      while (i < n && depth > 0) {
+        const d = css[i] as string;
+        if (d === '"' || d === "'") {
+          readString();
+          continue;
+        }
+        if (d === '{') depth += 1;
+        else if (d === '}') depth -= 1;
+        i += 1;
+      }
+      prelude += css.slice(start, i);
+      continue;
+    }
+
     if (atComment()) {
       skipAnyComment();
       continue;

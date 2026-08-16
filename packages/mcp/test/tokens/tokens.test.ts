@@ -115,6 +115,27 @@ describe('parseScssVariables', () => {
     expect(t?.utilityIsClass).toBeUndefined();
   });
 
+  it('drops a private variable, which no other file can reference', () => {
+    // Sass treats a leading `-` or `_` as private: the member is not exported, and @use-ing the
+    // file and naming it is an error. Bootstrap's `$_luminance-list` is one. Found by differential
+    // against dart-sass's own meta.module-variables() over real repositories.
+    expect(parseScssVariables('$_private: 1px;\n$-also: 2px;\n$public: 3px;', 'a.scss')).toEqual([
+      { name: 'public', value: '3px', scssVar: '$public', from: 'a.scss' },
+    ]);
+  });
+
+  it('does not let interpolation in a selector make a scoped variable look module-level', () => {
+    // `.table-#{$state} { … }` — the interpolation's braces are not block braces. Read as
+    // structure they open and close a phantom block, leaving the real rule's contents looking
+    // top-level: Bootstrap's mixin-local `$color` was emitted as a project token, and a ref to it
+    // compiles nowhere.
+    const tokens = parseScssVariables(
+      '@mixin v($state) {\n  .table-#{$state} {\n    $color: red;\n  }\n}\n$real: 1px;',
+      'a.scss',
+    );
+    expect(tokens.map(t => t.name)).toEqual(['real']);
+  });
+
   it('keeps one entry per distinct value of a repeated name', () => {
     // Same rule as the CSS parser: a `!default` override contributes a second real value, while an
     // exact repeat collapses so the join cannot call a token ambiguous with itself.

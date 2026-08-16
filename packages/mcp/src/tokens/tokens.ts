@@ -222,6 +222,11 @@ export const parseScssVariables = (scss: string, from: string): ProjectToken[] =
   for (const decl of scanScssVariables(scss)) {
     // Scoped to a rule — local to that block, so not referenceable from generated code.
     if (decl.scope !== '') continue;
+    // Private to its module. Sass treats a leading `-` or `_` as private: the member is not
+    // exported, `meta.module-variables()` does not list it, and `@use`-ing the file and naming it
+    // is an error. Bootstrap's `$_luminance-list` is one — emitting it hands codegen a ref that
+    // cannot resolve from any other file, which is the one thing this reader must never do.
+    if (decl.name.startsWith('_') || decl.name.startsWith('-')) continue;
     const key = `${decl.name}\u0000${decl.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
