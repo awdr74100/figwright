@@ -529,12 +529,19 @@ export type DesignContextSectionPlan = z.infer<typeof DesignContextSectionPlanSc
 /** One project design token a raw color value maps to: the literal to emit + the property name. */
 export const ProjectTokenMatchSchema = z.object({
   /**
-   * The reference codegen should emit: a Tailwind utility base on a Tailwind project, else
-   * var(--name).
+   * The reference codegen should emit: a utility base on a project whose framework generates one, a
+   * SCSS `$variable`, else var(--name).
    */
   ref: z.string(),
   /** Custom property name without the leading `--`. */
   name: z.string(),
+  /**
+   * Present only for a SCSS variable: the repo-relative file declaring it. The ref does not resolve
+   * on its own — the consuming file must `@use` this file, and how that import is written decides
+   * the ref's final form (`@use '…' as *` keeps `$name`; a plain `@use './tokens'` makes it
+   * `tokens.$name`). Emitting the ref without the import is a compile error.
+   */
+  from: z.string().optional(),
 });
 export type ProjectTokenMatch = z.infer<typeof ProjectTokenMatchSchema>;
 

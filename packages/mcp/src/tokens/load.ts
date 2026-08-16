@@ -191,11 +191,20 @@ export const loadProjectTokens = async (
   if (profile.styling.system === 'scss') {
     const scss = await aggregateRepoScssTokens(rootDir);
     if (scss.files.length > 0) {
+      // Pooled with the repo's .css for the same reason the JS-config path pools it: a project can
+      // keep its Sass variables in .scss and a global `:root` block in a plain .css file, and
+      // returning only one of them would trade half the matches away. Both walks are already
+      // aggregations, so this does not turn a precise source into a fuzzy one.
+      const css = await aggregateRepoCssTokens(rootDir);
+      const cssNote =
+        css.files.length === 0
+          ? ''
+          : `; also pooled ${css.tokens.length} custom propert(ies) from ${css.files.length} .css file(s): ${listFiles(css.files)}`;
       return {
-        tokens: scss.tokens,
+        tokens: [...scss.tokens, ...css.tokens],
         source: null,
-        note: `aggregated ${scss.tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}; ${SCSS_USE_NOTE}`,
-        files: scss.files,
+        note: `aggregated ${scss.tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
+        files: [...scss.files, ...css.files],
       };
     }
   }

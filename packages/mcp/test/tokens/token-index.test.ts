@@ -71,6 +71,28 @@ describe('annotateProjectTokens', () => {
     });
   });
 
+  it('carries the declaring file for a SCSS token, without which the ref cannot resolve', () => {
+    // This annotation is the surface a caller reads when the document has no bound variables to
+    // join — the commoner case — so leaving `from` off it hands codegen a ref it cannot make
+    // compile, which is exactly the failure the forward join already guards against.
+    const index = buildTokenValueIndex([
+      {
+        name: 'color-primary-500',
+        value: '#6266F0',
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      },
+    ]);
+    const payload = { nodes: [{ id: '1', fills: ['#6266F0'] }] } as never;
+    const r = annotateProjectTokens(payload, index, false);
+    expect(r.projectTokens?.['#6266F0']).toEqual({
+      ref: '$color-primary-500',
+      name: 'color-primary-500',
+      from: 'src/styles/_tokens.scss',
+      matchedBy: ['value'],
+    });
+  });
+
   it('emits the Tailwind utility as ref on a Tailwind project', () => {
     const index = buildTokenValueIndex([proj('color-primary-500', '#6266F0', 'primary-500')]);
     const payload = result({ globalVars: { styles: { abc: { color: '#6266F0' } } } });

@@ -272,6 +272,29 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it("pools a SCSS project's .css alongside its .scss", async () => {
+    // Symmetric with the JS-config path: a project can keep Sass variables in .scss and a global
+    // :root block in a plain .css file, and returning only one trades half the matches away.
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-css-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_tokens.scss'), '$color-primary-500: #6266F0;');
+      await writeFile(join(dir, 'src', 'global.css'), ':root { --color-legacy: #1F304D; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+      expect(byName.get('color-primary-500')?.scssVar).toBe('$color-primary-500');
+      expect(byName.get('color-legacy')?.cssVar).toBe('var(--color-legacy)');
+      expect(loaded.files).toEqual(['src/_tokens.scss', 'src/global.css']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('reads a single .scss file when tokenSource names one', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'load-scss-one-'));
     try {

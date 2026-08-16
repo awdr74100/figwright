@@ -52,6 +52,10 @@ const MAX_CANDIDATES = 3;
 const toMatch = (token: ProjectToken, utilityFirst: boolean): ProjectTokenMatch => ({
   ref: refOf(token, utilityFirst),
   name: token.name,
+  // Carried for the same reason token_map carries it: a SCSS ref is an undefined-variable error
+  // until the consuming file @uses this path, and this annotation is the surface a caller reads
+  // when the document has no variables to join — the commoner case, not the rarer one.
+  ...(token.from === undefined ? {} : { from: token.from }),
 });
 
 /** A string is hex-like when normHex accepts it — the only values the index can answer for. */
