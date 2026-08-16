@@ -482,9 +482,17 @@ const AMBIGUOUS_KEYS: ReadonlySet<string> = new Set(['container']);
  * theme speaks — and counting them as an answer disabled the key-shape fallback entirely: `presets:
  * [presetIcons(), ...sharedPresets]` on a wind4 theme was ruled wind3 and dropped every wind4-only
  * scale, silently.
+ *
+ * All three identities are consulted, because each form of import leaves the answer in a different
+ * one: a default import in the module specifier, a named import in the _imported_ name (the
+ * specifier is just `unocss`), and an unaliased reference in the local name. Checking only the
+ * local name and the specifier made `import { presetWind4 as p } from 'unocss'` unrecognisable —
+ * and, since the gate ran first, made the wind4 test below unreachable for that form.
  */
-const isVocabularyPreset = (name: string, from: string | undefined): boolean =>
-  /(wind|uno|mini)/i.test(name) || /preset-(wind|uno|mini)/i.test(from ?? '');
+const isVocabularyPreset = (local: string, imported?: string, from?: string): boolean =>
+  /(wind|uno|mini)/i.test(local) ||
+  /(wind|uno|mini)/i.test(imported ?? '') ||
+  /preset-(wind|uno|mini)/i.test(from ?? '');
 
 /** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */
 const discriminators = (mine: readonly Scale[], other: readonly Scale[]): readonly Scale[] =>
@@ -537,7 +545,7 @@ const unoScalesFor = ({ config, program, scopes }: ScalePickContext): readonly S
     const name = el?.type === 'CallExpression' ? el.callee?.name : el?.name;
     if (typeof name !== 'string') continue;
     const binding = bindings.get(name);
-    if (!isVocabularyPreset(name, binding?.from)) continue;
+    if (!isVocabularyPreset(name, binding?.imported, binding?.from)) continue;
     identified = true;
     if (
       /wind4/i.test(name) ||

@@ -57,6 +57,26 @@ describe('parseCssCustomProperties', () => {
     expect(tokens.map(t => t.value)).toEqual(['#FFFFFF', '#000000', '#010101']);
   });
 
+  it('keeps a @theme name utility-first across its theme overrides', () => {
+    // The two entries are one token kept twice so the value-match join can recognise either value.
+    // Deciding "does this generate a class" per declaration made the `.dark` one utility-less, so
+    // the same token resolved to `surface` for its light value and `var(--color-surface)` for its
+    // dark one — two contradictory refs, reachable inside a single grounding payload.
+    const css = `@theme { --color-surface: #FFFFFF; }
+      .dark { --color-surface: #0A0A0A; }`;
+    const tokens = parseCssCustomProperties(css).filter(t => t.name === 'color-surface');
+    expect(tokens.map(t => t.value)).toEqual(['#FFFFFF', '#0A0A0A']);
+    expect(tokens.map(t => t.utilityIsClass)).toEqual([true, true]);
+  });
+
+  it('does not mark a namespace-shaped name outside @theme as a class', () => {
+    // `utility` is derived from the name, so a loose custom property gets one — but nothing
+    // generates `bg-brand` from `:root { --color-brand }`.
+    const [token] = parseCssCustomProperties(':root { --color-brand: #6266F0; }');
+    expect(token?.utility).toBe('brand');
+    expect(token?.utilityIsClass).toBeUndefined();
+  });
+
   it('collapses a name+value repeated across blocks', () => {
     const css = ':root { --a: 1px; } .x { --a: 1px; } .y { --a: 2px; }';
     const tokens = parseCssCustomProperties(css).filter(t => t.name === 'a');

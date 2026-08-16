@@ -141,18 +141,26 @@ export const parseCssCustomProperties = (css: string): ProjectToken[] => {
     .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
     .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
 
+  // Whether a *name* generates a utility class, decided once per name rather than per declaration.
+  // Rank 0 is scopeRank's `@theme` case, and `@theme` is the only CSS in which declaring a custom
+  // property also generates a class: a stray `:root { --color-brand: … }`, which the repo-wide pool
+  // is full of, yields `utility: 'brand'` that nothing turns into `bg-brand`.
+  //
+  // The property belongs to the name, not to one declaration of it. A `@theme` token with a dark
+  // override (`@theme { --color-surface: #fff }` + `.dark { --color-surface: #0a0a0a }`) is kept as
+  // two tokens so the value-match join can recognise either, and ranking each separately left the
+  // dark one utility-less — `bg-surface` for the light value and `var(--color-surface)` for the
+  // dark one, two contradictory refs for one token inside a single payload.
+  const generatesClass = new Set(declarations.filter(d => d.rank === 0).map(d => d.decl.name));
+
   const seen = new Set<string>();
   const out: ProjectToken[] = [];
-  for (const { decl, rank } of declarations) {
+  for (const { decl } of declarations) {
     const key = `${decl.name}\u0000${decl.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const { utility, category } = deriveNamespace(decl.name);
-    // Rank 0 is scopeRank's `@theme` case, and `@theme` is the only CSS in which declaring a custom
-    // property also generates a utility class. A namespace-shaped name outside it — a stray
-    // `:root { --color-brand: … }`, which the repo-wide pool is full of — yields `utility: 'brand'`
-    // while nothing generates `bg-brand` from it, so the utility must not be offered as the ref.
-    const utilityIsClass = rank === 0;
+    const utilityIsClass = generatesClass.has(decl.name);
     out.push({
       name: decl.name,
       value: decl.value,

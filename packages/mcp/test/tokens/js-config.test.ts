@@ -500,6 +500,26 @@ describe('parseUnoConfig', () => {
       );
     });
 
+    it('identifies a named preset import through any alias, not just a wind-shaped one', () => {
+      // `import { presetWind4 as p } from 'unocss'` leaves the answer in the *imported* name: the
+      // local name is arbitrary and the specifier is the umbrella package. The vocabulary gate
+      // consulted neither, so such a config was rejected as non-vocabulary before the wind4 test
+      // could run — and the theme, being all shared keys, then tied to wind3 and lost `container`.
+      const theme =
+        "colors: { primary: '#111' }, spacing: { xs: '4px' }, container: { prose: '65ch' }";
+      for (const alias of ['p', 'x', 'wind']) {
+        const { byName } = parseUno(
+          `import { presetWind4 as ${alias} } from 'unocss'
+           export default { presets: [${alias}()], theme: { ${theme} } }`,
+        );
+        expect([...byName.keys()].toSorted()).toEqual([
+          'color-primary',
+          'container-prose',
+          'spacing-xs',
+        ]);
+      }
+    });
+
     it('switches on the import source, so a renamed binding still resolves', () => {
       // Reading only the call's callee name missed every aliased import — silently, since wind4's
       // keys are absent from the wind3 table and the result is just empty.
