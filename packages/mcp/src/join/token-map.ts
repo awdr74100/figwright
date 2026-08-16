@@ -39,6 +39,14 @@ export interface TokenMapping {
      */
     cssVar?: string;
     utility?: string;
+    /**
+     * Present only for a SCSS variable: the repo-relative file that declares it. The `ref` does not
+     * resolve on its own — the consuming file must `@use` this file, and how that `@use` is written
+     * decides the reference's final form (`@use '…' as *` keeps `$name`; a plain `@use './tokens'`
+     * makes it `tokens.$name`). Emitting the ref without the import is a compile error, not a style
+     * nit.
+     */
+    from?: string;
     confidence: number;
     /**
      * Which signal produced the match: name similarity and/or exact color value, or 'map-file' for
@@ -52,6 +60,14 @@ export interface TokenMapping {
      * it; binding the wrong same-value sibling silently diverges when that token is later retuned.
      */
     ambiguousWith?: string[];
+    /**
+     * Other files declaring this same name and value, present only when the join could not tell
+     * which one the design meant. `ambiguousWith` cannot express this — it carries token _names_,
+     * and these siblings share the winner's name; only the declaring file differs. Without it a
+     * capped mapping arrived with nothing at all explaining the cap, and `from` looked like a
+     * resolved answer rather than one of several candidates.
+     */
+    ambiguousFrom?: string[];
   };
   /**
    * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
@@ -219,6 +235,7 @@ const candidateFrom = (
   matchedBy: ('name' | 'value' | 'map-file')[],
   utilityFirst: boolean,
   ambiguousWith?: readonly string[],
+  ambiguousFrom?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
   ref: refOf(token, utilityFirst),
@@ -228,10 +245,16 @@ const candidateFrom = (
   ...(utilityFirst && token.utilityIsClass === true && token.utility !== undefined
     ? { utility: token.utility }
     : {}),
+  // Always carried when present, and deliberately not gated on anything: without it the ref cannot
+  // be made to resolve at all.
+  ...(token.from === undefined ? {} : { from: token.from }),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0
     ? { ambiguousWith: [...ambiguousWith] }
+    : {}),
+  ...(ambiguousFrom !== undefined && ambiguousFrom.length > 0
+    ? { ambiguousFrom: [...ambiguousFrom] }
     : {}),
 });
 
@@ -272,7 +295,9 @@ const resolveOverrideToken = (
 ): ProjectToken | undefined => {
   const wanted = stripVar(ref);
   return projectTokens.find(t =>
-    [t.name, t.cssVar, t.utility].some(id => id !== undefined && stripVar(id) === wanted),
+    [t.name, t.cssVar, t.utility, t.scssVar].some(
+      id => id !== undefined && stripVar(id) === wanted,
+    ),
   );
 };
 
@@ -387,10 +412,32 @@ const joinOne = (
     // than the fuzzy fallback — so it degrades to the normal join, tagged stale for cleanup.
     const token = resolveOverrideToken(override, projectTokens);
     if (token !== undefined) {
+      // A recorded row names a ref, and a ref has no way to name a file. When several file-bound
+      // tokens answer to it, the declaring file returned is this join's choice rather than the
+      // author's — so it carries the same cap the name-only path uses, not the certainty a
+      // recorded mapping otherwise earns.
+      const fileAmbiguous =
+        token.from !== undefined &&
+        projectTokens.some(
+          t => t.name === token.name && t.from !== undefined && t.from !== token.from,
+        );
+      const confidence = fileAmbiguous ? 0.7 : 1;
+      const otherFiles = fileAmbiguous
+        ? projectTokens
+            .filter(t => t.name === token.name && t.from !== undefined && t.from !== token.from)
+            .map(t => t.from as string)
+        : [];
       return {
         ...base,
-        candidate: candidateFrom(token, 1, ['map-file'], opts.utilityFirst === true),
-        status: 'high',
+        candidate: candidateFrom(
+          token,
+          confidence,
+          ['map-file'],
+          opts.utilityFirst === true,
+          undefined,
+          otherFiles,
+        ),
+        status: fileAmbiguous ? statusFor(confidence, opts.threshold) : 'high',
       };
     }
     return { ...joinTokenScan(figma, projectTokens, opts, base), staleOverride: { ref: override } };
@@ -454,7 +501,23 @@ const joinTokenScan = (
 
     // Same-value siblings the name can't split: a deterministic pick (best name score, then token
     // name), capped below the high bar so it reads as "verify me", with the alternatives attached.
+    //
+    // A sibling that shares the winner's *name* is not an alternative to choose between by meaning
+    // — it is the same token declared in another file, which only the `from` distinguishes. Listing
+    // it named the candidate as ambiguous with itself, which reads as a data error and tells the
+    // caller nothing. The cap stays, because which file to import is genuinely unresolved.
     const confidence = 0.7;
+    const alternatives = scored
+      .slice(1)
+      .map(s => s.token.name)
+      .filter(name => name !== top.token.name);
+    // Siblings that share the winner's name are the same token in another file — not an
+    // alternative to choose between by meaning, but the reason the caller cannot know which file
+    // to import. Reported as files, so the cap is explained by the thing that caused it.
+    const otherFiles = scored
+      .slice(1)
+      .filter(s => s.token.name === top.token.name && s.token.from !== undefined)
+      .map(s => s.token.from as string);
     return {
       ...base,
       candidate: candidateFrom(
@@ -462,7 +525,8 @@ const joinTokenScan = (
         confidence,
         ['value'],
         opts.utilityFirst === true,
-        scored.slice(1).map(s => s.token.name),
+        alternatives,
+        otherFiles,
       ),
       status: statusFor(confidence, opts.threshold),
     };
@@ -474,10 +538,46 @@ const joinTokenScan = (
     // below the high bar so it reads as "name match, verify the value" rather than a confirmed reuse.
     const candHex = normHex(nameMatch.token.value);
     const valueDisagrees = figmaHex !== null && candHex !== null && candHex !== figmaHex;
-    const confidence = valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score;
+    // A name matched by name alone cannot say *which* file declared it when several do. That was
+    // harmless while repeats of a name differed only in value — the ref was identical either way —
+    // but a SCSS token's ref only resolves through its declaring file, so picking the first and
+    // reporting confidence 1 claims a certainty the name does not carry. Cap it to the same
+    // "verify me" level the value-ambiguous path uses, rather than invent a winner.
+    const fileAmbiguous =
+      nameMatch.token.from !== undefined &&
+      projectTokens.some(
+        t =>
+          t.name === nameMatch.token.name &&
+          // Only another *file-bound* token makes the choice ambiguous. A pooled custom property
+          // has no `from` at all, and counting its absence as "a different file" capped every
+          // name-only match on the mirror layout, where exactly one file declares the name.
+          t.from !== undefined &&
+          t.from !== nameMatch.token.from,
+      );
+    const confidence = Math.min(
+      valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score,
+      fileAmbiguous ? 0.7 : 1,
+    );
+    const otherFiles = fileAmbiguous
+      ? projectTokens
+          .filter(
+            t =>
+              t.name === nameMatch.token.name &&
+              t.from !== undefined &&
+              t.from !== nameMatch.token.from,
+          )
+          .map(t => t.from as string)
+      : [];
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.utilityFirst === true),
+      candidate: candidateFrom(
+        nameMatch.token,
+        confidence,
+        ['name'],
+        opts.utilityFirst === true,
+        undefined,
+        otherFiles,
+      ),
       status: statusFor(confidence, opts.threshold),
     };
   }

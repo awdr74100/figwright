@@ -30,8 +30,8 @@ const inputSchema = z.object({
   tokenSource: z
     .string()
     .describe(
-      'Path (relative to rootDir) to the file holding the tokens — a CSS file, or a Tailwind / ' +
-        'UnoCSS config (.js/.cjs/.mjs/.ts), read according to its name; overrides detection',
+      'Path (relative to rootDir) to the file holding the tokens — a CSS file, a .scss file, or a ' +
+        'Tailwind / UnoCSS config (.js/.cjs/.mjs/.ts), read according to its name; overrides detection',
     )
     .optional(),
   threshold: z
@@ -78,12 +78,22 @@ export const tokenMapTool: ToolSpec = {
     "project's design tokens, so generated code references " +
     'existing tokens instead of hard-coded values. Joins the grounded Figma names + values ' +
     "against the project's design tokens — parsed from its CSS (Tailwind v4 @theme or :root custom " +
-    'properties) and, on a Tailwind v3 or UnoCSS project, from the theme scales in its JS/TS config ' +
-    '(whose tokens have no var() form: reference them by candidate.ref, the utility base). The ' +
+    'properties), on a Tailwind v3 or UnoCSS project from the theme scales in its JS/TS config ' +
+    '(whose tokens have no var() form: reference them by candidate.ref, the utility base), and on a ' +
+    'SCSS project from its $variables. A SCSS candidate carries candidate.from, the file declaring ' +
+    'it: candidate.ref does NOT resolve on its own — the consuming file must @use that file. from ' +
+    'is REPO-relative and Sass resolves @use against the importing file, so re-resolve it from the ' +
+    "file being written (from src/components/card.scss it is '../styles/tokens', never the " +
+    'repo-relative path verbatim). `as *` keeps the ref as written; a namespaced @use requires ' +
+    'prefixing the ref with that namespace. Emitting the ref without the import is a compile ' +
+    'error. The ' +
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
     "below 'high' and candidate.ambiguousWith lists the other same-value tokens — verify that pick " +
-    'semantically instead of trusting it blindly. On a project with a utility framework (Tailwind ' +
+    'semantically instead of trusting it blindly. When the rival is the SAME name in another file ' +
+    '(a SCSS layout with per-component variable files), candidate.ambiguousFrom lists those files ' +
+    'instead: the ref is right and the declaring file is the open question, so confirm which one ' +
+    'the design means before writing its @use. On a project with a utility framework (Tailwind ' +
     'or UnoCSS) a ' +
     'variable that hits a framework built-in scale (spacing/N, line-height/N, weight/*) is reported as ' +
     "status 'framework-builtin' with { builtin: { scale, step } } rather than unmapped — it has no " +

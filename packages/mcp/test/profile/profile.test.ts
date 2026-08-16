@@ -219,6 +219,17 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.configPath).toBe('tailwind.config.ts');
   });
 
+  it('detects SCSS from sass-embedded, which modern Vite projects use', () => {
+    // The compiler Vite documents alongside `sass`, and the common choice on a Vite/Vue/Nuxt
+    // project. Missing it meant the whole SCSS token source silently never ran there.
+    for (const dep of ['sass', 'sass-embedded', 'node-sass']) {
+      expect(
+        detectProfile(baseInput({ packageJson: { devDependencies: { [dep]: '^1.80.0' } } })).styling
+          .system,
+      ).toBe('scss');
+    }
+  });
+
   it('falls back to scss / unknown styling', () => {
     expect(
       detectProfile(baseInput({ packageJson: { dependencies: { sass: '^1' } } })).styling.system,

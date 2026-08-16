@@ -232,6 +232,324 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('reads a SCSS project, which previously joined against an empty pool', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1.102.0' } }),
+      );
+      await mkdir(join(dir, 'src', 'styles'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', 'styles', '_tokens.scss'),
+        [
+          '$color-primary-500: #6266F0;',
+          '$radius-lg: 8px !default;',
+          // A CSS custom property written in a .scss file compiles through untouched, so it is an
+          // ordinary var() token — modern SCSS projects use both and reading one leaves half unread.
+          ':root { --color-legacy: #1F304D; }',
+          // Scoped to a rule: not referenceable from generated code.
+          '.card { $scoped: 99px; padding: $scoped; }',
+        ].join('\n'),
+      );
+
+      const profile = await analyzeProject(dir);
+      expect(profile.styling.system).toBe('scss');
+      const loaded = await loadProjectTokens(dir, profile, undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+
+      expect(byName.get('color-primary-500')).toMatchObject({
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      });
+      expect(byName.get('radius-lg')?.value).toBe('8px');
+      expect(byName.get('color-legacy')?.cssVar).toBe('var(--color-legacy)');
+      expect(byName.has('scoped')).toBe(false);
+      // The ref is not self-sufficient, so every SCSS result says what makes it resolve.
+      expect(loaded.note).toMatch(/@use/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("pools a SCSS project's .css alongside its .scss", async () => {
+    // Symmetric with the JS-config path: a project can keep Sass variables in .scss and a global
+    // :root block in a plain .css file, and returning only one trades half the matches away.
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-css-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_tokens.scss'), '$color-primary-500: #6266F0;');
+      await writeFile(join(dir, 'src', 'global.css'), ':root { --color-legacy: #1F304D; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+      expect(byName.get('color-primary-500')?.scssVar).toBe('$color-primary-500');
+      expect(byName.get('color-legacy')?.cssVar).toBe('var(--color-legacy)');
+      expect(loaded.files).toEqual(['src/_tokens.scss', 'src/global.css']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('collapses a mirror split across two files, not just within one', async () => {
+    // `_vars.scss` for the build-time Sass variables plus a hand-written `global.css` `:root` block
+    // for runtime theming, same palette, is a standard layout. Keeping both halves cost such a
+    // project twice: an exact hit degraded to 'medium' because the join saw two same-value tokens,
+    // and the surviving ref flipped to `$primary`, which needs an `@use` — where reading only the
+    // CSS (this server's behaviour before SCSS was a source at all) returned `var(--primary)` at
+    // full confidence. A regression against our own previous output.
+    const dir = await mkdtemp(join(tmpdir(), 'load-xfile-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_vars.scss'), '$primary: #6266F0;');
+      await writeFile(join(dir, 'src', 'global.css'), ':root { --primary: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.tokens[0]?.cssVar).toBe('var(--primary)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not attach the @use instruction to a pool that needs no import', async () => {
+    // The sentence is model-facing guidance and only applies to a token carrying a declaring file.
+    // Said over plain custom properties it told the caller to import something for a `var()` that
+    // needs nothing — a fabricated instruction, in the file the model then writes.
+    const dir = await mkdtemp(join(tmpdir(), 'load-nouse-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', 'g.css'), ':root { --a: 1px; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.note).not.toMatch(/@use/);
+      // …and it does not claim a .scss pool it never found.
+      expect(loaded.note).not.toMatch(/0 \.scss/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a refused override even when nothing else was found', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-onlysass-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_v.sass'), '$a: 1px');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_v.sass');
+      expect(loaded.tokens).toEqual([]);
+      expect(loaded.note).toMatch(/indented \.sass syntax/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('collapses the mirror layout into one token with the import-free ref', async () => {
+    // `$brand` plus `:root { --brand: #{$brand} }` in one file is one logical token with two
+    // reference forms — the idiomatic modern layout this reader set out to support. Left as two,
+    // an exact name+value hit degraded to 'medium' and reported the token ambiguous with itself.
+    // The custom property wins because var(--brand) compiles from any consumer with no @use at all.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', '_tokens.scss'),
+        '$brand: #6266F0;\n$only-scss: #FF0000;\n:root { --brand: #6266F0; }',
+      );
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+      expect(loaded.tokens.filter(t => t.name === 'brand')).toHaveLength(1);
+      expect(byName.get('brand')?.cssVar).toBe('var(--brand)');
+      expect(byName.get('brand')?.scssVar).toBeUndefined();
+      // A variable with no mirror keeps its own ref and declaring file.
+      expect(byName.get('only-scss')?.scssVar).toBe('$only-scss');
+      expect(byName.get('only-scss')?.from).toBe('src/_tokens.scss');
+      // The note counts what the result contains, not the raw walks.
+      expect(loaded.note).toMatch(/aggregated 2 token\(s\)/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('collapses the mirror on the explicit tokenSource path too', async () => {
+    // More likely to matter here than on the aggregate path: a caller narrows tokenSource to the
+    // file that declares the tokens, which is exactly the file that carries the mirror.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-one-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;\n:root { --brand: #6266F0; }');
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_t.scss');
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.tokens[0]?.cssVar).toBe('var(--brand)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps a mirror whose two forms hold different values', async () => {
+    // Not a mirror of one token but two real declarations — the value-match join needs both.
+    const dir = await mkdtemp(join(tmpdir(), 'load-mirror-diff-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;\n:root { --brand: #FF0000; }');
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens.map(t => t.value).toSorted()).toEqual(['#6266F0', '#FF0000']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back when an explicitly named .scss declares nothing itself', async () => {
+    // SCSS's commonest entry shape is a barrel: `main.scss` = `@use './tokens'; @use './mixins';`.
+    // Reading only the named file returned an empty pool under a note that never said so, leaving
+    // every Figma variable unmapped while omitting tokenSource entirely would have worked.
+    const dir = await mkdtemp(join(tmpdir(), 'load-barrel-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src', 'styles'), { recursive: true });
+      await writeFile(join(dir, 'src', 'styles', '_tokens.scss'), '$brand: #6266F0;');
+      await writeFile(join(dir, 'src', 'styles', 'main.scss'), "@use './tokens';");
+
+      const loaded = await loadProjectTokens(
+        dir,
+        await analyzeProject(dir),
+        'src/styles/main.scss',
+      );
+      expect(loaded.tokens.map(t => t.name)).toEqual(['brand']);
+      expect(loaded.note).toMatch(/declares no tokens of its own/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not tell a SCSS project that no token source was detected', async () => {
+    // `resolveTokenSource` says "no token source detected; pass tokenSource" for any project with no
+    // config file — true of every SCSS project, since there is no such thing to detect. Forwarded
+    // into the pool's own note it produced a sentence contradicting itself in its second clause:
+    // "no token source detected; pass tokenSource; aggregated 1192 token(s) from 22 .scss file(s)".
+    const dir = await mkdtemp(join(tmpdir(), 'load-note-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.note).not.toMatch(/no token source detected/);
+      expect(loaded.note).toMatch(/^aggregated 1 token/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('carries a refused override into the note of whatever it fell back to', async () => {
+    // The refusal was computed and then dropped whenever a pool was found — which is every real
+    // repo — so the answer described files the caller never asked about with no hint of a refusal.
+    const dir = await mkdtemp(join(tmpdir(), 'load-sassnote-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_v.sass'), '$a: 1px');
+      await writeFile(join(dir, 'src', '_t.scss'), '$brand: #6266F0;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_v.sass');
+      expect(loaded.note).toMatch(/indented \.sass syntax/);
+      expect(loaded.tokens.map(t => t.name)).toEqual(['brand']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a .sass override instead of silently reading nothing', () => {
+    // The indented syntax is newline-terminated, which the value reader would run past — so the
+    // walk never visits it. Pointed at one explicitly, saying so beats returning an empty pool
+    // under a note that never mentions the file the caller asked for.
+    const { source, refusal } = resolveTokenSource(profileWith({ system: 'scss' }), 'src/_v.sass');
+    expect(source).toBeNull();
+    // A refusal of what the caller asked for, distinct from the ordinary "nothing detected" note —
+    // only the refusal survives into whatever the loader falls back to.
+    expect(refusal).toMatch(/indented \.sass syntax/);
+  });
+
+  it('does not report a token ambiguous with itself when both walks see it', async () => {
+    // A `:root` block in a .scss file and the compiled .css committed beside it are one
+    // declaration read through two walks. Left duplicated, an exact name+value hit degrades to
+    // 'medium' with ambiguousWith naming the token itself.
+    const dir = await mkdtemp(join(tmpdir(), 'load-dup-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_t.scss'), ':root { --brand: #6266F0; }');
+      await writeFile(join(dir, 'src', 'compiled.css'), ':root { --brand: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens.filter(t => t.name === 'brand')).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads a single .scss file when tokenSource names one', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-one-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_a.scss'), '$from-a: #111111;');
+      await writeFile(join(dir, 'src', '_b.scss'), '$from-b: #222222;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_a.scss');
+      expect(loaded.source).toBe('src/_a.scss');
+      expect(loaded.tokens.map(t => t.name)).toEqual(['from-a']);
+      expect(loaded.tokens[0]?.from).toBe('src/_a.scss');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('caps the file list in a note instead of naming up to 200 paths', async () => {
     // A note is a diagnostic; naming every contributor buries the sentence that matters under a
     // wall of paths in the middle of a tool result.

@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import type { ProjectProfile, StylingSystem } from '../profile/profile.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
+import { aggregateRepoScssTokens } from './repo-scss.js';
+import { parseScssFile } from './scss-file.js';
 import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
 
 // The one place that decides where a project's design tokens come from and reads them — shared by
@@ -16,7 +18,7 @@ import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
  * the same scales in a form no CSS parser can see. They are separate kinds rather than one
  * "js-config" because the frameworks name their theme keys differently.
  */
-export type TokenSourceKind = 'css' | 'tailwind-v3' | 'unocss';
+export type TokenSourceKind = 'css' | 'tailwind-v3' | 'unocss' | 'scss';
 
 export interface TokenSource {
   /** Repo-relative path. */
@@ -43,6 +45,7 @@ const TAILWIND_CONFIG_BASENAME = /(^|[\\/])tailwind\.config\.[cm]?[jt]s$/i;
  * which framework wrote them.
  */
 const kindOfOverride = (path: string, system: StylingSystem): TokenSourceKind => {
+  if (/\.scss$/i.test(path)) return 'scss';
   if (!JS_CONFIG_EXT.test(path)) return 'css';
   if (UNO_CONFIG_BASENAME.test(path)) return 'unocss';
   if (TAILWIND_CONFIG_BASENAME.test(path)) return 'tailwind-v3';
@@ -54,8 +57,23 @@ export const resolveTokenSource = (
   // Only the styling half of the profile decides this, so that's all it asks for.
   profile: Pick<ProjectProfile, 'styling'>,
   override: string | undefined,
-): { source: TokenSource | null; note?: string } => {
+): { source: TokenSource | null; note?: string; refusal?: string } => {
   if (override !== undefined) {
+    // `.sass` is the indented syntax: newline-terminated declarations that this scanner's value
+    // reader would run straight past, so repo-scss deliberately never walks it. Pointed at one
+    // explicitly it must say so — read as CSS it returns nothing and then falls through to the
+    // repo pool, whose note never mentions the file the caller actually asked for.
+    if (/\.sass$/i.test(override)) {
+      // `refusal`, not `note`: this is an answer to what the *caller asked for*, so it must survive
+      // into whatever the loader falls back to. The plain `note` below is a description of the
+      // project, which the fallback replaces with its own — forwarding that one unconditionally
+      // produced "no token source detected; pass tokenSource; aggregated 1192 token(s) …", a
+      // sentence that contradicts itself in its own second clause.
+      return {
+        source: null,
+        refusal: `token source ${override} is the indented .sass syntax, which is not readable here; pass a .scss or CSS file`,
+      };
+    }
     return { source: { path: override, kind: kindOfOverride(override, profile.styling.system) } };
   }
 
@@ -90,10 +108,88 @@ export interface LoadedProjectTokens {
 // the middle of a tool result. Enough to recognise where the tokens came from, then a count.
 const NAMED_FILES = 6;
 
+// Said on every SCSS result, because the ref is not self-sufficient: `$color-primary-500` is an
+// undefined-variable error until the consuming file pulls its declaring file in, and modern Sass
+// namespaces that import. Verified against dart-sass — under a plain `@use './tokens'` the bare
+// name does not compile and the reference is `tokens.$color-primary-500`.
+const SCSS_USE_NOTE =
+  "a SCSS ref only resolves once the consuming file imports its `from` file. `from` is repo-relative and Sass resolves @use against the *importing* file, so re-resolve it from wherever the code is being written (a file in src/components imports '../styles/tokens', not the repo-relative path verbatim). `@use '<resolved>' as *` keeps the ref as written; a namespaced @use instead requires prefixing the ref with that namespace";
+
 const listFiles = (files: readonly string[]): string =>
   files.length <= NAMED_FILES
     ? files.join(', ')
     : `${files.slice(0, NAMED_FILES).join(', ')} (+${files.length - NAMED_FILES} more)`;
+
+/**
+ * Drop an entry that is the same declaration seen twice — identical in name, value and reference
+ * form. A `:root` block in a `.scss` file and the compiled `.css` committed beside it are one
+ * declaration read through two walks, and leaving both makes the join report the token ambiguous
+ * with itself.
+ *
+ * Mirrored `$var` / `--var` pairs are _not_ handled here: that is a per-file idiom and is collapsed
+ * where both halves of one file are in hand (see `parseScssFile`). Doing it across the pool let a
+ * `--x` in an unrelated stylesheet displace a genuinely declared `$x` from another file.
+ */
+const dedupeTokens = (tokens: readonly ProjectToken[]): ProjectToken[] => {
+  const seen = new Set<string>();
+  const unique = tokens.filter(t => {
+    const key = [t.name, t.value, t.cssVar ?? '', t.scssVar ?? '', t.from ?? ''].join('\u0000');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // The mirror is not always written in one file: `_vars.scss` for the build-time Sass variables
+  // and a hand-written `global.css` `:root` block for runtime theming, same palette, is a standard
+  // layout. Keeping both halves cost such a project *twice*: an exact hit degraded from 'high' to
+  // 'medium' (the join saw two same-value tokens and could not split them), and the surviving ref
+  // flipped to `$primary`, which needs an `@use` — where reading only the CSS, as this server did
+  // before SCSS was a source at all, returned `var(--primary)` at full confidence. A regression
+  // against our own previous behaviour, so the same rule parseScssFile applies within a file
+  // applies across the pool: the import-free reference wins.
+  const importFree = new Set(
+    unique.filter(t => t.cssVar !== undefined).map(t => `${t.name}\u0000${t.value}`),
+  );
+  return unique.filter(t => t.cssVar !== undefined || !importFree.has(`${t.name}\u0000${t.value}`));
+};
+
+/**
+ * The `.scss` pool plus the repo's `.css`, which is what a SCSS project's tokens are read from:
+ * there is no marker for "the" variables file, and real layouts run from one 952-entry file to ~90
+ * per-component ones.
+ */
+const loadScssPool = async (rootDir: string): Promise<LoadedProjectTokens> => {
+  const scss = await aggregateRepoScssTokens(rootDir);
+  const css = await aggregateRepoCssTokens(rootDir);
+  // Counted after collapsing, so the note describes the result rather than the raw walks.
+  const tokens = dedupeTokens([...scss.tokens, ...css.tokens]);
+  const parts = [
+    scss.files.length === 0 ? null : `${scss.files.length} .scss file(s): ${listFiles(scss.files)}`,
+    css.files.length === 0 ? null : `${css.files.length} .css file(s): ${listFiles(css.files)}`,
+  ].filter(part => part !== null);
+  // The @use sentence is model-facing guidance, and it only applies to a token that carries a
+  // declaring file. Said over a pool of plain custom properties it told the caller to add an import
+  // for a `var()` that needs none — a fabricated instruction, in the file the model then writes.
+  const needsUse = tokens.some(t => t.from !== undefined);
+  return {
+    tokens,
+    source: null,
+    note: `aggregated ${tokens.length} token(s) from ${parts.join(' and ')}${needsUse ? `; ${SCSS_USE_NOTE}` : ''}`,
+    files: [...scss.files, ...css.files],
+  };
+};
+
+/**
+ * Put a reason in front of a result's note. Without this the caller's own diagnostic — "the file
+ * you named is the indented .sass syntax", "the file you named declares nothing" — was computed and
+ * then dropped on the floor whenever a pool was found, which is every real repo: the answer came
+ * back describing files the caller never asked about, with no hint that their request was refused.
+ */
+const withPrefixedNote = (
+  loaded: LoadedProjectTokens,
+  reason: string | undefined,
+): LoadedProjectTokens =>
+  reason === undefined ? loaded : { ...loaded, note: `${reason}; ${loaded.note ?? ''}`.trim() };
 
 /** Read one file, or null when it isn't readable — a missing token source is a note, not a throw. */
 const readOr = async (rootDir: string, rel: string): Promise<string | null> => {
@@ -114,7 +210,36 @@ export const loadProjectTokens = async (
   profile: ProjectProfile,
   tokenSourceOverride: string | undefined,
 ): Promise<LoadedProjectTokens> => {
-  const { source, note } = resolveTokenSource(profile, tokenSourceOverride);
+  const { source, note, refusal } = resolveTokenSource(profile, tokenSourceOverride);
+
+  if (source !== null && source.kind === 'scss') {
+    // An explicit `tokenSource` pointing at one .scss file: read exactly that, so a caller can
+    // narrow a large repo to its variables file.
+    const body = await readOr(rootDir, source.path);
+    if (body === null) {
+      return {
+        tokens: [],
+        source: null,
+        note: `token source ${source.path} could not be read`,
+        files: [],
+      };
+    }
+    // Deduped for the same reason the aggregate path is, and it is *more* likely to matter here:
+    // a caller narrows tokenSource to the file that declares the tokens, which is exactly the file
+    // most likely to carry the mirror layout.
+    const own = parseScssFile(body, source.path);
+    if (own.length > 0) {
+      return { tokens: own, source: source.path, files: [source.path], note: SCSS_USE_NOTE };
+    }
+    // The named file declares nothing — SCSS's commonest entry shape is a barrel
+    // (`main.scss` = `@use './tokens'; @use './mixins';`), and reading only it returned an empty
+    // pool under a note that never said so, leaving every Figma variable unmapped. Same fallback
+    // the CSS branch below has for the same shape.
+    return withPrefixedNote(
+      await loadScssPool(rootDir),
+      `${source.path} declares no tokens of its own — it looks like an entry that imports them`,
+    );
+  }
 
   if (source !== null && source.kind !== 'css')
     return loadJsConfigTokens(rootDir, source, profile.styling);
@@ -155,19 +280,34 @@ export const loadProjectTokens = async (
     return { tokens, source: source.path, files: [source.path] };
   }
 
+  // A SCSS project has no single detected source — there is no marker for "the" variables file, and
+  // real layouts run from one 952-entry file to ~90 per-component ones — so the .scss pool is the
+  // source. Checked before the .css pool because a SCSS project's tokens are in .scss files, which
+  // that walk does not visit; without this the whole styling system read nothing.
+  if (profile.styling.system === 'scss') {
+    const pooled = await loadScssPool(rootDir);
+    if (pooled.files.length > 0) return withPrefixedNote(pooled, refusal);
+  }
+
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
   // wasn't located). Aggregate custom properties across the repo's CSS and let the join filter
   // them — incidental vars stay unmatched, so this can only add real matches, never regress.
   const { tokens, files } = await aggregateRepoCssTokens(rootDir);
   if (files.length > 0) {
-    return {
-      tokens,
-      source: null,
-      note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
-      files,
-    };
+    return withPrefixedNote(
+      {
+        tokens,
+        source: null,
+        note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
+        files,
+      },
+      refusal,
+    );
   }
-  return { tokens, source: null, ...(note === undefined ? {} : { note }), files };
+  return withPrefixedNote(
+    { tokens, source: null, ...(note === undefined ? {} : { note }), files },
+    refusal,
+  );
 };
 
 /**

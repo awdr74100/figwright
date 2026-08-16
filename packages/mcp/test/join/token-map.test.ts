@@ -47,6 +47,137 @@ describe('joinTokens', () => {
     expect(m?.status).toBe('high');
   });
 
+  it('carries the declaring file of a SCSS token, without which the ref cannot resolve', () => {
+    const scss: ProjectToken[] = [
+      {
+        name: 'color-primary-500',
+        value: '#6266F0',
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      },
+    ];
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], scss, { threshold: 0.7 });
+    expect(m?.candidate?.ref).toBe('$color-primary-500');
+    // Not decoration: `$color-primary-500` is an undefined-variable error until the consuming file
+    // @uses this path, so dropping it leaves a ref the caller cannot make resolve.
+    expect(m?.candidate?.from).toBe('src/styles/_tokens.scss');
+    // SCSS generates no classes, so no utility must be offered even if the flag were on.
+    expect(m?.candidate?.utility).toBeUndefined();
+    expect(m?.candidate?.cssVar).toBeUndefined();
+  });
+
+  it('points `from` at the file whose token actually matched, not the first seen', () => {
+    // Per-component variable files (Vuetify ships ~90) repeat names across files. If `from` did not
+    // follow the winning token, the caller would @use a file that does not declare the value it was
+    // given — a compile error that looks like a token problem.
+    const perComponent: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'src/_a.scss' },
+      { name: 'primary', value: '#FF0000', scssVar: '$primary', from: 'src/_b.scss' },
+    ];
+    const [m] = joinTokens([fig('Primary', '#FF0000')], perComponent, { threshold: 0.7 });
+    expect(m?.candidate?.from).toBe('src/_b.scss');
+  });
+
+  it('caps a name-only match that cannot say which file declared the name', () => {
+    // Repeats of a CSS name differ only in value and share a ref, so picking the first was free.
+    // A SCSS ref resolves through its declaring file, so the same shortcut claims a certainty the
+    // name does not carry — the Figma side here is a FLOAT, so no value-match can break the tie.
+    const twoFiles: ProjectToken[] = [
+      { name: 'radius-lg', value: '4px', scssVar: '$radius-lg', from: 'src/_a.scss' },
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_b.scss' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], twoFiles, { threshold: 0.7 });
+    expect(m?.candidate?.confidence).toBeLessThan(1);
+    expect(m?.status).not.toBe('high');
+  });
+
+  it('does not cap a name-only match because a pooled custom property has no file', () => {
+    // A custom property carries no `from` at all. Counting that absence as "a different declaring
+    // file" capped every name-only match on the mirror layout, where exactly one file declares it.
+    const mixed: ProjectToken[] = [
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_t.scss' },
+      { name: 'radius-lg', value: '8px', cssVar: 'var(--radius-lg)' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], mixed, { threshold: 0.7 });
+    expect(m?.status).toBe('high');
+  });
+
+  it('does not cap a name-only match when one file declares the name', () => {
+    const oneFile: ProjectToken[] = [
+      { name: 'radius-lg', value: '8px', scssVar: '$radius-lg', from: 'src/_a.scss' },
+    ];
+    const [m] = joinTokens([fig('radius/lg', 8, 'FLOAT')], oneFile, { threshold: 0.7 });
+    expect(m?.status).toBe('high');
+  });
+
+  it('does not list a same-named sibling as an alternative to choose between', () => {
+    // Two files declaring one name+value are the same token, not two to pick between by meaning —
+    // only `from` differs. Listing it named the candidate ambiguous with itself, which reads as a
+    // data error and tells the caller nothing. The cap stays: which file to import is unresolved.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    const [m] = joinTokens([fig('primary', '#6266F0')], twoFiles, { threshold: 0.7 });
+    expect(m?.candidate?.ambiguousWith).toBeUndefined();
+    expect(m?.status).not.toBe('high');
+  });
+
+  it('says which other files caused a cap, on every path that caps', () => {
+    // A cap with nothing explaining it is worse than no cap: `from` reads as a resolved answer
+    // rather than one of several candidates. `ambiguousWith` cannot say this — it carries names,
+    // and these siblings share the winner's name.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    // value path
+    const [byValue] = joinTokens([fig('primary', '#6266F0')], twoFiles, { threshold: 0.7 });
+    expect(byValue?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+    // name path
+    const [byName] = joinTokens([fig('primary', 8, 'FLOAT')], twoFiles, { threshold: 0.7 });
+    expect(byName?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+    // map-file path
+    const overrides = parseTokenMapFile('| Accent | $primary |');
+    const [byMap] = joinTokens([fig('Accent', '#123456')], twoFiles, { threshold: 0.7, overrides });
+    expect(byMap?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+  });
+
+  it('caps a map-file override that cannot say which file it meant', () => {
+    // A recorded row names a ref, and a ref cannot name a file — so with two files answering to it
+    // the returned `from` is this join's choice, not the author's.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    const overrides = parseTokenMapFile('| Accent | $primary |');
+    const [m] = joinTokens([fig('Accent', '#123456')], twoFiles, { threshold: 0.7, overrides });
+    expect(m?.status).not.toBe('high');
+    // One file, and a recorded mapping keeps the certainty it earns.
+    const [one] = joinTokens([fig('Accent', '#123456')], [twoFiles[0] as ProjectToken], {
+      threshold: 0.7,
+      overrides,
+    });
+    expect(one?.status).toBe('high');
+  });
+
+  it('resolves a map-file override against a SCSS variable, with or without the sigil', () => {
+    const scssOnly: ProjectToken[] = [
+      { name: 'brand-blue', value: '#6266F0', scssVar: '$brand-blue', from: 'src/_t.scss' },
+    ];
+    for (const ref of ['$brand-blue', 'brand-blue']) {
+      const overrides = parseTokenMapFile(`| Accent/Blue | ${ref} |`);
+      const [m] = joinTokens([fig('Accent/Blue', '#123456')], scssOnly, {
+        threshold: 0.7,
+        overrides,
+      });
+      expect(m?.candidate?.matchedBy).toEqual(['map-file']);
+      // The recorded row still has to come back with everything needed to emit it.
+      expect(m?.candidate?.from).toBe('src/_t.scss');
+      expect(m?.staleOverride).toBeUndefined();
+    }
+  });
+
   it('recommends the var() reference (not a bogus utility) on a non-Tailwind project', () => {
     // token.utility is derived from the name prefix and so is set even off-Tailwind, where no
     // `primary-500` class exists. With the flag off, ref must be the CSS var and utility not surfaced.
