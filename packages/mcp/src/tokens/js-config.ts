@@ -489,9 +489,17 @@ const AMBIGUOUS_KEYS: ReadonlySet<string> = new Set(['container']);
  * local name and the specifier made `import { presetWind4 as p } from 'unocss'` unrecognisable —
  * and, since the gate ran first, made the wind4 test below unreachable for that form.
  */
+// The identifier names are matched whole, not by substring. A substring test also fired on any
+// project-local or third-party preset whose name merely contains those letters — `presetMinimal`,
+// `acmeUnoPreset` — and since a match sets `identified`, one false positive switched off the
+// key-shape fallback and pinned a wind4 theme to the wind3 table, yielding zero tokens and zero
+// skips. The module specifier keeps a looser test: `@unocss/preset-wind4` is a package path, and
+// no non-vocabulary UnoCSS package is named `preset-(wind|uno|mini)…`.
+const VOCABULARY_PRESET_NAME = /^preset(uno|wind\d?|mini)$/i;
+
 const isVocabularyPreset = (local: string, imported?: string, from?: string): boolean =>
-  /(wind|uno|mini)/i.test(local) ||
-  /(wind|uno|mini)/i.test(imported ?? '') ||
+  VOCABULARY_PRESET_NAME.test(local) ||
+  VOCABULARY_PRESET_NAME.test(imported ?? '') ||
   /preset-(wind|uno|mini)/i.test(from ?? '');
 
 /** Theme keys that belong to exactly one UnoCSS vocabulary, so their presence identifies it. */

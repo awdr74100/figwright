@@ -40,6 +40,22 @@ describe('resolveTokenSource', () => {
     ).toEqual({ source: { path: 'uno.config.ts', kind: 'unocss' } });
   });
 
+  it('recognises a config basename written with Windows separators', () => {
+    // A tokenSource is a path the caller typed; on Windows it arrives backslashed, and matching only
+    // `/` sent it to the fallback — reading a shared UnoCSS config with the Tailwind vocabulary,
+    // which drops radius / text / shadow / tracking / leading / breakpoint / ease with skipped: 0.
+    const tw = profileWith({ system: 'tailwind' });
+    expect(resolveTokenSource(tw, 'packages\\ui\\uno.config.ts').source).toEqual({
+      path: 'packages\\ui\\uno.config.ts',
+      kind: 'unocss',
+    });
+    const uno = profileWith({ system: 'unocss' });
+    expect(resolveTokenSource(uno, 'packages\\ui\\tailwind.config.js').source).toEqual({
+      path: 'packages\\ui\\tailwind.config.js',
+      kind: 'tailwind-v3',
+    });
+  });
+
   it('recognises both UnoCSS config basenames in an override', () => {
     // `uno.config.*` is the commoner of the two and was the one a too-clever `unocss?` pattern
     // missed — it means "unocs" + an optional "s", so it matched a name nobody writes.
@@ -87,6 +103,41 @@ describe('resolveTokenSource', () => {
       path: 'styles/tokens.css',
       kind: 'css',
     });
+  });
+
+  it('keeps the utility ref on a real v4 @theme when the project also has a JS config', async () => {
+    // `@config "../tailwind.config.js"` beside `@import "tailwindcss"` is v4's documented upgrade
+    // path, so a genuine v4 project can have a root tailwind.config.* — which routes it to the
+    // JS-config reader. Stripping @theme provenance by source kind therefore killed the utility ref
+    // on every such project's real tokens, a regression against reading the CSS directly.
+    const dir = await mkdtemp(join(tmpdir(), 'load-v4config-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({
+          devDependencies: { tailwindcss: '^4.1.0', '@tailwindcss/vite': '^4.0.0' },
+        }),
+      );
+      await writeFile(
+        join(dir, 'tailwind.config.js'),
+        "module.exports = { content: ['./src/**/*.tsx'] };",
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', 'app.css'),
+        '@import "tailwindcss";\n@config "../tailwind.config.js";\n@theme { --color-primary-500: #6266F0; }\n',
+      );
+
+      const profile = await analyzeProject(dir);
+      expect(profile.styling.tailwindVersion).toBe(4);
+      const loaded = await loadProjectTokens(dir, profile, undefined);
+      const token = loaded.tokens.find(t => t.name === 'color-primary-500');
+      expect(token?.utilityIsClass).toBe(true);
+      // …and the note must not claim the opposite of what the payload contains.
+      expect(loaded.note).not.toMatch(/declares no CSS custom properties/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('does not let a foreign @theme block claim to generate a class', async () => {

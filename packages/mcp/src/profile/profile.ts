@@ -292,8 +292,12 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
   // is a common layout, and letting the uno config win it read the wrong token source and then told
   // the caller "UnoCSS declares no CSS custom properties" about a project whose tokens are `@theme`
   // custom properties.
+  // A *v4* dependency specifically. `depVersion !== undefined` also accepted `tailwindcss: ^3`,
+  // which is the very signal the rest of this cascade treats as residue — a migrated repo keeps a
+  // v3 dep alive for prettier-plugin-tailwindcss — so a leftover v3 dep plus any `@theme` match
+  // anywhere in the CSS (the marker regex is unanchored, so a comment counts) beat a real uno config.
   const liveTailwindV4 =
-    input.tailwindCssEntry !== undefined && (depVersion !== undefined || hasV4Pkg);
+    input.tailwindCssEntry !== undefined && ((depVersion ?? 0) >= 4 || hasV4Pkg);
   if (unoConfig !== undefined && !liveTailwindV4)
     return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
 

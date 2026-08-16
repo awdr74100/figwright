@@ -90,6 +90,15 @@ describe('styling cascade matrix', () => {
         'unocss',
         'uno.config.ts',
       ],
+      // — a leftover *v3* dep is residue too, not proof of a live v4 setup: keeping `tailwindcss`
+      //   alive for prettier-plugin-tailwindcss is the signal this cascade already calls residue,
+      //   and the CSS marker regex is unanchored enough that a comment can match it —
+      [
+        'uno config vs CSS marker backed only by a v3 dep',
+        { uno: true, css: true, deps: { ...UNO, ...TW3 } },
+        'unocss',
+        'uno.config.ts',
+      ],
 
       // — packages that generate no utility are not evidence of UnoCSS —
       ['@unocss/reset only', { deps: { '@unocss/reset': '^66.0.0' } }, 'unknown', undefined],

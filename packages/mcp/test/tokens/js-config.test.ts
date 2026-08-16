@@ -559,6 +559,32 @@ describe('parseUnoConfig', () => {
       expect(tokens).toEqual([]);
     });
 
+    it('matches preset names whole, so a lookalike does not pin the vocabulary', () => {
+      // A substring test fired on any preset whose name merely contains uno/wind/mini —
+      // `presetMinimal`, `acmeUnoPreset`. Since a match sets "identified", one false positive
+      // switched off the key-shape fallback and pinned a wind4 theme to the wind3 table: zero
+      // tokens, zero skips, and a note claiming the theme declares no scales.
+      const theme = "radius: { lg: '8px' }, text: { sm: '14px' }";
+      for (const [local, from] of [
+        ['presetMinimal', './presets/minimal'],
+        ['acmeUnoPreset', './presets/acme'],
+      ] as const) {
+        const { byName } = parseUno(
+          `import ${local} from '${from}'
+           export default { presets: [${local}(), ...shared], theme: { ${theme} } }`,
+        );
+        expect([...byName.keys()].toSorted()).toEqual(['radius-lg', 'text-sm']);
+      }
+      // The real ones still identify the vocabulary.
+      for (const name of ['presetUno', 'presetWind', 'presetWind3', 'presetMini']) {
+        const { byName } = parseUno(
+          `import { ${name} } from 'unocss'
+           export default { presets: [${name}()], theme: { ${theme} } }`,
+        );
+        expect([...byName.keys()]).toEqual([]); // wind3 vocabulary → wind4-only keys are not read
+      }
+    });
+
     it('ignores presets that carry no theme vocabulary when reading the presets array', () => {
       // presetIcons / presetAttributify / presetTypography add rules without a scale, so they
       // cannot answer which vocabulary the theme speaks. Treating them as an answer disabled the

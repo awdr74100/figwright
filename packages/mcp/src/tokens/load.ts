@@ -29,8 +29,8 @@ const JS_CONFIG_EXT = /\.[cm]?[jt]s$/i;
 // UnoCSS's two config basenames. Spelled as an alternation rather than an optional letter: the
 // tempting `unocss?` reads right and is not — it means "unocs" + an optional "s", so it matches a
 // name nobody writes and misses `uno.config.ts`, the commoner of the two.
-const UNO_CONFIG_BASENAME = /(^|\/)(uno|unocss)\.config\.[cm]?[jt]s$/i;
-const TAILWIND_CONFIG_BASENAME = /(^|\/)tailwind\.config\.[cm]?[jt]s$/i;
+const UNO_CONFIG_BASENAME = /(^|[\\/])(uno|unocss)\.config\.[cm]?[jt]s$/i;
+const TAILWIND_CONFIG_BASENAME = /(^|[\\/])tailwind\.config\.[cm]?[jt]s$/i;
 
 /**
  * Which reader an explicit `tokenSource` override needs. The caller's intent has to come from what
@@ -116,7 +116,8 @@ export const loadProjectTokens = async (
 ): Promise<LoadedProjectTokens> => {
   const { source, note } = resolveTokenSource(profile, tokenSourceOverride);
 
-  if (source !== null && source.kind !== 'css') return loadJsConfigTokens(rootDir, source);
+  if (source !== null && source.kind !== 'css')
+    return loadJsConfigTokens(rootDir, source, profile.styling);
 
   if (source !== null) {
     const body = await readOr(rootDir, source.path);
@@ -164,7 +165,15 @@ export const loadProjectTokens = async (
 const loadJsConfigTokens = async (
   rootDir: string,
   source: TokenSource,
+  styling: ProjectProfile['styling'],
 ): Promise<LoadedProjectTokens> => {
+  // Does a `@theme` block in this repo's CSS actually compile? Only Tailwind v4 processes it. The
+  // question is *not* "did the tokens come from a JS config": v4's documented upgrade path is
+  // `@config "../tailwind.config.js"` beside an `@import "tailwindcss"`, which leaves a root
+  // tailwind.config.* on a genuine v4 project — so answering it by source kind stripped the utility
+  // ref off every real v4 `@theme` token and regressed those projects against main.
+  const themeBlockCompiles = styling.system === 'tailwind' && styling.tailwindVersion === 4;
+
   const configPath = source.path;
   const body = await readOr(rootDir, configPath);
   if (body === null) {
@@ -185,12 +194,13 @@ const loadJsConfigTokens = async (
     const key = `${token.name} ${token.value}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // The CSS reader marks a declaration inside `@theme` as generating a utility class, which is
-    // true of Tailwind v4 and of nothing else. On a project whose tokens come from a JS config,
-    // `@theme` is a foreign syntax that nothing compiles — leftover v4 residue in a repo since
-    // migrated to UnoCSS, or to v3 — so a pooled custom property never generates a class here
-    // whatever scope it sits in. Carrying the flag through emitted `bg-leftover` for a token that
-    // resolves to nothing, the one outcome this whole reader exists to avoid.
+    // Where `@theme` is foreign syntax — UnoCSS, or Tailwind v3 — nothing compiles it, so a pooled
+    // custom property never generates a class whatever scope it sits in. Leftover v4 residue in a
+    // migrated repo otherwise emitted `bg-leftover` for a token that resolves to nothing.
+    if (themeBlockCompiles) {
+      tokens.push(token);
+      continue;
+    }
     const pooled = { ...token };
     delete pooled.utilityIsClass;
     tokens.push(pooled);
@@ -221,11 +231,16 @@ const loadJsConfigTokens = async (
       `also pooled ${css.tokens.length} CSS custom propert(ies) from ${css.files.length} file(s): ${listFiles(css.files)}`,
     );
   }
-  // Both frameworks inline theme values into the utilities they generate, so these tokens have no
-  // var() form — the ref to emit is the utility base (bg-primary-500), not var(--color-primary-500).
-  notes.push(
-    `${source.kind === 'unocss' ? 'UnoCSS' : 'Tailwind v3'} declares no CSS custom properties; reference theme tokens as utilities`,
-  );
+  // A config's theme scales are inlined into the utilities the framework generates, so those tokens
+  // have no var() form — the ref to emit is the utility base (bg-primary-500). Said only when the
+  // config actually produced such tokens: on a v4 project reading a JS config for `content` alone
+  // the theme lives in `@theme`, every ref *is* a var(), and this sentence flatly contradicted the
+  // payload it was attached to (while also naming the wrong major).
+  if (config.tokens.length > 0) {
+    notes.push(
+      `the ${source.kind === 'unocss' ? 'UnoCSS' : 'Tailwind'} config declares no CSS custom properties; reference its theme tokens as utilities`,
+    );
+  }
 
   return {
     tokens,

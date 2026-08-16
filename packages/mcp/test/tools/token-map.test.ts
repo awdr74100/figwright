@@ -272,7 +272,7 @@ describe('handleTokenMap', () => {
 
       const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
       expect(teal?.candidate?.ref).toBe('var(--accent-teal)');
-      expect(result.note).toMatch(/UnoCSS declares no CSS custom properties/);
+      expect(result.note).toMatch(/the UnoCSS config declares no CSS custom properties/);
     } finally {
       await rm(uno, { recursive: true, force: true });
     }
