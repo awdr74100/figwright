@@ -160,8 +160,8 @@ export const handleDesignContext = async (
   // never throws and returns an empty index off a non-web project, keeping this a no-op there.
   let result = raw;
   if (detail === 'full') {
-    const { index, tailwind } = await loadIndex(process.cwd());
-    result = annotateProjectTokens(raw, index, tailwind);
+    const { index, utilityFirst } = await loadIndex(process.cwd());
+    result = annotateProjectTokens(raw, index, utilityFirst);
   }
 
   const payloadChars = JSON.stringify(result).length;

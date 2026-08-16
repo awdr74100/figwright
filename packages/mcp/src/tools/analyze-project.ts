@@ -17,7 +17,8 @@ export const analyzeProjectTool: ToolSpec = {
     'switch on. Optional standalone probe: those tools run detection internally and return the same ' +
     'profile, so call this only to inspect detection in isolation (no Figma, no file scan). Runs on ' +
     'the server filesystem. rootDir defaults to the server cwd. Detects Tailwind v3 (config file) and ' +
-    'v4 (CSS-first @import/@theme) and reports tailwindVersion; detects svg loader (svgr / ' +
+    'v4 (CSS-first @import/@theme) and reports tailwindVersion, and UnoCSS (uno.config.* / a ' +
+    "@unocss package) as styling.system 'unocss'; detects svg loader (svgr / " +
     'vite-svg-loader / …) → svg.mode component vs url + an import hint.',
   inputSchema,
   kind: 'local',

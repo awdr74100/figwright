@@ -226,7 +226,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
     });
     const r = await handleDesignContext(dispatch, {}, async () => ({
       index: indexOf([{ name: 'color-primary', value: '#6266F0' }]),
-      tailwind: false,
+      utilityFirst: false,
     }));
     expect(r.projectTokens).toEqual({
       '#6266F0': { ref: 'var(--color-primary)', name: 'color-primary', matchedBy: ['value'] },
@@ -241,7 +241,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
     let loaderCalls = 0;
     const r = await handleDesignContext(dispatch, { detail: 'compact' }, async () => {
       loaderCalls += 1;
-      return { index: indexOf([{ name: 'color-primary', value: '#6266F0' }]), tailwind: false };
+      return { index: indexOf([{ name: 'color-primary', value: '#6266F0' }]), utilityFirst: false };
     });
     expect(loaderCalls).toBe(0);
     expect(r.projectTokens).toBeUndefined();
@@ -251,7 +251,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
     const { dispatch } = dispatcher(oversizedFull());
     const r = await handleDesignContext(dispatch, {}, async () => ({
       index: indexOf([{ name: 'color-primary', value: '#6266F0' }]),
-      tailwind: false,
+      utilityFirst: false,
     }));
     // Over budget → structure-only view; the annotation must not survive on a payload whose
     // colors are gone.

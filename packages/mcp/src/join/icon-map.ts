@@ -151,9 +151,9 @@ export interface IconMapping {
 const recolorGuidance = (
   contract: SvgColorContract,
   svg: ProjectProfile['svg'],
-  tailwind: boolean,
+  utilityFirst: boolean,
 ): string => {
-  const colorClass = tailwind ? 'text-{token}' : 'the CSS `color` property (or var(--token))';
+  const colorClass = utilityFirst ? 'text-{token}' : 'the CSS `color` property (or var(--token))';
   switch (contract) {
     case 'currentColor':
       return svg.mode === 'component'
@@ -171,7 +171,7 @@ const recolorGuidance = (
 export interface IconJoinOptions {
   threshold: number;
   svg: ProjectProfile['svg'];
-  tailwind: boolean;
+  utilityFirst: boolean;
 }
 
 // Icons demand near-exact matching, unlike the component join. The asymmetry is the reason: a wrong
@@ -222,7 +222,7 @@ const joinOne = (
     candidate: {
       filePath: match.svg.path,
       colorContract: match.svg.colorContract,
-      recolor: recolorGuidance(match.svg.colorContract, opts.svg, opts.tailwind),
+      recolor: recolorGuidance(match.svg.colorContract, opts.svg, opts.utilityFirst),
       confidence,
     },
     status: statusFor(confidence, opts.threshold),

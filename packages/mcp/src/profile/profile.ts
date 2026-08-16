@@ -1,7 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { walkRepoFiles } from '../repo-walk.js';
+import { declaresVocabularyPreset } from '../tokens/js-config.js';
 
 // Project Profile — the structured "how this project writes code" that the join tools (component_map,
 // token_map) switch their target side on. Detection is split in two: gatherProjectInput does the IO
@@ -24,6 +25,7 @@ export type Framework = (typeof FRAMEWORKS)[number];
 
 export const STYLING_SYSTEMS = [
   'tailwind',
+  'unocss',
   'css-variables',
   'scss',
   'css-modules',
@@ -31,6 +33,22 @@ export const STYLING_SYSTEMS = [
   'unknown',
 ] as const;
 export type StylingSystem = (typeof STYLING_SYSTEMS)[number];
+
+/**
+ * Whether the styling system generates utility classes from a Tailwind-compatible vocabulary, so a
+ * token's utility base (`primary-500`) is the literal to emit rather than its `var()` reference,
+ * and a Figma variable hitting a built-in scale is a usable utility rather than a gap.
+ *
+ * UnoCSS qualifies on both counts: its wind3 and wind4 presets were each confirmed, by generating
+ * CSS from the installed package, to produce `p-4` / `leading-7` / `font-bold` / `rounded-lg` /
+ * `text-sm` from the same built-in scales, and `bg-primary-500` from a theme colour.
+ *
+ * One predicate rather than a comparison at each site: the forward join and the design-context
+ * value annotation both need it, and them disagreeing would mean the same token is written one way
+ * in `token_map` and another inside the grounding payload.
+ */
+export const isUtilityFirst = (system: StylingSystem): boolean =>
+  system === 'tailwind' || system === 'unocss';
 
 // How the project consumes `import X from './icon.svg'`: `component` when a loader turns the svg into
 // a renderable component (svgr / vite-svg-loader / …) so codegen can emit `<Icon/>`; `url` otherwise
@@ -90,6 +108,16 @@ export interface ProjectInput {
    * CSS-first config). Undefined when no such marker was found.
    */
   tailwindCssEntry?: string;
+  /**
+   * Whether the UnoCSS config found at the root loads a preset that generates the Tailwind utility
+   * vocabulary. Undefined when there is no such config, or when its `presets` could not be read —
+   * both of which mean "assume it does", since that is what almost every UnoCSS project loads.
+   *
+   * The config's _presence_ is not the question. UnoCSS is routinely installed only for icons, and
+   * such a project generates no `p-4`; calling it utility-first makes codegen emit classes that do
+   * not exist there.
+   */
+  unoConfigDeclaresVocabulary?: boolean;
 }
 
 interface PackageJson {
@@ -104,20 +132,38 @@ const TAILWIND_CONFIGS = [
   'tailwind.config.ts',
 ];
 
+// UnoCSS reads either basename, in any of the JS/TS extensions. Both are listed by @unocss/config
+// as the config it loads; a project uses one or the other, never both.
+const UNOCSS_CONFIGS = ['uno.config', 'unocss.config'].flatMap(base =>
+  ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map(ext => `${base}.${ext}`),
+);
+
 /** Config files worth probing for at the project root; presence feeds styling detection. */
-const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS];
+const PROBE_CONFIG_FILES = [...TAILWIND_CONFIGS, ...UNOCSS_CONFIGS];
 
 // Tailwind v4 marks its CSS-first config inline: `@import "tailwindcss"` pulls the framework in and
 // `@theme { ... }` declares tokens. Either marker identifies the v4 token source.
 const CSS_TAILWIND_IMPORT = /@import\s+["']tailwindcss["']/;
 const CSS_THEME_BLOCK = /@theme\b/;
 
+// stat, not readFile: this only asks whether the path is there, and the probe list below grew from
+// 4 entries to 17 when UnoCSS's six extensions × two basenames were added. Reading each candidate's
+// whole contents to answer a yes/no was affordable at 4 and is not on a path every grounding call
+// runs through (token_map and the design-context annotation both profile the project).
 const fileExists = async (path: string): Promise<boolean> => {
   try {
-    await readFile(path);
+    await stat(path);
     return true;
   } catch {
     return false;
+  }
+};
+
+const readText = async (path: string): Promise<string | null> => {
+  try {
+    return await readFile(path, 'utf8');
+  } catch {
+    return null;
   }
 };
 
@@ -153,13 +199,19 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
   const packageJson = await readJson<PackageJson>(join(root, 'package.json'));
   const hasTsconfig = await fileExists(join(root, 'tsconfig.json'));
 
-  const presentConfigFiles: string[] = [];
-  for (const name of PROBE_CONFIG_FILES) {
-    // eslint-disable-next-line no-await-in-loop -- small fixed list, clarity over micro-parallelism
-    if (await fileExists(join(root, name))) presentConfigFiles.push(name);
-  }
+  // In parallel, and order-preserving via the index — detectStyling's cascade picks the first match
+  // from this list, so the result must not depend on which stat resolved first.
+  const probed = await Promise.all(PROBE_CONFIG_FILES.map(name => fileExists(join(root, name))));
+  const presentConfigFiles = PROBE_CONFIG_FILES.filter((_, i) => probed[i] === true);
 
   const tailwindCssEntry = await findTailwindCssEntry(root);
+
+  // One extra read, and only when such a config exists: what it loads decides whether the project
+  // generates utility classes at all, which no filename or dependency can answer.
+  const unoConfig = presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
+  const unoBody = unoConfig === undefined ? null : await readText(join(root, unoConfig));
+  const unoConfigDeclaresVocabulary =
+    unoBody === null ? null : declaresVocabularyPreset(unoConfig as string, unoBody);
 
   return {
     rootDir: root,
@@ -167,6 +219,7 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
     hasTsconfig,
     presentConfigFiles,
     ...(tailwindCssEntry === undefined ? {} : { tailwindCssEntry }),
+    ...(unoConfigDeclaresVocabulary === null ? {} : { unoConfigDeclaresVocabulary }),
   };
 };
 
@@ -242,15 +295,15 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
   const hasV4Pkg = '@tailwindcss/vite' in deps || '@tailwindcss/postcss' in deps;
   const v3Config = input.presentConfigFiles.find(name => TAILWIND_CONFIGS.includes(name));
 
-  // Tailwind v4: CSS-first config (no JS config file). Strongest when a CSS entry was found.
-  if (input.tailwindCssEntry !== undefined && v3Config === undefined) {
-    return {
-      system: 'tailwind',
-      configPath: input.tailwindCssEntry,
-      tailwindVersion: depVersion ?? 4,
-      reason: `Tailwind v4 CSS config: ${input.tailwindCssEntry}`,
-    };
-  }
+  const unoConfig = input.presentConfigFiles.find(name => UNOCSS_CONFIGS.includes(name));
+
+  // Order of evidence, strongest first: a config file named at the project root, then the
+  // repo-wide CSS marker scan, then a dependency entry. The root config files go together and
+  // ahead of the rest — `tailwindCssEntry` is whichever file *anywhere* in the repo still contains
+  // `@import "tailwindcss"` or `@theme`, which in a half-migrated repo is residue, while a root
+  // `uno.config.ts` is a deliberate, current statement of what builds the CSS. Getting this
+  // backwards labelled such a repo Tailwind and left its real token source unread.
+
   // Tailwind v3: JS/TS config file at the root.
   if (v3Config !== undefined) {
     return {
@@ -260,7 +313,36 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: `found ${v3Config}`,
     };
   }
-  // Dep-only signal (config not located): trust the version, default to v4 for the v4-only packages.
+  // …with one exception, which is what separates residue from a live setup. Tailwind v4 has no JS
+  // config by design, so its only root-level evidence *is* the CSS marker — and a CSS marker backed
+  // by an actual tailwindcss dependency is not leftovers. "UnoCSS for icons alongside Tailwind v4"
+  // is a common layout, and letting the uno config win it read the wrong token source and then told
+  // the caller "UnoCSS declares no CSS custom properties" about a project whose tokens are `@theme`
+  // custom properties.
+  // A *v4* dependency specifically. `depVersion !== undefined` also accepted `tailwindcss: ^3`,
+  // which is the very signal the rest of this cascade treats as residue — a migrated repo keeps a
+  // v3 dep alive for prettier-plugin-tailwindcss — so a leftover v3 dep plus any `@theme` match
+  // anywhere in the CSS (the marker regex is unanchored, so a comment counts) beat a real uno config.
+  const liveTailwindV4 =
+    input.tailwindCssEntry !== undefined && ((depVersion ?? 0) >= 4 || hasV4Pkg);
+  // A config that loads no vocabulary preset — UnoCSS installed purely for icons — is not a
+  // utility-first project, and saying so would have codegen emit `p-4` where nothing generates it.
+  // Undefined means the presets could not be read, which is not a "no": assume the usual setup.
+  const unoGeneratesUtilities = input.unoConfigDeclaresVocabulary !== false;
+  if (unoConfig !== undefined && !liveTailwindV4 && unoGeneratesUtilities)
+    return { system: 'unocss', configPath: unoConfig, reason: `found ${unoConfig}` };
+
+  // Tailwind v4: CSS-first config, which has no JS config file to find.
+  if (input.tailwindCssEntry !== undefined) {
+    return {
+      system: 'tailwind',
+      configPath: input.tailwindCssEntry,
+      tailwindVersion: depVersion ?? 4,
+      reason: `Tailwind v4 CSS config: ${input.tailwindCssEntry}`,
+    };
+  }
+
+  // Dep-only signals (no config located): trust the version, default to v4 for the v4-only packages.
   if (depVersion !== undefined || hasV4Pkg) {
     return {
       system: 'tailwind',
@@ -268,6 +350,31 @@ const detectStyling = (deps: Record<string, string>, input: ProjectInput): Styli
       reason: hasV4Pkg ? '@tailwindcss/* package in dependencies' : 'tailwindcss in dependencies',
     };
   }
+  // `unocss` is the umbrella package; `@unocss/*` covers a project that installs only the pieces it
+  // uses (the Nuxt and Vite modules both do, and both default to a wind preset). Excluded are the
+  // packages that carry no theme vocabulary and so generate no utility on their own: `reset` is a
+  // bundle of stylesheets any project can import, and the presets below add rules — icons, fonts,
+  // prose, attributify syntax — without a scale.
+  //
+  // The dependency list is the weaker half of this question, and on its own it answers the wrong
+  // one: an icons-only project still installs the `unocss` umbrella and configures `presetIcons`
+  // inside its config, so the denylist never fires. `unoGeneratesUtilities` is what actually
+  // decides it — a config that was read and loads no vocabulary preset overrules any dependency,
+  // because the config is the project's own statement of what it generates.
+  const NON_VOCABULARY = new Set([
+    '@unocss/reset',
+    '@unocss/preset-icons',
+    '@unocss/preset-web-fonts',
+    '@unocss/preset-typography',
+    '@unocss/preset-attributify',
+    '@unocss/preset-tagify',
+  ]);
+  const unoDep = Object.keys(deps).find(
+    d => d === 'unocss' || (d.startsWith('@unocss/') && !NON_VOCABULARY.has(d)),
+  );
+  if (unoDep !== undefined && unoGeneratesUtilities)
+    return { system: 'unocss', reason: `${unoDep} in dependencies` };
+
   if ('sass' in deps || 'node-sass' in deps)
     return { system: 'scss', reason: 'sass in dependencies' };
   return { system: 'unknown', reason: 'no styling signal in manifest' };

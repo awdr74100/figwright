@@ -34,22 +34,35 @@ export type ProjectToken = {
   value: string;
   /** Tailwind token category derived from the namespace, e.g. "color"; absent for plain CSS vars. */
   category?: string;
+  /**
+   * Whether `utility` is a class the framework actually generates, rather than merely a name stem
+   * that happens to start with a namespace prefix.
+   *
+   * The distinction is not cosmetic. `utility` is derived from the name alone, so a stray `:root {
+   * --color-brand: … }` anywhere in the repo yields `brand` — but no framework generates `bg-brand`
+   * from a loose custom property. Only a scale declared in a framework config, or a custom property
+   * declared inside Tailwind v4's `@theme`, actually produces the class. Emitting the utility for
+   * the rest hands codegen a literal that does not exist, and the pooling this loader does (config
+   * tokens _plus_ the repo's CSS) puts both kinds in one list.
+   */
+  utilityIsClass?: boolean;
 } & TokenRef;
 
 /**
  * The literal codegen should emit for a token.
  *
- * A Tailwind utility base (primary-500) is only a real, usable class on a Tailwind project —
- * `utility` is derived purely from the name's prefix and so is populated even on non-Tailwind
- * projects (where it's just the name minus a category prefix, and no `primary-500` class exists).
- * So the utility only leads on a Tailwind project; otherwise the `var()` reference is correct.
- * (`utility` still aids name-matching either way — that's a separate concern from this output.)
+ * A utility base (`primary-500`) leads only when the project has a utility framework **and** the
+ * token came from a source that framework actually generates classes from — see
+ * {@linkcode ProjectToken.utilityIsClass}. Otherwise the `var()` reference is the correct literal.
+ * (`utility` still aids name-matching either way; that is a separate concern from this output.)
  *
  * Shared by the forward join and the design-context value annotation so the two can never disagree
  * about how a token is written.
  */
-export const refOf = (token: ProjectToken, tailwind: boolean): string => {
-  if (tailwind && token.utility !== undefined) return token.utility;
+export const refOf = (token: ProjectToken, utilityFirst: boolean): string => {
+  if (utilityFirst && token.utilityIsClass === true && token.utility !== undefined) {
+    return token.utility;
+  }
   // Narrowing on the union: no `cssVar` means the token came from a source that declares none,
   // which is the arm that guarantees a `utility`.
   return token.cssVar === undefined ? token.utility : token.cssVar;
@@ -128,6 +141,18 @@ export const parseCssCustomProperties = (css: string): ProjectToken[] => {
     .map((decl, index) => ({ decl, index, rank: scopeRank(decl.scope, decl.ancestors) }))
     .toSorted((a, b) => a.rank - b.rank || a.index - b.index);
 
+  // Whether a *name* generates a utility class, decided once per name rather than per declaration.
+  // Rank 0 is scopeRank's `@theme` case, and `@theme` is the only CSS in which declaring a custom
+  // property also generates a class: a stray `:root { --color-brand: … }`, which the repo-wide pool
+  // is full of, yields `utility: 'brand'` that nothing turns into `bg-brand`.
+  //
+  // The property belongs to the name, not to one declaration of it. A `@theme` token with a dark
+  // override (`@theme { --color-surface: #fff }` + `.dark { --color-surface: #0a0a0a }`) is kept as
+  // two tokens so the value-match join can recognise either, and ranking each separately left the
+  // dark one utility-less — `bg-surface` for the light value and `var(--color-surface)` for the
+  // dark one, two contradictory refs for one token inside a single payload.
+  const generatesClass = new Set(declarations.filter(d => d.rank === 0).map(d => d.decl.name));
+
   const seen = new Set<string>();
   const out: ProjectToken[] = [];
   for (const { decl } of declarations) {
@@ -135,12 +160,14 @@ export const parseCssCustomProperties = (css: string): ProjectToken[] => {
     if (seen.has(key)) continue;
     seen.add(key);
     const { utility, category } = deriveNamespace(decl.name);
+    const utilityIsClass = generatesClass.has(decl.name);
     out.push({
       name: decl.name,
       value: decl.value,
       cssVar: `var(--${decl.name})`,
       ...(utility === undefined ? {} : { utility }),
       ...(category === undefined ? {} : { category }),
+      ...(utilityIsClass ? { utilityIsClass } : {}),
     });
   }
   return out;

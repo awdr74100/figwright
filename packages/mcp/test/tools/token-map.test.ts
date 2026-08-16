@@ -242,6 +242,77 @@ describe('handleTokenMap', () => {
     }
   });
 
+  it('reads an UnoCSS config, in its own theme vocabulary, and pools the repo CSS too', async () => {
+    const uno = await mkdtemp(join(tmpdir(), 'tokenmap-uno-'));
+    try {
+      await writeFile(
+        join(uno, 'package.json'),
+        JSON.stringify({ devDependencies: { unocss: '^66.0.0' } }),
+      );
+      await writeFile(
+        join(uno, 'uno.config.ts'),
+        `import { defineConfig, presetUno } from 'unocss'
+         export default defineConfig({
+           presets: [presetUno()],
+           theme: { colors: { primary: { 500: '#6266F0' } }, breakpoints: { tablet: '768px' } },
+         })`,
+      );
+      await mkdir(join(uno, 'src'), { recursive: true });
+      await writeFile(join(uno, 'src', 'theme.css'), ':root { --accent-teal: #14B8A6; }');
+
+      const result = await handleTokenMap(dispatch, { rootDir: uno });
+      expect(result.profile.styling.system).toBe('unocss');
+      expect(result.tokenSource).toBe('uno.config.ts');
+
+      const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+      // Utility base, exactly as a Tailwind project would get — and no fabricated var().
+      expect(primary?.candidate?.ref).toBe('primary-500');
+      expect(primary?.candidate?.cssVar).toBeUndefined();
+      expect(primary?.status).toBe('high');
+
+      const teal = result.mappings.find(m => m.figmaName === 'Accent/Teal');
+      expect(teal?.candidate?.ref).toBe('var(--accent-teal)');
+      expect(result.note).toMatch(/the UnoCSS config declares no CSS custom properties/);
+    } finally {
+      await rm(uno, { recursive: true, force: true });
+    }
+  });
+
+  it('reports the skip count even when nothing at all could be read', async () => {
+    // The chained note left this unreachable in exactly the case counting was added for: a config
+    // whose only colour scale is `require('tailwindcss/colors')` yields zero tokens *and* one skip,
+    // and said "its theme declares no scales" — the message the chain exists to stop being wrong.
+    const v3 = await v3Project({
+      'tailwind.config.js':
+        "module.exports = { theme: { colors: require('tailwindcss/colors') } };",
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      expect(result.note).toMatch(/1 theme entr\(ies\) were skipped/);
+      expect(result.note).not.toMatch(/declares no scales/);
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
+  it('does not offer a utility ref for a custom property outside @theme', async () => {
+    // `utility` is derived from the name alone, so a loose `:root { --color-brand }` yields
+    // `brand` — but nothing generates `bg-brand` from a stray custom property. Pooled beside a
+    // config on a utility-first project, it must still be referenced as the var().
+    const v3 = await v3Project({
+      'tailwind.config.js': 'module.exports = { theme: { extend: {} } };',
+      'src/theme.css': ':root { --color-primary-500: #6266F0; }',
+    });
+    try {
+      const result = await handleTokenMap(dispatch, { rootDir: v3 });
+      const primary = result.mappings.find(m => m.figmaName === 'Primary/500');
+      expect(primary?.candidate?.ref).toBe('var(--color-primary-500)');
+      expect(primary?.candidate?.utility).toBeUndefined();
+    } finally {
+      await rm(v3, { recursive: true, force: true });
+    }
+  });
+
   it('says an empty theme is empty rather than unreadable', async () => {
     // `theme: { extend: {} }` was read perfectly well. Reporting it as unreadable would send the
     // caller hunting for a parsing problem instead of concluding the project has no theme tokens.

@@ -68,9 +68,10 @@ Run the grounded tools against the selection, then generate — **trust them ove
      verify, not a resolved binding: an entry with `candidates` lists same-value tokens to choose
      between by meaning, a semantically wrong token is **worse** than the raw value (keep the raw
      value and note the gap instead), and a bound Figma variable always outranks a raw-value match.
-   - `framework-builtin` (Tailwind built-in scale step, e.g. `spacing/4`, `line-height/7`,
-     `weight/Bold`): carries `builtin: { scale, step }` — compose the utility (`p-4`/`gap-4`,
-     `leading-7`, `font-bold`), **not** an arbitrary `p-[16px]`. This is **not** a gap.
+   - `framework-builtin` (a built-in scale step of the project's utility framework — Tailwind or
+     UnoCSS — e.g. `spacing/4`, `line-height/7`, `weight/Bold`): carries `builtin: { scale, step }`
+     — compose the utility (`p-4`/`gap-4`, `leading-7`, `font-bold`), **not** an arbitrary
+     `p-[16px]`. This is **not** a gap.
    - `unmapped`: use the value but call out the gap (offer to add it to the token source); don't
      hardcode silently.
    - `figmaModes` (`{ Light: …, Dark: … }`, with the file's theme axes on `themedCollections`): the

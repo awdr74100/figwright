@@ -8,6 +8,7 @@ import {
   analyzeProject,
   detectProfile,
   gatherProjectInput,
+  isUtilityFirst,
   type ProjectInput,
 } from '../../src/profile/profile.js';
 
@@ -106,6 +107,118 @@ describe('detectProfile (pure)', () => {
     expect(p.styling.configPath).toBeUndefined();
   });
 
+  it('detects UnoCSS from its config file and points configPath at it', () => {
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
+  it('detects UnoCSS from a scoped package when no config file was located', () => {
+    // The Nuxt and Vite integrations install only the pieces they use, so the umbrella `unocss`
+    // package is not always present.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/nuxt': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBeUndefined();
+  });
+
+  it('lets an UnoCSS config file beat a leftover Tailwind CSS marker', () => {
+    // tailwindCssEntry is whichever file *anywhere* in the repo still contains `@import
+    // "tailwindcss"` or `@theme` — in a half-migrated repo that is residue, while a root
+    // uno.config.ts is a current statement of what builds the CSS.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+        tailwindCssEntry: 'src/legacy.css',
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
+  it('still detects Tailwind v4 from its CSS marker when no root config file exists', () => {
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^4.0.0' } },
+        tailwindCssEntry: 'src/app.css',
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('src/app.css');
+    expect(p.styling.tailwindVersion).toBe(4);
+  });
+
+  it('keeps Tailwind v4 when its CSS marker is backed by a real dependency', () => {
+    // "UnoCSS for icons alongside Tailwind v4" is a common layout, and v4 has no JS config by
+    // design — so its only root-level evidence is the CSS marker. A marker backed by an actual
+    // tailwindcss dependency is a live setup, not the migration residue the uno-first rule exists
+    // for; letting the uno config win read the wrong token source.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^4.0.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+        tailwindCssEntry: 'src/app.css',
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('src/app.css');
+    expect(p.styling.tailwindVersion).toBe(4);
+  });
+
+  it('does not treat an icons-only UnoCSS install as a utility-first project', () => {
+    // presetIcons adds rules without a theme vocabulary. Counted as evidence, a plain-CSS project
+    // became utility-first and codegen was told to write `p-4`, which nothing there generates.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/preset-icons': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unknown');
+    expect(isUtilityFirst(p.styling.system)).toBe(false);
+  });
+
+  it('does not treat @unocss/reset as evidence of UnoCSS', () => {
+    // It is a bundle of stylesheets (normalize / eric-meyer / a Tailwind-compat reset) any project
+    // can import without UnoCSS generating a class. Counting it flipped a plain-CSS project to
+    // utility-first, whose refs and framework-builtin rows would name classes that don't exist.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { '@unocss/reset': '^66.0.0' } } }),
+    );
+    expect(p.styling.system).toBe('unknown');
+  });
+
+  it('lets an UnoCSS config file beat a bare tailwindcss dependency', () => {
+    // `tailwindcss` turns up in UnoCSS repos for prettier-plugin-tailwindcss, editor tooling, or a
+    // half-finished migration. Letting that dep-only branch run first called the project Tailwind
+    // *and* reported no configPath, so the uno.config.ts at the root was never read as a source.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^3.4.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('unocss');
+    expect(p.styling.configPath).toBe('uno.config.ts');
+  });
+
+  it('keeps Tailwind ahead of UnoCSS when a project carries both', () => {
+    // Mid-migration projects do. Tailwind's cascade already demands a config file or a real
+    // tailwindcss dependency, so it only wins here on a positive signal of its own.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^3.4.0', unocss: '^66.0.0' } },
+        presentConfigFiles: ['tailwind.config.ts', 'uno.config.ts'],
+      }),
+    );
+    expect(p.styling.system).toBe('tailwind');
+    expect(p.styling.configPath).toBe('tailwind.config.ts');
+  });
+
   it('falls back to scss / unknown styling', () => {
     expect(
       detectProfile(baseInput({ packageJson: { dependencies: { sass: '^1' } } })).styling.system,
@@ -179,6 +292,28 @@ describe('gatherProjectInput + analyzeProject (real fs)', () => {
     const input = await gatherProjectInput(dir);
     expect(input.hasTsconfig).toBe(true);
     expect(input.tailwindCssEntry).toBe('src/app.css');
+  });
+
+  it('reports present config files in probe order, not stat-completion order', async () => {
+    // The probes run in parallel, and detectStyling picks the *first* match out of this list, so a
+    // project with more than one config present must not get a different answer run to run.
+    const multi = await mkdtemp(join(tmpdir(), 'profile-order-'));
+    try {
+      await writeFile(join(multi, 'package.json'), '{}');
+      for (const name of ['tailwind.config.ts', 'tailwind.config.js', 'uno.config.ts']) {
+        await writeFile(join(multi, name), 'module.exports = {};');
+      }
+      const input = await gatherProjectInput(multi);
+      // .js before .ts is the declared probe order; whichever file the filesystem answered for
+      // first must not change it.
+      expect(input.presentConfigFiles).toEqual([
+        'tailwind.config.js',
+        'tailwind.config.ts',
+        'uno.config.ts',
+      ]);
+    } finally {
+      await rm(multi, { recursive: true, force: true });
+    }
   });
 
   it('analyzeProject end-to-end yields a react + tailwind-v4 + ts profile', async () => {
