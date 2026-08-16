@@ -163,6 +163,15 @@ const scopeRank = (scope: string, ancestors: readonly string[]): number => {
  * syntax around them is Sass: without it a `//` comment swallows the following declaration, and one
  * containing a `}` swallows the whole file.
  */
+/**
+ * Whether a custom-property declaration applies document-wide, rather than only under some
+ * selector. `var(--x)` from a `:root` block resolves anywhere; the same name declared under
+ * `.theme` resolves to nothing outside it — which decides whether it is a usable project token in
+ * its own right, and whether it may stand in for a Sass variable that is referenceable anywhere.
+ */
+export const isBaseScopedDeclaration = (scope: string, ancestors: readonly string[]): boolean =>
+  scopeRank(scope, ancestors) <= 1;
+
 export const parseCssCustomProperties = (css: string, scssSyntax = false): ProjectToken[] => {
   const declarations = scanCustomProperties(css, scssSyntax)
     // A custom property declared inside a `@mixin` or `@function` body only exists wherever that

@@ -90,7 +90,10 @@ export const tokenMapTool: ToolSpec = {
     'match is name-based with an exact color value-match as confirmation. When several project ' +
     'tokens share the exact same color value and the name cannot pick one, the mapping is capped ' +
     "below 'high' and candidate.ambiguousWith lists the other same-value tokens — verify that pick " +
-    'semantically instead of trusting it blindly. On a project with a utility framework (Tailwind ' +
+    'semantically instead of trusting it blindly. When the rival is the SAME name in another file ' +
+    '(a SCSS layout with per-component variable files), candidate.ambiguousFrom lists those files ' +
+    'instead: the ref is right and the declaring file is the open question, so confirm which one ' +
+    'the design means before writing its @use. On a project with a utility framework (Tailwind ' +
     'or UnoCSS) a ' +
     'variable that hits a framework built-in scale (spacing/N, line-height/N, weight/*) is reported as ' +
     "status 'framework-builtin' with { builtin: { scale, step } } rather than unmapped — it has no " +

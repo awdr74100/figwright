@@ -1,4 +1,10 @@
-import { parseCssCustomProperties, parseScssVariables, type ProjectToken } from './tokens.js';
+import { scanCustomProperties } from './css-scan.js';
+import {
+  isBaseScopedDeclaration,
+  parseCssCustomProperties,
+  parseScssVariables,
+  type ProjectToken,
+} from './tokens.js';
 
 // One `.scss` file's design tokens. Both kinds of declaration count, because modern SCSS projects
 // use both and reading one would leave half the project joining against nothing:
@@ -47,7 +53,18 @@ export const parseScssFile = (body: string, from: string): ProjectToken[] => {
   // A variable is dropped only when *this file* also exposes it as a custom property of the same
   // value — the mirror. A same-named variable in another file is a different declaration and is
   // not affected by what this one happens to expose.
-  const mirrored = new Set(customProperties.map(t => `${t.name}\u0000${t.value}`));
+  // Only a custom property that applies document-wide may displace the variable. One declared
+  // under `.theme` resolves to nothing outside that selector, while the `$brand` it would have
+  // replaced is referenceable anywhere through `@use` — trading them there loses the only usable
+  // ref, which is the opposite of the rule this file states.
+  const baseScoped = new Set(
+    scanCustomProperties(body, true)
+      .filter(d => isBaseScopedDeclaration(d.scope, d.ancestors))
+      .map(d => d.name),
+  );
+  const mirrored = new Set(
+    customProperties.filter(t => baseScoped.has(t.name)).map(t => `${t.name}\u0000${t.value}`),
+  );
   const kept = [
     ...variables.filter(v => !mirrored.has(`${v.name}\u0000${v.value}`)),
     ...customProperties,

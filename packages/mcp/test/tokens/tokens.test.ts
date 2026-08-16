@@ -175,6 +175,18 @@ describe('parseScssFile', () => {
     expect(tokens).toEqual([{ name: 'brand', value: '#6266F0', cssVar: 'var(--brand)' }]);
   });
 
+  it('only lets a document-wide custom property displace a variable', () => {
+    // `--brand` under `.theme` resolves to nothing outside that selector, while the `$brand` it
+    // would have replaced is referenceable anywhere through `@use` — trading them loses the only
+    // usable ref, the opposite of the rule this collapse exists to apply.
+    const scoped = parseScssFile('$brand: #6266F0;\n.theme { --brand: #6266F0; }', 'f.scss');
+    expect(scoped.map(t => t.scssVar ?? t.cssVar)).toEqual(['$brand', 'var(--brand)']);
+    // A `:root` mirror still folds.
+    expect(parseScssFile('$b: #111111;\n:root { --b: #{$b}; }', 'f.scss')).toEqual([
+      { name: 'b', value: '#111111', cssVar: 'var(--b)' },
+    ]);
+  });
+
   it('drops a custom property declared inside a mixin body', () => {
     // It only exists wherever the mixin is included, so `var(--brand)` resolves to nothing in a
     // component that never includes it — the asymmetric twin of the rule-scoped `$var` case.

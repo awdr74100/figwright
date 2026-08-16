@@ -132,12 +132,25 @@ const listFiles = (files: readonly string[]): string =>
  */
 const dedupeTokens = (tokens: readonly ProjectToken[]): ProjectToken[] => {
   const seen = new Set<string>();
-  return tokens.filter(t => {
+  const unique = tokens.filter(t => {
     const key = [t.name, t.value, t.cssVar ?? '', t.scssVar ?? '', t.from ?? ''].join('\u0000');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+
+  // The mirror is not always written in one file: `_vars.scss` for the build-time Sass variables
+  // and a hand-written `global.css` `:root` block for runtime theming, same palette, is a standard
+  // layout. Keeping both halves cost such a project *twice*: an exact hit degraded from 'high' to
+  // 'medium' (the join saw two same-value tokens and could not split them), and the surviving ref
+  // flipped to `$primary`, which needs an `@use` — where reading only the CSS, as this server did
+  // before SCSS was a source at all, returned `var(--primary)` at full confidence. A regression
+  // against our own previous behaviour, so the same rule parseScssFile applies within a file
+  // applies across the pool: the import-free reference wins.
+  const importFree = new Set(
+    unique.filter(t => t.cssVar !== undefined).map(t => `${t.name}\u0000${t.value}`),
+  );
+  return unique.filter(t => t.cssVar !== undefined || !importFree.has(`${t.name}\u0000${t.value}`));
 };
 
 /**
@@ -150,12 +163,18 @@ const loadScssPool = async (rootDir: string): Promise<LoadedProjectTokens> => {
   const css = await aggregateRepoCssTokens(rootDir);
   // Counted after collapsing, so the note describes the result rather than the raw walks.
   const tokens = dedupeTokens([...scss.tokens, ...css.tokens]);
-  const cssNote =
-    css.files.length === 0 ? '' : ` and ${css.files.length} .css file(s): ${listFiles(css.files)}`;
+  const parts = [
+    scss.files.length === 0 ? null : `${scss.files.length} .scss file(s): ${listFiles(scss.files)}`,
+    css.files.length === 0 ? null : `${css.files.length} .css file(s): ${listFiles(css.files)}`,
+  ].filter(part => part !== null);
+  // The @use sentence is model-facing guidance, and it only applies to a token that carries a
+  // declaring file. Said over a pool of plain custom properties it told the caller to add an import
+  // for a `var()` that needs none — a fabricated instruction, in the file the model then writes.
+  const needsUse = tokens.some(t => t.from !== undefined);
   return {
     tokens,
     source: null,
-    note: `aggregated ${tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}${cssNote}; ${SCSS_USE_NOTE}`,
+    note: `aggregated ${tokens.length} token(s) from ${parts.join(' and ')}${needsUse ? `; ${SCSS_USE_NOTE}` : ''}`,
     files: [...scss.files, ...css.files],
   };
 };
@@ -285,7 +304,10 @@ export const loadProjectTokens = async (
       refusal,
     );
   }
-  return { tokens, source: null, ...(note === undefined ? {} : { note }), files };
+  return withPrefixedNote(
+    { tokens, source: null, ...(note === undefined ? {} : { note }), files },
+    refusal,
+  );
 };
 
 /**

@@ -295,6 +295,71 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('collapses a mirror split across two files, not just within one', async () => {
+    // `_vars.scss` for the build-time Sass variables plus a hand-written `global.css` `:root` block
+    // for runtime theming, same palette, is a standard layout. Keeping both halves cost such a
+    // project twice: an exact hit degraded to 'medium' because the join saw two same-value tokens,
+    // and the surviving ref flipped to `$primary`, which needs an `@use` — where reading only the
+    // CSS (this server's behaviour before SCSS was a source at all) returned `var(--primary)` at
+    // full confidence. A regression against our own previous output.
+    const dir = await mkdtemp(join(tmpdir(), 'load-xfile-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_vars.scss'), '$primary: #6266F0;');
+      await writeFile(join(dir, 'src', 'global.css'), ':root { --primary: #6266F0; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.tokens).toHaveLength(1);
+      expect(loaded.tokens[0]?.cssVar).toBe('var(--primary)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not attach the @use instruction to a pool that needs no import', async () => {
+    // The sentence is model-facing guidance and only applies to a token carrying a declaring file.
+    // Said over plain custom properties it told the caller to import something for a `var()` that
+    // needs nothing — a fabricated instruction, in the file the model then writes.
+    const dir = await mkdtemp(join(tmpdir(), 'load-nouse-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', 'g.css'), ':root { --a: 1px; }');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.note).not.toMatch(/@use/);
+      // …and it does not claim a .scss pool it never found.
+      expect(loaded.note).not.toMatch(/0 \.scss/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a refused override even when nothing else was found', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-onlysass-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_v.sass'), '$a: 1px');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_v.sass');
+      expect(loaded.tokens).toEqual([]);
+      expect(loaded.note).toMatch(/indented \.sass syntax/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('collapses the mirror layout into one token with the import-free ref', async () => {
     // `$brand` plus `:root { --brand: #{$brand} }` in one file is one logical token with two
     // reference forms — the idiomatic modern layout this reader set out to support. Left as two,

@@ -60,6 +60,14 @@ export interface TokenMapping {
      * it; binding the wrong same-value sibling silently diverges when that token is later retuned.
      */
     ambiguousWith?: string[];
+    /**
+     * Other files declaring this same name and value, present only when the join could not tell
+     * which one the design meant. `ambiguousWith` cannot express this — it carries token _names_,
+     * and these siblings share the winner's name; only the declaring file differs. Without it a
+     * capped mapping arrived with nothing at all explaining the cap, and `from` looked like a
+     * resolved answer rather than one of several candidates.
+     */
+    ambiguousFrom?: string[];
   };
   /**
    * Set only when status is 'framework-builtin': the Tailwind built-in scale this variable belongs
@@ -227,6 +235,7 @@ const candidateFrom = (
   matchedBy: ('name' | 'value' | 'map-file')[],
   utilityFirst: boolean,
   ambiguousWith?: readonly string[],
+  ambiguousFrom?: readonly string[],
 ): NonNullable<TokenMapping['candidate']> => ({
   token: token.name,
   ref: refOf(token, utilityFirst),
@@ -243,6 +252,9 @@ const candidateFrom = (
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0
     ? { ambiguousWith: [...ambiguousWith] }
+    : {}),
+  ...(ambiguousFrom !== undefined && ambiguousFrom.length > 0
+    ? { ambiguousFrom: [...ambiguousFrom] }
     : {}),
 });
 
@@ -410,9 +422,21 @@ const joinOne = (
           t => t.name === token.name && t.from !== undefined && t.from !== token.from,
         );
       const confidence = fileAmbiguous ? 0.7 : 1;
+      const otherFiles = fileAmbiguous
+        ? projectTokens
+            .filter(t => t.name === token.name && t.from !== undefined && t.from !== token.from)
+            .map(t => t.from as string)
+        : [];
       return {
         ...base,
-        candidate: candidateFrom(token, confidence, ['map-file'], opts.utilityFirst === true),
+        candidate: candidateFrom(
+          token,
+          confidence,
+          ['map-file'],
+          opts.utilityFirst === true,
+          undefined,
+          otherFiles,
+        ),
         status: fileAmbiguous ? statusFor(confidence, opts.threshold) : 'high',
       };
     }
@@ -487,6 +511,13 @@ const joinTokenScan = (
       .slice(1)
       .map(s => s.token.name)
       .filter(name => name !== top.token.name);
+    // Siblings that share the winner's name are the same token in another file — not an
+    // alternative to choose between by meaning, but the reason the caller cannot know which file
+    // to import. Reported as files, so the cap is explained by the thing that caused it.
+    const otherFiles = scored
+      .slice(1)
+      .filter(s => s.token.name === top.token.name && s.token.from !== undefined)
+      .map(s => s.token.from as string);
     return {
       ...base,
       candidate: candidateFrom(
@@ -495,6 +526,7 @@ const joinTokenScan = (
         ['value'],
         opts.utilityFirst === true,
         alternatives,
+        otherFiles,
       ),
       status: statusFor(confidence, opts.threshold),
     };
@@ -526,9 +558,26 @@ const joinTokenScan = (
       valueDisagrees ? Math.min(nameMatch.score, 0.84) : nameMatch.score,
       fileAmbiguous ? 0.7 : 1,
     );
+    const otherFiles = fileAmbiguous
+      ? projectTokens
+          .filter(
+            t =>
+              t.name === nameMatch.token.name &&
+              t.from !== undefined &&
+              t.from !== nameMatch.token.from,
+          )
+          .map(t => t.from as string)
+      : [];
     return {
       ...base,
-      candidate: candidateFrom(nameMatch.token, confidence, ['name'], opts.utilityFirst === true),
+      candidate: candidateFrom(
+        nameMatch.token,
+        confidence,
+        ['name'],
+        opts.utilityFirst === true,
+        undefined,
+        otherFiles,
+      ),
       status: statusFor(confidence, opts.threshold),
     };
   }

@@ -123,6 +123,26 @@ describe('joinTokens', () => {
     expect(m?.status).not.toBe('high');
   });
 
+  it('says which other files caused a cap, on every path that caps', () => {
+    // A cap with nothing explaining it is worse than no cap: `from` reads as a resolved answer
+    // rather than one of several candidates. `ambiguousWith` cannot say this — it carries names,
+    // and these siblings share the winner's name.
+    const twoFiles: ProjectToken[] = [
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'a/_t.scss' },
+      { name: 'primary', value: '#6266F0', scssVar: '$primary', from: 'b/_t.scss' },
+    ];
+    // value path
+    const [byValue] = joinTokens([fig('primary', '#6266F0')], twoFiles, { threshold: 0.7 });
+    expect(byValue?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+    // name path
+    const [byName] = joinTokens([fig('primary', 8, 'FLOAT')], twoFiles, { threshold: 0.7 });
+    expect(byName?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+    // map-file path
+    const overrides = parseTokenMapFile('| Accent | $primary |');
+    const [byMap] = joinTokens([fig('Accent', '#123456')], twoFiles, { threshold: 0.7, overrides });
+    expect(byMap?.candidate?.ambiguousFrom).toEqual(['b/_t.scss']);
+  });
+
   it('caps a map-file override that cannot say which file it meant', () => {
     // A recorded row names a ref, and a ref cannot name a file — so with two files answering to it
     // the returned `from` is this join's choice, not the author's.
