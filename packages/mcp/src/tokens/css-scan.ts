@@ -56,12 +56,62 @@ const isNameChar = (c: string): boolean =>
   c !== '!';
 
 /**
+ * What separates the two dialects this scanner reads. Everything else — comment/string/brace
+ * tracking, the prelude guard, `url(a;b)` and `content: "}"` surviving intact — is identical, which
+ * is why they share one implementation rather than a copy that drifts.
+ */
+interface Dialect {
+  /** What begins a declaration: `--` for a CSS custom property, `$` for a SCSS variable. */
+  sigil: string;
+  /**
+   * Whether the declaration must sit inside a block. A CSS custom property does; a SCSS variable is
+   * normally top-level, and one written _inside_ a rule is scoped to that rule — not referenceable
+   * from anywhere else, so it must not become a token. That filtering is the caller's, from
+   * `scope`.
+   */
+  requireBlock: boolean;
+  /** SCSS adds `//` line comments; CSS has no such thing (`//` there is just text). */
+  lineComments: boolean;
+  /** Declaration flags to strip from the tail of a value, longest-lived first. */
+  flags: RegExp;
+}
+
+const CSS_DIALECT: Dialect = {
+  sigil: '--',
+  requireBlock: true,
+  lineComments: false,
+  // `!important` is a declaration flag rather than part of the value; keeping it would make the
+  // same token compare unequal to its unflagged twin in the value-match join.
+  flags: /\s*!\s*important\s*$/i,
+};
+
+const SCSS_DIALECT: Dialect = {
+  sigil: '$',
+  requireBlock: false,
+  lineComments: true,
+  // `!default` is how a SCSS variable declares itself overridable; `!global` how a scoped one
+  // escapes its block. Both are flags on the declaration, not part of the value.
+  flags: /\s*!\s*(default|global)\s*$/i,
+};
+
+/**
  * Scan every custom-property declaration in a stylesheet, in document order, each tagged with the
  * block chain it appears in. Pure, total (never throws), and order-preserving — callers decide
  * which declaration of a repeated name wins, which is a question this layer deliberately does not
  * answer.
  */
-export const scanCustomProperties = (css: string): CssDeclaration[] => {
+export const scanCustomProperties = (css: string): CssDeclaration[] =>
+  scanDeclarations(css, CSS_DIALECT);
+
+/**
+ * The same scan over SCSS `$name: value` declarations. `scope` is empty for a module-level variable
+ * and holds the enclosing rule for one declared inside a block — which the caller must drop, since
+ * such a variable is local to that rule and referencing it from elsewhere does not compile.
+ */
+export const scanScssVariables = (scss: string): CssDeclaration[] =>
+  scanDeclarations(scss, SCSS_DIALECT);
+
+const scanDeclarations = (css: string, dialect: Dialect): CssDeclaration[] => {
   const out: CssDeclaration[] = [];
   // Preludes of the blocks currently open, outermost first.
   const stack: string[] = [];
@@ -96,6 +146,20 @@ export const scanCustomProperties = (css: string): CssDeclaration[] => {
     i = end < 0 ? n : end + 2;
   };
 
+  /** True at the start of a comment this dialect recognises. */
+  const atComment = (): boolean =>
+    css[i] === '/' && (css[i + 1] === '*' || (dialect.lineComments && css[i + 1] === '/'));
+
+  /** Skip whichever comment form starts here. A `//` runs to the newline, or to end-of-input. */
+  const skipAnyComment = (): void => {
+    if (css[i + 1] === '*') {
+      skipComment();
+      return;
+    }
+    const end = css.indexOf('\n', i + 2);
+    i = end < 0 ? n : end + 1;
+  };
+
   /**
    * Read a declaration value, starting just after the `:`. Stops at the `;` that ends it or the `}`
    * that ends its block — but only when that character is at paren depth 0 and outside any string
@@ -106,8 +170,8 @@ export const scanCustomProperties = (css: string): CssDeclaration[] => {
     let depth = 0;
     while (i < n) {
       const c = css[i] as string;
-      if (c === '/' && css[i + 1] === '*') {
-        skipComment();
+      if (atComment()) {
+        skipAnyComment();
         continue;
       }
       if (c === '"' || c === "'") {
@@ -125,19 +189,14 @@ export const scanCustomProperties = (css: string): CssDeclaration[] => {
       value += c;
       i += 1;
     }
-    // `!important` is a declaration flag rather than part of the value; keeping it would make the
-    // same token compare unequal to its unflagged twin in the value-match join.
-    return value
-      .trim()
-      .replace(/\s*!\s*important\s*$/i, '')
-      .trim();
+    return value.trim().replace(dialect.flags, '').trim();
   };
 
   while (i < n) {
     const c = css[i] as string;
 
-    if (c === '/' && css[i + 1] === '*') {
-      skipComment();
+    if (atComment()) {
+      skipAnyComment();
       continue;
     }
 
@@ -174,12 +233,18 @@ export const scanCustomProperties = (css: string): CssDeclaration[] => {
       continue;
     }
 
-    // A custom property can only begin a declaration: inside a block, with nothing but whitespace
-    // since the last separator. The prelude guard is what keeps `color: var(--x)` from registering
-    // `--x` as a declaration — there, the prelude holds `color: var(` when `--x` is reached.
-    if (c === '-' && css[i + 1] === '-' && stack.length > 0 && prelude.trim() === '') {
+    // A declaration begins with nothing but whitespace since the last separator — the prelude guard
+    // is what keeps `color: var(--x)` and `color: $x` from registering as declarations, since there
+    // the prelude holds `color: var(` / `color: ` when the sigil is reached. CSS additionally
+    // requires a block; a SCSS variable is normally top-level.
+    const sigilLen = dialect.sigil.length;
+    if (
+      css.startsWith(dialect.sigil, i) &&
+      (!dialect.requireBlock || stack.length > 0) &&
+      prelude.trim() === ''
+    ) {
       const start = i;
-      let j = i + 2;
+      let j = i + sigilLen;
       while (j < n) {
         const d = css[j] as string;
         if (d === '\\') {
@@ -192,8 +257,8 @@ export const scanCustomProperties = (css: string): CssDeclaration[] => {
       let k = j;
       while (k < n && isWhitespace(css[k] as string)) k += 1;
       // Only a `:` makes this a declaration; a bare `--x` in a prelude is a selector fragment.
-      if (css[k] === ':' && j > i + 2) {
-        const name = css.slice(i + 2, j);
+      if (css[k] === ':' && j > i + sigilLen) {
+        const name = css.slice(i + sigilLen, j);
         i = k + 1;
         const value = readValue();
         // An empty value (`--x:;`) declares nothing usable for a design-token join, and the

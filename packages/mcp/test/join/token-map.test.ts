@@ -47,6 +47,25 @@ describe('joinTokens', () => {
     expect(m?.status).toBe('high');
   });
 
+  it('carries the declaring file of a SCSS token, without which the ref cannot resolve', () => {
+    const scss: ProjectToken[] = [
+      {
+        name: 'color-primary-500',
+        value: '#6266F0',
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      },
+    ];
+    const [m] = joinTokens([fig('Primary/500', '#6266F0')], scss, { threshold: 0.7 });
+    expect(m?.candidate?.ref).toBe('$color-primary-500');
+    // Not decoration: `$color-primary-500` is an undefined-variable error until the consuming file
+    // @uses this path, so dropping it leaves a ref the caller cannot make resolve.
+    expect(m?.candidate?.from).toBe('src/styles/_tokens.scss');
+    // SCSS generates no classes, so no utility must be offered even if the flag were on.
+    expect(m?.candidate?.utility).toBeUndefined();
+    expect(m?.candidate?.cssVar).toBeUndefined();
+  });
+
   it('recommends the var() reference (not a bogus utility) on a non-Tailwind project', () => {
     // token.utility is derived from the name prefix and so is set even off-Tailwind, where no
     // `primary-500` class exists. With the flag off, ref must be the CSS var and utility not surfaced.

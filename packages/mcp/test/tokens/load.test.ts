@@ -232,6 +232,66 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('reads a SCSS project, which previously joined against an empty pool', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1.102.0' } }),
+      );
+      await mkdir(join(dir, 'src', 'styles'), { recursive: true });
+      await writeFile(
+        join(dir, 'src', 'styles', '_tokens.scss'),
+        [
+          '$color-primary-500: #6266F0;',
+          '$radius-lg: 8px !default;',
+          // A CSS custom property written in a .scss file compiles through untouched, so it is an
+          // ordinary var() token — modern SCSS projects use both and reading one leaves half unread.
+          ':root { --color-legacy: #1F304D; }',
+          // Scoped to a rule: not referenceable from generated code.
+          '.card { $scoped: 99px; padding: $scoped; }',
+        ].join('\n'),
+      );
+
+      const profile = await analyzeProject(dir);
+      expect(profile.styling.system).toBe('scss');
+      const loaded = await loadProjectTokens(dir, profile, undefined);
+      const byName = new Map(loaded.tokens.map(t => [t.name, t]));
+
+      expect(byName.get('color-primary-500')).toMatchObject({
+        scssVar: '$color-primary-500',
+        from: 'src/styles/_tokens.scss',
+      });
+      expect(byName.get('radius-lg')?.value).toBe('8px');
+      expect(byName.get('color-legacy')?.cssVar).toBe('var(--color-legacy)');
+      expect(byName.has('scoped')).toBe(false);
+      // The ref is not self-sufficient, so every SCSS result says what makes it resolve.
+      expect(loaded.note).toMatch(/@use/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads a single .scss file when tokenSource names one', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'load-scss-one-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await writeFile(join(dir, 'src', '_a.scss'), '$from-a: #111111;');
+      await writeFile(join(dir, 'src', '_b.scss'), '$from-b: #222222;');
+
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), 'src/_a.scss');
+      expect(loaded.source).toBe('src/_a.scss');
+      expect(loaded.tokens.map(t => t.name)).toEqual(['from-a']);
+      expect(loaded.tokens[0]?.from).toBe('src/_a.scss');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('caps the file list in a note instead of naming up to 200 paths', async () => {
     // A note is a diagnostic; naming every contributor buries the sentence that matters under a
     // wall of paths in the middle of a tool result.

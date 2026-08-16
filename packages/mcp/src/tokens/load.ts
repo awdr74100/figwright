@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import type { ProjectProfile, StylingSystem } from '../profile/profile.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
-import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
+import { aggregateRepoScssTokens } from './repo-scss.js';
+import { parseCssCustomProperties, parseScssVariables, type ProjectToken } from './tokens.js';
 
 // The one place that decides where a project's design tokens come from and reads them — shared by
 // token_map (the explicit join tool) and the design-context value-reverse annotation, so the two
@@ -16,7 +17,7 @@ import { parseCssCustomProperties, type ProjectToken } from './tokens.js';
  * the same scales in a form no CSS parser can see. They are separate kinds rather than one
  * "js-config" because the frameworks name their theme keys differently.
  */
-export type TokenSourceKind = 'css' | 'tailwind-v3' | 'unocss';
+export type TokenSourceKind = 'css' | 'tailwind-v3' | 'unocss' | 'scss';
 
 export interface TokenSource {
   /** Repo-relative path. */
@@ -43,6 +44,7 @@ const TAILWIND_CONFIG_BASENAME = /(^|[\\/])tailwind\.config\.[cm]?[jt]s$/i;
  * which framework wrote them.
  */
 const kindOfOverride = (path: string, system: StylingSystem): TokenSourceKind => {
+  if (/\.scss$/i.test(path)) return 'scss';
   if (!JS_CONFIG_EXT.test(path)) return 'css';
   if (UNO_CONFIG_BASENAME.test(path)) return 'unocss';
   if (TAILWIND_CONFIG_BASENAME.test(path)) return 'tailwind-v3';
@@ -90,6 +92,13 @@ export interface LoadedProjectTokens {
 // the middle of a tool result. Enough to recognise where the tokens came from, then a count.
 const NAMED_FILES = 6;
 
+// Said on every SCSS result, because the ref is not self-sufficient: `$color-primary-500` is an
+// undefined-variable error until the consuming file pulls its declaring file in, and modern Sass
+// namespaces that import. Verified against dart-sass — under a plain `@use './tokens'` the bare
+// name does not compile and the reference is `tokens.$color-primary-500`.
+const SCSS_USE_NOTE =
+  "a SCSS ref only resolves once the consuming file imports its `from` file — add `@use '<from>' as *` to keep the ref as written, or follow the project's existing @use style and prefix the ref with that namespace";
+
 const listFiles = (files: readonly string[]): string =>
   files.length <= NAMED_FILES
     ? files.join(', ')
@@ -115,6 +124,26 @@ export const loadProjectTokens = async (
   tokenSourceOverride: string | undefined,
 ): Promise<LoadedProjectTokens> => {
   const { source, note } = resolveTokenSource(profile, tokenSourceOverride);
+
+  if (source !== null && source.kind === 'scss') {
+    // An explicit `tokenSource` pointing at one .scss file: read exactly that, so a caller can
+    // narrow a large repo to its variables file.
+    const body = await readOr(rootDir, source.path);
+    if (body === null) {
+      return {
+        tokens: [],
+        source: null,
+        note: `token source ${source.path} could not be read`,
+        files: [],
+      };
+    }
+    return {
+      tokens: [...parseScssVariables(body, source.path), ...parseCssCustomProperties(body)],
+      source: source.path,
+      files: [source.path],
+      note: SCSS_USE_NOTE,
+    };
+  }
 
   if (source !== null && source.kind !== 'css')
     return loadJsConfigTokens(rootDir, source, profile.styling);
@@ -153,6 +182,22 @@ export const loadProjectTokens = async (
       };
     }
     return { tokens, source: source.path, files: [source.path] };
+  }
+
+  // A SCSS project has no single detected source — there is no marker for "the" variables file, and
+  // real layouts run from one 952-entry file to ~90 per-component ones — so the .scss pool is the
+  // source. Checked before the .css pool because a SCSS project's tokens are in .scss files, which
+  // that walk does not visit; without this the whole styling system read nothing.
+  if (profile.styling.system === 'scss') {
+    const scss = await aggregateRepoScssTokens(rootDir);
+    if (scss.files.length > 0) {
+      return {
+        tokens: scss.tokens,
+        source: null,
+        note: `aggregated ${scss.tokens.length} token(s) from ${scss.files.length} .scss file(s): ${listFiles(scss.files)}; ${SCSS_USE_NOTE}`,
+        files: scss.files,
+      };
+    }
   }
 
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry

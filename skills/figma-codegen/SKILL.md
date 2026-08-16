@@ -72,6 +72,11 @@ Run the grounded tools against the selection, then generate — **trust them ove
      UnoCSS — e.g. `spacing/4`, `line-height/7`, `weight/Bold`): carries `builtin: { scale, step }`
      — compose the utility (`p-4`/`gap-4`, `leading-7`, `font-bold`), **not** an arbitrary
      `p-[16px]`. This is **not** a gap.
+   - `from` (a SCSS variable): the ref does **not** resolve on its own. The file you write must
+     import the declaring file — `@use '<from>' as *` keeps the ref as given, or follow the
+     project's existing `@use` style and prefix the ref with that namespace (a plain
+     `@use './tokens'` makes `$color-primary-500` into `tokens.$color-primary-500`). Emitting the
+     ref without the import is a **compile error**, not a style nit.
    - `unmapped`: use the value but call out the gap (offer to add it to the token source); don't
      hardcode silently.
    - `figmaModes` (`{ Light: …, Dark: … }`, with the file's theme axes on `themedCollections`): the

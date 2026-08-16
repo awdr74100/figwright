@@ -39,6 +39,14 @@ export interface TokenMapping {
      */
     cssVar?: string;
     utility?: string;
+    /**
+     * Present only for a SCSS variable: the repo-relative file that declares it. The `ref` does not
+     * resolve on its own — the consuming file must `@use` this file, and how that `@use` is written
+     * decides the reference's final form (`@use '…' as *` keeps `$name`; a plain `@use './tokens'`
+     * makes it `tokens.$name`). Emitting the ref without the import is a compile error, not a style
+     * nit.
+     */
+    from?: string;
     confidence: number;
     /**
      * Which signal produced the match: name similarity and/or exact color value, or 'map-file' for
@@ -228,6 +236,9 @@ const candidateFrom = (
   ...(utilityFirst && token.utilityIsClass === true && token.utility !== undefined
     ? { utility: token.utility }
     : {}),
+  // Always carried when present, and deliberately not gated on anything: without it the ref cannot
+  // be made to resolve at all.
+  ...(token.from === undefined ? {} : { from: token.from }),
   confidence: Number(confidence.toFixed(3)),
   matchedBy,
   ...(ambiguousWith !== undefined && ambiguousWith.length > 0
@@ -272,7 +283,9 @@ const resolveOverrideToken = (
 ): ProjectToken | undefined => {
   const wanted = stripVar(ref);
   return projectTokens.find(t =>
-    [t.name, t.cssVar, t.utility].some(id => id !== undefined && stripVar(id) === wanted),
+    [t.name, t.cssVar, t.utility, t.scssVar].some(
+      id => id !== undefined && stripVar(id) === wanted,
+    ),
   );
 };
 

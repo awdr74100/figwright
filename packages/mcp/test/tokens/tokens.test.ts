@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCssCustomProperties } from '../../src/tokens/tokens.js';
+import { parseCssCustomProperties, parseScssVariables } from '../../src/tokens/tokens.js';
 
 describe('parseCssCustomProperties', () => {
   it('parses Tailwind v4 @theme tokens with utility base + category', () => {
@@ -83,5 +83,42 @@ describe('parseCssCustomProperties', () => {
     // Same value in three places is one token — reporting it twice would make token_map call it
     // ambiguous with itself.
     expect(tokens.map(t => t.value)).toEqual(['1px', '2px']);
+  });
+});
+
+describe('parseScssVariables', () => {
+  it('emits the reference with its sigil and the file that declares it', () => {
+    // `from` is not decoration: `$color-primary-500` is an undefined-variable error until the
+    // consuming file @uses this path, and how that @use is written decides the ref's final form.
+    expect(parseScssVariables('$color-primary-500: #6266F0;', 'src/_tokens.scss')).toEqual([
+      {
+        name: 'color-primary-500',
+        value: '#6266F0',
+        scssVar: '$color-primary-500',
+        from: 'src/_tokens.scss',
+      },
+    ]);
+  });
+
+  it('drops a variable scoped to a rule, which cannot be referenced from elsewhere', () => {
+    // Sass scopes it to the block; emitting it would hand codegen a compile error, not a style nit.
+    const tokens = parseScssVariables('$top: 1px;\n.card { $inner: 2px; }', 'a.scss');
+    expect(tokens.map(t => t.name)).toEqual(['top']);
+  });
+
+  it('derives no utility or category, because SCSS generates no classes', () => {
+    // A namespace-shaped name would otherwise put `bg-primary-500` back into circulation on a
+    // project that has no such class.
+    const [t] = parseScssVariables('$color-primary-500: #6266F0;', 'a.scss');
+    expect(t?.utility).toBeUndefined();
+    expect(t?.category).toBeUndefined();
+    expect(t?.utilityIsClass).toBeUndefined();
+  });
+
+  it('keeps one entry per distinct value of a repeated name', () => {
+    // Same rule as the CSS parser: a `!default` override contributes a second real value, while an
+    // exact repeat collapses so the join cannot call a token ambiguous with itself.
+    const tokens = parseScssVariables('$c: #111;\n$c: #111;\n$c: #222;', 'a.scss');
+    expect(tokens.map(t => t.value)).toEqual(['#111', '#222']);
   });
 });
