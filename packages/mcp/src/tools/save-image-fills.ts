@@ -10,6 +10,7 @@ import type {
 } from '@figwright/shared';
 import { z } from 'zod';
 
+import { BINARY_REQUEST, binaryPayload } from './binary-payload.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -85,7 +86,7 @@ const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'for
 });
 
 /**
- * Decode the base64 image bytes into files under outDir (created if missing). Files are named by
+ * Land the original image-fill bytes as files under outDir (created if missing). Files are named by
  * imageHash so an asset reused across many nodes is written exactly once; every usage still gets
  * its own result entry pointing at the shared path. Pure-fs and dispatch-free so it can be
  * unit-tested against a temp directory.
@@ -102,8 +103,8 @@ export const writeImageFills = async (
   const toWrite = new Map<string, Buffer>();
   const outNodes: SavedNodeImageFills[] = nodes.map(node => {
     const images: SavedImageFill[] = node.images.map(img => {
-      if (img.base64 === null || img.imageHash === null) return { ...carry(img), path: null };
-      const buf = Buffer.from(img.base64, 'base64');
+      const buf = binaryPayload(img);
+      if (buf === null || img.imageHash === null) return { ...carry(img), path: null };
       const { format, ext } = detectImageFormat(buf);
       const path = join(dir, `${sanitize(img.imageHash)}.${ext}`);
       if (!toWrite.has(path)) toWrite.set(path, buf);
@@ -128,6 +129,7 @@ export const handleSaveImageFills = async (
 ): Promise<SaveImageFillsResult> => {
   const args = inputSchema.parse(rawArgs);
   const { nodes } = (await dispatch(SAVE_IMAGE_FILLS_TOOL_NAME, {
+    ...BINARY_REQUEST,
     nodeIds: args.nodeIds,
   })) as ImageFillsResult;
   return writeImageFills(args.outDir, nodes);

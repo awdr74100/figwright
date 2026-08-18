@@ -105,9 +105,29 @@ describe('handleSaveScreenshots', () => {
 
     // scale:1 is always forwarded explicitly — an omitted scale would make get_screenshot auto-fit
     // the raster for model consumption, but files on disk are user artifacts and stay full-res.
-    expect(dispatched).toEqual({ tool: 'get_screenshot', args: { nodeIds: ['1:1'], scale: 1 } });
+    expect(dispatched).toEqual({
+      tool: 'get_screenshot',
+      args: { binary: true, nodeIds: ['1:1'], scale: 1 },
+    });
     expect(result.saved[0]).toEqual({ nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png') });
     expect((await readFile(join(dir, '1-1.png'))).toString('base64')).toBe('AAAA');
+  });
+
+  it('lands raw bytes when the plugin answers the binary request', async () => {
+    const dir = await makeDir();
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d]);
+    const dispatch: ToolDispatcher = async () =>
+      ({
+        images: [{ nodeId: '1:1', format: 'PNG', base64: null, bytes }],
+      }) satisfies GetScreenshotResult;
+
+    const result = (await handleSaveScreenshots(dispatch, {
+      nodeIds: ['1:1'],
+      outDir: dir,
+    })) as SaveScreenshotsResult;
+
+    expect(result.saved[0]).toEqual({ nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png') });
+    expect(new Uint8Array(await readFile(join(dir, '1-1.png')))).toEqual(bytes);
   });
 
   it('forwards format and scale to get_screenshot', async () => {
@@ -123,7 +143,7 @@ describe('handleSaveScreenshots', () => {
       format: 'JPG',
       scale: 2,
     });
-    expect(forwarded).toEqual({ nodeIds: ['1:1'], format: 'JPG', scale: 2 });
+    expect(forwarded).toEqual({ binary: true, nodeIds: ['1:1'], format: 'JPG', scale: 2 });
   });
 
   it('rejects input missing outDir', async () => {
