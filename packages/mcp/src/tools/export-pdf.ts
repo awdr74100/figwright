@@ -30,6 +30,9 @@ export const exportPdfTool: ToolSpec = {
     'target is missing or not exportable, and empty:true means it rendered a blank PDF.',
   inputSchema,
   kind: 'local',
+  // Dispatches to a same-named sandbox handler; outPath stays on the server.
+  serverOnlyArgs: ['outPath'],
+  injectedArgs: ['binary'],
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

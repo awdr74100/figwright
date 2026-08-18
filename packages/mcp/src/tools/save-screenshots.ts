@@ -37,6 +37,8 @@ export const saveScreenshotsTool: ToolSpec = {
     'Files are named after a sanitized node id.',
   inputSchema,
   kind: 'local',
+  // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
+  serverOnlyArgs: null,
 };
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
 

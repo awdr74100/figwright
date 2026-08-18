@@ -22,6 +22,8 @@ export const analyzeProjectTool: ToolSpec = {
     'vite-svg-loader / …) → svg.mode component vs url + an import hint.',
   inputSchema,
   kind: 'local',
+  // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
+  serverOnlyArgs: null,
 };
 export const handleAnalyzeProject = async (rawArgs: unknown): Promise<ProjectProfile> => {
   const args = inputSchema.parse(rawArgs);

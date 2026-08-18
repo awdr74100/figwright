@@ -38,6 +38,9 @@ export const saveImageFillsTool: ToolSpec = {
     'for a vector node use export_pdf.',
   inputSchema,
   kind: 'local',
+  // Dispatches to a same-named sandbox handler; outDir stays on the server.
+  serverOnlyArgs: ['outDir'],
+  injectedArgs: ['binary'],
 };
 
 /**
