@@ -43,6 +43,41 @@ describe('get_screenshot handler', () => {
     expect(calls[0]).toEqual({ format: 'PNG', constraint: { type: 'SCALE', value: 1 } });
   });
 
+  it('returns raw bytes instead of base64 when the server asks for binary', async () => {
+    const calls: ExportCall[] = [];
+    const handler = createGetScreenshotHandler(
+      fakeFigma({ '1:1': exportable('1:1', calls) }, calls),
+    );
+    const result = (await handler({ nodeIds: ['1:1'], binary: true })) as GetScreenshotResult;
+    expect(result.images).toEqual([
+      { nodeId: '1:1', format: 'PNG', base64: null, bytes: new Uint8Array([1, 2, 3]) },
+    ]);
+  });
+
+  it('keeps the recovery path on the binary payload too', async () => {
+    // The clipped-node branch builds its image separately, so it needs its own guard against
+    // drifting back to base64.
+    const calls: ExportCall[] = [];
+    const clipped = {
+      id: '2:2',
+      visible: true,
+      absoluteRenderBounds: null,
+      absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 },
+      exportAsync: async (settings: ExportCall) => {
+        calls.push(settings);
+        return new Uint8Array([9, 9]);
+      },
+    } as unknown as BaseNode;
+    const handler = createGetScreenshotHandler(fakeFigma({ '2:2': clipped }, calls));
+    const result = (await handler({ nodeIds: ['2:2'], binary: true })) as GetScreenshotResult;
+    expect(result.images[0]).toMatchObject({
+      nodeId: '2:2',
+      base64: null,
+      bytes: new Uint8Array([9, 9]),
+      recovered: true,
+    });
+  });
+
   it('passes scale through for raster formats', async () => {
     const calls: ExportCall[] = [];
     const handler = createGetScreenshotHandler(

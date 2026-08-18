@@ -4,7 +4,7 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 
 /** Bytes + intrinsic size for one resolved image hash. */
 interface ResolvedImage {
-  base64: string;
+  bytes: Uint8Array;
   width: number;
   height: number;
 }
@@ -22,7 +22,7 @@ interface ResolvedImage {
 export const createSaveImageFillsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { nodeIds?: unknown };
+    const p = (params ?? {}) as { nodeIds?: unknown; binary?: unknown };
     if (
       !Array.isArray(p.nodeIds) ||
       p.nodeIds.length === 0 ||
@@ -30,6 +30,26 @@ export const createSaveImageFillsHandler =
     ) {
       throw new TypeError('save_image_fills: nodeIds must be a non-empty string[]');
     }
+
+    // See get_screenshot: `binary` means the server lands these bytes on disk, so they skip base64.
+    // Encoding stays per-usage rather than per-hash so the memoized fetch keeps returning raw bytes
+    // — a hash reused across nodes is still fetched exactly once either way.
+    const binary = p.binary === true;
+    const resolved = (
+      index: number,
+      imageHash: string,
+      data: ResolvedImage,
+      scaleMode: string,
+    ): ImageFillBytes => ({
+      index,
+      imageHash,
+      ...(binary
+        ? { base64: null, bytes: data.bytes }
+        : { base64: figmaCtx.base64Encode(data.bytes) }),
+      width: data.width,
+      height: data.height,
+      scaleMode,
+    });
 
     const cache = new Map<string, Promise<ResolvedImage | null>>();
     const fetchImage = (hash: string): Promise<ResolvedImage | null> => {
@@ -39,7 +59,7 @@ export const createSaveImageFillsHandler =
           const image = figmaCtx.getImageByHash(hash);
           if (image === null) return null;
           const [bytes, size] = await Promise.all([image.getBytesAsync(), image.getSizeAsync()]);
-          return { base64: figmaCtx.base64Encode(bytes), width: size.width, height: size.height };
+          return { bytes, width: size.width, height: size.height };
         })();
         cache.set(hash, pending);
       }
@@ -66,14 +86,7 @@ export const createSaveImageFillsHandler =
             if (imageHash === null) return { index, imageHash: null, base64: null, scaleMode };
             const data = await fetchImage(imageHash);
             if (data === null) return { index, imageHash, base64: null, scaleMode };
-            return {
-              index,
-              imageHash,
-              base64: data.base64,
-              width: data.width,
-              height: data.height,
-              scaleMode,
-            };
+            return resolved(index, imageHash, data, scaleMode);
           }),
         );
         const images = entries.filter((e): e is ImageFillBytes => e !== null);

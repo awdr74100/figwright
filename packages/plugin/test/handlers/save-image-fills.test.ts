@@ -69,6 +69,29 @@ describe('save_image_fills handler', () => {
     ]);
   });
 
+  it('returns raw bytes instead of base64 when the server asks for binary', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => bytes);
+    const f = makeFigma(
+      { '1:1': { fills: [imagePaint('h')] } },
+      { h: { getBytesAsync: getBytes, getSizeAsync: async () => ({ width: 10, height: 20 }) } },
+      getBytes,
+    );
+    const result = (await createSaveImageFillsHandler(f)({
+      nodeIds: ['1:1'],
+      binary: true,
+    })) as ImageFillsResult;
+    expect(result.nodes[0]?.images[0]).toEqual({
+      index: 0,
+      imageHash: 'h',
+      base64: null,
+      bytes,
+      width: 10,
+      height: 20,
+      scaleMode: 'FILL',
+    });
+  });
+
   it('fetches a shared imageHash exactly once across nodes/fills', async () => {
     const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([9]));
     const f = makeFigma(
