@@ -10,7 +10,7 @@ import {
 } from '@figwright/shared';
 import { z } from 'zod';
 
-import { BINARY_REQUEST, binaryPayload } from './binary-payload.js';
+import { binaryPayload } from './binary-payload.js';
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
 import type { ToolSpec } from './spec.js';
 
@@ -84,7 +84,9 @@ export const handleSaveScreenshots = async (
 ): Promise<SaveScreenshotsResult> => {
   const args = inputSchema.parse(rawArgs);
 
-  const screenshotArgs: Record<string, unknown> = { ...BINARY_REQUEST, nodeIds: args.nodeIds };
+  const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
+  // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+  screenshotArgs.binary = true;
   if (args.format !== undefined) screenshotArgs.format = args.format;
   // Always pass an explicit scale: an omitted scale makes get_screenshot auto-fit the raster for
   // model consumption, but files written to disk are user artifacts and must stay full-res.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BINARY_REQUEST, binaryPayload } from '../../src/tools/binary-payload.js';
+import { binaryPayload } from '../../src/tools/binary-payload.js';
 
 describe('binaryPayload', () => {
   it('takes the raw bytes when the plugin answered the binary request', () => {
@@ -27,9 +27,5 @@ describe('binaryPayload', () => {
     const empty = binaryPayload({ base64: null, bytes: new Uint8Array(0) });
     expect(empty).not.toBeNull();
     expect(empty?.byteLength).toBe(0);
-  });
-
-  it('is the single flag every disk-landing tool sends', () => {
-    expect(BINARY_REQUEST).toEqual({ binary: true });
   });
 });

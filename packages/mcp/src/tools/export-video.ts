@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { ExportVideoResult, VideoExport } from '@figwright/shared';
 import { z } from 'zod';
 
-import { BINARY_REQUEST, binaryPayload } from './binary-payload.js';
+import { binaryPayload } from './binary-payload.js';
 import { videoExportConstraintSchema } from './motion-schemas.js';
 import type { ToolSpec } from './spec.js';
 
@@ -83,7 +83,8 @@ export const handleExportVideo = async (
 ): Promise<ExportVideoResult> => {
   const { outPath, ...pluginArgs } = inputSchema.parse(rawArgs);
   const video = (await dispatch(EXPORT_VIDEO_TOOL_NAME, {
-    ...BINARY_REQUEST,
+    // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+    binary: true,
     ...pluginArgs,
   })) as VideoExport;
   return writeExportedVideo(outPath, video);

@@ -2,15 +2,15 @@
  * Reading the export payload off a plugin reply, whichever way it arrived.
  *
  * The disk-landing tools (save_screenshots / export_pdf / export_video / save_image_fills) ask the
- * plugin for raw bytes with a `binary: true` request flag. A plugin new enough to understand it
- * answers with `bytes` — msgpack carries a Uint8Array as a native `bin`, so the payload skips
- * base64's 33% inflation and the encoder's per-character string scan. A plugin predating the flag
- * drops it silently (handlers read named params off a loose cast) and answers with `base64`, so
- * both shapes stay live and this is the one place that knows the difference.
+ * plugin for raw bytes with a `binary: true` request flag, written as a literal at each dispatch
+ * site rather than shared as a constant — `test/plugin-contract.ts` reads the plugin-facing
+ * argument surface out of the source text, and a spread of a named constant is exactly the shape it
+ * cannot see. A plugin new enough to understand it answers with `bytes` — msgpack carries a
+ * Uint8Array as a native `bin`, so the payload skips base64's 33% inflation and the encoder's
+ * per-character string scan. A plugin predating the flag drops it silently (handlers read named
+ * params off a loose cast) and answers with `base64`, so both shapes stay live and this is the one
+ * place that knows the difference.
  */
-
-/** The request flag every disk-landing tool sends; a plugin that doesn't know it answers in base64. */
-export const BINARY_REQUEST = { binary: true } as const;
 
 /** A reply carrying export bytes one way or the other. */
 export interface BinaryCarrier {

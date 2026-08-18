@@ -10,7 +10,7 @@ import type {
 } from '@figwright/shared';
 import { z } from 'zod';
 
-import { BINARY_REQUEST, binaryPayload } from './binary-payload.js';
+import { binaryPayload } from './binary-payload.js';
 import type { ToolSpec } from './spec.js';
 
 export const SAVE_IMAGE_FILLS_TOOL_NAME = 'save_image_fills';
@@ -129,7 +129,8 @@ export const handleSaveImageFills = async (
 ): Promise<SaveImageFillsResult> => {
   const args = inputSchema.parse(rawArgs);
   const { nodes } = (await dispatch(SAVE_IMAGE_FILLS_TOOL_NAME, {
-    ...BINARY_REQUEST,
+    // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+    binary: true,
     nodeIds: args.nodeIds,
   })) as ImageFillsResult;
   return writeImageFills(args.outDir, nodes);

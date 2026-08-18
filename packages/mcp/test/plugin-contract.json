@@ -23,7 +23,7 @@
     "get_node_motion": ["nodeId"],
     "list_files": [],
     "get_design_context": ["budget", "dedupeComponents", "depth", "detail", "nodeId"],
-    "get_screenshot": ["forVision", "format", "nodeIds", "scale"],
+    "get_screenshot": ["binary", "forVision", "format", "nodeIds", "scale"],
     "set_fills": [
       "fills",
       "fills[].color",

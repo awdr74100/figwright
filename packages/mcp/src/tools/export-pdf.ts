@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { ExportPdfResult, PdfExport } from '@figwright/shared';
 import { z } from 'zod';
 
-import { BINARY_REQUEST, binaryPayload } from './binary-payload.js';
+import { binaryPayload } from './binary-payload.js';
 import type { ToolSpec } from './spec.js';
 
 export const EXPORT_PDF_TOOL_NAME = 'export_pdf';
@@ -57,7 +57,9 @@ export const handleExportPdf = async (
   rawArgs: unknown,
 ): Promise<ExportPdfResult> => {
   const args = inputSchema.parse(rawArgs);
-  const pluginArgs: Record<string, unknown> = { ...BINARY_REQUEST };
+  const pluginArgs: Record<string, unknown> = {};
+  // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+  pluginArgs.binary = true;
   if (args.nodeId !== undefined) pluginArgs.nodeId = args.nodeId;
   const pdf = (await dispatch(EXPORT_PDF_TOOL_NAME, pluginArgs)) as PdfExport;
   return writeExportedPdf(args.outPath, pdf);
