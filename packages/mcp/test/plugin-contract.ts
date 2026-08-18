@@ -12,14 +12,18 @@ import { ALL_TOOL_SPECS } from '../src/tools/registry.js';
  * added a field" from an invisible event into a diff.
  *
  * Paths are dotted and descend through arrays and unions (`track.keyframes[].easing.type`), because
- * a nested addition drops just as silently as a top-level one. `local` tools are excluded: they
- * never reach the plugin.
+ * a nested addition drops just as silently as a top-level one.
+ *
+ * A read/write tool dispatches its own schema verbatim, so the schema is the contract. A `local`
+ * tool's handler builds the plugin payload by hand, so its schema is not: `serverOnlyArgs` names
+ * the fields that stay on the server (an output path), and `null` there means the tool has no
+ * sandbox handler of its own — its arguments belong to the tool it reuses, which records them.
  *
  * `batch.ops[].params` stops at `unknown` on purpose — it is the union of every other tool's
  * arguments, and each of those tools records its own entry here, so the arguments a batched op
  * carries are covered under the tool it batches rather than duplicated under `batch`.
  */
-const collect = (schema: z.ZodType, prefix: string, out: Set<string>): void => {
+export const collect = (schema: z.ZodType, prefix: string, out: Set<string>): void => {
   const def = schema.def as { type: string; [key: string]: unknown };
 
   switch (def.type) {
@@ -70,12 +74,22 @@ const collect = (schema: z.ZodType, prefix: string, out: Set<string>): void => {
 
 export type PluginToolContract = Record<string, readonly string[]>;
 
+/** True when `path` is `arg` itself or something nested under it (`outPath`, `outPath.dir`). */
+const isUnder = (path: string, arg: string): boolean =>
+  path === arg || path.startsWith(`${arg}.`) || path.startsWith(`${arg}[`);
+
 export const derivePluginContract = (): PluginToolContract => {
   const contract: Record<string, readonly string[]> = {};
   for (const spec of ALL_TOOL_SPECS) {
-    if (spec.kind === 'local') continue;
-    const paths = new Set<string>();
-    collect(spec.inputSchema, '', paths);
+    // A local tool with no sandbox handler of its own contributes nothing here; one that has a
+    // handler contributes its schema minus the fields that never leave the server.
+    const serverOnly = spec.kind === 'local' ? spec.serverOnlyArgs : undefined;
+    if (spec.kind === 'local' && (serverOnly === null || serverOnly === undefined)) continue;
+    const schemaPaths = new Set<string>();
+    collect(spec.inputSchema, '', schemaPaths);
+    const paths = new Set(
+      [...schemaPaths].filter(path => !(serverOnly ?? []).some(arg => isUnder(path, arg))),
+    );
     // Server-added arguments reach the same handlers and drop just as silently, but appear in no
     // schema — `forVision` was the worst measured case and would have been invisible here.
     for (const arg of spec.injectedArgs ?? []) paths.add(arg);

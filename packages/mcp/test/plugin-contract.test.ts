@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ALL_TOOL_SPECS } from '../src/tools/registry.js';
 import {
+  collect,
   derivePluginContract,
   diffContracts,
   type PluginToolContract,
@@ -123,6 +124,72 @@ describe('plugin argument contract', () => {
     expect(derived).not.toHaveProperty('analyze_project');
     expect(derived.set_layout_props).toContain('layoutSizingHorizontal');
     expect(derived.get_screenshot).toContain('forVision');
+  });
+
+  it('makes every local tool state whether it has a sandbox handler of its own', () => {
+    // The hole this closes: `kind === 'local'` used to mean "skip", so export_pdf / export_video /
+    // save_image_fills sent arguments to their own sandbox handlers that nothing here recorded. A
+    // new local tool must not be able to opt out of that by saying nothing, so an absent
+    // declaration is a failure — `null` is how a tool says it reuses another tool's handler.
+    const undeclared = ALL_TOOL_SPECS.filter(
+      spec => spec.kind === 'local' && spec.serverOnlyArgs === undefined,
+    ).map(spec => spec.name);
+    expect(undeclared).toEqual([]);
+
+    // Pins both halves of the split so neither side can quietly empty out.
+    const owns = ALL_TOOL_SPECS.filter(
+      spec =>
+        spec.kind === 'local' && spec.serverOnlyArgs !== undefined && spec.serverOnlyArgs !== null,
+    ).map(spec => spec.name);
+    expect(owns.toSorted()).toEqual(['export_pdf', 'export_video', 'save_image_fills']);
+    for (const name of owns) expect(derived).toHaveProperty(name);
+    // save_screenshots dispatches get_screenshot, so its arguments live under that entry, not here.
+    expect(derived).not.toHaveProperty('save_screenshots');
+  });
+
+  it('only excludes arguments the tool actually has', () => {
+    // A stale or misspelled exclusion silently widens the hole it was meant to describe: the field
+    // it names is gone or never existed, and the real server-only field flows into the contract
+    // unnoticed. Checked against the schema rather than trusted.
+    for (const spec of ALL_TOOL_SPECS) {
+      const serverOnly = spec.serverOnlyArgs;
+      if (serverOnly === undefined || serverOnly === null) continue;
+      const own = new Set<string>();
+      collect(spec.inputSchema, '', own);
+      for (const arg of serverOnly) {
+        expect({ tool: spec.name, arg, inSchema: own.has(arg) }).toEqual({
+          tool: spec.name,
+          arg,
+          inSchema: true,
+        });
+      }
+    }
+  });
+
+  it('records every argument a handler-owning local tool is seen to dispatch', () => {
+    // The recorded entry is derived from the schema, which is one step removed from what the
+    // handler actually sends. This reads the send site back: every argument the scan finds in the
+    // tool's own file has to appear in that tool's entry, so a renamed or hand-added field cannot
+    // sit in the code while the contract describes something else. A lower bound by nature — the
+    // scan cannot see through a spread of a variable — but it is read from the real call site.
+    const toolsRoot = join(dirname(fileURLToPath(import.meta.url)), '../src/tools');
+    for (const spec of ALL_TOOL_SPECS) {
+      if (
+        spec.kind !== 'local' ||
+        spec.serverOnlyArgs === undefined ||
+        spec.serverOnlyArgs === null
+      )
+        continue;
+      const file = join(toolsRoot, `${spec.name.replaceAll('_', '-')}.ts`);
+      const seen = [...scanInjectedArgs(readFileSync(file, 'utf8'))].toSorted();
+      const recordedArgs = new Set(derived[spec.name] ?? []);
+      expect({ tool: spec.name, missing: seen.filter(arg => !recordedArgs.has(arg)) }).toEqual({
+        tool: spec.name,
+        missing: [],
+      });
+      // Vacuous if the scan found nothing — every one of these hand-builds a payload.
+      expect(seen.length).toBeGreaterThan(0);
+    }
   });
 
   it('descends into nested and array arguments', () => {
