@@ -39,4 +39,22 @@ export interface ToolSpec {
    * `requestId` is not listed: it is derived from `kind === 'write'` at the dispatch site.
    */
   injectedArgs?: readonly string[];
+  /**
+   * Required on every `kind: 'local'` spec — the plugin-facing half of a tool whose `inputSchema`
+   * is not it. A read/write tool dispatches its own schema verbatim, so the schema _is_ the
+   * contract; a local tool's handler builds the plugin payload by hand, and the schema also carries
+   * server-only fields (`outPath`, `outDir`) that must never be recorded as plugin arguments.
+   *
+   * An array names those server-only fields and opts the tool into the recorded contract: its
+   * plugin-facing surface is `inputSchema − serverOnlyArgs + injectedArgs`. `null` says the tool
+   * has no plugin handler of its own and borrows another tool's (save_screenshots → get_screenshot,
+   * component_map → get_design_context), so its arguments are recorded under the tool it borrows.
+   *
+   * Declared as the _exclusions_ rather than the plugin argument list on purpose. The list would be
+   * a hand-kept mirror of the schema that goes stale silently — the failure this repo keeps
+   * relearning. The exclusions are few and change far less often, and forgetting one fails loud: an
+   * unlisted server-only field shows up as a new plugin argument in the contract diff, which is
+   * noisy and wrong rather than quiet and wrong.
+   */
+  serverOnlyArgs?: readonly string[] | null;
 }

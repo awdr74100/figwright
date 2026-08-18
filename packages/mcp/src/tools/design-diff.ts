@@ -52,6 +52,8 @@ export const designDiffTool: ToolSpec = {
     'never mutates Figma. Scope by a component / section nodeId, the same unit codegen works on.',
   inputSchema,
   kind: 'local',
+  // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
+  serverOnlyArgs: null,
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

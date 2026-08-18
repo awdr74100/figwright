@@ -49,6 +49,9 @@ export const exportVideoTool: ToolSpec = {
     'calls, or the render can fail. Returns { nodeId, format, path, reason?, error? }.',
   inputSchema,
   kind: 'local',
+  // Dispatches to a same-named sandbox handler; outPath stays on the server.
+  serverOnlyArgs: ['outPath'],
+  injectedArgs: ['binary'],
 };
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;

@@ -117,6 +117,8 @@ export const tokenMapTool: ToolSpec = {
     'profile }.',
   inputSchema,
   kind: 'local',
+  // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
+  serverOnlyArgs: null,
 };
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 

@@ -25,6 +25,8 @@ export const scanComponentsTool: ToolSpec = {
     "detected profile's; rootDir defaults to the server cwd. Returns { components, profile }.",
   inputSchema,
   kind: 'local',
+  // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
+  serverOnlyArgs: null,
 };
 export interface ScanComponentsResult {
   components: ScannedComponent[];
