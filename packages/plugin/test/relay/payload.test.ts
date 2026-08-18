@@ -22,6 +22,28 @@ describe('summarizePayload', () => {
     expect(p.preview).toContain('"nodeId": "1:2"');
   });
 
+  it('elides raw export bytes without letting JSON expand them per byte', () => {
+    // Regression guard: a Uint8Array has no toJSON, so an unguarded JSON.stringify turns a 4.4MB
+    // export into a 51MB string and ~375ms of work on the thread that draws the panel.
+    const bytes = new Uint8Array(64_000);
+    const started = Date.now();
+    const p = summarizePayload({ images: [{ nodeId: '1:2', base64: null, bytes }] });
+    expect(p.preview).toContain('bytes elided');
+    expect(p.preview).not.toMatch(/"0":\s*0/);
+    // The preview stays proportional to the structure, not to the payload's byte count.
+    expect(p.preview.length).toBeLessThan(500);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('counts binary by its real byteLength, not by the elision placeholder', () => {
+    const bytes = new Uint8Array(50_000);
+    const withBinary = summarizePayload({ nodeId: '1:2', bytes });
+    const withoutBinary = summarizePayload({ nodeId: '1:2' });
+    // bytes reflect what actually crossed the wire — a msgpack `bin` costs its byteLength.
+    expect(withBinary.bytes - withoutBinary.bytes).toBeGreaterThanOrEqual(50_000);
+    expect(withBinary.bytes).toBeLessThan(60_000);
+  });
+
   it('caps the preview and flags truncation for an oversized result', () => {
     // Many short strings → no per-string elision, but a huge total that must be capped.
     const big = Array.from({ length: 20_000 }, (_, i) => `item-${i}`);
