@@ -39,8 +39,10 @@ export const getScreenshotTool: ToolSpec = {
   }),
   kind: 'read',
   // See index.ts: the public path dispatches with forVision so the sandbox caps an oversized scale
-  // to what a vision model resolves. save_screenshots dispatches the same tool without it.
-  injectedArgs: ['forVision'],
+  // to what a vision model resolves. save_screenshots dispatches the same tool without it, and with
+  // `binary` instead — its bytes land on disk, so they skip base64 (export_pdf / export_video /
+  // save_image_fills send the same flag, but they are `kind: 'local'` and so are not recorded here).
+  injectedArgs: ['forVision', 'binary'],
 };
 /** A subset of MCP tool-result content blocks this tool emits. */
 export type ScreenshotContent =

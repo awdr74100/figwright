@@ -69,6 +69,60 @@ describe('save_image_fills handler', () => {
     ]);
   });
 
+  it('encodes a shared imageHash once, not once per usage', async () => {
+    // The memo holds the finished payload, not the raw bytes: a logo reused across nodes must cost
+    // one base64Encode. Encoding per usage would be invisible in the result and quadratic in fills.
+    const encode = vi.fn<(bytes: Uint8Array) => string>(bytes => `b64(${bytes.length})`);
+    const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([1, 2, 3]));
+    const f = {
+      ...makeFigma(
+        {
+          '1:1': { fills: [imagePaint('logo'), imagePaint('logo')] },
+          '2:2': { fills: [imagePaint('logo')] },
+        },
+        { logo: { getBytesAsync: getBytes, getSizeAsync: async () => ({ width: 1, height: 1 }) } },
+        getBytes,
+      ),
+      base64Encode: encode,
+    } as unknown as typeof figma;
+
+    const result = (await createSaveImageFillsHandler(f)({
+      nodeIds: ['1:1', '2:2'],
+    })) as ImageFillsResult;
+
+    expect(getBytes).toHaveBeenCalledTimes(1);
+    expect(encode).toHaveBeenCalledTimes(1);
+    // all three usages still carry the payload
+    expect(result.nodes.flatMap(n => n.images).map(i => i.base64)).toEqual([
+      'b64(3)',
+      'b64(3)',
+      'b64(3)',
+    ]);
+  });
+
+  it('returns raw bytes instead of base64 when the server asks for binary', async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => bytes);
+    const f = makeFigma(
+      { '1:1': { fills: [imagePaint('h')] } },
+      { h: { getBytesAsync: getBytes, getSizeAsync: async () => ({ width: 10, height: 20 }) } },
+      getBytes,
+    );
+    const result = (await createSaveImageFillsHandler(f)({
+      nodeIds: ['1:1'],
+      binary: true,
+    })) as ImageFillsResult;
+    expect(result.nodes[0]?.images[0]).toEqual({
+      index: 0,
+      imageHash: 'h',
+      base64: null,
+      bytes,
+      width: 10,
+      height: 20,
+      scaleMode: 'FILL',
+    });
+  });
+
   it('fetches a shared imageHash exactly once across nodes/fills', async () => {
     const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([9]));
     const f = makeFigma(

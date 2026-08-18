@@ -183,7 +183,10 @@ describe('handleSaveImageFills', () => {
       outDir: dir,
     })) as SaveImageFillsResult;
 
-    expect(dispatched).toEqual({ tool: 'save_image_fills', args: { nodeIds: ['1:1'] } });
+    expect(dispatched).toEqual({
+      tool: 'save_image_fills',
+      args: { binary: true, nodeIds: ['1:1'] },
+    });
     expect(result.nodes[0]?.images[0]).toEqual({
       index: 0,
       imageHash: 'h',
@@ -191,6 +194,29 @@ describe('handleSaveImageFills', () => {
       path: join(dir, 'h.png'),
     });
     expect((await readFile(join(dir, 'h.png'))).toString('base64')).toBe(PNG_B64);
+  });
+
+  it('lands raw bytes when the plugin answers the binary request', async () => {
+    const dir = await makeDir();
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const dispatch: ToolDispatcher = async () =>
+      ({
+        nodes: [{ nodeId: '1:1', images: [{ index: 0, imageHash: 'h', base64: null, bytes }] }],
+      }) satisfies ImageFillsResult;
+
+    const result = (await handleSaveImageFills(dispatch, {
+      nodeIds: ['1:1'],
+      outDir: dir,
+    })) as SaveImageFillsResult;
+
+    // Format detection reads magic bytes, so it has to work off the binary payload too.
+    expect(result.nodes[0]?.images[0]).toEqual({
+      index: 0,
+      imageHash: 'h',
+      format: 'PNG',
+      path: join(dir, 'h.png'),
+    });
+    expect(new Uint8Array(await readFile(join(dir, 'h.png')))).toEqual(bytes);
   });
 
   it('rejects input missing outDir', async () => {

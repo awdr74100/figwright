@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { ExportVideoResult, VideoExport } from '@figwright/shared';
 import { z } from 'zod';
 
+import { binaryPayload } from './binary-payload.js';
 import { videoExportConstraintSchema } from './motion-schemas.js';
 import type { ToolSpec } from './spec.js';
 
@@ -65,21 +66,26 @@ export const writeExportedVideo = async (
     ...(video.reason !== undefined ? { reason: video.reason } : {}),
     ...(video.error !== undefined ? { error: video.error } : {}),
   };
-  if (video.base64 === null) {
+  const payload = binaryPayload(video);
+  if (payload === null) {
     return { nodeId: video.nodeId, format: video.format, path: null, ...miss };
   }
   const path = resolve(outPath);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, Buffer.from(video.base64, 'base64'));
+  await writeFile(path, payload);
   return { nodeId: video.nodeId, format: video.format, path };
 };
 
-/** Reuses the plugin-side export_video handler to fetch base64 bytes, then writes them to disk. */
+/** Reuses the plugin-side export_video handler to fetch the encoded bytes, then writes them to disk. */
 export const handleExportVideo = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ExportVideoResult> => {
   const { outPath, ...pluginArgs } = inputSchema.parse(rawArgs);
-  const video = (await dispatch(EXPORT_VIDEO_TOOL_NAME, pluginArgs)) as VideoExport;
+  const video = (await dispatch(EXPORT_VIDEO_TOOL_NAME, {
+    // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+    binary: true,
+    ...pluginArgs,
+  })) as VideoExport;
   return writeExportedVideo(outPath, video);
 };

@@ -119,6 +119,7 @@ export const createGetScreenshotHandler =
       format?: unknown;
       scale?: unknown;
       forVision?: unknown;
+      binary?: unknown;
     };
     if (
       !Array.isArray(p.nodeIds) ||
@@ -144,6 +145,14 @@ export const createGetScreenshotHandler =
     // save_screenshots leaves it off: those bytes go to disk, never to a model, so the caller's
     // scale is kept exactly and files stay full-res.
     const forVision = p.forVision === true;
+    // Set by the tools that land the raster on disk. Those bytes never enter a model's context, so
+    // they skip base64 entirely and ride the wire as a msgpack `bin`. An older server never sends
+    // the flag and keeps getting base64, which is why both branches exist.
+    const binary = p.binary === true;
+    const exported = (nodeId: string, bytes: Uint8Array): ScreenshotImage =>
+      binary
+        ? { nodeId, format, base64: null, bytes }
+        : { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
     // useAbsoluteBounds renders the node at its own bounding box instead of its (clipped) render
     // region — see the recovery path below. We only ever turn it on for that recovery.
     const makeSettings = (useAbsoluteBounds: boolean, scale: number): ExportSettings =>
@@ -178,7 +187,7 @@ export const createGetScreenshotHandler =
           const box = geom.absoluteRenderBounds ?? geom.absoluteBoundingBox;
           const scale = resolveScale(box, requestedScale, forVision, true, ceiling);
           const bytes = await node.exportAsync(makeSettings(false, scale));
-          const image: ScreenshotImage = { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
+          const image = exported(nodeId, bytes);
           attachRasterDims(image, box, scale);
           return image;
         }
@@ -194,7 +203,7 @@ export const createGetScreenshotHandler =
         // A blank isn't worth fitting — keep it at 1x unless the caller asked for a scale.
         const scale = resolveScale(box, requestedScale, forVision, recoverable, ceiling);
         const bytes = await node.exportAsync(makeSettings(recoverable, scale));
-        const image: ScreenshotImage = { nodeId, format, base64: figmaCtx.base64Encode(bytes) };
+        const image = exported(nodeId, bytes);
         if (recoverable) image.recovered = true;
         else image.empty = true;
         attachRasterDims(image, box, scale);

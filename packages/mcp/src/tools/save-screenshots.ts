@@ -10,6 +10,7 @@ import {
 } from '@figwright/shared';
 import { z } from 'zod';
 
+import { binaryPayload } from './binary-payload.js';
 import { GET_SCREENSHOT_TOOL_NAME } from './get-screenshot.js';
 import type { ToolSpec } from './spec.js';
 
@@ -43,8 +44,8 @@ const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' 
 const sanitize = (id: string): string => id.replace(/[^\w.-]/g, '-');
 
 /**
- * Decode the base64 images into files under outDir (created if missing). Pure-fs and dispatch-free
- * so it can be unit-tested against a temp directory.
+ * Land the exported images as files under outDir (created if missing). Pure-fs and dispatch-free so
+ * it can be unit-tested against a temp directory.
  */
 export const writeScreenshots = async (
   outDir: string,
@@ -59,11 +60,11 @@ export const writeScreenshots = async (
         ...(img.empty === true ? { empty: true as const } : {}),
         ...(img.recovered === true ? { recovered: true as const } : {}),
       };
-      if (img.base64 === null)
-        return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
+      const payload = binaryPayload(img);
+      if (payload === null) return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
       const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
       const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
-      await writeFile(path, Buffer.from(img.base64, 'base64'));
+      await writeFile(path, payload);
       return { nodeId: img.nodeId, format: img.format, path, ...flags };
     }),
   );
@@ -74,8 +75,8 @@ export const writeScreenshots = async (
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
 /**
- * Reuses the plugin-side get_screenshot export (no dedicated plugin handler) to fetch base64 bytes,
- * then lands them on the server filesystem — the first server-side write tool.
+ * Reuses the plugin-side get_screenshot export (no dedicated plugin handler) to fetch the raster
+ * bytes, then lands them on the server filesystem — the first server-side write tool.
  */
 export const handleSaveScreenshots = async (
   dispatch: ToolDispatcher,
@@ -84,6 +85,8 @@ export const handleSaveScreenshots = async (
   const args = inputSchema.parse(rawArgs);
 
   const screenshotArgs: Record<string, unknown> = { nodeIds: args.nodeIds };
+  // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+  screenshotArgs.binary = true;
   if (args.format !== undefined) screenshotArgs.format = args.format;
   // Always pass an explicit scale: an omitted scale makes get_screenshot auto-fit the raster for
   // model consumption, but files written to disk are user artifacts and must stay full-res.

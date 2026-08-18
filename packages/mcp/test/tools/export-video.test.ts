@@ -109,9 +109,29 @@ describe('handleExportVideo', () => {
       outPath: path,
     })) as ExportVideoResult;
 
-    expect(dispatched).toEqual({ tool: 'export_video', args: { nodeId: '5:5', format: 'MP4' } });
+    expect(dispatched).toEqual({
+      tool: 'export_video',
+      args: { binary: true, nodeId: '5:5', format: 'MP4' },
+    });
     expect(result).toEqual({ nodeId: '5:5', format: 'MP4', path });
     expect((await readFile(path)).toString('base64')).toBe('AAAA');
+  });
+
+  it('writes raw bytes when the plugin answers the binary request', async () => {
+    const dir = await makeDir();
+    const path = join(dir, 'bin.mp4');
+    const bytes = new Uint8Array([0x00, 0x00, 0x00, 0x18]);
+    const dispatch: ToolDispatcher = async () =>
+      ({ nodeId: '5:5', format: 'MP4', base64: null, bytes }) satisfies VideoExport;
+
+    const result = (await handleExportVideo(dispatch, {
+      nodeId: '5:5',
+      format: 'MP4',
+      outPath: path,
+    })) as ExportVideoResult;
+
+    expect(result).toEqual({ nodeId: '5:5', format: 'MP4', path });
+    expect(new Uint8Array(await readFile(path))).toEqual(bytes);
   });
 
   it('forwards fps / quality / constraint to the plugin export', async () => {
@@ -130,6 +150,7 @@ describe('handleExportVideo', () => {
       outPath: join(dir, 'frame.webm'),
     });
     expect(forwarded).toEqual({
+      binary: true,
       nodeId: '3:21',
       format: 'WEBM',
       fps: 30,

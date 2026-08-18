@@ -13,7 +13,7 @@ const isExportable = (node: BaseNode): node is BaseNode & ExportMixin => 'export
 export const createExportPdfHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { nodeId?: unknown };
+    const p = (params ?? {}) as { nodeId?: unknown; binary?: unknown };
     if (p.nodeId !== undefined && typeof p.nodeId !== 'string') {
       throw new TypeError('export_pdf: nodeId must be a string');
     }
@@ -29,7 +29,11 @@ export const createExportPdfHandler =
     }
 
     const bytes = await node.exportAsync({ format: 'PDF' });
-    const result: PdfExport = { nodeId: node.id, base64: figmaCtx.base64Encode(bytes) };
+    // See get_screenshot: `binary` means the server lands these bytes on disk, so they skip base64.
+    const result: PdfExport =
+      p.binary === true
+        ? { nodeId: node.id, base64: null, bytes }
+        : { nodeId: node.id, base64: figmaCtx.base64Encode(bytes) };
     // A PAGE has no absoluteRenderBounds; only flag empty when the property exists and is null.
     const renderBounds = (node as { absoluteRenderBounds?: unknown }).absoluteRenderBounds;
     if (renderBounds === null) result.empty = true;

@@ -26,6 +26,22 @@ export const SCREENSHOT_FORMATS = ['PNG', 'JPG', 'SVG'] as const;
 export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
 /**
+ * Raw export bytes, carried in place of `base64` on the paths that land on disk. msgpack encodes a
+ * Uint8Array as a native `bin`, so base64's 33% inflation buys nothing here — the server used to
+ * decode straight back to bytes anyway, making it a pure round trip.
+ *
+ * Both fields exist because the server asks for bytes with a `binary: true` request flag that a
+ * plugin predating this simply drops, answering with `base64` as before. So every consumer reads
+ * the payload as "`bytes`, else `base64`" (see `binaryPayload` server-side); neither present means
+ * nothing was exported.
+ */
+// Typed against ArrayBufferLike rather than z.instanceof's ArrayBuffer: Figma's exportAsync and
+// getBytesAsync both hand back Uint8Array<ArrayBufferLike>.
+export const ExportBytesSchema = z
+  .custom<Uint8Array<ArrayBufferLike>>(value => value instanceof Uint8Array)
+  .optional();
+
+/**
  * Per-node export; base64 is null when the node is missing or not exportable.
  *
  * A node that renders nothing in place (absoluteRenderBounds === null — fully clipped / off-canvas,
@@ -50,6 +66,7 @@ export const ScreenshotImageSchema = z.object({
   width: z.number().optional(),
   height: z.number().optional(),
   scale: z.number().optional(),
+  bytes: ExportBytesSchema,
 });
 export type ScreenshotImage = z.infer<typeof ScreenshotImageSchema>;
 
@@ -86,6 +103,7 @@ export const PdfExportSchema = z.object({
   nodeId: z.string(),
   base64: z.string().nullable(),
   empty: z.boolean().optional(),
+  bytes: ExportBytesSchema,
 });
 export type PdfExport = z.infer<typeof PdfExportSchema>;
 
@@ -124,6 +142,7 @@ export const VideoExportSchema = z.object({
   reason: z.enum(VIDEO_EXPORT_MISS_REASONS).optional(),
   /** Figma's own rejection message, present when reason is `failed`. */
   error: z.string().optional(),
+  bytes: ExportBytesSchema,
 });
 export type VideoExport = z.infer<typeof VideoExportSchema>;
 
@@ -152,6 +171,7 @@ export const ImageFillBytesSchema = z.object({
   width: z.number().optional(),
   height: z.number().optional(),
   scaleMode: z.string().optional(),
+  bytes: ExportBytesSchema,
 });
 export type ImageFillBytes = z.infer<typeof ImageFillBytesSchema>;
 

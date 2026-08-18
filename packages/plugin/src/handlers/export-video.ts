@@ -42,6 +42,7 @@ export const createExportVideoHandler =
       quality?: unknown;
       loopCount?: unknown;
       constraint?: unknown;
+      binary?: unknown;
     };
     if (typeof p.nodeId !== 'string') throw new TypeError('export_video: nodeId must be a string');
     if (p.format !== 'MP4' && p.format !== 'GIF' && p.format !== 'WEBM') {
@@ -67,7 +68,10 @@ export const createExportVideoHandler =
 
     try {
       const bytes = await frame.exportAsync(buildVideoSettings(format, p));
-      return { nodeId: frame.id, format, base64: figmaCtx.base64Encode(bytes) };
+      // See get_screenshot: `binary` means the server lands these bytes on disk, so they skip base64.
+      return p.binary === true
+        ? { nodeId: frame.id, format, base64: null, bytes }
+        : { nodeId: frame.id, format, base64: figmaCtx.base64Encode(bytes) };
     } catch (err) {
       // exportAsync rejects for a static (no-animation) frame, a bad setting, or a raced render —
       // carry Figma's real message rather than guessing a single cause.

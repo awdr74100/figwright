@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import type { ExportPdfResult, PdfExport } from '@figwright/shared';
 import { z } from 'zod';
 
+import { binaryPayload } from './binary-payload.js';
 import type { ToolSpec } from './spec.js';
 
 export const EXPORT_PDF_TOOL_NAME = 'export_pdf';
@@ -42,20 +43,23 @@ export const writeExportedPdf = async (
   pdf: PdfExport,
 ): Promise<ExportPdfResult> => {
   const empty = pdf.empty === true ? { empty: true } : {};
-  if (pdf.base64 === null) return { nodeId: pdf.nodeId, path: null, ...empty };
+  const payload = binaryPayload(pdf);
+  if (payload === null) return { nodeId: pdf.nodeId, path: null, ...empty };
   const path = resolve(outPath);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, Buffer.from(pdf.base64, 'base64'));
+  await writeFile(path, payload);
   return { nodeId: pdf.nodeId, path, ...empty };
 };
 
-/** Reuses the plugin-side export_pdf handler to fetch base64 bytes, then writes them to disk. */
+/** Reuses the plugin-side export_pdf handler to fetch the PDF bytes, then writes them to disk. */
 export const handleExportPdf = async (
   dispatch: ToolDispatcher,
   rawArgs: unknown,
 ): Promise<ExportPdfResult> => {
   const args = inputSchema.parse(rawArgs);
   const pluginArgs: Record<string, unknown> = {};
+  // These bytes go to disk, never to a model, so they ride the wire as a msgpack `bin`.
+  pluginArgs.binary = true;
   if (args.nodeId !== undefined) pluginArgs.nodeId = args.nodeId;
   const pdf = (await dispatch(EXPORT_PDF_TOOL_NAME, pluginArgs)) as PdfExport;
   return writeExportedPdf(args.outPath, pdf);
