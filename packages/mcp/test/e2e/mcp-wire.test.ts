@@ -1,12 +1,13 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { once as onExit } from 'node:events';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { leaderLockPath } from '../../src/election/leader-lock.js';
 import { PROMPT_DEFINITIONS } from '../../src/prompts/registry.js';
 import { annotationsFor } from '../../src/tools/annotations.js';
 import { ALL_TOOL_SPECS } from '../../src/tools/registry.js';
@@ -125,6 +126,11 @@ class WireClient {
    * SIGKILL escalation that silently rescued a stuck shutdown would let a hang pass as a pass.
    */
   async stop(): Promise<{ code: number | null; escalated: boolean }> {
+    // Each spawned server leaves a leader note for the random port it owned (election/leader-lock).
+    // Production overwrites one file per port forever; a suite would otherwise leave one behind per
+    // server, per run, on every dev machine and CI runner. Done here rather than in a hook because
+    // this file creates WireClients inside individual tests too, not only in beforeAll.
+    rmSync(leaderLockPath(this.port), { force: true });
     if (this.child.exitCode !== null) return { code: this.child.exitCode, escalated: false };
     // Subscribe before closing stdin, so a server that exits immediately can't be missed.
     const exited = onExit(this.child, 'exit');

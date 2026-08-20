@@ -3,11 +3,19 @@ import { describe, expect, it } from 'vitest';
 
 import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
-import type { Node } from '../src/election/node.js';
+import { portConflictMessage } from '../src/election/leader-lock.js';
+import { type Node, NodeRole } from '../src/election/node.js';
 import { captureSkew } from '../src/tools/skew-notice.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
-  ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
+  ({
+    isConflicted: () => false,
+    port: 3055,
+    conflictMessage: portConflictMessage(3055),
+    // dispatch subscribes to role changes so a conflict declared mid-call can cut it short.
+    onRoleChange: () => () => {},
+    ...overrides,
+  }) as unknown as Node;
 const makeFollower = (overrides: Partial<Follower>): Follower => overrides as unknown as Follower;
 
 describe('dispatchTool', () => {
@@ -36,7 +44,18 @@ describe('dispatchTool', () => {
   });
 
   it('fails fast with an actionable error when the node is port-conflicted', async () => {
-    const node = makeNode({ isConflicted: () => true, port: 3055, isLeader: () => false });
+    const node = makeNode({
+      isConflicted: () => true,
+      port: 3055,
+      isLeader: () => false,
+      conflictMessage: portConflictMessage(3055, {
+        pid: 4242,
+        buildId: 1,
+        serverVersion: '0.4.0',
+        stopped: true,
+        resumed: true,
+      }),
+    });
     let forwarded = false;
     const follower = makeFollower({
       sendRpc: async (): Promise<RpcResponse> => {
@@ -45,11 +64,127 @@ describe('dispatchTool', () => {
       },
     });
 
+    // The election's own diagnosis is what the caller gets — dispatch never writes its own, so the
+    // pid of a wedged leader reaches the agent instead of a bare timeout minutes later.
     await expect(dispatchTool({ node, follower }, 'get_document', {})).rejects.toThrow(
-      /port 3055 is held by a non-Figwright process/,
+      /port 3055 is held by a Figwright server \(pid 4242/,
     );
-    // Must NOT forward to the squatter holding the port.
+    // Must NOT forward to whoever is holding the port.
     expect(forwarded).toBe(false);
+  });
+
+  it('cuts an in-flight follower call short when the election declares the port wedged', async () => {
+    // The case fail-fast alone does not cover, and the common one in practice: the call is already
+    // blocked on a leader that has stopped answering when the election works out why. Measured
+    // before the abort existed — 123s of budget and retries, then a timeout naming nothing.
+    let announce: ((role: NodeRole) => void) | undefined;
+    let conflicted = false;
+    const node = makeNode({
+      isLeader: () => false,
+      isConflicted: () => conflicted,
+      conflictMessage: portConflictMessage(3055, {
+        pid: 4242,
+        buildId: 1,
+        serverVersion: '0.4.0',
+        stopped: true,
+        resumed: true,
+      }),
+      onRoleChange: (listener: (role: NodeRole) => void) => {
+        announce = listener;
+        return () => {};
+      },
+    });
+    let aborted = false;
+    const follower = makeFollower({
+      sendRpc: async (
+        _tool: string,
+        _args?: unknown,
+        _requestId?: string,
+        _sessionId?: string,
+        _timeoutMs?: number,
+        abort?: AbortSignal,
+      ): Promise<RpcResponse> => {
+        // A wedged leader answers nothing; only the abort can end this wait.
+        await new Promise<void>(resolve => {
+          abort?.addEventListener('abort', () => resolve(), { once: true });
+        });
+        aborted = true;
+        return {
+          kind: 'err',
+          requestId: 'r',
+          code: ErrorCode.Internal,
+          message: 'follower rpc transport: This operation was aborted',
+        };
+      },
+    });
+
+    const call = dispatchTool({ node, follower }, 'get_document', {}, { retryDelayMs: 1 });
+    await new Promise<void>(resolve => setTimeout(resolve, 10));
+    conflicted = true;
+    announce?.(NodeRole.Conflicted);
+
+    await expect(call).rejects.toThrow(/pid 4242/);
+    expect(aborted).toBe(true);
+  });
+
+  it('retries normally once the conflict clears, instead of reusing a spent abort', async () => {
+    // The good ending, and the one the abort can silently destroy: the holder was only suspended,
+    // the election woke it, and by the retry there is a working leader again. Before the controller
+    // was made per-attempt, this exact sequence answered "This operation was aborted" — worse than
+    // the 11s success it produced before the abort existed at all.
+    let announce: ((role: NodeRole) => void) | undefined;
+    let conflicted = false;
+    const node = makeNode({
+      isLeader: () => false,
+      isConflicted: () => conflicted,
+      onRoleChange: (listener: (role: NodeRole) => void) => {
+        announce = listener;
+        return () => {};
+      },
+    });
+
+    const seen: Array<boolean | undefined> = [];
+    let attempt = 0;
+    const follower = makeFollower({
+      sendRpc: async (
+        _tool: string,
+        _args?: unknown,
+        _requestId?: string,
+        _sessionId?: string,
+        _timeoutMs?: number,
+        abort?: AbortSignal,
+      ): Promise<RpcResponse> => {
+        attempt += 1;
+        if (attempt === 1) {
+          await new Promise<void>(resolve => {
+            abort?.addEventListener('abort', () => resolve(), { once: true });
+          });
+          seen.push(abort?.aborted);
+          return {
+            kind: 'err',
+            requestId: 'r',
+            code: ErrorCode.Internal,
+            message: 'follower rpc transport: This operation was aborted',
+          };
+        }
+        // The retry must arrive with a live signal, not the spent one.
+        seen.push(abort?.aborted);
+        return { kind: 'ok', requestId: 'r', result: { recovered: true } };
+      },
+    });
+
+    // The retry delay has to outlast the recovery below, so the retry lands in the window this
+    // test is about: conflict already cleared, previous attempt's signal already spent.
+    const call = dispatchTool({ node, follower }, 'get_document', {}, { retryDelayMs: 120 });
+    await new Promise<void>(resolve => setTimeout(resolve, 10));
+    conflicted = true;
+    announce?.(NodeRole.Conflicted);
+    // SIGCONT worked: the holder answers again and the election is back to following it.
+    await new Promise<void>(resolve => setTimeout(resolve, 30));
+    conflicted = false;
+
+    await expect(call).resolves.toEqual({ recovered: true });
+    expect(seen).toEqual([true, false]);
   });
 
   it('routes to Follower.sendRpc when local node is not leader', async () => {

@@ -1,10 +1,12 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { leaderLockPath } from '../../src/election/leader-lock.js';
 
 // Process-level proof of the zombie fixes: real spawned servers (the built dist), a real stdin
 // EOF, and a real election takeover — the layers no in-process test exercises (process.exit
@@ -34,9 +36,16 @@ afterEach(() => {
     if (s.exited() === null) s.child.kill('SIGKILL');
   }
   servers.length = 0;
+  // Each spawned server leaves a leader note for its random port (election/leader-lock). Production
+  // overwrites one file forever; without this a suite run leaves one behind per server, per run.
+  for (const port of usedPorts) rmSync(leaderLockPath(port), { force: true });
+  usedPorts.clear();
 });
 
+const usedPorts = new Set<number>();
+
 const spawnServer = (port: number): Server => {
+  usedPorts.add(port);
   const child = spawn(process.execPath, [DIST_ENTRY], {
     env: { ...process.env, FIGWRIGHT_PORT: String(port) },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -97,6 +106,59 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process lifecycle (built dist)', () =>
       follower.child.stdin?.end();
       await waitFor(() => follower.exited() !== null, 'promoted follower exit', 8_000);
       expect(follower.exited()?.code).toBe(0);
+    },
+  );
+
+  // Timeouts here are deliberately several times the ~12s the mechanism actually needs: this test
+  // proves the mechanism runs, not that it meets a deadline, and a loaded CI runner stretches the
+  // election's ping timeouts. A tight bound here would buy nothing and flake.
+  // The fourth zombie class, and the only one no takeover can resolve: the leader is *alive*, still
+  // holding the port, and no longer answering. SIGSTOP is how a user actually produces it (Ctrl-Z on
+  // a hand-launched server, a debugger, kill -STOP), and it is also the one shape a fake cannot
+  // stand in for — the diagnosis reads the real process table and the recovery sends a real signal.
+  describe.skipIf(process.platform === 'win32')(
+    'a leader that holds the port but stops answering',
+    () => {
+      it(
+        'names it, wakes it, and is a follower again — without anyone killing anything',
+        { timeout: 70_000 },
+        async () => {
+          const port = await freePort();
+          const leader = spawnServer(port);
+          await waitFor(() => leader.stderr().includes('ready as leader'), 'leader ready', 8_000);
+          const follower = spawnServer(port);
+          await waitFor(
+            () => follower.stderr().includes('ready as follower'),
+            'follower ready',
+            8_000,
+          );
+          await new Promise<void>(resolve => setTimeout(resolve, 1_000));
+
+          leader.child.kill('SIGSTOP');
+          try {
+            // Identified from the note it left when it bound, re-proved against the live process
+            // table — the pid printed here is the one a user would kill.
+            await waitFor(
+              () => follower.stderr().includes(`port holder pid ${leader.child.pid} is suspended`),
+              'wedge diagnosed',
+              45_000,
+            );
+            expect(follower.stderr()).toContain('PORT CONFLICT');
+            expect(follower.stderr()).toContain(`kill ${leader.child.pid}`);
+
+            // And the SIGCONT it sent has to actually revive the leader, which is only observable
+            // from the outside: the follower goes back to following it.
+            await waitFor(
+              () => /became FOLLOWER/.test(follower.stderr().split('PORT CONFLICT')[1] ?? ''),
+              'follower resumes following the revived leader',
+              20_000,
+            );
+            expect(leader.exited()).toBeNull();
+          } finally {
+            leader.child.kill('SIGCONT');
+          }
+        },
+      );
     },
   );
 

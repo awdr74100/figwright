@@ -148,6 +148,14 @@ export class Follower {
     requestId?: string,
     sessionId?: string,
     timeoutMs?: number,
+    /**
+     * Cancels the request early, before its budget is up. The budget answers "how long may a
+     * _working_ leader take"; this answers "we have since learned there is no leader to wait for" —
+     * the election declaring the port wedged while this very call is in flight. Without it the
+     * diagnosis arrives while the caller is still blocked on a leader that will never answer, and
+     * the call keeps the full budget (and its retries: 40s × 3 for a default tool, measured).
+     */
+    abort?: AbortSignal,
   ): Promise<RpcResponse> {
     const rpc: RpcRequest = {
       requestId: requestId ?? newId(),
@@ -158,14 +166,18 @@ export class Follower {
     const bytes = encode(rpc);
     const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
+    // Per-tool follower budget when given (outermost layer); else the constructor default. Combined
+    // with the caller's abort so whichever reason arrives first ends the wait.
+    const budget = AbortSignal.timeout(timeoutMs ?? this.opts.rpcTimeoutMs);
+    const signal = abort === undefined ? budget : AbortSignal.any([budget, abort]);
+
     let res: Response;
     try {
       res = await this.opts.fetch(`${this.opts.leaderUrl}${RPC_PATH}`, {
         method: 'POST',
         headers: { 'content-type': 'application/msgpack' },
         body,
-        // Per-tool follower budget when given (outermost layer); else the constructor default.
-        signal: AbortSignal.timeout(timeoutMs ?? this.opts.rpcTimeoutMs),
+        signal,
       });
     } catch (err) {
       this.opts.log(`[follower] rpc transport error: ${(err as Error).message}`);

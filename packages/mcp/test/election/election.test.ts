@@ -1,11 +1,18 @@
+import { rmSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Election } from '../../src/election/election.js';
+import { Election, WEDGED_UNRESPONSIVE_TICKS } from '../../src/election/election.js';
 import { Follower } from '../../src/election/follower.js';
 import { attachLeaderEndpoints } from '../../src/election/leader-endpoints.js';
+import {
+  leaderLockPath,
+  type ProcessProbe,
+  readLeaderLock,
+  writeLeaderLock,
+} from '../../src/election/leader-lock.js';
 import { Node, NodeRole } from '../../src/election/node.js';
 import { Relay } from '../../src/relay/relay.js';
 
@@ -21,6 +28,7 @@ const harnesses: LeaderHarness[] = [];
 const extraNodes: Node[] = [];
 const extraElections: Election[] = [];
 const blockers: HttpServer[] = [];
+const lockedPorts: number[] = [];
 
 afterEach(async () => {
   for (const e of extraElections) e.stop();
@@ -38,6 +46,8 @@ afterEach(async () => {
   harnesses.length = 0;
   await Promise.all(blockers.map(s => new Promise<void>(r => s.close(() => r()))));
   blockers.length = 0;
+  for (const port of lockedPorts) rmSync(leaderLockPath(port), { force: true });
+  lockedPorts.length = 0;
 });
 
 const freePort = async (): Promise<number> => {
@@ -71,6 +81,7 @@ const buildElection = (
   pingTimeoutMs = 200,
   buildId = 0,
   log?: (msg: string) => void,
+  probe?: ProcessProbe,
 ): { node: Node; election: Election; follower: Follower } => {
   const node = new Node({ serverVersion: 'challenger-1.0.0', port });
   extraNodes.push(node);
@@ -84,6 +95,7 @@ const buildElection = (
     buildId,
     tickIntervalMs: 1_000_000,
     ...(log === undefined ? {} : { log }),
+    ...(probe === undefined ? {} : { probe }),
   });
   extraElections.push(election);
   return { node, election, follower };
@@ -219,6 +231,187 @@ describe('Election', () => {
     await election.start();
     expect(node.role).toBe(NodeRole.Follower);
     election.stop();
+  });
+});
+
+/**
+ * The wedged leader: alive, still holding the port, no longer answering. Simulated by detaching the
+ * leader's endpoints while leaving its http server bound — the same thing an observer sees from a
+ * SIGSTOPped process, and the one shape the election cannot resolve by waiting, because "the leader
+ * is dead" is decided by a failed /ping while taking over needs the port actually released.
+ */
+describe('Election: a leader that holds the port but stops answering', () => {
+  const wedge = (h: LeaderHarness): void => {
+    h.detach();
+  };
+
+  /** A probe that reports one pid with a chosen state, and records every SIGCONT. */
+  const probeFor = (
+    pid: number,
+    state: string,
+    startedAt: number,
+  ): ProcessProbe & { resumed: number[] } => {
+    const resumed: number[] = [];
+    return {
+      resumed,
+      inspect: p => (p === pid ? { state, startedAt } : undefined),
+      resume: p => {
+        resumed.push(p);
+        return true;
+      },
+    };
+  };
+
+  const lockPortToThisProcess = (port: number): number => {
+    lockedPorts.push(port);
+    writeLeaderLock({ port, buildId: 7, serverVersion: 'wedged-1.0.0' });
+    return readLeaderLock(port)!.processStartedAt;
+  };
+
+  it('stays a follower until the threshold, then declares the conflict', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const { node, election } = buildElection(port);
+    await election.determineRole();
+    expect(node.role).toBe(NodeRole.Follower);
+
+    wedge(h);
+
+    // One silent tick is the ordinary handoff race, not a wedge — tripping on it would turn every
+    // leadership change into a conflict. Nothing may change until the last tick of the run.
+    for (let i = 0; i < WEDGED_UNRESPONSIVE_TICKS - 1; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+      expect(node.role).toBe(NodeRole.Follower);
+    }
+    await election.tickOnce();
+    expect(node.role).toBe(NodeRole.Conflicted);
+  });
+
+  it('resets the count when the leader answers again, so intermittent stalls never trip it', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const { node, election } = buildElection(port);
+    await election.determineRole();
+
+    // Strictly more silent ticks than the threshold, so a count that never resets WOULD trip —
+    // which is the only way this test can tell the reset apart from "not enough ticks yet".
+    const silentTicks = WEDGED_UNRESPONSIVE_TICKS + 2;
+    for (let i = 0; i < silentTicks; i += 1) {
+      wedge(h);
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+      // Asserted here, on the silent tick itself. Checking only after the leader answers again
+      // would prove nothing: the conflict state is self-healing, so a wrongly-declared conflict is
+      // back to follower one tick later and leaves no trace to assert on.
+      expect(node.role).toBe(NodeRole.Follower);
+      h.detach = attachLeaderEndpoints(h.http, { relay: h.relay, serverVersion: 'leader-1.0.0' });
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+      expect(node.role).toBe(NodeRole.Follower);
+    }
+  });
+
+  it('names the holding process in the message when the lock can be proved', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const startedAt = lockPortToThisProcess(port);
+    const probe = probeFor(process.pid, 'S', startedAt);
+    const { node, election } = buildElection(port, 200, 0, undefined, probe);
+    await election.determineRole();
+    wedge(h);
+
+    for (let i = 0; i < WEDGED_UNRESPONSIVE_TICKS; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+    }
+    expect(node.role).toBe(NodeRole.Conflicted);
+    expect(node.conflictMessage).toContain(`pid ${process.pid}`);
+    expect(node.conflictMessage).toContain('wedged-1.0.0');
+    expect(node.conflictMessage).toContain(`kill ${process.pid}`);
+    // Not suspended → nothing may be signalled.
+    expect(probe.resumed).toEqual([]);
+  });
+
+  it('sends SIGCONT when the holder is suspended, and says so', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const startedAt = lockPortToThisProcess(port);
+    const probe = probeFor(process.pid, 'T', startedAt);
+    const { node, election } = buildElection(port, 200, 0, undefined, probe);
+    await election.determineRole();
+    wedge(h);
+
+    for (let i = 0; i < WEDGED_UNRESPONSIVE_TICKS; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+    }
+    expect(node.role).toBe(NodeRole.Conflicted);
+    expect(probe.resumed).toEqual([process.pid]);
+    expect(node.conflictMessage).toContain('SIGCONT was just sent');
+  });
+
+  it('falls back to the anonymous message when the holder cannot be proved', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    // No lock written for this port, so there is nobody to name — and we must not guess.
+    const { node, election } = buildElection(port);
+    await election.determineRole();
+    wedge(h);
+    for (let i = 0; i < WEDGED_UNRESPONSIVE_TICKS; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+    }
+    expect(node.role).toBe(NodeRole.Conflicted);
+    expect(node.conflictMessage).not.toContain('pid');
+    // The anonymous branch, named by what it offers instead of a pid — the shell command it
+    // suggests is platform-specific and pinned in leader-lock's own tests.
+    expect(node.conflictMessage).toContain('Free that port');
+  });
+
+  it('recovers to follower the moment the leader answers again, and drops the diagnosis', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const startedAt = lockPortToThisProcess(port);
+    const { node, election } = buildElection(
+      port,
+      200,
+      0,
+      undefined,
+      probeFor(process.pid, 'T', startedAt),
+    );
+    await election.determineRole();
+    wedge(h);
+    for (let i = 0; i < WEDGED_UNRESPONSIVE_TICKS; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- ticks are sequential by definition
+      await election.tickOnce();
+    }
+    expect(node.role).toBe(NodeRole.Conflicted);
+
+    // What a successful SIGCONT looks like from here: the holder starts answering again.
+    h.detach = attachLeaderEndpoints(h.http, { relay: h.relay, serverVersion: 'leader-1.0.0' });
+    await election.tickOnce();
+    expect(node.role).toBe(NodeRole.Follower);
+    expect(node.conflictMessage).not.toContain('pid');
+  });
+
+  it('identifies the holder on the cold-start path too', async () => {
+    const port = await freePort();
+    const h = await startLeaderHarness(port);
+    const startedAt = lockPortToThisProcess(port);
+    wedge(h);
+    // A server launched *while* the leader is already wedged never gets to be a follower, so it
+    // reaches the conflict through determineRole instead of the tick — and must diagnose it the same.
+    const { node, election } = buildElection(
+      port,
+      200,
+      0,
+      undefined,
+      probeFor(process.pid, 'T', startedAt),
+    );
+    await election.determineRole();
+    expect(node.role).toBe(NodeRole.Conflicted);
+    expect(node.conflictMessage).toContain(`pid ${process.pid}`);
   });
 });
 
