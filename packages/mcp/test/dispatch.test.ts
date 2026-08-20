@@ -156,10 +156,19 @@ describe('dispatchTool', () => {
       ): Promise<RpcResponse> => {
         attempt += 1;
         if (attempt === 1) {
+          // Driven from inside the call rather than by racing timers outside it: the election
+          // declares the wedge while this very request is in flight, the abort lands, and by the
+          // time the retry runs the holder is answering again. Causal ordering, so a loaded
+          // machine cannot reorder it.
+          conflicted = true;
+          announce?.(NodeRole.Conflicted);
           await new Promise<void>(resolve => {
-            abort?.addEventListener('abort', () => resolve(), { once: true });
+            if (abort?.aborted === true) resolve();
+            else abort?.addEventListener('abort', () => resolve(), { once: true });
           });
           seen.push(abort?.aborted);
+          // SIGCONT worked: a working leader exists again before the retry is made.
+          conflicted = false;
           return {
             kind: 'err',
             requestId: 'r',
@@ -173,17 +182,10 @@ describe('dispatchTool', () => {
       },
     });
 
-    // The retry delay has to outlast the recovery below, so the retry lands in the window this
-    // test is about: conflict already cleared, previous attempt's signal already spent.
-    const call = dispatchTool({ node, follower }, 'get_document', {}, { retryDelayMs: 120 });
-    await new Promise<void>(resolve => setTimeout(resolve, 10));
-    conflicted = true;
-    announce?.(NodeRole.Conflicted);
-    // SIGCONT worked: the holder answers again and the election is back to following it.
-    await new Promise<void>(resolve => setTimeout(resolve, 30));
-    conflicted = false;
+    const call = dispatchTool({ node, follower }, 'get_document', {}, { retryDelayMs: 1 });
 
     await expect(call).resolves.toEqual({ recovered: true });
+    // The retry must have arrived with a live signal, not the spent one.
     expect(seen).toEqual([true, false]);
   });
 
