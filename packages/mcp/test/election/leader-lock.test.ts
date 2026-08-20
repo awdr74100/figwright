@@ -262,9 +262,14 @@ describe('leader lock: the message', () => {
 // degradation chain — that the guards hold *before* the OS calls, not that the OS calls fail.
 describe('leader lock: the Windows branch', () => {
   const realPlatform = process.platform;
-  const asWindows = (): void => {
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  // Both directions are stubbed, so each branch is asserted on every host. Asserting the POSIX
+  // branch by *being* on POSIX is what the first Windows CI run caught: the production message was
+  // right there (`netstat`), and the test that assumed otherwise was the thing that failed.
+  const asPlatform = (value: NodeJS.Platform): void => {
+    Object.defineProperty(process, 'platform', { value, configurable: true });
   };
+  const asWindows = (): void => asPlatform('win32');
+  const asPosix = (): void => asPlatform('linux');
 
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true });
@@ -305,7 +310,10 @@ describe('leader lock: the Windows branch', () => {
   });
 
   it('gives the POSIX remedy everywhere else', () => {
-    expect(portConflictMessage(3055)).toContain('lsof -iTCP:3055 -sTCP:LISTEN');
+    asPosix();
+    const msg = portConflictMessage(3055);
+    expect(msg).toContain('lsof -iTCP:3055 -sTCP:LISTEN');
+    expect(msg).not.toContain('netstat');
   });
 });
 
