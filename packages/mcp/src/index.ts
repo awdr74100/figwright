@@ -9,6 +9,7 @@ import { dispatchTool, resolveRoutingSession } from './dispatch.js';
 import { Election } from './election/election.js';
 import { Follower } from './election/follower.js';
 import { attachLeaderEndpoints } from './election/leader-endpoints.js';
+import { writeLeaderLock } from './election/leader-lock.js';
 import { Node, NodeRole } from './election/node.js';
 import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { wireShutdown } from './lifecycle.js';
@@ -58,6 +59,11 @@ node.onRoleChange(role => {
   if (role === NodeRole.Leader) {
     const res = node.getLeader();
     if (res !== null) {
+      // Leave a note naming this process as the port's owner. It is read by exactly one caller: a
+      // node that finds the port bound by something that won't answer /ping, which is the single
+      // failure the election cannot resolve by waiting (see election/leader-lock.ts). Best-effort —
+      // a server that can't write it still leads.
+      writeLeaderLock({ port: res.port, buildId: BUILD_ID, serverVersion: SERVER_VERSION });
       currentDetach = attachLeaderEndpoints(res.http, {
         relay: res.relay,
         serverVersion: SERVER_VERSION,
@@ -242,7 +248,7 @@ const stdio = serveStdio(createMcpServer, {
 const roleDetail = node.isLeader()
   ? `relay on :${node.getLeader()?.port ?? PORT}`
   : node.isConflicted()
-    ? `:${PORT} held by a non-Figwright process — contending for it`
+    ? `:${PORT} held by an unresponsive owner — contending for it`
     : `follower → ${node.leaderUrl}`;
 log(
   `[figwright] server ${SERVER_VERSION} (protocol ${PROTOCOL_VERSION}) ready as ${node.role}, ${roleDetail}`,

@@ -180,6 +180,33 @@ describe('Follower HTTP client', () => {
     expect(resp.requestId).toBe('r-dead');
   });
 
+  it('sendRpc ends early when the caller aborts, without waiting out its budget', async () => {
+    // A leader that never answers — the shape of a wedged one. The budget here is 60s, so the only
+    // thing that can end this call in test time is the abort actually reaching the request.
+    const b = await startLeader();
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
+    const abort = new AbortController();
+    const started = Date.now();
+    const pending = f.sendRpc('get_doc', {}, 'r-abort', undefined, 60_000, abort.signal);
+    setTimeout(() => abort.abort(new Error('port conflict')), 50);
+
+    const resp = await pending;
+    const elapsed = Date.now() - started;
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(resp.code).toBe(ErrorCode.Internal);
+    expect(resp.message).toMatch(/transport/);
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  it('sendRpc still honours its own budget when no abort signal is given', async () => {
+    const b = await startLeader();
+    const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
+    const started = Date.now();
+    const resp = await f.sendRpc('get_doc', {}, 'r-budget', undefined, 300);
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+  });
+
   it('resolveActiveSession reads the leader-picked session id', async () => {
     const b = await startLeader();
     const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });

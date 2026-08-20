@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Follower } from '../../src/election/follower.js';
+import { portConflictMessage } from '../../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../../src/election/node.js';
 import { handlePing, pingTool } from '../../src/tools/ping.js';
 import { toToolDefinition } from '../tool-schema.js';
@@ -8,7 +9,14 @@ import { toToolDefinition } from '../tool-schema.js';
 const pingToolDefinition = toToolDefinition(pingTool);
 
 const makeNode = (overrides: Partial<Node> & { role?: NodeRole }): Node =>
-  ({ isConflicted: () => false, port: 3055, ...overrides }) as unknown as Node;
+  ({
+    isConflicted: () => false,
+    port: 3055,
+    conflictMessage: portConflictMessage(3055),
+    // dispatch subscribes to role changes so a conflict declared mid-call can cut it short.
+    onRoleChange: () => () => {},
+    ...overrides,
+  }) as unknown as Node;
 const makeFollower = (overrides: Partial<Follower>): Follower => overrides as unknown as Follower;
 
 describe('ping tool', () => {
@@ -49,6 +57,13 @@ describe('ping tool', () => {
       isConflicted: () => true,
       port: 3055,
       getLeader: () => null,
+      conflictMessage: portConflictMessage(3055, {
+        pid: 4242,
+        buildId: 1,
+        serverVersion: '0.4.0',
+        stopped: false,
+        resumed: false,
+      }),
     });
     const result = await handlePing({
       node,
@@ -58,7 +73,10 @@ describe('ping tool', () => {
     expect(result.hop).toBe('server-only');
     expect(result.plugin).toBeNull();
     expect(result.server.role).toBe(NodeRole.Conflicted);
-    expect(result.server.portConflict).toMatch(/port 3055 is held by a non-Figwright process/);
+    // Reports the election's diagnosis verbatim, pid included — `ping` is where a user looks when
+    // nothing works, so it must name the process to kill rather than restate the symptom.
+    expect(result.server.portConflict).toMatch(/pid 4242/);
+    expect(result.server.portConflict).toMatch(/kill 4242/);
   });
 
   it('returns e2e hop with plugin info + sessions when dispatch succeeds (leader path)', async () => {

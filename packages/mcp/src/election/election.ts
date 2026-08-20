@@ -1,4 +1,10 @@
 import type { Follower } from './follower.js';
+import {
+  identifyPortHolder,
+  osProcessProbe,
+  type ProcessProbe,
+  resumeStoppedHolder,
+} from './leader-lock.js';
 import { isAddressInUse, type Node, NodeRole } from './node.js';
 
 export const DEFAULT_TICK_INTERVAL_MS = 1_000;
@@ -23,6 +29,21 @@ export const ABDICATION_BACKOFF_MS = 60_000;
 const ABDICATION_GRAB_ATTEMPTS = 20;
 const ABDICATION_GRAB_DELAY_MS = 50;
 
+/**
+ * Consecutive ticks that must find the leader silent _and_ the port still bound before this node
+ * declares the deadlock (see leader-lock.ts) instead of retrying into it forever.
+ *
+ * Every ordinary way a leader ends releases the port, so those ticks find it free and take over on
+ * the first one — this threshold is only ever reached by a leader that is alive, holding the port
+ * and not answering. The number is a floor on how long a _transient_ stall may last without being
+ * mistaken for that: each such tick costs the 2s ping timeout plus the tick interval, so five of
+ * them is roughly twelve seconds of continuous silence. Well above anything measured (a 6000-file
+ * `scan_components` on the leader kept `/ping` under 30ms), and far below the tool budget the
+ * follower would otherwise spend hanging (40s for a default tool, 130s × 3 attempts for a heavy
+ * one).
+ */
+export const WEDGED_UNRESPONSIVE_TICKS = 5;
+
 export interface ElectionOptions {
   node: Node;
   follower: Follower;
@@ -33,6 +54,8 @@ export interface ElectionOptions {
   buildId?: number;
   tickIntervalMs?: number;
   log?: (msg: string) => void;
+  /** OS probe used to identify (and resume) a wedged port holder; injected by tests. */
+  probe?: ProcessProbe;
 }
 
 export class Election {
@@ -41,11 +64,14 @@ export class Election {
   private readonly buildId: number;
   private readonly tickIntervalMs: number;
   private readonly log: (msg: string) => void;
+  private readonly probe: ProcessProbe;
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private tickInFlight = false;
   private yieldUntil = 0;
   private abdicationBackoffUntil = 0;
+  /** Consecutive ticks that found the leader silent while the port stayed bound. */
+  private unresponsiveTicks = 0;
 
   constructor(opts: ElectionOptions) {
     this.node = opts.node;
@@ -53,6 +79,7 @@ export class Election {
     this.buildId = opts.buildId ?? 0;
     this.tickIntervalMs = opts.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS;
     this.log = opts.log ?? ((): void => {});
+    this.probe = opts.probe ?? osProcessProbe;
   }
 
   async start(): Promise<void> {
@@ -89,7 +116,10 @@ export class Election {
     await new Promise<void>(resolve => setTimeout(resolve, RACE_RETRY_DELAY_MS));
     if (await this.tryLeadOrFollow()) return;
 
-    this.node.becomeConflicted();
+    // Reached by a foreign squatter and by a wedged Figwright leader alike — a process starting up
+    // behind one cannot tell them apart from the outside, so it asks the same question the tick
+    // asks: is there a leader note for this port whose process is still the one that wrote it?
+    this.enterConflicted();
   }
 
   /**
@@ -155,6 +185,7 @@ export class Election {
 
     const leader = await this.follower.leaderInfo();
     if (leader !== undefined) {
+      this.unresponsiveTicks = 0;
       // Healthy leader — but if it runs a strictly older build than us, it's serving stale code
       // (the "zombie leader" a rebuild leaves behind when an old process still owns the port).
       // Newest build wins: ask it to step down and take over. Same single /ping round-trip as the
@@ -172,13 +203,43 @@ export class Election {
     this.log('[election] leader unresponsive — attempting takeover');
     try {
       await this.node.becomeLeader();
+      this.unresponsiveTicks = 0;
     } catch (err) {
       if (isAddressInUse(err)) {
-        this.log('[election] takeover lost — another node took the port');
+        // Silent leader, port still bound. Once is the ordinary handoff race (another node beat us
+        // to it, and its /ping will answer on the next tick). Repeated, it is the one failure the
+        // election cannot resolve by waiting: see WEDGED_UNRESPONSIVE_TICKS and leader-lock.ts.
+        this.unresponsiveTicks += 1;
+        this.log(
+          `[election] takeover lost — port still held by an unresponsive owner ` +
+            `(${this.unresponsiveTicks}/${WEDGED_UNRESPONSIVE_TICKS})`,
+        );
+        if (this.unresponsiveTicks >= WEDGED_UNRESPONSIVE_TICKS) this.enterConflicted();
       } else {
         this.log(`[election] takeover failed: ${(err as Error).message}`);
       }
     }
+  }
+
+  /**
+   * Declare the port unusable, having first tried to find out who holds it — and, if that process
+   * turns out to be suspended, to wake it.
+   *
+   * The conflict state is self-healing: its tick keeps calling tryLeadOrFollow, so a holder that
+   * frees the port (or starts answering again, which is what SIGCONT is for) puts this node back to
+   * leader or follower within one tick. What it buys in the meantime is that `dispatch` fails a
+   * tool call in milliseconds with a message naming the process to kill, instead of hanging for the
+   * tool's full budget and reporting a bare timeout.
+   */
+  private enterConflicted(): void {
+    this.unresponsiveTicks = 0;
+    const identified = identifyPortHolder(this.node.port, this.probe);
+    const holder =
+      identified === undefined ? undefined : resumeStoppedHolder(identified, this.probe);
+    if (holder?.resumed === true) {
+      this.log(`[election] port holder pid ${holder.pid} is suspended — sent SIGCONT`);
+    }
+    this.node.becomeConflicted(holder);
   }
 
   /**

@@ -46,9 +46,10 @@ export interface PingServerInfo {
    */
   versionSkew?: string;
   /**
-   * Present only in the `conflicted` role: :port is held by a non-Figwright process, so Figwright
-   * can neither lead nor reach the plugin. Human-readable, actionable (which port, how to free
-   * it).
+   * Present only in the `conflicted` role: :port is held by something that isn't answering as a
+   * Figwright leader, so Figwright can neither lead nor reach the plugin. Human-readable and
+   * actionable — it names the holding process's pid when that could be proved (a wedged Figwright
+   * leader), and how to free the port when it could not.
    */
   portConflict?: string;
 }
@@ -110,19 +111,15 @@ const serverInfo = (ctx: PingContext): PingServerInfo => ({
 export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const server = serverInfo(ctx);
 
-  // Port conflict: :port is held by a non-Figwright process. There's no relay and no leader to reach,
-  // so report the clash directly instead of trying (and failing) to dispatch to the plugin.
+  // Port conflict: :port is held by something that isn't answering as a Figwright leader. There's no
+  // relay and no leader to reach, so report the clash directly instead of trying (and failing) to
+  // dispatch to the plugin. The text is the election's own diagnosis, shared with dispatch so the
+  // two can't drift.
   if (ctx.node.isConflicted()) {
     return {
       ok: true,
       hop: 'server-only',
-      server: {
-        ...server,
-        portConflict:
-          `port ${ctx.node.port} is held by a non-Figwright process — Figwright can neither lead nor ` +
-          `follow it, so no plugin is reachable. Free that port (lsof -iTCP:${ctx.node.port} ` +
-          `-sTCP:LISTEN) and Figwright takes it over automatically.`,
-      },
+      server: { ...server, portConflict: ctx.node.conflictMessage },
       plugin: null,
     };
   }

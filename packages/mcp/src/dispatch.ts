@@ -1,7 +1,7 @@
 import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared';
 
 import type { Follower } from './election/follower.js';
-import type { Node } from './election/node.js';
+import { type Node, NodeRole } from './election/node.js';
 import { reportSkew } from './tools/skew-notice.js';
 
 export const DEFAULT_DISPATCH_MAX_ATTEMPTS = 3;
@@ -42,82 +42,103 @@ export const dispatchTool = async (
   const retryDelayMs = opts.retryDelayMs ?? DEFAULT_DISPATCH_RETRY_DELAY_MS;
   const log = ctx.log ?? ((): void => {});
 
-  // The relay port is held by a non-Figwright process, so there's no leader to reach and no point
-  // forwarding to the squatter. Fail fast with an actionable message rather than retrying into a wall.
-  if (ctx.node.isConflicted()) {
-    throw new DispatchError(
-      ErrorCode.NotLeader,
-      `port ${ctx.node.port} is held by a non-Figwright process, so Figwright can't run tools against ` +
-        `your plugin. Free that port (e.g. lsof -iTCP:${ctx.node.port} -sTCP:LISTEN) and Figwright ` +
-        `reconnects automatically.`,
-    );
-  }
-
   let lastError: Error | null = null;
 
-  /* eslint-disable no-await-in-loop -- retry/backoff loop is intentionally sequential */
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    if (ctx.node.isLeader()) {
-      const leader = ctx.node.getLeader();
-      if (leader === null) {
-        lastError = new DispatchError(
-          ErrorCode.Internal,
-          'leader resources missing despite Leader role',
-        );
-        break;
+  // The election can declare the port wedged *while this call is in flight*, and that verdict has
+  // to reach a call that is already blocked — not just the next one. Two halves: the signal cuts
+  // the in-flight fetch short, and the check at the top of each attempt turns the resulting
+  // transport error into the real diagnosis instead of another retry. Without the signal the first
+  // call after a wedge still spent its whole budget and every retry (measured at 123s for a
+  // default-budget tool) before reporting a timeout that named nothing.
+  let conflicted = new AbortController();
+  const stopWatching = ctx.node.onRoleChange(role => {
+    if (role === NodeRole.Conflicted) conflicted.abort(new Error('port conflict'));
+  });
+
+  try {
+    /* eslint-disable no-await-in-loop -- retry/backoff loop is intentionally sequential */
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      // The relay port is held by something that isn't answering as a Figwright leader, so there is
+      // no leader to reach and no point forwarding to it. Fail with the diagnosis the election
+      // already made (see node.conflictMessage) rather than retrying into a wall.
+      if (ctx.node.isConflicted()) {
+        throw new DispatchError(ErrorCode.NotLeader, ctx.node.conflictMessage);
       }
-      try {
-        // Relay→plugin budget = B + one margin (see getRelayBudget) so the inner sandbox-bridge timer
-        // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
-        // Attribution is captured as the request is answered, not read afterwards: two concurrent
-        // calls to plugins on different builds would otherwise both see whichever finished last.
-        const result = await leader.relay.sendRequest(
-          toolName,
-          args,
-          opts.perCallTimeoutMs ?? getRelayBudget(toolName),
-          opts.sessionId,
-          served => reportSkew(leader.relay.skewNotice(served)),
-        );
-        return result;
-      } catch (err) {
-        lastError = err as Error;
-        break;
+
+      // A fresh controller per attempt, checked *after* the line above, because an abort is spent
+      // once it fires. The best outcome of a wedge is that it heals — the holder was suspended, the
+      // election woke it, and by this retry there is a working leader again. Reusing the aborted
+      // signal would fail that retry instantly and turn the one case that recovers on its own into
+      // "This operation was aborted": strictly worse than before the abort existed. Whether the
+      // conflict is over has already been decided one line up, by the role, which is the fact —
+      // the signal is only how the previous attempt was interrupted.
+      conflicted = new AbortController();
+
+      if (ctx.node.isLeader()) {
+        const leader = ctx.node.getLeader();
+        if (leader === null) {
+          lastError = new DispatchError(
+            ErrorCode.Internal,
+            'leader resources missing despite Leader role',
+          );
+          break;
+        }
+        try {
+          // Relay→plugin budget = B + one margin (see getRelayBudget) so the inner sandbox-bridge timer
+          // fires first. opts.perCallTimeoutMs overrides for callers/tests that need a specific value.
+          // Attribution is captured as the request is answered, not read afterwards: two concurrent
+          // calls to plugins on different builds would otherwise both see whichever finished last.
+          const result = await leader.relay.sendRequest(
+            toolName,
+            args,
+            opts.perCallTimeoutMs ?? getRelayBudget(toolName),
+            opts.sessionId,
+            served => reportSkew(leader.relay.skewNotice(served)),
+          );
+          return result;
+        } catch (err) {
+          lastError = err as Error;
+          break;
+        }
       }
-    }
 
-    // Follower→leader budget = B + two margins (outermost layer), so it outlives the leader's own
-    // relay timer for the same tool.
-    const resp = await ctx.follower.sendRpc(
-      toolName,
-      args,
-      undefined,
-      opts.sessionId,
-      opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
-    );
-    if (resp.kind === 'ok') {
-      reportSkew(resp.notice ?? null);
-      return resp.result;
-    }
+      // Follower→leader budget = B + two margins (outermost layer), so it outlives the leader's own
+      // relay timer for the same tool.
+      const resp = await ctx.follower.sendRpc(
+        toolName,
+        args,
+        undefined,
+        opts.sessionId,
+        opts.perCallTimeoutMs ?? getFollowerBudget(toolName),
+        conflicted.signal,
+      );
+      if (resp.kind === 'ok') {
+        reportSkew(resp.notice ?? null);
+        return resp.result;
+      }
 
-    // 'relay stopping' is the leader rejecting the call because it's shutting down or abdicating —
-    // by the retry delay a new leader (possibly this very node) has the port, so it's as transient
-    // as a dropped connection. Safe to replay: writes carry a stable requestId the plugin dedupes.
-    const isTransient =
-      resp.code === ErrorCode.Internal &&
-      /transport|fetch failed|ECONNREFUSED|relay stopping/i.test(resp.message);
-    if (!isTransient || attempt === maxAttempts - 1) {
-      throw new DispatchError(resp.code, resp.message);
-    }
+      // 'relay stopping' is the leader rejecting the call because it's shutting down or abdicating —
+      // by the retry delay a new leader (possibly this very node) has the port, so it's as transient
+      // as a dropped connection. Safe to replay: writes carry a stable requestId the plugin dedupes.
+      const isTransient =
+        resp.code === ErrorCode.Internal &&
+        /transport|fetch failed|ECONNREFUSED|relay stopping/i.test(resp.message);
+      if (!isTransient || attempt === maxAttempts - 1) {
+        throw new DispatchError(resp.code, resp.message);
+      }
 
-    log(
-      `[dispatch] transient leader error, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxAttempts})`,
-    );
-    await new Promise<void>(resolve => setTimeout(resolve, retryDelayMs));
+      log(
+        `[dispatch] transient leader error, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxAttempts})`,
+      );
+      await new Promise<void>(resolve => setTimeout(resolve, retryDelayMs));
+    }
+    /* eslint-enable no-await-in-loop */
+
+    if (lastError !== null) throw lastError;
+    throw new DispatchError(ErrorCode.Internal, 'dispatch exhausted retries');
+  } finally {
+    stopWatching();
   }
-  /* eslint-enable no-await-in-loop */
-
-  if (lastError !== null) throw lastError;
-  throw new DispatchError(ErrorCode.Internal, 'dispatch exhausted retries');
 };
 
 /**
@@ -127,8 +148,8 @@ export const dispatchTool = async (
  * — in that case sub-calls run unpinned, i.e. the pre-existing most-active routing on each call.
  */
 export const resolveRoutingSession = async (ctx: DispatchContext): Promise<string | undefined> => {
-  // A conflicted node has no leader to ask (the port holder isn't Figwright) — resolve to undefined so
-  // sub-calls run unpinned, and don't waste an HTTP round-trip on the squatter.
+  // A conflicted node has no leader to ask (the port holder isn't answering as one) — resolve to
+  // undefined so sub-calls run unpinned, and don't waste an HTTP round-trip on it.
   if (ctx.node.isConflicted()) return undefined;
   if (ctx.node.isLeader()) {
     return ctx.node.getLeader()?.relay.pickActiveSessionId();

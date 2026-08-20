@@ -38,3 +38,35 @@ jobs:
       - run: pnpm knip
       - run: pnpm build
       - run: pnpm test
+
+  # The one platform no contributor here can run, and the only one where a whole feature is guarded
+  # off rather than exercised: `election/leader-lock.ts` cannot read the process table (no `ps`) and
+  # cannot resume a suspended holder (no SIGSTOP to be suspended by), so it never names a pid and
+  # never signals — Windows gets the platform-independent half (the election's consecutive-silence
+  # count and dispatch's fail-fast) and the anonymous message. Those guards are asserted by forcing
+  # `process.platform`, which proves the branching but not that Node's fs and process APIs behave as
+  # assumed underneath it. This job is the part a stub cannot stand in for.
+  #
+  # Deliberately NOT the whole gate: typecheck / lint / format:check / knip are platform-independent
+  # and already ran above, and a Windows runner bills at 2×. What differs across platforms is the
+  # filesystem, process spawning and path handling — which is `build` and `test`.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build first: the dist-backed e2e tests skip themselves when `dist` is missing, so an
+      # unbuilt run here would pass while proving nothing — the same trap the Linux job avoids.
+      - run: pnpm build
+      - run: pnpm test
