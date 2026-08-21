@@ -494,12 +494,57 @@ export type DesignContextMetrics = z.infer<typeof DesignContextMetricsSchema>;
 //   (it shrinks the payload, not the visit count), so the threshold is deliberately high — real
 //   whole-page groundings of several hundred nodes succeed today and must keep working; only
 //   pathological sizes bail.
-// - DESIGN_CONTEXT_CHAR_BUDGET gates mcp-side, AFTER serialization: the precise net. Anchored to
-//   Claude Code's default MCP result cap (MAX_MCP_OUTPUT_TOKENS = 25k tokens ≈ 100k chars of
-//   minified JSON) — a result beyond it errors out today and delivers nothing, so replacing it with
-//   a section plan is strictly an upgrade.
+// - DESIGN_CONTEXT_TOKEN_BUDGET gates mcp-side, AFTER serialization: the precise net. A result past
+//   the client's cap errors out and delivers nothing, so replacing it with a smaller shape is
+//   strictly an upgrade.
+//
+// This used to be a 100k CHARACTER budget, derived on paper from "25k tokens ≈ 100k chars". That
+// derivation was wrong by roughly 2x, and the error was invisible because nothing ever measured it:
+// results between the real cap and 100k chars were simply dead ends. Measured against a live client
+// (Claude Code, MAX_MCP_OUTPUT_TOKENS = 25,000) on real design payloads:
+//
+//     46,503 chars  accepted        62,980 chars  REJECTED
+//     49,468 chars  accepted        70,521 chars  REJECTED
+//     54,209 chars  REJECTED        84,896 chars  REJECTED
+//
+// So the cap lands between 49,468 and 54,209 chars for that content — about half the old budget.
+// Counting characters cannot be fixed by picking a smaller number, because the chars-per-token
+// ratio is content-dependent: the same 50k chars is ~25k tokens of ASCII-ish JSON but ~50k tokens
+// of CJK text. Hence a token ESTIMATE instead, calibrated from the measurements above.
 export const DESIGN_CONTEXT_BAIL_NODES = 1500;
-export const DESIGN_CONTEXT_CHAR_BUDGET = 100_000;
+
+/**
+ * Non-CJK characters per token in a minified JSON payload. The measurements above bracket the true
+ * value at [2.02, 2.20); 2 is used deliberately — the low end over-estimates the token count, and
+ * over-estimating is the safe direction (see DESIGN_CONTEXT_TOKEN_BUDGET).
+ */
+const CHARS_PER_TOKEN = 2;
+
+/** CJK ideographs and fullwidth forms, which tokenize at roughly one token per character. */
+const CJK = /[\u3000-\u9fff\uff00-\uffef]/u;
+
+/**
+ * Conservative token estimate for a serialized tool result. Deliberately an over-estimate: the two
+ * failure directions are not symmetric. Estimating too HIGH degrades a result that would have fit —
+ * the caller gets a smaller shape or a section plan, both of which still carry complete data, just
+ * over more calls. Estimating too LOW ships a payload the client refuses, and the caller gets
+ * nothing at all. So this leans high, and the budget leans low.
+ */
+export const estimateResultTokens = (serialized: string): number => {
+  let cjk = 0;
+  for (const ch of serialized) {
+    if (CJK.test(ch)) cjk += 1;
+  }
+  return cjk + Math.ceil((serialized.length - cjk) / CHARS_PER_TOKEN);
+};
+
+/**
+ * The mcp-side net, in estimated tokens. Set below the measured 25,000-token client cap on purpose:
+ * the cascade below this budget degrades gracefully (a section plan still grounds every section at
+ * full fidelity), while a payload above the client's real cap is an outright failure. A little
+ * early sectioning costs round trips; overshooting costs the whole result.
+ */
+export const DESIGN_CONTEXT_TOKEN_BUDGET = 24_000;
 
 /** One entry of a section plan: a subtree the caller should ground individually. */
 export const DesignContextSectionSchema = z.object({
