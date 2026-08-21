@@ -14,8 +14,11 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  # Platform-independent gates. None of these need a build: typecheck, lint, format and
+  # knip all run against source, which is why they ran before `pnpm build` before too.
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,22 +39,23 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm knip
-      - run: pnpm build
-      - run: pnpm test
 
-  # The one platform no contributor here can run, and the only one where a whole feature is guarded
-  # off rather than exercised: `election/leader-lock.ts` cannot read the process table (no `ps`) and
-  # cannot resume a suspended holder (no SIGSTOP to be suspended by), so it never names a pid and
-  # never signals — Windows gets the platform-independent half (the election's consecutive-silence
-  # count and dispatch's fail-fast) and the anonymous message. Those guards are asserted by forcing
-  # `process.platform`, which proves the branching but not that Node's fs and process APIs behave as
-  # assumed underneath it. This job is the part a stub cannot stand in for.
-  #
-  # Deliberately NOT the whole gate: typecheck / lint / format:check / knip are platform-independent
-  # and already ran above, and a Windows runner bills at 2×. What differs across platforms is the
-  # filesystem, process spawning and path handling — which is `build` and `test`.
-  windows:
-    runs-on: windows-latest
+  # What actually differs across platforms is the filesystem, process spawning and path
+  # handling — so this is the half that gets a matrix. Windows is the one platform no
+  # contributor here can run, and the only one where a whole feature is guarded off rather
+  # than exercised: `election/leader-lock.ts` cannot read the process table (no `ps`) and
+  # cannot resume a suspended holder (no SIGSTOP to be suspended by), so it never names a
+  # pid and never signals. Those guards are asserted by forcing `process.platform`, which
+  # proves the branching but not that Node's fs and process APIs behave as assumed
+  # underneath it. A real runner is the part a stub cannot stand in for.
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # One platform failing must not cancel the other — which one broke is the finding.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,7 +70,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Build first: the dist-backed e2e tests skip themselves when `dist` is missing, so an
-      # unbuilt run here would pass while proving nothing — the same trap the Linux job avoids.
+      # Build first: the dist-backed e2e tests skip themselves when `dist` is missing, so
+      # an unbuilt run would pass while proving nothing.
       - run: pnpm build
       - run: pnpm test
