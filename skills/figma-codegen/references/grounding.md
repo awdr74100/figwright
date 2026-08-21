@@ -131,6 +131,19 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `background-size` derived from `scalingFactor` (and gaps from `spacing`); for the hexagonal tile
   types (`HORIZONTAL_HEXAGONAL` / `VERTICAL_HEXAGONAL`), use an SVG `<pattern>` with offset rows.
   Don't flatten it to a solid colour.
+- **Containers first — the tree's nesting is the markup's nesting.** Emit **one container element per
+  frame** and keep the parent/child relationships the payload gives you. Never flatten a section's
+  frames into a flat run of siblings: the frame that disappears is the one that owned the `padding`
+  and the `itemSpacing`, so every child then has to be placed by hand, and the result only holds at
+  the design's exact width. Spacing belongs to the **container**, not to the children — `itemSpacing`
+  is the parent's `gap`, `padding*` is the parent's `padding`. Never re-express either as per-child
+  `margin` / `margin-top` / `margin-bottom`, and never place a child of an auto-layout frame by
+  absolute offset. `margin` is only for a genuine **one-sided** offset between elements that share no
+  container; where a container exists, `gap` and `padding` are the answer. The tell that this went
+  wrong: sibling elements each carrying their own `margin-bottom` where the parent has one
+  `itemSpacing`, or a stack of `position: absolute` children under a frame that has a `layout`.
+  This holds for **every** shape the tool returns — including a degraded payload that carries layout
+  without appearance (see [Large designs](#large-designs-build-section-by-section-and-ground-every-section)).
 - **Auto-layout & Grid — read spacing off `layout`, never eyeball it.** Each auto-layout frame carries
   a `layout` object with the _exact_ spacing; don't reverse-engineer padding/gap/justify from child
   `x/y/w/h`. `mode` `HORIZONTAL`/`VERTICAL` → `flex-row`/`flex-col`; `padding*` → `p-*`; for H/V
@@ -209,6 +222,17 @@ gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering 
     (`%`-based left + width); vertical `MIN`→`top`, `MAX`→`bottom`, `CENTER`→centered-y,
     `STRETCH`→`top-N bottom-M`, `SCALE`→`%`. A `MAX`/right-anchored element emitted as `left-[Xpx]`
     drifts at every width but the design's — read the constraint, don't assume the top-left corner.
+  - **A frame with no `layout` is not automatically an absolute canvas.** `constraints` tells you how
+    a child was _anchored_ in Figma; it does not mean the right CSS is a stack of absolutely
+    positioned boxes. Many files are simply drawn without auto-layout, and emitting one `position:
+absolute` per child there reproduces the artboard rather than the design: it breaks at every
+    other width and is the single biggest source of unmaintainable generated markup. So read the
+    geometry for **intent** before reaching for `absolute`: children in a single column at a shared
+    `x` with a repeating `y` delta are a `flex-col` with that delta as `gap`; children on a shared
+    `y` are a `flex-row`; a uniform inset from the parent's edges is `padding`. Emit the flow
+    version, and reserve real absolute positioning for what is genuinely layered — a badge over a
+    card, a caption over an image, a decorative blob. When you infer a flow this way, say so: it is
+    inferred from geometry, not grounded in a `layout` object.
 
 ## Large designs: build section by section, and ground every section
 
@@ -223,9 +247,20 @@ throws away the structure inside each section → empty cards/rows). Scope **hor
 2. Then `get_design_context` **each section by its `nodeId` at full detail** (`dedupeComponents: true`),
    build that section, and move on. One section in context at a time.
 
-The tool enforces this on the worst cases: an over-budget call returns a **`sectionPlan`**
-(`{ sections: [{ nodeId, name, nodes }] }` + a `note`) instead of the tree — that plan **is** step 1,
-already done; ground each listed section by its `nodeId` as in step 2.
+The tool enforces this on the worst cases, and it always says which shape you got in a **leading
+`note`** — read that note first, it tells you what the payload is missing:
+
+- **Layout without appearance.** The tree is intact and every frame still carries its `layout`
+  (mode, `padding*`, `itemSpacing`, alignment), every node its sizing/`constraints`, every text its
+  `characters`. What is gone is colour, typography, effects and token bindings. **Build the full
+  structure from this** — containers, flex/grid, padding, gap — then `get_design_context` each
+  section at full detail for its colours and type before styling it. Do **not** treat missing
+  appearance as licence to guess it off the screenshot.
+- **Structure only (compact).** Identity + geometry, no `layout` at all. This is a **map, not a
+  spec**: use it to pick sections, never to generate from. In particular do not turn the `x`/`y`
+  deltas into margins — the spacing they encode belongs to a `layout` you have not been given yet.
+- **`sectionPlan`** (`{ sections: [{ nodeId, name, nodes }] }`). That plan **is** step 1, already
+  done; ground each listed section by its `nodeId` as in step 2.
 
 **Ground every section the same way — never eyeball values off the screenshot for "the easy ones".**
 This is the cardinal failure: grounding the first sections properly, then guessing the rest to save
