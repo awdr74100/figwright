@@ -14,8 +14,16 @@ export const getDesignContextTool: ToolSpec = {
     'detail: minimal (id/name/type) / compact (+ geometry) / full (+ styling, layout, text and ' +
     'design-system tokens resolved to names plus a deduped globalVars style table). Defaults to ' +
     'full with dedupeComponents true — the code-generation view; pass detail: compact explicitly ' +
-    'for a cheap structure scan. An over-budget full result degrades gracefully: first to the ' +
-    'compact structure of the same tree (note attached), then to a sectionPlan. ' +
+    'for a cheap structure scan. An over-budget full result degrades gracefully, always with a ' +
+    'leading note saying which shape you got: a small overshoot returns the same tree with LAYOUT ' +
+    'intact and only appearance dropped (every frame keeps its flex/grid mode, padding, gap and ' +
+    'alignment, each node its sizing/constraints, each text its characters — enough to build ' +
+    'correct containers, then re-ground per section for colour and type); anything bigger returns ' +
+    'a sectionPlan, which is the BEST outcome and not the worst — each section grounded on its own ' +
+    'comes back at full detail with layout AND colour AND type. Layout-only and geometry-only ' +
+    'views appear only for a subtree with nothing left to split into. Whatever shape comes back, ' +
+    "build layout from each frame's own layout object — never reconstruct spacing from child x/y " +
+    'as margins or absolute offsets. ' +
     'depth limits child levels (omit or 0 = unlimited; cut nodes are ' +
     'flagged truncated). dedupeComponents collapses repeated instances of an already-expanded main ' +
     'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +

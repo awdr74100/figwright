@@ -9,6 +9,7 @@ import {
   type GetDesignContextResult,
   MIXED,
   type MotionSummary,
+  planRootFrom,
   type ResolvedToken,
   type SerializedPaint,
   simplifyPaint,
@@ -603,18 +604,22 @@ const sectionPlanResult = (
   }));
   const omitted = sectionNodes.length - sections.length;
   return {
-    nodes: roots.map(node => ({ id: node.id, name: node.name, type: node.type })),
+    // Note first: the consumer is a model reading top to bottom, and a caveat placed after the
+    // payload is read after every value it is warning about (see withLeadingNote in the mcp guard).
+    note:
+      `This tree is ${totalNodes} nodes — too large to serialize whole. Ground it section by ` +
+      'section: call get_design_context per section nodeId (detail: full, dedupeComponents: true) ' +
+      'and build each before moving on. Do not retry this call unscoped and do not depth-cap the ' +
+      'whole page.',
+    // The roots keep their own layout: a plan tells the caller which sections to ground, but it is
+    // the root's layout that says how to build the container they go into (see planRootFrom).
+    nodes: roots.map(node => planRootFrom(project(node, 'full'))),
     sectionPlan: {
       reason: 'node-count',
       totalNodes,
       sections,
       ...(omitted > 0 ? { sectionsOmitted: omitted } : {}),
     },
-    note:
-      `This tree is ${totalNodes} nodes — too large to serialize whole. Ground it section by ` +
-      'section: call get_design_context per section nodeId (detail: full, dedupeComponents: true) ' +
-      'and build each before moving on. Do not retry this call unscoped and do not depth-cap the ' +
-      'whole page.',
   };
 };
 

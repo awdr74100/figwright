@@ -788,6 +788,12 @@ describe('get_design_context node-count bail (budget)', () => {
     const r = (await handler({ detail: 'full', budget: true })) as GetDesignContextResult;
 
     expect(r.sectionPlan?.reason).toBe('node-count');
+    // The note leads the payload: the consumer reads top to bottom, and a caveat serialized after
+    // the plan is read after everything it is warning about (mirrors withLeadingNote in the guard).
+    expect(Object.keys(r)[0]).toBe('note');
+    // Roots keep their own layout so the caller can build the container the sections go into.
+    expect(r.nodes[0]?.id).toBe('root');
+    expect(r.nodes[0]?.children).toBeUndefined();
     expect(r.sectionPlan?.totalNodes).toBe(1 + 8 + 8 * 250);
     // Sections descend into the single root's children; each carries its subtree size.
     expect(r.sectionPlan?.sections).toHaveLength(8);
@@ -797,8 +803,23 @@ describe('get_design_context node-count bail (budget)', () => {
       childCount: 250,
       nodes: 251,
     });
-    // The roots keep only their identity; no serialized styling sneaks into a bail response.
-    expect(r.nodes).toEqual([{ id: 'root', name: 'Page', type: 'FRAME' }]);
+    // The roots keep identity + geometry + their own LAYOUT — the caller needs the root's layout to
+    // build the container the sections go into. Styling still must not ride along in a bail
+    // response: no fills/effects on the node, no globalVars table, and no children.
+    const root = r.nodes[0] as unknown as Record<string, unknown>;
+    expect(root).toMatchObject({ id: 'root', name: 'Page', type: 'FRAME' });
+    expect(root.children).toBeUndefined();
+    for (const styling of [
+      'fills',
+      'strokes',
+      'effects',
+      'fill',
+      'stroke',
+      'effect',
+      'textStyle',
+    ]) {
+      expect(root[styling]).toBeUndefined();
+    }
     expect(r.note).toMatch(/section by section/);
     expect(r.globalVars).toBeUndefined();
   });

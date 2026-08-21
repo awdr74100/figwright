@@ -1,5 +1,6 @@
 import {
-  DESIGN_CONTEXT_CHAR_BUDGET,
+  DESIGN_CONTEXT_TOKEN_BUDGET,
+  estimateResultTokens,
   type DesignContextNode,
   type GetDesignContextResult,
 } from '@figwright/shared';
@@ -102,9 +103,11 @@ describe('handleDesignContext (the public-path guard)', () => {
     expect(r).toEqual(bail);
   });
 
-  it('downgrades an oversized full payload to its compact structure with a note', async () => {
+  it('downgrades an oversized full payload, dropping styling and keeping the tree', async () => {
     const payload = oversizedFull();
-    expect(JSON.stringify(payload).length).toBeGreaterThan(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(estimateResultTokens(JSON.stringify(payload))).toBeGreaterThan(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
 
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
@@ -127,9 +130,13 @@ describe('handleDesignContext (the public-path guard)', () => {
       width: 3,
       height: 4,
     });
-    expect(JSON.stringify(r).length).toBeLessThanOrEqual(DESIGN_CONTEXT_CHAR_BUDGET);
-    expect(r.note).toMatch(/structure-only/);
-    expect(r.note).toMatch(/never\s+generate code from this structure alone/);
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
+    // This fixture carries no layout fields, so the layout tier fires first and yields the same
+    // node shape as the compact rung; either way the note must say so and warn off x/y spacing.
+    expect(r.note).toMatch(/APPEARANCE dropped/);
+    expect(r.note).toMatch(/never from x\/y/);
   });
 
   it('keeps the breakpoint hint on a compact downgrade', async () => {
@@ -140,7 +147,7 @@ describe('handleDesignContext (the public-path guard)', () => {
   });
 
   it('falls through to a section plan when even the compact structure is over budget', async () => {
-    // Two sections × 1200 leaves with long names: the compact projection alone tops 100k chars.
+    // Two sections × 1200 leaves with long names: the compact projection alone blows the budget.
     const longName = 'section-content-'.repeat(6);
     const sections = ['a', 'b'].map((s, i) =>
       leaf(`s${i}`, {
@@ -196,7 +203,7 @@ describe('handleDesignContext (the public-path guard)', () => {
     expect(r.nodes[0]?.children?.[0]?.id).toBe('only');
   });
 
-  it('rescues an unsplittable oversized full payload via the compact downgrade', async () => {
+  it('rescues an unsplittable oversized full payload via a downgrade', async () => {
     // The fat is styling (unknown fields) — the compact projection strips it, so the downgrade
     // fits even though there are no sections to plan.
     const payload: GetDesignContextResult = {
@@ -206,7 +213,7 @@ describe('handleDesignContext (the public-path guard)', () => {
     const r = await handleDesignContext(dispatch, {});
     expect(r.sectionPlan).toBeUndefined();
     expect(r.nodes[0]?.children?.[0]).toEqual({ id: 'only', name: 'n-only', type: 'RECTANGLE' });
-    expect(r.note).toMatch(/structure-only/);
+    expect(r.note).toMatch(/APPEARANCE dropped/);
   });
 });
 
@@ -247,7 +254,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
     expect(r.projectTokens).toBeUndefined();
   });
 
-  it('drops annotations with the styling on a compact downgrade', async () => {
+  it('drops projectTokens with the styling on a downgrade', async () => {
     const { dispatch } = dispatcher(oversizedFull());
     const r = await handleDesignContext(dispatch, {}, async () => ({
       index: indexOf([{ name: 'color-primary', value: '#6266F0' }]),
@@ -255,7 +262,7 @@ describe('handleDesignContext — value-reverse annotation', () => {
     }));
     // Over budget → structure-only view; the annotation must not survive on a payload whose
     // colors are gone.
-    expect(r.note).toMatch(/structure-only/);
+    expect(r.note).toMatch(/APPEARANCE dropped/);
     expect(r.projectTokens).toBeUndefined();
   });
 });
@@ -279,5 +286,307 @@ describe('sectionPlanFromPayload', () => {
     const plan = sectionPlanFromPayload({ nodes: [leaf('root', { children: wide })] }, 1);
     expect(plan?.sectionPlan?.sections).toHaveLength(60);
     expect(plan?.sectionPlan?.sectionsOmitted).toBe(10);
+  });
+});
+
+describe('the LAYOUT downgrade tier', () => {
+  /**
+   * A full payload whose bulk is appearance: every leaf carries a fat styling field plus the layout
+   * fields the tier must preserve. Sized so `full` blows the budget but the layout projection
+   * fits.
+   */
+  const oversizedWithLayout = (leaves: number, fatChars: number): GetDesignContextResult => {
+    const fat = 'x'.repeat(fatChars);
+    const sections = ['a', 'b'].map((s, i) =>
+      leaf(`s${i}`, {
+        name: `Section ${s}`,
+        type: 'FRAME',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        layout: {
+          mode: 'VERTICAL',
+          paddingTop: 16,
+          paddingRight: 16,
+          paddingBottom: 16,
+          paddingLeft: 16,
+          itemSpacing: 24,
+          primaryAxisAlignItems: 'MIN',
+          counterAxisAlignItems: 'CENTER',
+        },
+        children: Array.from({ length: leaves }, (_c, l) =>
+          leaf(`s${i}-l${l}`, {
+            x: 1,
+            y: 2,
+            width: 3,
+            height: 4,
+            // Preserved by the tier:
+            layoutSizingHorizontal: 'FILL',
+            layoutGrow: 1,
+            constraints: { horizontal: 'STRETCH', vertical: 'MIN' },
+            characters: `label ${l}`,
+            componentProperties: { State: { type: 'VARIANT', value: 'default' } },
+            // Dropped by the tier (appearance):
+            fills: fat,
+            effects: fat,
+            boundVariables: { itemSpacing: ['VariableID:1:1'] },
+          }),
+        ),
+      }),
+    );
+    return {
+      nodes: [leaf('root', { name: 'Page', type: 'FRAME', children: sections })],
+      globalVars: { styles: { deadbeef: { fills: fat } } },
+    };
+  };
+
+  it('keeps the whole layout system when full is over budget but the layout tier fits', async () => {
+    const payload = oversizedWithLayout(40, 2000);
+    expect(estimateResultTokens(JSON.stringify(payload))).toBeGreaterThan(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
+
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+
+    expect(r.sectionPlan).toBeUndefined();
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
+
+    // The container's own layout survives — the whole point of the tier.
+    const section = r.nodes[0]?.children?.[0];
+    expect(section?.layout).toEqual(payload.nodes[0]?.children?.[0]?.layout);
+
+    // A child keeps how it sizes/places itself and what it says…
+    const child = section?.children?.[0];
+    expect(child).toMatchObject({
+      id: 's0-l0',
+      x: 1,
+      y: 2,
+      width: 3,
+      height: 4,
+      layoutSizingHorizontal: 'FILL',
+      layoutGrow: 1,
+      constraints: { horizontal: 'STRETCH', vertical: 'MIN' },
+      characters: 'label 0',
+      componentProperties: { State: { type: 'VARIANT', value: 'default' } },
+    });
+    // …and loses only appearance.
+    expect(child?.fills).toBeUndefined();
+    expect(child?.effects).toBeUndefined();
+    expect(child?.boundVariables).toBeUndefined();
+    expect(r.globalVars).toBeUndefined();
+
+    expect(r.note).toMatch(/LAYOUT intact/);
+    expect(r.note).toMatch(/never from x\/y/);
+  });
+
+  it('falls through to geometry-only on an unsplittable tree whose layout will not fit', async () => {
+    // Unsplittable: the plan walk descends through at most two single-child wrappers, so a
+    // root → only → single chain leaves it one section and it returns null. That is the shape the
+    // projection rungs exist for — a splittable tree gets a plan instead (asserted below).
+    const bigLayout = { mode: 'VERTICAL', filler: 'x'.repeat(200) };
+    const payload: GetDesignContextResult = {
+      nodes: [
+        leaf('root', {
+          children: [
+            leaf('only', {
+              children: [
+                leaf('single', {
+                  children: Array.from({ length: 400 }, (_c, l) =>
+                    leaf(`l${l}`, { x: 1, y: 2, width: 3, height: 4, layout: bigLayout }),
+                  ),
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    };
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+
+    expect(r.sectionPlan).toBeUndefined();
+    const first = r.nodes[0]?.children?.[0]?.children?.[0]?.children?.[0];
+    expect(first).toEqual({
+      id: 'l0',
+      name: 'n-l0',
+      type: 'RECTANGLE',
+      x: 1,
+      y: 2,
+      width: 3,
+      height: 4,
+    });
+    expect(r.note).toMatch(/too large even with layout alone/);
+  });
+
+  it('keeps the breakpoint hint on a layout downgrade', async () => {
+    const payload = { ...oversizedWithLayout(40, 2000), hint: 'breakpoints: ground each frame' };
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+    expect(r.hint).toBe('breakpoints: ground each frame');
+  });
+});
+
+describe('every degraded shape leads with its note', () => {
+  // The consumer reads the payload top to bottom; a caveat serialized after the nodes is read after
+  // every coordinate it warns about. Assert on key ORDER, which JSON.stringify preserves.
+  const firstKey = (r: GetDesignContextResult): string => Object.keys(r)[0] as string;
+
+  it('leads with the note on a layout downgrade', async () => {
+    const payload = (() => {
+      const fat = 'x'.repeat(2000);
+      return {
+        nodes: [
+          leaf('root', {
+            name: 'Page',
+            type: 'FRAME',
+            children: Array.from({ length: 60 }, (_c, l) =>
+              leaf(`l${l}`, {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+                layout: { mode: 'VERTICAL' },
+                fills: fat,
+              }),
+            ),
+          }),
+        ],
+      } satisfies GetDesignContextResult;
+    })();
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+    expect(firstKey(r)).toBe('note');
+  });
+
+  it('leads with the note on a compact downgrade', async () => {
+    const { dispatch } = dispatcher(oversizedFull());
+    const r = await handleDesignContext(dispatch, {});
+    expect(firstKey(r)).toBe('note');
+  });
+
+  it('leads with the note on a section plan', () => {
+    const plan = sectionPlanFromPayload(
+      { nodes: [leaf('root', { children: [leaf('a'), leaf('b')] })] },
+      200_000,
+    );
+    expect(plan).not.toBeNull();
+    expect(firstKey(plan as GetDesignContextResult)).toBe('note');
+  });
+
+  it('leads with the note on an explicit below-full result', async () => {
+    const { dispatch } = dispatcher({ nodes: [leaf('1:1')] });
+    const r = await handleDesignContext(dispatch, { detail: 'compact' });
+    expect(firstKey(r)).toBe('note');
+  });
+});
+
+describe('the layout rung sheds content before it sheds layout', () => {
+  it('drops text/props rather than collapsing to geometry on an unsplittable tree', async () => {
+    // Sized so layout+content misses the budget but layout alone clears it — the band where a
+    // naive cascade would have traded the entire box model for some strings. Unsplittable (see
+    // above) so the projection rungs, not the section plan, are what answer.
+    const layout = {
+      mode: 'VERTICAL',
+      paddingTop: 16,
+      paddingRight: 16,
+      paddingBottom: 16,
+      paddingLeft: 16,
+      itemSpacing: 24,
+    };
+    const payload: GetDesignContextResult = {
+      nodes: [
+        leaf('root', {
+          children: [
+            leaf('only', {
+              children: [
+                leaf('single', {
+                  layout,
+                  children: Array.from({ length: 180 }, (_c, l) =>
+                    leaf(`l${l}`, {
+                      x: 1,
+                      y: 2,
+                      width: 3,
+                      height: 4,
+                      layout,
+                      layoutSizingHorizontal: 'FILL',
+                      characters: 'y'.repeat(90),
+                      fills: 'x'.repeat(400),
+                    }),
+                  ),
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    };
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+
+    const child = r.nodes[0]?.children?.[0]?.children?.[0]?.children?.[0];
+    // Layout survived…
+    expect(child?.layout).toEqual(layout);
+    expect(child?.layoutSizingHorizontal).toBe('FILL');
+    // …and it was the text, not the box model, that paid for the overage.
+    expect(child?.characters).toBeUndefined();
+    expect(child?.fills).toBeUndefined();
+    expect(r.note).toMatch(/missing is text content/);
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
+  });
+});
+
+describe('a splittable over-budget tree becomes a section plan, not a coordinate dump', () => {
+  it('prefers the plan over any geometry-only projection', async () => {
+    // The regression this locks: geometry-only used to win here, handing back a tree of bare x/y
+    // that looks buildable and is not (issue #161). A plan sends the caller back per section, where
+    // each one returns at FULL detail — strictly more than the projection it replaces.
+    const fat = 'x'.repeat(400);
+    const sections = ['a', 'b', 'c'].map((s, i) =>
+      leaf(`s${i}`, {
+        name: `Section ${s}`,
+        type: 'FRAME',
+        children: Array.from({ length: 300 }, (_c, l) =>
+          leaf(`s${i}-l${l}`, {
+            x: 1,
+            y: 2,
+            width: 3,
+            height: 4,
+            layout: { mode: 'VERTICAL', itemSpacing: 24 },
+            characters: 'y'.repeat(60),
+            fills: fat,
+          }),
+        ),
+      }),
+    );
+    const payload: GetDesignContextResult = {
+      nodes: [
+        leaf('root', {
+          name: 'Page',
+          type: 'FRAME',
+          layout: { mode: 'VERTICAL', itemSpacing: 40, paddingTop: 64 },
+          children: sections,
+        }),
+      ],
+    };
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+
+    expect(r.sectionPlan?.reason).toBe('payload-size');
+    expect(r.sectionPlan?.sections.map(s => s.nodeId)).toEqual(['s0', 's1', 's2']);
+    // The root keeps its OWN layout: the plan says which sections to ground, but the caller still
+    // has to build the container they go into, and only the root's layout describes it.
+    expect(r.nodes[0]?.layout).toEqual({ mode: 'VERTICAL', itemSpacing: 40, paddingTop: 64 });
+    // The coordinate dump is gone: no children, no per-node geometry tree.
+    expect(r.nodes[0]?.children).toBeUndefined();
+    expect(Object.keys(r)[0]).toBe('note');
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
   });
 });

@@ -61,10 +61,11 @@ const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'i
  * the discarded remainder of an oversized message has no findable boundary.
  *
  * This is the only Figwright tool that can get near it. Text results are held far below by the
- * client's own output cap (Claude Code: ~25k tokens ≈ 100k chars), but image blocks are not counted
- * as text, so they are the one payload that reaches the transport unmetered — measured at ~2.4 MB
- * for a single 1440×3140 frame, so four frames pass Claude Desktop's 1 MB content limit and ten
- * pass the transport's 10 MB.
+ * client's own output cap (Claude Code: MAX_MCP_OUTPUT_TOKENS = 25k tokens, measured at roughly 50k
+ * chars of minified JSON — see DESIGN_CONTEXT_TOKEN_BUDGET), but image blocks are not counted as
+ * text, so they are the one payload that reaches the transport unmetered — measured at ~2.4 MB for
+ * a single 1440×3140 frame, so four frames pass Claude Desktop's 1 MB content limit and ten pass
+ * the transport's 10 MB.
  *
  * The budget is derived from that limit rather than picked, and deliberately sits just under it
  * rather than comfortably under it. A budget lower than it needs to be would withhold exports the

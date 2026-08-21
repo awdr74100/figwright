@@ -494,12 +494,144 @@ export type DesignContextMetrics = z.infer<typeof DesignContextMetricsSchema>;
 //   (it shrinks the payload, not the visit count), so the threshold is deliberately high — real
 //   whole-page groundings of several hundred nodes succeed today and must keep working; only
 //   pathological sizes bail.
-// - DESIGN_CONTEXT_CHAR_BUDGET gates mcp-side, AFTER serialization: the precise net. Anchored to
-//   Claude Code's default MCP result cap (MAX_MCP_OUTPUT_TOKENS = 25k tokens ≈ 100k chars of
-//   minified JSON) — a result beyond it errors out today and delivers nothing, so replacing it with
-//   a section plan is strictly an upgrade.
+// - DESIGN_CONTEXT_TOKEN_BUDGET gates mcp-side, AFTER serialization: the precise net. A result past
+//   the client's cap errors out and delivers nothing, so replacing it with a smaller shape is
+//   strictly an upgrade.
+//
+// This used to be a 100k CHARACTER budget, derived on paper from "25k tokens ≈ 100k chars". That
+// derivation was wrong by roughly 2x, and the error was invisible because nothing ever measured it:
+// results between the real cap and 100k chars were simply dead ends. Measured against a live client
+// (Claude Code, MAX_MCP_OUTPUT_TOKENS = 25,000) on real design payloads:
+//
+//     46,503 chars  accepted        62,980 chars  REJECTED
+//     49,468 chars  accepted        70,521 chars  REJECTED
+//     54,209 chars  REJECTED        84,896 chars  REJECTED
+//
+// So the cap lands between 49,468 and 54,209 chars for that content — about half the old budget.
+// Counting characters cannot be fixed by picking a smaller number, because the chars-per-token
+// ratio is content-dependent: the same 50k chars is ~25k tokens of ASCII-ish JSON but ~50k tokens
+// of CJK text. Hence a token ESTIMATE instead, calibrated from the measurements above.
 export const DESIGN_CONTEXT_BAIL_NODES = 1500;
-export const DESIGN_CONTEXT_CHAR_BUDGET = 100_000;
+
+/**
+ * Non-CJK characters per token in a minified JSON payload. The measurements above bracket the true
+ * value at [2.02, 2.20); 2 is used deliberately — the low end over-estimates the token count, and
+ * over-estimating is the safe direction (see DESIGN_CONTEXT_TOKEN_BUDGET).
+ */
+const CHARS_PER_TOKEN = 2;
+
+/** CJK ideographs and fullwidth forms, which tokenize at roughly one token per character. */
+const CJK = /[\u3000-\u9fff\uff00-\uffef]/u;
+
+/**
+ * Conservative token estimate for a serialized tool result. Deliberately an over-estimate: the two
+ * failure directions are not symmetric. Estimating too HIGH degrades a result that would have fit —
+ * the caller gets a smaller shape or a section plan, both of which still carry complete data, just
+ * over more calls. Estimating too LOW ships a payload the client refuses, and the caller gets
+ * nothing at all. So this leans high, and the budget leans low.
+ */
+export const estimateResultTokens = (serialized: string): number => {
+  let cjk = 0;
+  for (const ch of serialized) {
+    if (CJK.test(ch)) cjk += 1;
+  }
+  return cjk + Math.ceil((serialized.length - cjk) / CHARS_PER_TOKEN);
+};
+
+/**
+ * The mcp-side net, in estimated tokens. Set below the measured 25,000-token client cap on purpose:
+ * the cascade below this budget degrades gracefully (a section plan still grounds every section at
+ * full fidelity), while a payload above the client's real cap is an outright failure. A little
+ * early sectioning costs round trips; overshooting costs the whole result.
+ */
+export const DESIGN_CONTEXT_TOKEN_BUDGET = 24_000;
+
+/**
+ * The box model and the flow: everything that decides how a node is sized, placed and spaced. This
+ * is the half whose absence makes a caller rebuild spacing out of coordinates, so it is the last
+ * thing shed — it survives even when the content below has to go.
+ */
+export const LAYOUT_FIELDS = [
+  // Auto-layout / grid: the container's own flex or grid system.
+  'layout',
+  'layoutGrids',
+  // How this node sizes and places itself inside its parent's layout.
+  'layoutSizingHorizontal',
+  'layoutSizingVertical',
+  'layoutGrow',
+  'layoutAlign',
+  'layoutPositioning',
+  'gridChild',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'targetAspectRatio',
+  // Placement of a child of a NON-auto-layout frame: the resize anchor, not just x/y.
+  'constraints',
+  // Clipping / scrolling / sticky children — overflow behaviour is layout, not paint.
+  'clipsContent',
+  'overflowDirection',
+  'numberOfFixedChildren',
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * What the element says and which variant it renders — content, not appearance. Kept alongside the
+ * layout whenever it fits, but shed one rung earlier: text is ~15% of a tier payload, and letting
+ * that 15% push the result off the layout rung would trade the entire box model for some strings.
+ */
+const CONTENT_FIELDS = [
+  'characters',
+  'textAutoResize',
+  'textAlignHorizontal',
+  'textAlignVertical',
+  'textTruncation',
+  'maxLines',
+  'textOverrides',
+  // Which variant an instance renders — an INSTANCE without its props is not buildable.
+  'componentProperties',
+  // The designer's Dev Mode notes: explicit instructions that outrank inference, so dropping them
+  // while keeping geometry would be backwards.
+  'annotations',
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * Everything a downgrade may keep beyond the compact base — the union of the two groups above, and
+ * the surface the drift ratchet checks.
+ *
+ * Hand-listed on purpose, and ratcheted by a test against DesignContextNodeSchema: this repo's most
+ * recurring bug class is a new dimension landing in the serializer and silently missing from a
+ * hand-copied projection. The test forces every new schema field to be either listed here or
+ * explicitly classified as appearance, so the tier can never quietly stop carrying a layout field.
+ */
+export const LAYOUT_TIER_FIELDS = [
+  ...LAYOUT_FIELDS,
+  ...CONTENT_FIELDS,
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * The roots of a section plan, projected to identity + geometry + LAYOUT and stripped of children.
+ *
+ * A plan says "here are the sections, ground each one" — but the caller still has to build the
+ * container those sections go into, and the root's own `layout` is what says whether they stack, in
+ * which direction, with how much gap and how much page padding. Dropping it re-creates, at the top
+ * level, the exact failure the layout tier exists to prevent: the caller cannot read the page shell
+ * off the plan, so it invents one and spaces the sections by hand. It costs a few hundred bytes
+ * against a plan that is otherwise ~1 KB.
+ */
+export const planRootFrom = (node: DesignContextNode): DesignContextNode => {
+  const out: DesignContextNode = { id: node.id, name: node.name, type: node.type };
+  if (node.x !== undefined) out.x = node.x;
+  if (node.y !== undefined) out.y = node.y;
+  if (node.width !== undefined) out.width = node.width;
+  if (node.height !== undefined) out.height = node.height;
+  const src = node as unknown as Record<string, unknown>;
+  const dst = out as unknown as Record<string, unknown>;
+  for (const key of LAYOUT_FIELDS) {
+    if (src[key] !== undefined) dst[key] = src[key];
+  }
+  return out;
+};
 
 /** One entry of a section plan: a subtree the caller should ground individually. */
 export const DesignContextSectionSchema = z.object({
