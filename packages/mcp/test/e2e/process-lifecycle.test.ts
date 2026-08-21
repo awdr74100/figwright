@@ -138,13 +138,21 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process lifecycle (built dist)', () =>
           try {
             // Identified from the note it left when it bound, re-proved against the live process
             // table — the pid printed here is the one a user would kill.
-            await waitFor(
-              () => follower.stderr().includes(`port holder pid ${leader.child.pid} is suspended`),
-              'wedge diagnosed',
-              45_000,
-            );
-            expect(follower.stderr()).toContain('PORT CONFLICT');
-            expect(follower.stderr()).toContain(`kill ${leader.child.pid}`);
+            //
+            // Every line the diagnosis depends on is waited for *together*, rather than waiting on
+            // one and then asserting the rest. The follower writes the SIGCONT line before the
+            // PORT CONFLICT line, but its stderr reaches this process in chunks — waiting for the
+            // first and immediately asserting the second is a race, and it lost about once in
+            // thirty runs.
+            const diagnosed = (): boolean => {
+              const log = follower.stderr();
+              return (
+                log.includes(`port holder pid ${leader.child.pid} is suspended`) &&
+                log.includes('PORT CONFLICT') &&
+                log.includes(`kill ${leader.child.pid}`)
+              );
+            };
+            await waitFor(diagnosed, 'wedge diagnosed', 45_000);
 
             // And the SIGCONT it sent has to actually revive the leader, which is only observable
             // from the outside: the follower goes back to following it.
