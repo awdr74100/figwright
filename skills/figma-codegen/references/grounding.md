@@ -248,19 +248,24 @@ throws away the structure inside each section → empty cards/rows). Scope **hor
    build that section, and move on. One section in context at a time.
 
 The tool enforces this on the worst cases, and it always says which shape you got in a **leading
-`note`** — read that note first, it tells you what the payload is missing:
+`note`** — read that note first, it tells you what the payload is and what it is missing:
 
-- **Layout without appearance.** The tree is intact and every frame still carries its `layout`
-  (mode, `padding*`, `itemSpacing`, alignment), every node its sizing/`constraints`, every text its
-  `characters`. What is gone is colour, typography, effects and token bindings. **Build the full
-  structure from this** — containers, flex/grid, padding, gap — then `get_design_context` each
-  section at full detail for its colours and type before styling it. Do **not** treat missing
-  appearance as licence to guess it off the screenshot.
-- **Structure only (compact).** Identity + geometry, no `layout` at all. This is a **map, not a
-  spec**: use it to pick sections, never to generate from. In particular do not turn the `x`/`y`
-  deltas into margins — the spacing they encode belongs to a `layout` you have not been given yet.
-- **`sectionPlan`** (`{ sections: [{ nodeId, name, nodes }] }`). That plan **is** step 1, already
-  done; ground each listed section by its `nodeId` as in step 2.
+- **`sectionPlan`** (`{ sections: [{ nodeId, name, nodes }] }`) — the normal answer for a tree too
+  big for one call, and **not a lesser result**: it _is_ step 1, already done. Ground each listed
+  section by its `nodeId` as in step 2 and each one comes back at **full** detail, with its layout
+  _and_ its colours, type and tokens — strictly more than any whole-tree view that had to drop half
+  its fields to fit. A section that is itself too big returns its own plan; keep descending, it
+  converges quickly (in practice two levels, onto sections of a few dozen nodes).
+- **Layout without appearance** — a tree that overshot by only a little. It is intact and every
+  frame still carries its `layout` (mode, `padding*`, `itemSpacing`, alignment), every node its
+  sizing/`constraints`, every text its `characters`. What is gone is colour, typography, effects and
+  token bindings. **Build the full structure from this** — containers, flex/grid, padding, gap —
+  then `get_design_context` each section at full detail for its colours and type before styling it.
+  Do **not** treat missing appearance as licence to guess it off the screenshot.
+- **Layout only / structure only (compact)** — the last resorts, and only for a subtree with nothing
+  to split into. Structure-only carries no `layout` at all: it is a **map, not a spec**. Use it to
+  pick what to drill into, never to generate from, and in particular do not turn its `x`/`y` deltas
+  into margins — the spacing they encode belongs to a `layout` you have not been given yet.
 
 **Ground every section the same way — never eyeball values off the screenshot for "the easy ones".**
 This is the cardinal failure: grounding the first sections properly, then guessing the rest to save

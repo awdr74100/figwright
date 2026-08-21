@@ -1,5 +1,6 @@
 import {
-  DESIGN_CONTEXT_CHAR_BUDGET,
+  DESIGN_CONTEXT_TOKEN_BUDGET,
+  estimateResultTokens,
   type DesignContextNode,
   type GetDesignContextResult,
 } from '@figwright/shared';
@@ -104,7 +105,9 @@ describe('handleDesignContext (the public-path guard)', () => {
 
   it('downgrades an oversized full payload, dropping styling and keeping the tree', async () => {
     const payload = oversizedFull();
-    expect(JSON.stringify(payload).length).toBeGreaterThan(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(estimateResultTokens(JSON.stringify(payload))).toBeGreaterThan(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
 
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
@@ -127,7 +130,9 @@ describe('handleDesignContext (the public-path guard)', () => {
       width: 3,
       height: 4,
     });
-    expect(JSON.stringify(r).length).toBeLessThanOrEqual(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
     // This fixture carries no layout fields, so the layout tier fires first and yields the same
     // node shape as the compact rung; either way the note must say so and warn off x/y spacing.
     expect(r.note).toMatch(/APPEARANCE dropped/);
@@ -338,13 +343,17 @@ describe('the LAYOUT downgrade tier', () => {
 
   it('keeps the whole layout system when full is over budget but the layout tier fits', async () => {
     const payload = oversizedWithLayout(40, 2000);
-    expect(JSON.stringify(payload).length).toBeGreaterThan(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(estimateResultTokens(JSON.stringify(payload))).toBeGreaterThan(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
 
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
 
     expect(r.sectionPlan).toBeUndefined();
-    expect(JSON.stringify(r).length).toBeLessThanOrEqual(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
 
     // The container's own layout survives — the whole point of the tier.
     const section = r.nodes[0]?.children?.[0];
@@ -374,28 +383,36 @@ describe('the LAYOUT downgrade tier', () => {
     expect(r.note).toMatch(/never from x\/y/);
   });
 
-  it('falls through to geometry-only when even the layout tier is over budget', async () => {
-    // Fat lives in `layout` itself, so the tier cannot shed enough and the next rung must fire.
+  it('falls through to geometry-only on an unsplittable tree whose layout will not fit', async () => {
+    // Unsplittable: the plan walk descends through at most two single-child wrappers, so a
+    // root → only → single chain leaves it one section and it returns null. That is the shape the
+    // projection rungs exist for — a splittable tree gets a plan instead (asserted below).
     const bigLayout = { mode: 'VERTICAL', filler: 'x'.repeat(200) };
-    const sections = ['a', 'b'].map((s, i) =>
-      leaf(`s${i}`, {
-        name: `Section ${s}`,
-        type: 'FRAME',
-        children: Array.from({ length: 400 }, (_c, l) =>
-          leaf(`s${i}-l${l}`, { x: 1, y: 2, width: 3, height: 4, layout: bigLayout }),
-        ),
-      }),
-    );
     const payload: GetDesignContextResult = {
-      nodes: [leaf('root', { name: 'Page', type: 'FRAME', children: sections })],
+      nodes: [
+        leaf('root', {
+          children: [
+            leaf('only', {
+              children: [
+                leaf('single', {
+                  children: Array.from({ length: 400 }, (_c, l) =>
+                    leaf(`l${l}`, { x: 1, y: 2, width: 3, height: 4, layout: bigLayout }),
+                  ),
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
     };
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
 
     expect(r.sectionPlan).toBeUndefined();
-    expect(r.nodes[0]?.children?.[0]?.children?.[0]).toEqual({
-      id: 's0-l0',
-      name: 'n-s0-l0',
+    const first = r.nodes[0]?.children?.[0]?.children?.[0]?.children?.[0];
+    expect(first).toEqual({
+      id: 'l0',
+      name: 'n-l0',
       type: 'RECTANGLE',
       x: 1,
       y: 2,
@@ -468,9 +485,10 @@ describe('every degraded shape leads with its note', () => {
 });
 
 describe('the layout rung sheds content before it sheds layout', () => {
-  it('drops text/props rather than collapsing to geometry when only just over budget', async () => {
-    // Sized so layout+content misses the budget but layout alone clears it — the band where the
-    // naive two-rung cascade would have traded the entire box model for some strings.
+  it('drops text/props rather than collapsing to geometry on an unsplittable tree', async () => {
+    // Sized so layout+content misses the budget but layout alone clears it — the band where a
+    // naive cascade would have traded the entire box model for some strings. Unsplittable (see
+    // above) so the projection rungs, not the section plan, are what answer.
     const layout = {
       mode: 'VERTICAL',
       paddingTop: 16,
@@ -479,21 +497,69 @@ describe('the layout rung sheds content before it sheds layout', () => {
       paddingLeft: 16,
       itemSpacing: 24,
     };
-    const sections = ['a', 'b'].map((s, i) =>
+    const payload: GetDesignContextResult = {
+      nodes: [
+        leaf('root', {
+          children: [
+            leaf('only', {
+              children: [
+                leaf('single', {
+                  layout,
+                  children: Array.from({ length: 180 }, (_c, l) =>
+                    leaf(`l${l}`, {
+                      x: 1,
+                      y: 2,
+                      width: 3,
+                      height: 4,
+                      layout,
+                      layoutSizingHorizontal: 'FILL',
+                      characters: 'y'.repeat(90),
+                      fills: 'x'.repeat(400),
+                    }),
+                  ),
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    };
+    const { dispatch } = dispatcher(payload);
+    const r = await handleDesignContext(dispatch, {});
+
+    const child = r.nodes[0]?.children?.[0]?.children?.[0]?.children?.[0];
+    // Layout survived…
+    expect(child?.layout).toEqual(layout);
+    expect(child?.layoutSizingHorizontal).toBe('FILL');
+    // …and it was the text, not the box model, that paid for the overage.
+    expect(child?.characters).toBeUndefined();
+    expect(child?.fills).toBeUndefined();
+    expect(r.note).toMatch(/missing is text content/);
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
+  });
+});
+
+describe('a splittable over-budget tree becomes a section plan, not a coordinate dump', () => {
+  it('prefers the plan over any geometry-only projection', async () => {
+    // The regression this locks: geometry-only used to win here, handing back a tree of bare x/y
+    // that looks buildable and is not (issue #161). A plan sends the caller back per section, where
+    // each one returns at FULL detail — strictly more than the projection it replaces.
+    const fat = 'x'.repeat(400);
+    const sections = ['a', 'b', 'c'].map((s, i) =>
       leaf(`s${i}`, {
         name: `Section ${s}`,
         type: 'FRAME',
-        layout,
-        children: Array.from({ length: 180 }, (_c, l) =>
+        children: Array.from({ length: 300 }, (_c, l) =>
           leaf(`s${i}-l${l}`, {
             x: 1,
             y: 2,
             width: 3,
             height: 4,
-            layout,
-            layoutSizingHorizontal: 'FILL',
-            characters: 'y'.repeat(90),
-            fills: 'x'.repeat(400),
+            layout: { mode: 'VERTICAL', itemSpacing: 24 },
+            characters: 'y'.repeat(60),
+            fills: fat,
           }),
         ),
       }),
@@ -504,14 +570,13 @@ describe('the layout rung sheds content before it sheds layout', () => {
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
 
-    const child = r.nodes[0]?.children?.[0]?.children?.[0];
-    // Layout survived…
-    expect(child?.layout).toEqual(layout);
-    expect(child?.layoutSizingHorizontal).toBe('FILL');
-    // …and it was the text, not the box model, that paid for the overage.
-    expect(child?.characters).toBeUndefined();
-    expect(child?.fills).toBeUndefined();
-    expect(r.note).toMatch(/missing is text content/);
-    expect(JSON.stringify(r).length).toBeLessThanOrEqual(DESIGN_CONTEXT_CHAR_BUDGET);
+    expect(r.sectionPlan?.reason).toBe('payload-size');
+    expect(r.sectionPlan?.sections.map(s => s.nodeId)).toEqual(['s0', 's1', 's2']);
+    // The coordinate dump is gone: roots keep identity only.
+    expect(r.nodes).toEqual([{ id: 'root', name: 'Page', type: 'FRAME' }]);
+    expect(Object.keys(r)[0]).toBe('note');
+    expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
+      DESIGN_CONTEXT_TOKEN_BUDGET,
+    );
   });
 });

@@ -1,7 +1,8 @@
 import {
-  DESIGN_CONTEXT_CHAR_BUDGET,
+  DESIGN_CONTEXT_TOKEN_BUDGET,
   type DesignContextNode,
   type DesignContextSection,
+  estimateResultTokens,
   type GetDesignContextResult,
 } from '@figwright/shared';
 
@@ -20,15 +21,23 @@ import { getDesignContextTool } from './get-design-context.js';
 //
 //   full fits the budget                     → full (the accurate default)
 //   full over budget, layout+content fits    → LAYOUT + text/props projection + note
-//   still over, layout alone fits            → LAYOUT projection (text/props dropped) + note
-//   layout alone over budget too             → compact projection (geometry only) + note
-//   compact over budget too / below-full     → section plan (ground per section at full)
+//   still over, tree splits into sections    → section plan (ground each section at FULL)
+//   unsplittable, layout alone fits          → LAYOUT projection (text/props dropped) + note
+//   unsplittable, only geometry fits         → compact projection (geometry only) + note
+//   nothing fits and nothing to split        → the payload as-is (a plan would strand the caller)
 //   tree too large to even serialize (bail)  → section plan straight from the plugin, pre-work
 //
 // The plugin's pre-serialization bail is armed with budget: true (the coarse net); the mcp-side
-// char budget is the precise net, anchored to Claude Code's default MCP result cap
-// (MAX_MCP_OUTPUT_TOKENS = 25k tokens ≈ 100k chars of minified JSON) — beyond it the result errors
-// out today and delivers nothing, so every downgrade replaces a dead end, never a working result.
+// token budget is the precise net (see DESIGN_CONTEXT_TOKEN_BUDGET for the measurements behind it)
+// — beyond it the result errors out and delivers nothing, so every downgrade replaces a dead end,
+// never a working result.
+//
+// Section plan BEFORE the smaller projections is the important ordering. A section plan is not a
+// lesser result: each section, grounded on its own, comes back at FULL detail with its layout AND
+// its colour, type and tokens — strictly more than any whole-tree projection that had to drop half
+// its fields to fit. The projections exist for the trees a plan cannot help: a single deep subtree
+// with nothing to split into. Putting geometry-only ahead of the plan is what made the tool hand
+// back a coordinate dump that looked usable and was not.
 //
 // The LAYOUT tier exists because the cascade used to jump straight from full to geometry-only, and
 // geometry-only is precisely the input that makes a model emit absolute offsets and per-child
@@ -39,9 +48,10 @@ import { getDesignContextTool } from './get-design-context.js';
 // old downgrade was shedding styling to reach. So the tier keeps what defines the BOX MODEL and the
 // FLOW (and what the element says) and drops only APPEARANCE — colours, typography, effects, token
 // bindings — which is the half a caller can re-ground per section, and the half that is expensive.
-// A tree too big even for that sheds text/props before it sheds layout — letting the ~15% that text
-// costs push a result off the layout rung would trade the whole box model for some strings — and
-// only then falls through to geometry-only, and finally to a plan.
+// When even the layout tier does not fit, sectioning takes over; the layout-only and geometry-only
+// rungs remain for unsplittable trees, and there text/props are shed before layout — letting the
+// ~15% that text costs push a result off the layout rung would trade the whole box model for some
+// strings.
 
 export type ToolDispatcher = (toolName: string, args: unknown) => Promise<unknown>;
 
@@ -62,6 +72,10 @@ const withLeadingNote = (result: GetDesignContextResult, note: string): GetDesig
   void superseded;
   return { note, ...rest };
 };
+
+/** Does this shape survive the net? */
+const fits = (candidate: GetDesignContextResult): boolean =>
+  estimateResultTokens(JSON.stringify(candidate)) <= DESIGN_CONTEXT_TOKEN_BUDGET;
 
 // Mirrors the plugin-side cap: a very wide flat tree would otherwise produce a plan as unwieldy as
 // the payload it replaces.
@@ -315,18 +329,32 @@ export const handleDesignContext = async (
     result = annotateProjectTokens(raw, index, utilityFirst);
   }
 
-  const payloadChars = JSON.stringify(result).length;
-  if (payloadChars <= DESIGN_CONTEXT_CHAR_BUDGET) {
+  const serialized = JSON.stringify(result);
+  const payloadChars = serialized.length;
+  if (estimateResultTokens(serialized) <= DESIGN_CONTEXT_TOKEN_BUDGET) {
     return detail === 'full' ? result : withLeadingNote(result, BELOW_FULL_NOTE);
   }
 
   if (detail === 'full') {
-    // Shed appearance first, structure only if that still does not fit: the layout tier is the
-    // most complete shape that fits, and the one that keeps the caller emitting real containers.
-    for (const downgrade of [layoutDowngrade(true), layoutDowngrade(false), compactDowngrade]) {
+    // One rung of over-budget: shed appearance but keep the whole tree, its layout and its text.
+    // Cheaper than N round trips and still enough to build correct containers.
+    const withEverythingButAppearance = layoutDowngrade(true)(result, payloadChars);
+    if (fits(withEverythingButAppearance)) return withEverythingButAppearance;
+
+    // Genuinely too big for one call. Sectioning beats any further projection: each section comes
+    // back at FULL detail — layout AND colour AND type — instead of a whole tree missing half its
+    // fields. Only a tree with nothing to split into falls past this.
+    const plan = sectionPlanFromPayload(result, payloadChars);
+    if (plan !== null) return plan;
+
+    // Unsplittable: keep shedding, layout last.
+    for (const downgrade of [layoutDowngrade(false), compactDowngrade]) {
       const downgraded = downgrade(result, payloadChars);
-      if (JSON.stringify(downgraded).length <= DESIGN_CONTEXT_CHAR_BUDGET) return downgraded;
+      if (fits(downgraded)) return downgraded;
     }
+    return result;
   }
+
+  // Below full there is no cheaper projection to try — straight to the plan.
   return sectionPlanFromPayload(result, payloadChars) ?? result;
 };
