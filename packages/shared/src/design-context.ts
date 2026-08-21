@@ -546,6 +546,93 @@ export const estimateResultTokens = (serialized: string): number => {
  */
 export const DESIGN_CONTEXT_TOKEN_BUDGET = 24_000;
 
+/**
+ * The box model and the flow: everything that decides how a node is sized, placed and spaced. This
+ * is the half whose absence makes a caller rebuild spacing out of coordinates, so it is the last
+ * thing shed — it survives even when the content below has to go.
+ */
+export const LAYOUT_FIELDS = [
+  // Auto-layout / grid: the container's own flex or grid system.
+  'layout',
+  'layoutGrids',
+  // How this node sizes and places itself inside its parent's layout.
+  'layoutSizingHorizontal',
+  'layoutSizingVertical',
+  'layoutGrow',
+  'layoutAlign',
+  'layoutPositioning',
+  'gridChild',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'targetAspectRatio',
+  // Placement of a child of a NON-auto-layout frame: the resize anchor, not just x/y.
+  'constraints',
+  // Clipping / scrolling / sticky children — overflow behaviour is layout, not paint.
+  'clipsContent',
+  'overflowDirection',
+  'numberOfFixedChildren',
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * What the element says and which variant it renders — content, not appearance. Kept alongside the
+ * layout whenever it fits, but shed one rung earlier: text is ~15% of a tier payload, and letting
+ * that 15% push the result off the layout rung would trade the entire box model for some strings.
+ */
+const CONTENT_FIELDS = [
+  'characters',
+  'textAutoResize',
+  'textAlignHorizontal',
+  'textAlignVertical',
+  'textTruncation',
+  'maxLines',
+  'textOverrides',
+  // Which variant an instance renders — an INSTANCE without its props is not buildable.
+  'componentProperties',
+  // The designer's Dev Mode notes: explicit instructions that outrank inference, so dropping them
+  // while keeping geometry would be backwards.
+  'annotations',
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * Everything a downgrade may keep beyond the compact base — the union of the two groups above, and
+ * the surface the drift ratchet checks.
+ *
+ * Hand-listed on purpose, and ratcheted by a test against DesignContextNodeSchema: this repo's most
+ * recurring bug class is a new dimension landing in the serializer and silently missing from a
+ * hand-copied projection. The test forces every new schema field to be either listed here or
+ * explicitly classified as appearance, so the tier can never quietly stop carrying a layout field.
+ */
+export const LAYOUT_TIER_FIELDS = [
+  ...LAYOUT_FIELDS,
+  ...CONTENT_FIELDS,
+] as const satisfies readonly (keyof DesignContextNode)[];
+
+/**
+ * The roots of a section plan, projected to identity + geometry + LAYOUT and stripped of children.
+ *
+ * A plan says "here are the sections, ground each one" — but the caller still has to build the
+ * container those sections go into, and the root's own `layout` is what says whether they stack, in
+ * which direction, with how much gap and how much page padding. Dropping it re-creates, at the top
+ * level, the exact failure the layout tier exists to prevent: the caller cannot read the page shell
+ * off the plan, so it invents one and spaces the sections by hand. It costs a few hundred bytes
+ * against a plan that is otherwise ~1 KB.
+ */
+export const planRootFrom = (node: DesignContextNode): DesignContextNode => {
+  const out: DesignContextNode = { id: node.id, name: node.name, type: node.type };
+  if (node.x !== undefined) out.x = node.x;
+  if (node.y !== undefined) out.y = node.y;
+  if (node.width !== undefined) out.width = node.width;
+  if (node.height !== undefined) out.height = node.height;
+  const src = node as unknown as Record<string, unknown>;
+  const dst = out as unknown as Record<string, unknown>;
+  for (const key of LAYOUT_FIELDS) {
+    if (src[key] !== undefined) dst[key] = src[key];
+  }
+  return out;
+};
+
 /** One entry of a section plan: a subtree the caller should ground individually. */
 export const DesignContextSectionSchema = z.object({
   nodeId: z.string(),

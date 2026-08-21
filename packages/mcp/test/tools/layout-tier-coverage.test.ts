@@ -1,7 +1,5 @@
-import { DesignContextNodeSchema } from '@figwright/shared';
+import { DesignContextNodeSchema, LAYOUT_TIER_FIELDS } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
-
-import { LAYOUT_TIER_FIELDS } from '../../src/tools/design-context-guard.js';
 
 // The drift ratchet for the LAYOUT downgrade tier.
 //

@@ -147,7 +147,7 @@ describe('handleDesignContext (the public-path guard)', () => {
   });
 
   it('falls through to a section plan when even the compact structure is over budget', async () => {
-    // Two sections × 1200 leaves with long names: the compact projection alone tops 100k chars.
+    // Two sections × 1200 leaves with long names: the compact projection alone blows the budget.
     const longName = 'section-content-'.repeat(6);
     const sections = ['a', 'b'].map((s, i) =>
       leaf(`s${i}`, {
@@ -565,15 +565,25 @@ describe('a splittable over-budget tree becomes a section plan, not a coordinate
       }),
     );
     const payload: GetDesignContextResult = {
-      nodes: [leaf('root', { name: 'Page', type: 'FRAME', children: sections })],
+      nodes: [
+        leaf('root', {
+          name: 'Page',
+          type: 'FRAME',
+          layout: { mode: 'VERTICAL', itemSpacing: 40, paddingTop: 64 },
+          children: sections,
+        }),
+      ],
     };
     const { dispatch } = dispatcher(payload);
     const r = await handleDesignContext(dispatch, {});
 
     expect(r.sectionPlan?.reason).toBe('payload-size');
     expect(r.sectionPlan?.sections.map(s => s.nodeId)).toEqual(['s0', 's1', 's2']);
-    // The coordinate dump is gone: roots keep identity only.
-    expect(r.nodes).toEqual([{ id: 'root', name: 'Page', type: 'FRAME' }]);
+    // The root keeps its OWN layout: the plan says which sections to ground, but the caller still
+    // has to build the container they go into, and only the root's layout describes it.
+    expect(r.nodes[0]?.layout).toEqual({ mode: 'VERTICAL', itemSpacing: 40, paddingTop: 64 });
+    // The coordinate dump is gone: no children, no per-node geometry tree.
+    expect(r.nodes[0]?.children).toBeUndefined();
     expect(Object.keys(r)[0]).toBe('note');
     expect(estimateResultTokens(JSON.stringify(r))).toBeLessThanOrEqual(
       DESIGN_CONTEXT_TOKEN_BUDGET,

@@ -4,6 +4,9 @@ import {
   type DesignContextSection,
   estimateResultTokens,
   type GetDesignContextResult,
+  LAYOUT_FIELDS,
+  LAYOUT_TIER_FIELDS,
+  planRootFrom,
 } from '@figwright/shared';
 
 import { annotateProjectTokens, loadTokenValueIndex } from '../tokens/token-index.js';
@@ -89,69 +92,6 @@ const countNodes = (nodes: readonly DesignContextNode[]): number => {
   }
   return total;
 };
-
-/**
- * The box model and the flow: everything that decides how a node is sized, placed and spaced. This
- * is the half whose absence makes a caller rebuild spacing out of coordinates, so it is the last
- * thing shed — it survives even when the content below has to go.
- */
-const LAYOUT_FIELDS = [
-  // Auto-layout / grid: the container's own flex or grid system.
-  'layout',
-  'layoutGrids',
-  // How this node sizes and places itself inside its parent's layout.
-  'layoutSizingHorizontal',
-  'layoutSizingVertical',
-  'layoutGrow',
-  'layoutAlign',
-  'layoutPositioning',
-  'gridChild',
-  'minWidth',
-  'maxWidth',
-  'minHeight',
-  'maxHeight',
-  'targetAspectRatio',
-  // Placement of a child of a NON-auto-layout frame: the resize anchor, not just x/y.
-  'constraints',
-  // Clipping / scrolling / sticky children — overflow behaviour is layout, not paint.
-  'clipsContent',
-  'overflowDirection',
-  'numberOfFixedChildren',
-] as const satisfies readonly (keyof DesignContextNode)[];
-
-/**
- * What the element says and which variant it renders — content, not appearance. Kept alongside the
- * layout whenever it fits, but shed one rung earlier: text is ~15% of a tier payload, and letting
- * that 15% push the result off the layout rung would trade the entire box model for some strings.
- */
-const CONTENT_FIELDS = [
-  'characters',
-  'textAutoResize',
-  'textAlignHorizontal',
-  'textAlignVertical',
-  'textTruncation',
-  'maxLines',
-  'textOverrides',
-  // Which variant an instance renders — an INSTANCE without its props is not buildable.
-  'componentProperties',
-  // The designer's Dev Mode notes: explicit instructions that outrank inference, so dropping them
-  // while keeping geometry would be backwards.
-  'annotations',
-] as const satisfies readonly (keyof DesignContextNode)[];
-
-/**
- * Everything a downgrade may keep beyond the compact base — the union of the two groups above, and
- * the surface the drift ratchet checks.
- *
- * Hand-listed on purpose, and ratcheted by a test against DesignContextNodeSchema: this repo's most
- * recurring bug class is a new dimension landing in the serializer and silently missing from a
- * hand-copied projection. The test forces every new schema field to be either listed here or
- * explicitly classified as appearance, so the tier can never quietly stop carrying a layout field.
- */
-export const LAYOUT_TIER_FIELDS = [
-  ...LAYOUT_FIELDS,
-  ...CONTENT_FIELDS,
-] as const satisfies readonly (keyof DesignContextNode)[];
 
 const LAYOUT_AND_CONTENT_SET = new Set<string>(LAYOUT_TIER_FIELDS);
 const LAYOUT_ONLY_SET = new Set<string>(LAYOUT_FIELDS);
@@ -284,7 +224,7 @@ export const sectionPlanFromPayload = (
       'result can deliver. Ground it section by section: call get_design_context per section ' +
       'nodeId (detail: full, dedupeComponents: true) and build each before moving on. Do not ' +
       'retry this call unscoped and do not depth-cap the whole page.',
-    nodes: result.nodes.map(node => ({ id: node.id, name: node.name, type: node.type })),
+    nodes: result.nodes.map(planRootFrom),
     sectionPlan: {
       reason: 'payload-size',
       payloadChars,
