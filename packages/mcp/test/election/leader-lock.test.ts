@@ -17,9 +17,18 @@ import {
   writeLeaderLock,
 } from '../../src/election/leader-lock.js';
 
-// Ports here are only ever used as lock-file keys (nothing binds them), so a high random one keeps
-// parallel test files from sharing a file.
-let nextPort = 41_000 + Math.floor(Math.random() * 20_000);
+// Ports here are only ever used as lock-file keys — nothing binds them — but the key space is
+// shared with every other test file, and `election.test.ts` writes real notes keyed by the
+// *ephemeral* ports `freePort()` hands it, from a different worker process. A range that overlaps
+// the ephemeral one therefore collides for real: the earlier `41_000 + random * 20_000` crossed
+// 49152-61000 on macOS, and a hit made `readLeaderLock` return the other worker's note, failing
+// "is undefined when there is no lock for that port" — one test, at random, roughly once in a
+// hundred runs. Reproduced deliberately before this was changed.
+//
+// 20_000 is below every platform's ephemeral floor (Linux 32768, macOS/Windows 49152), so no port
+// any other file is handed can land here. The pid offset keeps two concurrent vitest runs on one
+// machine apart as well.
+let nextPort = 20_000 + (process.pid % 100) * 100;
 const testPort = (): number => (nextPort += 1);
 
 const written: number[] = [];
@@ -96,8 +105,19 @@ describe('leader lock: write / read', () => {
     expect(Math.abs((readLeaderLock(port)?.processStartedAt ?? 0) - selfStart)).toBeLessThan(2_000);
   });
 
+  it('keys its notes below every platform ephemeral range, so no other file can collide', () => {
+    // The invariant that closes the cross-worker race, pinned so an edit cannot quietly undo it:
+    // other files key their notes by ports `freePort()` hands them, which start at 32768 (Linux)
+    // and 49152 (macOS/Windows).
+    for (let i = 0; i < 50; i += 1) expect(testPort()).toBeLessThan(32_768);
+  });
+
   it('is undefined when there is no lock for that port', () => {
-    expect(readLeaderLock(testPort())).toBeUndefined();
+    // Asserting an absence means guaranteeing it: a crashed earlier run can leave a note at this
+    // key, and the assertion would then be reporting that leftover rather than the behaviour.
+    const port = testPort();
+    rmSync(leaderLockPath(port), { force: true });
+    expect(readLeaderLock(port)).toBeUndefined();
   });
 
   it.each([
@@ -171,6 +191,7 @@ describe('leader lock: identifying the holder', () => {
 
   it('is undefined when there is no lock at all', () => {
     const port = testPort();
+    rmSync(leaderLockPath(port), { force: true });
     const probe = fakeProbe(process.pid, { state: 'T', startedAt: Date.now() });
     expect(identifyPortHolder(port, probe)).toBeUndefined();
   });
