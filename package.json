@@ -38,7 +38,7 @@
     "knip": "^6.32.2",
     "oxfmt": "^0.64.0",
     "oxlint": "^1.79.0",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "engines": {
