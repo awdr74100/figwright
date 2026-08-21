@@ -603,6 +603,13 @@ const sectionPlanResult = (
   }));
   const omitted = sectionNodes.length - sections.length;
   return {
+    // Note first: the consumer is a model reading top to bottom, and a caveat placed after the
+    // payload is read after every value it is warning about (see withLeadingNote in the mcp guard).
+    note:
+      `This tree is ${totalNodes} nodes — too large to serialize whole. Ground it section by ` +
+      'section: call get_design_context per section nodeId (detail: full, dedupeComponents: true) ' +
+      'and build each before moving on. Do not retry this call unscoped and do not depth-cap the ' +
+      'whole page.',
     nodes: roots.map(node => ({ id: node.id, name: node.name, type: node.type })),
     sectionPlan: {
       reason: 'node-count',
@@ -610,11 +617,6 @@ const sectionPlanResult = (
       sections,
       ...(omitted > 0 ? { sectionsOmitted: omitted } : {}),
     },
-    note:
-      `This tree is ${totalNodes} nodes — too large to serialize whole. Ground it section by ` +
-      'section: call get_design_context per section nodeId (detail: full, dedupeComponents: true) ' +
-      'and build each before moving on. Do not retry this call unscoped and do not depth-cap the ' +
-      'whole page.',
   };
 };
 

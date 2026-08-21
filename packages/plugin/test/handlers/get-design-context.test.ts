@@ -788,6 +788,9 @@ describe('get_design_context node-count bail (budget)', () => {
     const r = (await handler({ detail: 'full', budget: true })) as GetDesignContextResult;
 
     expect(r.sectionPlan?.reason).toBe('node-count');
+    // The note leads the payload: the consumer reads top to bottom, and a caveat serialized after
+    // the plan is read after everything it is warning about (mirrors withLeadingNote in the guard).
+    expect(Object.keys(r)[0]).toBe('note');
     expect(r.sectionPlan?.totalNodes).toBe(1 + 8 + 8 * 250);
     // Sections descend into the single root's children; each carries its subtree size.
     expect(r.sectionPlan?.sections).toHaveLength(8);
