@@ -205,11 +205,17 @@ const stringValues = (variable: Variable): string[] => {
  * at all. The set is walked as a chain in the order the bindings are applied below, so a family
  * swap followed by a style swap loads the face each step lands on.
  *
- * Failures are swallowed on purpose. A face this guesses at may simply not exist (a family from one
- * mode paired with a style from another never co-occurs), and rejecting the write for that would
- * fail a binding Figma would have accepted. Anything genuinely missing still surfaces —
- * `setBoundVariable` throws naming the exact face, which is a better error than one this could
+ * Swallowing the failures is load-bearing, not defensive. Measured on a multi-mode collection: only
+ * the face the style actually RESOLVES to has to be loadable — a variable whose non-default mode
+ * names a font nobody has installed still binds fine. So a face that fails to load here is usually
+ * one no mode will ever resolve (a family from one mode paired with a style from another), and
+ * treating that as an error would reject a binding Figma accepts. Anything genuinely missing still
+ * surfaces from `setBoundVariable`, naming the exact face — a better error than one this could
  * invent.
+ *
+ * Every mode's value is loaded rather than just the resolved one: which mode resolves is a property
+ * of the collection, not of the variable this can see, and the extra loads are parallel,
+ * deduplicated and cached.
  */
 const preloadFaces = async (
   figmaCtx: typeof figma,
@@ -223,13 +229,18 @@ const preloadFaces = async (
     typeof familyId === 'string' ? stringValues(variableFor(table, familyId)) : [current.family];
   const styles =
     typeof styleId === 'string' ? stringValues(variableFor(table, styleId)) : [current.style];
-  const faces: FontName[] = [];
+  // Keyed so the common case — a family binding with no style binding, where the intermediate and
+  // final faces are the same — asks for each face once.
+  const faces = new Map<string, FontName>();
   for (const family of families) {
     // The face the family swap lands on before the style swap runs, then the final one.
-    faces.push({ family, style: current.style });
-    for (const style of styles) faces.push({ family, style });
+    for (const style of [current.style, ...styles]) {
+      faces.set(`${family}\u0000${style}`, { family, style });
+    }
   }
-  await Promise.all(faces.map(async face => figmaCtx.loadFontAsync(face).catch(() => undefined)));
+  await Promise.all(
+    [...faces.values()].map(async face => figmaCtx.loadFontAsync(face).catch(() => undefined)),
+  );
 };
 
 /**
