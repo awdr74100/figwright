@@ -37,6 +37,12 @@ export const createCreateTextStyleHandler =
     const style = figmaCtx.createTextStyle();
     style.name = p.name;
     if (fontName !== undefined) style.fontName = fontName;
+    // Every typography write below needs the style's own face loaded — Figma rejects them with
+    // `Cannot write to node with unloaded font` otherwise, and a style the plugin did not put a
+    // font on has none loaded. This load cannot fail on caller input: the face is either the one
+    // hoisted above or Figma's own default for a fresh style, so it stays out of the pre-creation
+    // validation above.
+    await figmaCtx.loadFontAsync(style.fontName);
     if (typeof p.fontSize === 'number') style.fontSize = p.fontSize;
     if (p.lineHeight !== undefined)
       style.lineHeight = toFigmaLineHeight(p.lineHeight as SerializedLineHeight);
@@ -44,13 +50,7 @@ export const createCreateTextStyleHandler =
       const ls = p.letterSpacing as SerializedLetterSpacing;
       style.letterSpacing = { unit: ls.unit as 'PIXELS' | 'PERCENT', value: ls.value };
     }
-    // Needs the font loaded (it writes through to the style's text runs), unlike the numeric fields
-    // above. This one has to run after creation: with fontName omitted the face is whatever default
-    // Figma put on the fresh style, which is not knowable beforehand. Acceptable where the hoisted
-    // load is not — that default is Figma's own bundled face, not caller input, so it does not fail
-    // on a bad argument.
     if (typeof p.textWrapStyle === 'string') {
-      await figmaCtx.loadFontAsync(style.fontName);
       style.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
     if (typeof p.description === 'string') style.description = p.description;

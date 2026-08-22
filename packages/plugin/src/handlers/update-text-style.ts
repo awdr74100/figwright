@@ -31,13 +31,19 @@ export const createUpdateTextStyleHandler =
     }
     const ts = style as TextStyle;
     if (typeof p.name === 'string') ts.name = p.name;
-    // A new fontName must be loaded before assignment (Figma throws otherwise). Numeric fields
-    // (fontSize / lineHeight / letterSpacing) don't need a load — they don't touch the glyph set.
+    // A new fontName must be loaded before assignment (Figma throws otherwise).
     if (p.fontName !== undefined) {
       const fn = p.fontName as SerializedFontName;
       await figmaCtx.loadFontAsync({ family: fn.family, style: fn.style });
       ts.fontName = { family: fn.family, style: fn.style };
     }
+    // So must the style's CURRENT face, before any typography write — fontSize / lineHeight /
+    // letterSpacing / textWrapStyle all write through to the style's text runs, and Figma rejects
+    // each with `Cannot write to node with unloaded font` against a face this session never
+    // loaded. That is most styles: nothing loads a font just by reading it, so before this an
+    // update that touched only fontSize failed on any style the caller had not also re-fonted.
+    // loadFontAsync is cached, so repeating it after the assignment above is free.
+    await figmaCtx.loadFontAsync(ts.fontName);
     if (typeof p.fontSize === 'number') ts.fontSize = p.fontSize;
     if (p.lineHeight !== undefined)
       ts.lineHeight = toFigmaLineHeight(p.lineHeight as SerializedLineHeight);
@@ -45,12 +51,7 @@ export const createUpdateTextStyleHandler =
       const ls = p.letterSpacing as SerializedLetterSpacing;
       ts.letterSpacing = { unit: ls.unit as 'PIXELS' | 'PERCENT', value: ls.value };
     }
-    // Unlike fontSize / lineHeight / letterSpacing, this one *does* need the font loaded — it
-    // writes through to the style's text runs, so Figma rejects it against an unloaded font even
-    // when the font itself is not changing. Load the style's current font (already the new one if
-    // fontName was assigned above; loadFontAsync is cached, so the repeat is free).
     if (typeof p.textWrapStyle === 'string') {
-      await figmaCtx.loadFontAsync(ts.fontName);
       ts.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
     if (typeof p.description === 'string') ts.description = p.description;

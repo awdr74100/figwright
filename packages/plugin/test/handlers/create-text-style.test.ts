@@ -38,7 +38,13 @@ describe('create_text_style handler', () => {
       letterSpacing: { unit: 'PIXELS', value: 0 },
     })) as StyleResult;
 
-    expect(loaded).toEqual([{ family: 'Inter', style: 'Bold' }]);
+    // Twice: hoisted before creation (a font the user may not have is the one caller-input
+    // failure here), then again as the style's own face, which every typography write below needs
+    // loaded. loadFontAsync is cached, so the repeat costs nothing.
+    expect(loaded).toEqual([
+      { family: 'Inter', style: 'Bold' },
+      { family: 'Inter', style: 'Bold' },
+    ]);
     expect(style.fontName).toEqual({ family: 'Inter', style: 'Bold' });
     expect(style.fontSize).toBe(32);
     expect(style.lineHeight).toEqual({ unit: 'PERCENT', value: 120 });

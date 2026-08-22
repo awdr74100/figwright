@@ -37,7 +37,12 @@ describe('update_text_style handler', () => {
       lineHeight: { unit: 'PERCENT', value: 120 },
     })) as StyleResult;
 
-    expect(loaded).toEqual([{ family: 'Inter', style: 'Bold' }]); // new font loaded before assign
+    // The new font before assigning it, then the style's now-current face before the typography
+    // writes. loadFontAsync is cached, so the repeat is free.
+    expect(loaded).toEqual([
+      { family: 'Inter', style: 'Bold' },
+      { family: 'Inter', style: 'Bold' },
+    ]);
     expect(style.name).toBe('Heading/H1');
     expect(style.fontName).toEqual({ family: 'Inter', style: 'Bold' });
     expect(style.fontSize).toBe(32);
@@ -66,11 +71,22 @@ describe('update_text_style handler', () => {
     expect(style.textWrapStyle).toBe('PRETTY'); // omitted → unchanged
   });
 
-  it('does not load a font for a numeric-only update (fontName omitted)', async () => {
-    const style: Record<string, unknown> = { id: 'S:0', type: 'TEXT', name: 'x', fontSize: 12 };
+  // This test used to assert the opposite — that a size-only update loads nothing, on the
+  // reasoning that changing a number "touches no glyphs". Live Figma disagrees: it answers
+  // `in set_fontSize: Cannot write to node with unloaded font "Inter Regular"`. Since nothing
+  // loads a font just by reading a style, that made update_text_style fail on any style the caller
+  // had not also re-fonted in the same session — which is most of them.
+  it("loads the style's own font even for a numeric-only update (fontName omitted)", async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'x',
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 12,
+    };
     const { figma: f, loaded } = fakeFigma(style);
     await createUpdateTextStyleHandler(f)({ styleId: 'S:0', fontSize: 16 });
-    expect(loaded).toEqual([]); // a size-only change touches no glyphs → no font work
+    expect(loaded).toEqual([{ family: 'Inter', style: 'Regular' }]);
     expect(style.fontSize).toBe(16);
   });
 
