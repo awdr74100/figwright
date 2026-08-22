@@ -1,8 +1,8 @@
 import type { MutateResult, SerializedLineHeight, SerializedPaint } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { toFigmaPaintsBound } from './bindings.js';
 import { toFigmaLineHeight } from './convert.js';
-import { toFigmaPaint } from './set-fills.js';
 
 interface RangeInput {
   start: number;
@@ -88,7 +88,15 @@ export const createSetTextRangeHandler =
       // Direct values first.
       if (r.fontName !== undefined) text.setRangeFontName(start, end, r.fontName);
       if (r.fontSize !== undefined) text.setRangeFontSize(start, end, r.fontSize);
-      if (r.fills !== undefined) text.setRangeFills(start, end, r.fills.map(toFigmaPaint));
+      // A run's paints carry their own bindings, exactly like a node's — distinct from the
+      // range-level `boundVariables` applied below, which binds a field on the run itself.
+      if (r.fills !== undefined) {
+        text.setRangeFills(
+          start,
+          end,
+          await toFigmaPaintsBound(figmaCtx, r.fills, 'set_text_range'),
+        );
+      }
       if (r.textDecoration !== undefined) {
         text.setRangeTextDecoration(start, end, r.textDecoration as TextDecoration);
       }

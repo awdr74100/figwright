@@ -230,4 +230,60 @@ describe('set_text_range handler', () => {
       }),
     ).rejects.toThrow(/variable VariableID:missing not found/);
   });
+
+  // A run's paints carry bindings of their own, distinct from the range-level `boundVariables`
+  // below them — the same shape get_node reports for a mixed TEXT node's segments. Before #164's
+  // write half they were dropped here, which turned a token-coloured word into a frozen hex.
+  it('carries a binding on a run fill through to setRangeFills', async () => {
+    const text = makeText();
+    const variable = { id: 'V:1', name: 'color/link', resolvedType: 'COLOR' };
+    const figma = makeFigma(text, { 'V:1': variable });
+    await createSetTextRangeHandler(figma)({
+      nodeId: 'T:1',
+      ranges: [
+        {
+          start: 0,
+          end: 5,
+          fills: [
+            {
+              type: 'SOLID',
+              visible: true,
+              opacity: 1,
+              color: { r: 0, g: 0, b: 1 },
+              boundVariables: { color: 'V:1' },
+            },
+          ],
+        },
+      ],
+    });
+    expect(text.setRangeFills).toHaveBeenCalledWith(0, 5, [
+      expect.objectContaining({ boundVariables: { color: variable } }),
+    ]);
+  });
+
+  it('rejects a run fill bound to a variable that no longer exists', async () => {
+    const text = makeText();
+    const figma = makeFigma(text);
+    await expect(
+      createSetTextRangeHandler(figma)({
+        nodeId: 'T:1',
+        ranges: [
+          {
+            start: 0,
+            end: 5,
+            fills: [
+              {
+                type: 'SOLID',
+                visible: true,
+                opacity: 1,
+                color: { r: 0, g: 0, b: 1 },
+                boundVariables: { color: 'V:gone' },
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow('set_text_range: variable V:gone not found');
+    expect(text.setRangeFills).not.toHaveBeenCalled();
+  });
 });

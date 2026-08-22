@@ -1,7 +1,7 @@
 import type { MutateResult, SerializedEffect } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { toFigmaEffect } from './convert.js';
+import { toFigmaEffectsBound } from './bindings.js';
 
 export const createSetEffectsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -14,7 +14,11 @@ export const createSetEffectsHandler =
     if (node === null || !('effects' in node)) {
       throw new Error(`set_effects: node ${p.nodeId} not found or cannot have effects`);
     }
-    (node as BlendMixin).effects = (p.effects as SerializedEffect[]).map(toFigmaEffect);
+    (node as BlendMixin).effects = await toFigmaEffectsBound(
+      figmaCtx,
+      p.effects as SerializedEffect[],
+      'set_effects',
+    );
 
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;

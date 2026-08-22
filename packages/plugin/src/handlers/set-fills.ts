@@ -1,6 +1,7 @@
 import type { MutateResult, SerializedPaint } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { toFigmaPaintsBound } from './bindings.js';
 
 /**
  * Convert a serialized paint back to a Figma Paint. SOLID and the four gradient types are supported
@@ -53,7 +54,11 @@ export const createSetFillsHandler =
     if (node === null || !('fills' in node)) {
       throw new Error(`set_fills: node ${p.nodeId} not found or cannot have fills`);
     }
-    (node as GeometryMixin).fills = (p.fills as SerializedPaint[]).map(toFigmaPaint);
+    (node as GeometryMixin).fills = await toFigmaPaintsBound(
+      figmaCtx,
+      p.fills as SerializedPaint[],
+      'set_fills',
+    );
 
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;

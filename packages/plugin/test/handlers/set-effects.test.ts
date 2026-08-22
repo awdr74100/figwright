@@ -3,8 +3,20 @@ import { describe, expect, it } from 'vitest';
 
 import { createSetEffectsHandler } from '../../src/handlers/set-effects.js';
 
-const fakeFigma = (lookup: Record<string, unknown>): typeof figma =>
-  ({ getNodeByIdAsync: async (id: string) => lookup[id] ?? null }) as unknown as typeof figma;
+const fakeFigma = (
+  lookup: Record<string, unknown>,
+  variables: Record<string, unknown> = {},
+): typeof figma =>
+  ({
+    getNodeByIdAsync: async (id: string) => lookup[id] ?? null,
+    variables: {
+      getVariableByIdAsync: async (id: string) => variables[id] ?? null,
+      setBoundVariableForEffect: (effect: object, field: string, v: { id: string }) => ({
+        ...effect,
+        boundVariables: { [field]: { type: 'VARIABLE_ALIAS', id: v.id } },
+      }),
+    },
+  }) as unknown as typeof figma;
 
 const dropShadow = {
   type: 'DROP_SHADOW',
@@ -44,5 +56,19 @@ describe('set_effects handler', () => {
     await expect(
       handler({ nodeId: '1:1', effects: [{ type: 'DROP_SHADOW', visible: true }] }),
     ).rejects.toThrow(/color and offset/);
+  });
+
+  it('applies a shadow binding, so a token shadow colour stays a token', async () => {
+    const node = { id: '1:1', effects: [] as unknown };
+    const handler = createSetEffectsHandler(
+      fakeFigma({ '1:1': node }, { 'V:1': { id: 'V:1', name: 'token', resolvedType: 'COLOR' } }),
+    );
+    await handler({
+      nodeId: '1:1',
+      effects: [{ ...dropShadow, boundVariables: { color: 'V:1' } }],
+    });
+    expect(node.effects).toEqual([
+      expect.objectContaining({ boundVariables: { color: { type: 'VARIABLE_ALIAS', id: 'V:1' } } }),
+    ]);
   });
 });

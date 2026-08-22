@@ -1,7 +1,7 @@
 import type { MutateResult, SerializedPaint } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { toFigmaPaint } from './set-fills.js';
+import { toFigmaPaintsBound } from './bindings.js';
 
 const PER_SIDE = [
   'strokeTopWeight',
@@ -39,7 +39,11 @@ export const createSetStrokesHandler =
     if (node === null || !('strokes' in node)) {
       throw new Error(`set_strokes: node ${p.nodeId} not found or cannot have strokes`);
     }
-    (node as GeometryMixin).strokes = (p.strokes as SerializedPaint[]).map(toFigmaPaint);
+    (node as GeometryMixin).strokes = await toFigmaPaintsBound(
+      figmaCtx,
+      p.strokes as SerializedPaint[],
+      'set_strokes',
+    );
     if (typeof p.strokeWeight === 'number') {
       (node as { strokeWeight: number }).strokeWeight = p.strokeWeight;
     }

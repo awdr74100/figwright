@@ -1,7 +1,7 @@
 import type { SerializedLayoutGrid, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { toFigmaLayoutGrid } from './convert.js';
+import { toFigmaLayoutGridsBound } from './bindings.js';
 
 export const createCreateGridStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -11,9 +11,16 @@ export const createCreateGridStyleHandler =
     if (typeof p.name !== 'string') throw new TypeError('create_grid_style: name must be a string');
     if (!Array.isArray(p.grids)) throw new TypeError('create_grid_style: grids must be an array');
 
+    // Bindings resolve first, so a bad variable id fails before a half-built style exists.
+    const grids = await toFigmaLayoutGridsBound(
+      figmaCtx,
+      p.grids as SerializedLayoutGrid[],
+      'create_grid_style',
+    );
+
     const style = figmaCtx.createGridStyle();
     style.name = p.name;
-    style.layoutGrids = (p.grids as SerializedLayoutGrid[]).map(toFigmaLayoutGrid);
+    style.layoutGrids = grids;
     if (typeof p.description === 'string') style.description = p.description;
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
