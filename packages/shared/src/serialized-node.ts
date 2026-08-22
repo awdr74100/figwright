@@ -19,17 +19,37 @@ export const SerializedRGBASchema = z.object({
 });
 export type SerializedRGBA = z.infer<typeof SerializedRGBASchema>;
 
+/**
+ * Variable bindings carried _on_ a paint / effect / layout grid / gradient stop — `field` → the
+ * bound variable's id (e.g. `{ color: "VariableID:5:12" }`). Figma keeps these bindings on the
+ * object itself, not in the owning node's `boundVariables`, which is why a bound shadow colour or
+ * fill colour is invisible unless it is read from here (issue #164). Field names are passed through
+ * as Figma reports them rather than filtered against a hard-coded list, so a newly bindable field
+ * is never silently dropped. Each field binds exactly one variable (unlike a node's own
+ * `boundVariables`, where a field maps to a list). Ids resolve to names via the result's
+ * `variables` table (get_styles / get_design_context) or get_variable_defs.
+ *
+ * Read-only: the write tools (set_fills / set_effects / set_layout_grids / create_* / update_*)
+ * ignore this field — binding a variable goes through bind_variable_to_paint.
+ */
+export const SerializedBindingsSchema = z.record(z.string(), z.string());
+export type SerializedBindings = z.infer<typeof SerializedBindingsSchema>;
+
 const SolidPaintSchema = z.object({
   type: z.literal('SOLID'),
   visible: z.boolean(),
   opacity: z.number(),
   color: SerializedColorSchema,
+  /** `{ color: variableId }` when the designer bound the paint's colour to a variable. */
+  boundVariables: SerializedBindingsSchema.optional(),
 });
 
 /** A gradient color stop: position 0–1 along the gradient + its RGBA color. */
 export const SerializedColorStopSchema = z.object({
   position: z.number(),
   color: SerializedRGBASchema,
+  /** `{ color: variableId }` — a gradient stop binds its colour independently of its siblings. */
+  boundVariables: SerializedBindingsSchema.optional(),
 });
 export type SerializedColorStop = z.infer<typeof SerializedColorStopSchema>;
 
@@ -110,6 +130,11 @@ export const SerializedEffectSchema = z.object({
   color: SerializedRGBASchema.optional(),
   offset: z.object({ x: z.number(), y: z.number() }).optional(),
   spread: z.number().optional(),
+  /**
+   * Per-field bindings on this shadow — Figma allows `color`, `radius`, `spread`, `offsetX` and
+   * `offsetY`. Present only when at least one is bound.
+   */
+  boundVariables: SerializedBindingsSchema.optional(),
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
@@ -141,6 +166,8 @@ export const SerializedLayoutGridSchema = z.object({
   gutterSize: z.number().optional(),
   alignment: z.string().optional(),
   offset: z.number().optional(),
+  /** Per-field bindings — Figma allows `sectionSize`, `count`, `offset` and `gutterSize`. */
+  boundVariables: SerializedBindingsSchema.optional(),
 });
 export type SerializedLayoutGrid = z.infer<typeof SerializedLayoutGridSchema>;
 

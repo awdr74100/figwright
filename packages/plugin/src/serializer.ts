@@ -2,6 +2,8 @@ import {
   MIXED,
   type SerializedAnnotation,
   type SerializedAutoLayout,
+  type SerializedBindings,
+  type SerializedColorStop,
   type SerializedComponentProperty,
   type SerializedEffect,
   type SerializedGridChild,
@@ -41,15 +43,39 @@ const hasImageAdjustments = (filters: unknown): boolean =>
   filters !== null &&
   Object.values(filters).some(v => typeof v === 'number' && v !== 0);
 
+/**
+ * A paint / effect / layout-grid / gradient-stop `boundVariables` record → `field` → variable id.
+ * Figma keeps these bindings on the object itself (not in the owning node's `boundVariables`), and
+ * each field binds exactly one variable — so this is the single-alias counterpart to
+ * `collectBoundVariables` below. Field names pass through as Figma reports them, so a newly
+ * bindable field is carried rather than silently dropped. Returns undefined when nothing is bound,
+ * keeping unbound paints/effects byte-identical to before.
+ */
+export const collectBindings = (raw: unknown): SerializedBindings | undefined => {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const out: SerializedBindings = {};
+  for (const [field, alias] of Object.entries(raw)) {
+    if (typeof alias === 'object' && alias !== null && 'id' in alias) {
+      const id = (alias as { id: unknown }).id;
+      if (typeof id === 'string') out[field] = id;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 export const serializePaint = (paint: Paint): SerializedPaint => {
   const visible = paint.visible ?? true;
   const opacity = paint.opacity ?? 1;
   if (paint.type === 'SOLID') {
+    // A bound colour lives on the paint, not on the owning node — carry it, or a variable-driven
+    // fill is indistinguishable from a hard-coded one downstream (issue #164).
+    const bound = collectBindings(paint.boundVariables);
     return {
       type: 'SOLID',
       visible,
       opacity,
       color: { r: paint.color.r, g: paint.color.g, b: paint.color.b },
+      ...(bound === undefined ? {} : { boundVariables: bound }),
     };
   }
   if (isGradient(paint)) {
@@ -64,10 +90,16 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       type: paint.type,
       visible,
       opacity,
-      gradientStops: stops.map(s => ({
-        position: s.position,
-        color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
-      })),
+      gradientStops: stops.map(s => {
+        const stop: SerializedColorStop = {
+          position: s.position,
+          color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
+        };
+        // Each stop binds its own colour, so the binding has to ride on the stop, not the paint.
+        const bound = collectBindings(s.boundVariables);
+        if (bound !== undefined) stop.boundVariables = bound;
+        return stop;
+      }),
       gradientTransform: transform.map(row => row.slice()),
     };
   }
@@ -746,6 +778,9 @@ export const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
 };
 
 export const serializeEffect = (effect: Effect): SerializedEffect => {
+  // Shadow bindings (colour / radius / spread / offsetX / offsetY) live on the effect itself; a
+  // shadow whose colour is a variable otherwise reads as a hard-coded RGBA (issue #164).
+  const bound = collectBindings((effect as { boundVariables?: unknown }).boundVariables);
   if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
     return {
       type: effect.type,
@@ -754,11 +789,13 @@ export const serializeEffect = (effect: Effect): SerializedEffect => {
       color: { r: effect.color.r, g: effect.color.g, b: effect.color.b, a: effect.color.a },
       offset: { x: effect.offset.x, y: effect.offset.y },
       spread: effect.spread ?? 0,
+      ...(bound === undefined ? {} : { boundVariables: bound }),
     };
   }
   // Blurs / textures carry radius; noise / glass carry only type + visible.
   const out: SerializedEffect = { type: effect.type, visible: effect.visible };
   if ('radius' in effect && typeof effect.radius === 'number') out.radius = effect.radius;
+  if (bound !== undefined) out.boundVariables = bound;
   return out;
 };
 
@@ -778,8 +815,15 @@ export const serializeCodeSyntax = (raw: unknown): Record<string, string> | unde
 };
 
 export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
+  // sectionSize / count / offset / gutterSize can each be variable-bound, on the grid object.
+  const bound = collectBindings((grid as { boundVariables?: unknown }).boundVariables);
   if (grid.pattern === 'GRID') {
-    return { pattern: 'GRID', visible: grid.visible ?? true, sectionSize: grid.sectionSize };
+    return {
+      pattern: 'GRID',
+      visible: grid.visible ?? true,
+      sectionSize: grid.sectionSize,
+      ...(bound === undefined ? {} : { boundVariables: bound }),
+    };
   }
   const out: SerializedLayoutGrid = {
     pattern: grid.pattern,
@@ -794,5 +838,8 @@ export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
   if (typeof grid.offset === 'number' && grid.offset !== 0 && grid.alignment !== 'CENTER') {
     out.offset = grid.offset;
   }
+  // Last, so a bound grid reads as "the grid, then what it binds" — the order every other
+  // serializer here emits.
+  if (bound !== undefined) out.boundVariables = bound;
   return out;
 };

@@ -57,6 +57,13 @@ an orphan collection behind.
   changed; omitted fields stay as-is) — **don't** `create_*` a second style with the same name, which
   leaves a duplicate. Re-syncing a style ramp from code is the common case; `get_styles` gives you the
   `styleId`s to target.
+- **A value the style binds to a variable is a reference, not a literal.** `get_styles` reports those
+  bindings as `boundVariables` (`{ field: variableId }`) on the paint / effect / layout grid that
+  owns them — and on the text style itself for typography — with `variables` naming each id. Writing
+  that value back as a literal through `update_*` replaces the reference with a frozen copy, so the
+  style silently stops tracking the token it was built on. When code changes such a value, change the
+  **variable** (`set_variable_value`) instead; only rewrite the style's own paints/effects when the
+  field genuinely carries no binding.
 
 Apply a style to a node with `apply_style_to_node` (`field`: fill / stroke / effect / grid / text).
 Prefer a **variable** for a single colour/scalar token and a **style** for a reusable multi-property

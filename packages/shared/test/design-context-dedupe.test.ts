@@ -277,3 +277,59 @@ describe('computeMetrics', () => {
     expect(m.dedupedSizeKb).toBeLessThan(m.inlineSizeKb);
   });
 });
+
+// A deliberate boundary, pinned so it cannot flip by accident.
+//
+// Paints and effects carry per-object `boundVariables` since issue #164, but the globalVars bundles
+// are the hot, budget-constrained path (get_design_context, PR #162) — and the information is not
+// lost there: a node's own `boundVariables` already lists every variable its fills / strokes /
+// effects reference (measured against a live file: it is populated both for a binding made on the
+// node and for one inherited from a shared style), and `resolveTokens` turns those ids into names.
+// What the bundle drops is only *which field of which paint* — precision the caller does not need
+// to emit `var(--token)`, and which would otherwise be duplicated on every deduped bundle.
+describe('dedupeStyles — variable bindings stay out of the bundles', () => {
+  const bound = (over: Record<string, unknown>): DesignContextNode =>
+    ({ id: 'n', name: 'n', type: 'FRAME', ...over }) as DesignContextNode;
+
+  it('drops per-paint and per-effect bindings from the globalVars bundle', () => {
+    const { globalVars } = dedupeStyles([
+      bound({
+        fills: [{ ...solid(1, 0, 0), boundVariables: { color: 'VariableID:1' } }],
+        effects: [
+          {
+            type: 'DROP_SHADOW',
+            visible: true,
+            radius: 4,
+            color: { r: 0, g: 0, b: 0, a: 0.2 },
+            offset: { x: 0, y: 2 },
+            spread: 0,
+            boundVariables: { color: 'VariableID:1' },
+          },
+        ],
+        boundVariables: { fills: ['VariableID:1'], effects: ['VariableID:1'] },
+      }),
+    ]);
+    expect(JSON.stringify(globalVars.styles)).not.toContain('boundVariables');
+    expect(JSON.stringify(globalVars.styles)).not.toContain('VariableID');
+  });
+
+  it('keeps the node-level binding list, which is what names the token', () => {
+    const { nodes } = dedupeStyles([
+      bound({
+        fills: [{ ...solid(1, 0, 0), boundVariables: { color: 'VariableID:1' } }],
+        boundVariables: { fills: ['VariableID:1'] },
+      }),
+    ]);
+    expect(nodes[0]?.boundVariables).toEqual({ fills: ['VariableID:1'] });
+  });
+
+  it('does not let a binding split one shared bundle into two', () => {
+    // Two nodes with the same colour, one bound and one not, must still share a single bundle —
+    // otherwise adding bindings would quietly inflate globalVars on a file that uses variables.
+    const { globalVars } = dedupeStyles([
+      bound({ id: 'a', fills: [{ ...solid(1, 0, 0), boundVariables: { color: 'VariableID:1' } }] }),
+      bound({ id: 'b', fills: [solid(1, 0, 0)] }),
+    ]);
+    expect(Object.keys(globalVars.styles)).toHaveLength(1);
+  });
+});

@@ -295,6 +295,75 @@ describe('e2e get_styles', () => {
     expect(result.paints[0]?.name).toBe('Primary');
     expect(result).toEqual(response);
   });
+
+  // The bindings a style carries are nested string maps two and three levels down, plus a
+  // result-level lookup table — shapes the wire (msgpack over the relay) had never carried before
+  // issue #164. A unit test on the handler cannot say they survive the round trip.
+  it('carries per-object variable bindings and the variables table over the wire', async () => {
+    const h = await startLeader();
+    harnesses.push(h);
+    const response: GetStylesResult = {
+      paints: [
+        {
+          id: 'S:1',
+          name: 'Brand/Primary',
+          key: 'k1',
+          description: '',
+          paints: [
+            {
+              type: 'SOLID',
+              visible: true,
+              opacity: 1,
+              color: { r: 0.1, g: 0.2, b: 0.3 },
+              boundVariables: { color: 'VariableID:1' },
+            },
+          ],
+        },
+      ],
+      texts: [],
+      effects: [
+        {
+          id: 'S:3',
+          name: 'Elevation/focus',
+          key: 'k3',
+          description: '',
+          effects: [
+            {
+              type: 'DROP_SHADOW',
+              visible: true,
+              radius: 24,
+              color: { r: 0.729, g: 0.839, b: 0.898, a: 1 },
+              offset: { x: 0, y: 4 },
+              spread: 4,
+              boundVariables: { color: 'VariableID:1', radius: 'VariableID:2' },
+            },
+          ],
+        },
+      ],
+      grids: [],
+      variables: {
+        'VariableID:1': { name: 'color/information', type: 'COLOR' },
+        'VariableID:2': { name: 'size/lg', type: 'FLOAT', codeSyntax: { WEB: '--size-lg' } },
+      },
+    };
+    sockets.push(
+      await connectFakePlugin({
+        port: h.port,
+        handlers: { [GET_STYLES_TOOL_NAME]: () => response },
+      }),
+    );
+    const result = (await dispatchTool(
+      { node: h.node, follower: h.follower },
+      GET_STYLES_TOOL_NAME,
+      {},
+    )) as GetStylesResult;
+    expect(result).toEqual(response);
+    expect(result.effects[0]?.effects[0]?.boundVariables).toEqual({
+      color: 'VariableID:1',
+      radius: 'VariableID:2',
+    });
+    expect(result.variables?.['VariableID:1']?.name).toBe('color/information');
+  });
 });
 
 describe('e2e get_variable_defs', () => {
