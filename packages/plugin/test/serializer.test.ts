@@ -6,6 +6,7 @@ import {
   serializeFlat,
   serializeFlatSync,
   serializeLayoutGrid,
+  serializePaint,
   serializeTree,
 } from '../src/serializer.js';
 
@@ -1359,5 +1360,177 @@ describe('serializeLayoutGrid', () => {
       offset: 32,
     } as unknown as LayoutGrid);
     expect(centered.offset).toBeUndefined();
+  });
+});
+
+// Variable bindings live ON the paint / stop / effect / grid, not in the owning node's
+// `boundVariables` — so dropping them made a variable-driven colour indistinguishable from a
+// hard-coded one (issue #164). The raw shapes below are the ones a live Figma file actually
+// returns (measured against the plugin API, not inferred): an alias object per field, and — the
+// detail a hand-written fixture would never guess — `boundVariables: {}` on an UNBOUND paint,
+// which must not turn into an empty field in the payload.
+describe('serializer — variable bindings on paints / effects / grids', () => {
+  const ALIAS = { type: 'VARIABLE_ALIAS', id: 'VariableID:5157:5005' };
+  const ALIAS2 = { type: 'VARIABLE_ALIAS', id: 'VariableID:5157:5006' };
+
+  it('carries a bound colour on a solid paint', () => {
+    const out = serializePaint({
+      type: 'SOLID',
+      visible: true,
+      opacity: 1,
+      blendMode: 'NORMAL',
+      color: { r: 0.1, g: 0.2, b: 0.3 },
+      boundVariables: { color: ALIAS },
+    } as unknown as Paint);
+    expect(out).toEqual({
+      type: 'SOLID',
+      visible: true,
+      opacity: 1,
+      color: { r: 0.1, g: 0.2, b: 0.3 },
+      boundVariables: { color: 'VariableID:5157:5005' },
+    });
+  });
+
+  it('omits the field on an unbound paint, including Figma’s empty boundVariables', () => {
+    const empty = serializePaint({
+      type: 'SOLID',
+      visible: true,
+      opacity: 1,
+      color: { r: 0, g: 1, b: 0 },
+      boundVariables: {},
+    } as unknown as Paint);
+    expect(empty).not.toHaveProperty('boundVariables');
+    const absent = serializePaint({
+      type: 'SOLID',
+      visible: true,
+      opacity: 1,
+      color: { r: 0, g: 1, b: 0 },
+    } as unknown as Paint);
+    expect(absent).not.toHaveProperty('boundVariables');
+  });
+
+  it('binds gradient stops independently of each other', () => {
+    const out = serializePaint({
+      type: 'GRADIENT_LINEAR',
+      visible: true,
+      opacity: 1,
+      gradientTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      gradientStops: [
+        { position: 0, color: { r: 0, g: 0, b: 0, a: 1 }, boundVariables: { color: ALIAS } },
+        { position: 1, color: { r: 1, g: 1, b: 1, a: 1 } },
+      ],
+    } as unknown as Paint) as { gradientStops: { boundVariables?: unknown }[] };
+    expect(out.gradientStops[0]?.boundVariables).toEqual({ color: 'VariableID:5157:5005' });
+    expect(out.gradientStops[1]).not.toHaveProperty('boundVariables');
+  });
+
+  it('carries every bound field on a shadow', () => {
+    const out = serializeEffect({
+      type: 'DROP_SHADOW',
+      visible: true,
+      radius: 24,
+      color: { r: 0.1, g: 0.2, b: 0.3, a: 1 },
+      offset: { x: 0, y: 2 },
+      spread: 0,
+      blendMode: 'NORMAL',
+      boundVariables: { color: ALIAS, radius: ALIAS2 },
+    } as unknown as Effect);
+    expect(out.boundVariables).toEqual({
+      color: 'VariableID:5157:5005',
+      radius: 'VariableID:5157:5006',
+    });
+    // The resolved literal stays alongside the binding — it is the fallback, not a replacement.
+    expect(out.color).toEqual({ r: 0.1, g: 0.2, b: 0.3, a: 1 });
+  });
+
+  it('carries a bound radius on a blur (the non-shadow branch)', () => {
+    const out = serializeEffect({
+      type: 'LAYER_BLUR',
+      visible: true,
+      radius: 8,
+      boundVariables: { radius: ALIAS2 },
+    } as unknown as Effect);
+    expect(out).toEqual({
+      type: 'LAYER_BLUR',
+      visible: true,
+      radius: 8,
+      boundVariables: { radius: 'VariableID:5157:5006' },
+    });
+  });
+
+  it('carries bindings on both layout-grid branches', () => {
+    const columns = serializeLayoutGrid({
+      pattern: 'COLUMNS',
+      visible: true,
+      count: 12,
+      gutterSize: 24,
+      alignment: 'STRETCH',
+      offset: 24,
+      boundVariables: { gutterSize: ALIAS2 },
+    } as unknown as LayoutGrid);
+    expect(columns.boundVariables).toEqual({ gutterSize: 'VariableID:5157:5006' });
+    const uniform = serializeLayoutGrid({
+      pattern: 'GRID',
+      visible: true,
+      sectionSize: 8,
+      boundVariables: { sectionSize: ALIAS2 },
+    } as unknown as LayoutGrid);
+    expect(uniform.boundVariables).toEqual({ sectionSize: 'VariableID:5157:5006' });
+  });
+
+  it('ignores a malformed alias rather than emitting a broken id', () => {
+    const out = serializeEffect({
+      type: 'LAYER_BLUR',
+      visible: true,
+      radius: 8,
+      // Three ways an alias can fail to be one: no id at all, a non-string id, and a null entry.
+      boundVariables: {
+        radius: { type: 'VARIABLE_ALIAS' },
+        spread: { type: 'VARIABLE_ALIAS', id: 123 },
+        color: null,
+      },
+    } as unknown as Effect);
+    expect(out).not.toHaveProperty('boundVariables');
+  });
+
+  it('keeps the well-formed bindings when a sibling field is malformed', () => {
+    const out = serializeEffect({
+      type: 'LAYER_BLUR',
+      visible: true,
+      radius: 8,
+      boundVariables: { radius: ALIAS2, color: { type: 'VARIABLE_ALIAS', id: 123 } },
+    } as unknown as Effect);
+    expect(out.boundVariables).toEqual({ radius: 'VariableID:5157:5006' });
+  });
+
+  it('surfaces a bound fill through a node, alongside the node’s own coarse binding list', () => {
+    const out = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'SOLID',
+            visible: true,
+            opacity: 1,
+            color: { r: 0.1, g: 0.2, b: 0.3 },
+            boundVariables: { color: ALIAS },
+          },
+        ],
+        boundVariables: { fills: [ALIAS] },
+      }),
+    );
+    // The node-level list says *some* variable is bound; the paint says which field of which paint.
+    expect(out.boundVariables).toEqual({ fills: ['VariableID:5157:5005'] });
+    expect(out.fills).toEqual([
+      {
+        type: 'SOLID',
+        visible: true,
+        opacity: 1,
+        color: { r: 0.1, g: 0.2, b: 0.3 },
+        boundVariables: { color: 'VariableID:5157:5005' },
+      },
+    ]);
   });
 });
