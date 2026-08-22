@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { boundVariablesSchema } from './binding-schema.js';
+
 // Shared Zod paint schema, reused by set_fills / set_strokes / create_paint_style /
 // update_paint_style so the SOLID + gradient shape can't drift between them. Loose (only `type` is
 // required and unknown keys pass through) so a paint read back from get_node round-trips into a
@@ -22,7 +24,14 @@ export const paintItemSchema = z
     ]),
     color: rgb.describe('SOLID color (r/g/b in 0–1)').optional(),
     gradientStops: z
-      .array(z.object({ position: z.number(), color: rgba }))
+      .array(
+        z.object({
+          position: z.number(),
+          color: rgba,
+          // A stop binds its colour independently of its siblings, so the binding rides here.
+          boundVariables: boundVariablesSchema.optional(),
+        }),
+      )
       .describe('Gradient stops (position 0–1 + RGBA color); required for gradient types')
       .optional(),
     gradientTransform: z
@@ -31,5 +40,8 @@ export const paintItemSchema = z
       .optional(),
     opacity: z.number().optional(),
     visible: z.boolean().optional(),
+    boundVariables: boundVariablesSchema
+      .describe('SOLID only: { "color": variableId } binds the paint colour to a COLOR variable.')
+      .optional(),
   })
   .loose();

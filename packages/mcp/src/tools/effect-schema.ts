@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { boundVariablesSchema } from './binding-schema.js';
+
 // Shared Zod effect schema, reused by set_effects / create_effect_style so the shadow + blur shape
 // can't drift between them (they previously copy-pasted the same inline JSON shape). Loose so an
 // effect read back from get_node round-trips into a write. The plugin's toFigmaEffect enforces that
@@ -19,5 +21,10 @@ export const effectItemSchema = z
       .describe('Shadow offset in px. Required for shadows.')
       .optional(),
     spread: z.number().optional(),
+    boundVariables: boundVariablesSchema
+      .describe(
+        'Bindable fields: color (COLOR variable) and radius / spread / offsetX / offsetY (FLOAT).',
+      )
+      .optional(),
   })
   .loose();
