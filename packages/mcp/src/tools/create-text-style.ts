@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { textStyleBindingsSchema } from './binding-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const CREATE_TEXT_STYLE_TOOL_NAME = 'create_text_style';
@@ -26,6 +27,7 @@ export const createTextStyleTool: ToolSpec = {
       .describe(
         'Line-break balancing every node bound to this style inherits; maps 1:1 to CSS text-wrap',
       ),
+    boundVariables: textStyleBindingsSchema.optional(),
     description: z.string().optional(),
   }),
   kind: 'write',

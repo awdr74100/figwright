@@ -18,3 +18,18 @@ export const boundVariablesSchema = z
       'instead of the literal next to it. Omit to leave the value unbound: writing without it ' +
       'CLEARS any binding the object had.',
   );
+
+/**
+ * The same thing for a text style, whose typography values are scalars — there is no per-object
+ * level to hang them on, so the style itself carries them. This one accepts null because a text
+ * style write is a PATCH (omitted fields stay as they were), so unbinding has to be sayable;
+ * `set_text_range` takes the same shape for the same reason.
+ */
+export const textStyleBindingsSchema = z
+  .record(z.string(), z.union([z.string(), z.null()]))
+  .describe(
+    'Typography bindings as { field: variableId }: fontSize / lineHeight / letterSpacing / ' +
+      'paragraphSpacing / paragraphIndent take a FLOAT variable, fontFamily / fontStyle a STRING ' +
+      'one, fontWeight a FLOAT. Pass null for a field to unbind it; omit a field to leave it as it ' +
+      'is. A bound field wins over a literal passed for the same field in this call.',
+  );

@@ -5,15 +5,21 @@ import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-sty
 
 const fakeFigma = (
   style: Record<string, unknown> | null,
-): { figma: typeof figma; loaded: FontName[] } => {
+  variables: Record<string, unknown> = {},
+): { figma: typeof figma; loaded: FontName[]; bound: [string, unknown][] } => {
   const loaded: FontName[] = [];
+  const bound: [string, unknown][] = [];
+  if (style !== null) {
+    style.setBoundVariable = (field: string, variable: unknown) => bound.push([field, variable]);
+  }
   const figmaCtx = {
     getStyleByIdAsync: async () => style,
+    variables: { getVariableByIdAsync: async (id: string) => variables[id] ?? null },
     loadFontAsync: vi.fn<(fn: FontName) => Promise<void>>(async (fn: FontName) => {
       loaded.push(fn);
     }),
   } as unknown as typeof figma;
-  return { figma: figmaCtx, loaded };
+  return { figma: figmaCtx, loaded, bound };
 };
 
 describe('update_text_style handler', () => {
@@ -102,5 +108,59 @@ describe('update_text_style handler', () => {
     await expect(createUpdateTextStyleHandler(fakeFigma(null).figma)({})).rejects.toThrow(
       /styleId/,
     );
+  });
+
+  it('binds typography fields, and unbinds one passed as null', async () => {
+    const variable = { id: 'V:1', name: 'size/lg', resolvedType: 'FLOAT', valuesByMode: {} };
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    const { figma: f, bound } = fakeFigma(style, { 'V:1': variable });
+    await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      boundVariables: { fontSize: 'V:1', lineHeight: null },
+    });
+    // A text style write is a patch, so omission cannot mean "unbind" the way it does for the
+    // whole-array paints and effects — null is how a caller says it.
+    expect(bound).toEqual([
+      ['fontSize', variable],
+      ['lineHeight', null],
+    ]);
+  });
+
+  it('applies bindings after literals, so a bound field wins over one set in the same call', async () => {
+    const variable = { id: 'V:1', name: 'size/lg', resolvedType: 'FLOAT', valuesByMode: {} };
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 12,
+    };
+    const { figma: f, bound } = fakeFigma(style, { 'V:1': variable });
+    await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      fontSize: 99,
+      boundVariables: { fontSize: 'V:1' },
+    });
+    expect(style.fontSize).toBe(99); // the literal landed first…
+    expect(bound).toEqual([['fontSize', variable]]); // …and the binding then took over the field
+  });
+
+  it('leaves the style untouched when a binding cannot be resolved', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    const { figma: f, bound } = fakeFigma(style);
+    await expect(
+      createUpdateTextStyleHandler(f)({ styleId: 'S:0', boundVariables: { fontSize: 'V:gone' } }),
+    ).rejects.toThrow('update_text_style: variable V:gone not found');
+    expect(bound).toEqual([]);
   });
 });

@@ -6,6 +6,11 @@ import type {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import {
+  applyTextStyleBindings,
+  resolveTextStyleBindings,
+  type TextStyleBindings,
+} from './bindings.js';
 import { toFigmaLineHeight } from './convert.js';
 
 export const createUpdateTextStyleHandler =
@@ -19,6 +24,7 @@ export const createUpdateTextStyleHandler =
       lineHeight?: unknown;
       letterSpacing?: unknown;
       textWrapStyle?: unknown;
+      boundVariables?: unknown;
       description?: unknown;
     };
     if (typeof p.styleId !== 'string') {
@@ -55,6 +61,12 @@ export const createUpdateTextStyleHandler =
       ts.textWrapStyle = p.textWrapStyle as TextStyle['textWrapStyle'];
     }
     if (typeof p.description === 'string') ts.description = p.description;
+    // Last, so a bound field wins over a literal set for the same field above.
+    if (p.boundVariables !== undefined) {
+      const bindings = p.boundVariables as TextStyleBindings;
+      const table = await resolveTextStyleBindings(figmaCtx, bindings, 'update_text_style');
+      await applyTextStyleBindings(figmaCtx, ts, bindings, table);
+    }
 
     const result: StyleResult = { ok: true, styleId: ts.id, name: ts.name };
     return result;
