@@ -158,4 +158,94 @@ describe('create_text_style handler', () => {
     // Live Figma answers `unloaded font "Roboto Regular"` without this.
     expect(loaded).toContainEqual({ family: 'Roboto', style: 'Regular' });
   });
+
+  // Measured on a multi-mode collection: only the face the style RESOLVES to must be loadable — a
+  // non-default mode naming a font nobody has still binds. Every mode's face is loaded anyway
+  // (which mode resolves is the collection's business, not the variable's), and a face that cannot
+  // load is skipped rather than failing the write.
+  it('loads every mode of a bound family, not just the first', async () => {
+    const variable = {
+      id: 'V:f',
+      name: 'font/family',
+      resolvedType: 'STRING',
+      valuesByMode: { m1: 'Roboto', m2: 'Lato' },
+    };
+    const { figma: f, loaded, style } = fakeFigma({}, { 'V:f': variable });
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    await createCreateTextStyleHandler(f)({
+      name: 'Heading/H1',
+      boundVariables: { fontFamily: 'V:f' },
+    });
+    expect(loaded).toContainEqual({ family: 'Roboto', style: 'Regular' });
+    expect(loaded).toContainEqual({ family: 'Lato', style: 'Regular' });
+  });
+
+  it('binds anyway when a mode names a font that cannot load', async () => {
+    const variable = {
+      id: 'V:f',
+      name: 'font/family',
+      resolvedType: 'STRING',
+      valuesByMode: { m1: 'Roboto', m2: 'NoSuchFontFamilyXYZ' },
+    };
+    const {
+      figma: f,
+      loaded,
+      style,
+      bound,
+    } = fakeFigma({ missingFont: 'NoSuchFontFamilyXYZ' }, { 'V:f': variable });
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    await createCreateTextStyleHandler(f)({
+      name: 'Heading/H1',
+      boundVariables: { fontFamily: 'V:f' },
+    });
+    expect(loaded).toContainEqual({ family: 'Roboto', style: 'Regular' });
+    expect(loaded).not.toContainEqual({ family: 'NoSuchFontFamilyXYZ', style: 'Regular' });
+    // Live Figma binds this: only the face the style resolves to has to exist. Letting the failed
+    // load through would reject a binding Figma accepts.
+    expect(bound).toEqual([['fontFamily', variable]]);
+  });
+
+  it('asks for each face once when the family swap and the final face coincide', async () => {
+    const variable = {
+      id: 'V:f',
+      name: 'font/family',
+      resolvedType: 'STRING',
+      valuesByMode: { m1: 'Roboto' },
+    };
+    const { figma: f, loaded, style } = fakeFigma({}, { 'V:f': variable });
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    await createCreateTextStyleHandler(f)({
+      name: 'Heading/H1',
+      boundVariables: { fontFamily: 'V:f' },
+    });
+    // The style's own face (before creation writes) plus Roboto Regular — not Roboto twice.
+    expect(loaded.filter(fn => fn.family === 'Roboto')).toEqual([
+      { family: 'Roboto', style: 'Regular' },
+    ]);
+  });
+
+  it('walks family then style as a chain, loading the face each step lands on', async () => {
+    const family = {
+      id: 'V:f',
+      name: 'font/family',
+      resolvedType: 'STRING',
+      valuesByMode: { m1: 'Roboto' },
+    };
+    const weight = {
+      id: 'V:s',
+      name: 'font/style',
+      resolvedType: 'STRING',
+      valuesByMode: { m1: 'Bold' },
+    };
+    const { figma: f, loaded, style } = fakeFigma({}, { 'V:f': family, 'V:s': weight });
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    await createCreateTextStyleHandler(f)({
+      name: 'Heading/H1',
+      boundVariables: { fontFamily: 'V:f', fontStyle: 'V:s' },
+    });
+    // Live Figma composes these into Roboto Bold; the intermediate face has to load for the family
+    // swap to land before the style swap runs.
+    expect(loaded).toContainEqual({ family: 'Roboto', style: 'Regular' });
+    expect(loaded).toContainEqual({ family: 'Roboto', style: 'Bold' });
+  });
 });
