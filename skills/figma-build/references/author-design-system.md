@@ -59,15 +59,22 @@ an orphan collection behind.
   `styleId`s to target.
 - **A value the style binds to a variable is a reference, not a literal.** `get_styles` reports those
   bindings as `boundVariables` (`{ field: variableId }`) on the paint / effect / layout grid that
-  owns them — and on the text style itself for typography — with `variables` naming each id. Writing
-  that value back as a literal through `update_*` replaces the reference with a frozen copy, so the
-  style silently stops tracking the token it was built on. When code changes such a value, change the
-  **variable** (`set_variable_value`) instead; only rewrite the style's own paints/effects when the
-  field genuinely carries no binding.
+  owns them — and on the text style itself for typography — with `variables` naming each id. Paints
+  and effects **replace wholesale**, so an `update_*` that omits `boundVariables` replaces the
+  reference with a frozen copy and the style silently stops tracking its token. Carry the binding
+  through: send the paint/effect back **with** its `boundVariables`. And when what actually changed
+  is the token's value, change the **variable** (`set_variable_value`) rather than the style.
 
 Apply a style to a node with `apply_style_to_node` (`field`: fill / stroke / effect / grid / text).
 Prefer a **variable** for a single colour/scalar token and a **style** for a reusable multi-property
-look (a shadow, a type ramp step).
+look (a shadow, a type ramp step). The two compose rather than compete: a style's own values can be
+**bound to variables**, which is how a shadow tracks a colour token or a grid tracks a spacing one.
+Bind by including `boundVariables` (`{ field: variableId }`) on the paint / effect / layout grid you
+pass to `create_*` / `update_*` / `set_fills` / `set_strokes` / `set_effects` / `set_layout_grids` —
+`color` on a SOLID paint or a gradient stop, `color` / `radius` / `spread` / `offsetX` / `offsetY`
+on a shadow, `sectionSize` / `count` / `offset` / `gutterSize` on a grid. A binding whose variable
+id does not resolve is an error, not a silent miss, so a stale id fails loudly instead of painting
+the value white.
 
 ## Components & variant sets
 

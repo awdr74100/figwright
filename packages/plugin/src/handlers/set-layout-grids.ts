@@ -1,7 +1,7 @@
 import type { MutateResult, SerializedLayoutGrid } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { toFigmaLayoutGrid } from './convert.js';
+import { toFigmaLayoutGridsBound } from './bindings.js';
 
 /**
  * Replace a frame's own layout grids (its responsive column/row scaffold) — the mirror of the
@@ -28,8 +28,10 @@ export const createSetLayoutGridsHandler =
       );
     }
 
-    (node as BaseFrameMixin).layoutGrids = (p.grids as SerializedLayoutGrid[]).map(
-      toFigmaLayoutGrid,
+    (node as BaseFrameMixin).layoutGrids = await toFigmaLayoutGridsBound(
+      figmaCtx,
+      p.grids as SerializedLayoutGrid[],
+      'set_layout_grids',
     );
 
     const result: MutateResult = { ok: true, nodeId: node.id };

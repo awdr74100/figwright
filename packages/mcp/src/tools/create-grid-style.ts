@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { gridItemSchema } from './grid-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const CREATE_GRID_STYLE_TOOL_NAME = 'create_grid_style';
@@ -12,17 +13,7 @@ export const createGridStyleTool: ToolSpec = {
     'to frames with apply_style_to_node. Returns { ok, styleId, name }.',
   inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Layout/8pt"'),
-    grids: z.array(
-      z.object({
-        pattern: z.enum(['GRID', 'ROWS', 'COLUMNS']),
-        visible: z.boolean(),
-        sectionSize: z.number().optional(),
-        count: z.number().optional(),
-        gutterSize: z.number().optional(),
-        alignment: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH']).optional(),
-        offset: z.number().optional(),
-      }),
-    ),
+    grids: z.array(gridItemSchema),
     description: z.string().optional(),
   }),
   kind: 'write',

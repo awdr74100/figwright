@@ -1,7 +1,7 @@
 import type { SerializedPaint, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { toFigmaPaint } from './set-fills.js';
+import { toFigmaPaintsBound } from './bindings.js';
 
 export const createUpdatePaintStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -22,7 +22,13 @@ export const createUpdatePaintStyleHandler =
     }
     const ps = style as PaintStyle;
     if (typeof p.name === 'string') ps.name = p.name;
-    if (Array.isArray(p.paints)) ps.paints = (p.paints as SerializedPaint[]).map(toFigmaPaint);
+    if (Array.isArray(p.paints)) {
+      ps.paints = await toFigmaPaintsBound(
+        figmaCtx,
+        p.paints as SerializedPaint[],
+        'update_paint_style',
+      );
+    }
     if (typeof p.description === 'string') ps.description = p.description;
 
     const result: StyleResult = { ok: true, styleId: ps.id, name: ps.name };

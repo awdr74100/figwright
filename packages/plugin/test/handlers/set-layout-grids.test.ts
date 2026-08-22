@@ -3,8 +3,20 @@ import { describe, expect, it } from 'vitest';
 
 import { createSetLayoutGridsHandler } from '../../src/handlers/set-layout-grids.js';
 
-const fakeFigma = (lookup: Record<string, unknown>): typeof figma =>
-  ({ getNodeByIdAsync: async (id: string) => lookup[id] ?? null }) as unknown as typeof figma;
+const fakeFigma = (
+  lookup: Record<string, unknown>,
+  variables: Record<string, unknown> = {},
+): typeof figma =>
+  ({
+    getNodeByIdAsync: async (id: string) => lookup[id] ?? null,
+    variables: {
+      getVariableByIdAsync: async (id: string) => variables[id] ?? null,
+      setBoundVariableForLayoutGrid: (grid: object, field: string, v: { id: string }) => ({
+        ...grid,
+        boundVariables: { [field]: { type: 'VARIABLE_ALIAS', id: v.id } },
+      }),
+    },
+  }) as unknown as typeof figma;
 
 describe('set_layout_grids handler', () => {
   it('sets a 12-column grid on a frame (the responsive column scaffold)', async () => {
@@ -91,5 +103,30 @@ describe('set_layout_grids handler', () => {
     await expect(handler({ nodeId: '1:1', grids: 'nope' })).rejects.toThrow(/must be an array/);
     await expect(handler({ nodeId: '9:9', grids: [] })).rejects.toThrow(/not found/);
     await expect(handler({ nodeId: '2:2', grids: [] })).rejects.toThrow(/does not support/);
+  });
+
+  it('applies a grid binding, so a token gutter stays a token', async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    const handler = createSetLayoutGridsHandler(
+      fakeFigma({ '1:1': frame }, { 'V:1': { id: 'V:1', name: 'token', resolvedType: 'FLOAT' } }),
+    );
+    await handler({
+      nodeId: '1:1',
+      grids: [
+        {
+          pattern: 'COLUMNS',
+          visible: true,
+          count: 12,
+          gutterSize: 24,
+          alignment: 'STRETCH',
+          boundVariables: { gutterSize: 'V:1' },
+        },
+      ],
+    });
+    expect(frame.layoutGrids).toEqual([
+      expect.objectContaining({
+        boundVariables: { gutterSize: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
+      }),
+    ]);
   });
 });

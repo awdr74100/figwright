@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { gridItemSchema } from './grid-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SET_LAYOUT_GRIDS_TOOL_NAME = 'set_layout_grids';
@@ -15,23 +16,7 @@ export const setLayoutGridsTool: ToolSpec = {
   inputSchema: z.object({
     nodeId: z.string().describe('Frame (or component/instance) node id'),
     grids: z
-      .array(
-        z.object({
-          pattern: z.enum(['GRID', 'ROWS', 'COLUMNS']),
-          visible: z.boolean(),
-          sectionSize: z
-            .number()
-            .optional()
-            .describe('Cell size for GRID; section size for ROWS/COLUMNS (ignored when STRETCH)'),
-          count: z.number().optional().describe('Number of columns/rows (ROWS/COLUMNS)'),
-          gutterSize: z.number().optional().describe('Gap between columns/rows (ROWS/COLUMNS)'),
-          alignment: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH']).optional(),
-          offset: z
-            .number()
-            .optional()
-            .describe('Page margin from the frame edge (ignored when CENTER)'),
-        }),
-      )
+      .array(gridItemSchema)
       .describe('Layout grids to set; [] clears all grids on the frame'),
   }),
   kind: 'write',

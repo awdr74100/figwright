@@ -11,7 +11,9 @@ export const updateEffectStyleTool: ToolSpec = {
     'Update an existing effect style by id. Any of name / effects / description may be omitted to ' +
     'leave unchanged; effects, when given, replaces the whole list. Shadows (DROP_SHADOW / ' +
     'INNER_SHADOW) need color + offset; blurs (LAYER_BLUR / BACKGROUND_BLUR) need radius. Use this ' +
-    'to keep a shared style in sync with code instead of creating a duplicate. Returns { ok, ' +
+    'to keep a shared style in sync with code instead of creating a duplicate. Because effects ' +
+    'replace wholesale, an effect written back WITHOUT its boundVariables clears the variables it ' +
+    'was bound to — re-send them, or change the variable itself instead. Returns { ok, ' +
     'styleId, name }.',
   inputSchema: z.object({
     styleId: z.string().describe('Effect style id to update'),

@@ -3,8 +3,17 @@ import { describe, expect, it } from 'vitest';
 
 import { createUpdateEffectStyleHandler } from '../../src/handlers/update-effect-style.js';
 
-const fakeFigma = (style: unknown): typeof figma =>
-  ({ getStyleByIdAsync: async () => style }) as unknown as typeof figma;
+const fakeFigma = (style: unknown, variables: Record<string, unknown> = {}): typeof figma =>
+  ({
+    getStyleByIdAsync: async () => style,
+    variables: {
+      getVariableByIdAsync: async (id: string) => variables[id] ?? null,
+      setBoundVariableForEffect: (effect: object, field: string, v: { id: string }) => ({
+        ...effect,
+        boundVariables: { [field]: { type: 'VARIABLE_ALIAS', id: v.id } },
+      }),
+    },
+  }) as unknown as typeof figma;
 
 describe('update_effect_style handler', () => {
   it('replaces effects + name and leaves an omitted field unchanged', async () => {
@@ -35,5 +44,27 @@ describe('update_effect_style handler', () => {
       createUpdateEffectStyleHandler(fakeFigma({ id: 'E:0', type: 'PAINT' }))({ styleId: 'E:0' }),
     ).rejects.toThrow(/not found/);
     await expect(createUpdateEffectStyleHandler(fakeFigma(null))({})).rejects.toThrow(/styleId/);
+  });
+
+  it('re-applies a binding sent with the new effects', async () => {
+    const style = { id: 'E:0', type: 'EFFECT', name: 'n', effects: [] as unknown, description: '' };
+    await createUpdateEffectStyleHandler(
+      fakeFigma(style, { 'V:1': { id: 'V:1', name: 'token', resolvedType: 'COLOR' } }),
+    )({
+      styleId: 'E:0',
+      effects: [
+        {
+          type: 'DROP_SHADOW',
+          visible: true,
+          radius: 4,
+          color: { r: 0, g: 0, b: 0, a: 0.2 },
+          offset: { x: 0, y: 2 },
+          boundVariables: { color: 'V:1' },
+        },
+      ],
+    });
+    expect(style.effects).toEqual([
+      expect.objectContaining({ boundVariables: { color: { type: 'VARIABLE_ALIAS', id: 'V:1' } } }),
+    ]);
   });
 });
