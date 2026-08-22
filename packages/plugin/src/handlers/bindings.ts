@@ -41,7 +41,7 @@ const idsIn = (sources: readonly unknown[]): string[] =>
  * this for us on the literal path: an unknown id is stored as-is and the value renders white, which
  * is exactly the silent breakage this turns into an error.
  */
-const resolveVariables = async (
+export const resolveVariables = async (
   figmaCtx: typeof figma,
   ids: readonly string[],
   where: string,
@@ -59,7 +59,7 @@ const resolveVariables = async (
   return table;
 };
 
-const variableFor = (table: ReadonlyMap<string, Variable>, id: string): Variable =>
+export const variableFor = (table: ReadonlyMap<string, Variable>, id: string): Variable =>
   table.get(id) as Variable;
 
 /**
@@ -160,4 +160,104 @@ export const toFigmaLayoutGridsBound = async (
     }
     return grid;
   });
+};
+
+/**
+ * A text style's bindings on the way IN. Unlike paints and effects — whole arrays that Figma
+ * replaces, so omitting a binding clears it — a text style write is a patch: fields left out stay
+ * as they were. Unbinding therefore needs to be sayable, and `null` says it, the same shape
+ * set_text_range already uses for a run's bindings.
+ */
+export type TextStyleBindings = Record<string, string | null>;
+
+/**
+ * Resolve a text style's bindings without touching a style. Split out so create_text_style can do
+ * it BEFORE `createTextStyle()` — an id that matches nothing then fails with no style to clean up.
+ */
+export const resolveTextStyleBindings = async (
+  figmaCtx: typeof figma,
+  bindings: TextStyleBindings,
+  where: string,
+): Promise<ReadonlyMap<string, Variable>> =>
+  resolveVariables(
+    figmaCtx,
+    Object.values(bindings).filter((id): id is string => typeof id === 'string'),
+    where,
+  );
+
+/** Fields whose binding changes which font face the style resolves to. */
+const FONT_FIELDS = new Set(['fontFamily', 'fontStyle', 'fontWeight']);
+
+/** Every string a variable can resolve to, across its modes — the font names a binding may need. */
+const stringValues = (variable: Variable): string[] => {
+  const out = new Set<string>();
+  for (const value of Object.values(variable.valuesByMode)) {
+    if (typeof value === 'string') out.add(value);
+  }
+  return [...out];
+};
+
+/**
+ * Load every face a set of bindings could resolve to, best effort.
+ *
+ * Binding `fontFamily` throws `unloaded font "<family> <style>"` unless that face is already loaded
+ * — measured; the numeric fields (fontSize / lineHeight / letterSpacing / paragraph*) need no load
+ * at all. The set is walked as a chain in the order the bindings are applied below, so a family
+ * swap followed by a style swap loads the face each step lands on.
+ *
+ * Failures are swallowed on purpose. A face this guesses at may simply not exist (a family from one
+ * mode paired with a style from another never co-occurs), and rejecting the write for that would
+ * fail a binding Figma would have accepted. Anything genuinely missing still surfaces —
+ * `setBoundVariable` throws naming the exact face, which is a better error than one this could
+ * invent.
+ */
+const preloadFaces = async (
+  figmaCtx: typeof figma,
+  current: FontName,
+  bindings: TextStyleBindings,
+  table: ReadonlyMap<string, Variable>,
+): Promise<void> => {
+  const familyId = bindings.fontFamily;
+  const styleId = bindings.fontStyle;
+  const families =
+    typeof familyId === 'string' ? stringValues(variableFor(table, familyId)) : [current.family];
+  const styles =
+    typeof styleId === 'string' ? stringValues(variableFor(table, styleId)) : [current.style];
+  const faces: FontName[] = [];
+  for (const family of families) {
+    // The face the family swap lands on before the style swap runs, then the final one.
+    faces.push({ family, style: current.style });
+    for (const style of styles) faces.push({ family, style });
+  }
+  await Promise.all(faces.map(async face => figmaCtx.loadFontAsync(face).catch(() => undefined)));
+};
+
+/**
+ * Apply a text style's variable bindings. Typography values are scalars, so unlike a paint or an
+ * effect there is no per-object level to hang these on — the style itself is where they live.
+ *
+ * Ordered family → style → weight → everything else so the font-affecting swaps happen against a
+ * face that was preloaded for exactly that step. The variable table is resolved separately (see
+ * {@link resolveTextStyleBindings}) so a caller can fail on an unknown id before it creates anything
+ * — the resolution needs no style, only the font preload does.
+ */
+export const applyTextStyleBindings = async (
+  figmaCtx: typeof figma,
+  style: TextStyle,
+  bindings: TextStyleBindings,
+  table: ReadonlyMap<string, Variable>,
+): Promise<void> => {
+  await preloadFaces(figmaCtx, style.fontName, bindings, table);
+
+  const ordered = Object.entries(bindings).toSorted(([a], [b]) => {
+    const rank = (field: string): number =>
+      field === 'fontFamily' ? 0 : field === 'fontStyle' ? 1 : FONT_FIELDS.has(field) ? 2 : 3;
+    return rank(a) - rank(b);
+  });
+  for (const [field, id] of ordered) {
+    style.setBoundVariable(
+      field as VariableBindableTextField,
+      id === null ? null : variableFor(table, id),
+    );
+  }
 };

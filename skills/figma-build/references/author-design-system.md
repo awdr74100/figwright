@@ -76,6 +76,14 @@ on a shadow, `sectionSize` / `count` / `offset` / `gutterSize` on a grid. A bind
 id does not resolve is an error, not a silent miss, so a stale id fails loudly instead of painting
 the value white.
 
+A **text style** binds the same way, on `create_text_style` / `update_text_style` — `fontSize`,
+`lineHeight`, `letterSpacing`, `paragraphSpacing` and `paragraphIndent` to a FLOAT variable,
+`fontFamily` / `fontStyle` to a STRING one — which is how a type ramp step tracks the size and
+weight tokens instead of restating them. Two differences from the paints and effects above, both
+because a text style write is a **patch** rather than a whole-array replacement: omitting a field
+leaves it as it was (it does not unbind), so pass `null` to unbind one; and a bound field wins over
+a literal passed for that same field in the same call, so send one or the other, not both.
+
 ## Components & variant sets
 
 1. **`create_component`** — a reusable main component (size/name/position). Build its internals like

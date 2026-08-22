@@ -273,6 +273,7 @@
       "requestId"
     ],
     "create_text_style": [
+      "boundVariables",
       "description",
       "fontName",
       "fontName.family",
@@ -346,6 +347,7 @@
       "styleId"
     ],
     "update_text_style": [
+      "boundVariables",
       "description",
       "fontName",
       "fontName.family",
