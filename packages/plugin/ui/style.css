@@ -107,7 +107,19 @@
 
 .tab-enter-from {
   opacity: 0;
-  transform: translateY(3px);
+  /*
+   * The panel enters from *above*, and the sign is load-bearing rather than a taste call. The
+   * entering panel is exactly as tall as the scroller it sits in (`min-h-full` plus the section's
+   * padding), so a downward offset puts its bottom edge 3px past the scrollable overflow area and
+   * switches the section's vertical scrollbar on for the length of the transition. Scrollable
+   * overflow only ever extends down and right, so an upward offset adds none — and none of the
+   * panel is clipped for it either, because those 3px are absorbed by the section's own `pt-2`.
+   *
+   * The bug this fixes is invisible on macOS, where scrollbars overlay the content and stay hidden
+   * until you scroll. On Windows they are classic scrollbars that take layout width, so the
+   * phantom one flashed into view — and shoved the panel 15px narrower — on every tab switch.
+   */
+  transform: translateY(-3px);
 }
 
 html,
