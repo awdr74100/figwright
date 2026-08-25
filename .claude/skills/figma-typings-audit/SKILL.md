@@ -40,15 +40,47 @@ npm pack @figma/plugin-typings@<installed> @figma/plugin-typings@<target> --pack
 for v in <installed> <target>; do
   mkdir -p "$v" && tar -xzf "figma-plugin-typings-$v.tgz" -C "$v" --strip-components=1
 done
-diff -u <installed>/plugin-api.d.ts <target>/plugin-api.d.ts > api.diff
-wc -l api.diff
+diff -rq <installed> <target>            # which files differ at all — start here
+diff -u <installed>/package.json <target>/package.json
+diff -u <installed>/index.d.ts <target>/index.d.ts
 ```
 
-Diff **`plugin-api.d.ts`**, not `plugin-api-standalone.d.ts` — `packages/plugin/tsconfig.json` sets
-`types: ["@figma/plugin-typings"]`, whose `index.d.ts` references the former.
+`diff -rq` first, so the set of changed files is observed rather than assumed. Every file it names
+has to be accounted for — including `plugin-api-standalone.d.ts`, whose trailing `export { ... }` is
+one enormous single line where a removed symbol is easy to miss.
 
-Also diff `index.d.ts` (it declares the `figma` global, `fetch`, timers) — small, but high blast
-radius.
+`index.d.ts` declares the `figma` global, `fetch` and timers — small, but high blast radius.
+`package.json` looks irrelevant and isn't: **its `devDependencies.prettier` explains formatting
+noise.** When that version moves, the `.d.ts` diff fills with reflowed unions and `extends` clauses
+that mean nothing. Check it before reading a single hunk.
+
+### Normalize before diffing the `.d.ts`
+
+Never classify hunks straight out of `diff -u`. Reformat **both** versions with the target's own
+formatter first, so what survives is guaranteed to be semantic:
+
+```bash
+mkdir -p norm
+for v in <installed> <target>; do
+  for f in plugin-api.d.ts plugin-api-standalone.d.ts; do cp "$v/$f" "norm/$v.$f"; done
+done
+cp <target>/.prettierrc norm/.prettierrc          # the package ships its own config
+npx --yes prettier@<version from target package.json devDeps> --write "norm/*.d.ts"
+diff -u norm/<installed>.plugin-api.d.ts norm/<target>.plugin-api.d.ts
+diff -u norm/<installed>.plugin-api-standalone.d.ts norm/<target>.plugin-api-standalone.d.ts
+```
+
+Watch prettier's own per-file output: the **target** files should report `unchanged`. That confirms
+you picked the right formatter version, and turns "the noise is upstream reformatting" from a guess
+into an observation.
+
+Classify from these normalized diffs. `plugin-api.d.ts` is the one that matters —
+`packages/plugin/tsconfig.json` sets `types: ["@figma/plugin-typings"]`, whose `index.d.ts`
+references it — and standalone serves as a cross-check that nothing was missed.
+
+Measured on 1.134.0 → 1.135.0: 328 raw lines collapsed to 32, all of them one change.
+**Never estimate the size of a release from raw diff line count** — 1.134.0 was smaller (228 lines)
+and carried three real buckets.
 
 When the jump spans several releases, diff the two endpoints; the cumulative effect is what matters.
 Go release-by-release only to attribute a specific change to a version.
