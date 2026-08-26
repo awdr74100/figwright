@@ -57,6 +57,15 @@ export const isUtilityFirst = (system: StylingSystem): boolean =>
 export const SVG_IMPORT_MODES = ['component', 'url'] as const;
 export type SvgImportMode = (typeof SVG_IMPORT_MODES)[number];
 
+// How the project's own stylesheets spell a compound (BEM-style) class name: 'ampersand' assembles
+// it from the parent (`.card { &__title {} }`), 'flat' declares it in full (`.card__title {}`).
+// Both compile to the same selector, so this is a convention question, not a correctness one — and
+// the reason codegen has to ground it rather than pick is that a generated stylesheet which spells
+// names the other way than the rest of the repo is the kind of mismatch nobody notices until they
+// try to grep for one.
+export const CLASS_NAMING_STYLES = ['ampersand', 'flat'] as const;
+export type ClassNamingStyle = (typeof CLASS_NAMING_STYLES)[number];
+
 export interface ProjectProfile {
   rootDir: string;
   framework: Framework;
@@ -73,6 +82,15 @@ export interface ProjectProfile {
     configPath?: string;
     /** Tailwind major version (3 or 4) — v4 is CSS-first, changing where tokens are defined. */
     tailwindVersion?: number;
+    /**
+     * How the project's existing preprocessor stylesheets spell a compound (BEM-style) class —
+     * `ampersand` (`.card { &__title {} }`) or `flat` (`.card__title {}`) — so a generated
+     * stylesheet matches the repo instead of imposing a house style. Absent when the project has no
+     * such stylesheet, or none of them declares a compound class at all (a Tailwind project, or one
+     * that only uses single-word classes): with no habit to match, write `flat`, whose names
+     * survive a search for the class the markup actually carries.
+     */
+    classNaming?: ClassNamingStyle;
   };
   /**
    * How the project turns an imported .svg into something renderable — so codegen imports/uses
@@ -118,6 +136,23 @@ export interface ProjectInput {
    * not exist there.
    */
   unoConfigDeclaresVocabulary?: boolean;
+  /**
+   * Tally of how the project's own preprocessor stylesheets spell compound class names, summed over
+   * every file the scan read. Undefined when the project has no such stylesheet to learn from —
+   * which is not the same as a zeroed tally (stylesheets exist but declare no compound class), and
+   * the two produce different evidence lines.
+   */
+  classNamingTally?: ClassNamingTally;
+}
+
+/** Compound-class-name spellings counted across a project's preprocessor stylesheets. */
+export interface ClassNamingTally {
+  /** Occurrences of `&` glued onto a name fragment (`&__title`, `&--primary`). */
+  ampersand: number;
+  /** Top-level selectors declaring a compound class in full (`.card__title`). */
+  flat: number;
+  /** Stylesheets (or SFC preprocessor `<style>` blocks) actually read. */
+  filesScanned: number;
 }
 
 interface PackageJson {
@@ -193,6 +228,309 @@ const findTailwindCssEntry = async (root: string): Promise<string | undefined> =
   return undefined;
 };
 
+// Stylesheet languages whose `&` *concatenates* into a new selector token, so `.card { &__title {} }`
+// compiles to `.card__title`. `.pcss`/`.postcss` are here because postcss-nested concatenates the
+// same way; bare `.css` is deliberately excluded even though such a project can run through the same
+// plugin. Native CSS nesting makes `&` an element reference rather than string concatenation, so
+// `&__title` is not even valid there — and .css is common enough that counting it would bury a real
+// preprocessor habit under votes from files that mostly never had the syntax to cast one. A
+// postcss-nested project keeping `&__` in plain .css therefore reads as "no habit", which lands on
+// the flat default: still valid CSS there, just not its convention.
+const NESTING_STYLESHEET_EXTENSIONS = ['.scss', '.sass', '.less', '.styl', '.pcss', '.postcss'];
+
+// Vue and Svelte projects routinely keep every stylesheet inside the component file, so a repo with
+// a firm `&__` habit can own zero .scss files. Only a block declaring a preprocessor `lang` can
+// concatenate — a bare <style> is CSS, excluded for the same reason as .css above.
+const SFC_EXTENSIONS = ['.vue', '.svelte'];
+const SFC_PREPROCESSOR_STYLE_BLOCK =
+  /<style\b[^>]*\blang\s*=\s*["'](?:scss|sass|less|stylus|styl|postcss|pcss)["'][^>]*>([\s\S]*?)<\/style>/gi;
+
+// `&` glued straight onto a name fragment: `&__title`, `&--primary`, `&-sm`. `&` carries no other
+// meaning in a stylesheet, so once comments and strings are gone a textual match *is* the signal.
+// The forms that do not build a name — `&:hover`, `&::before`, `&.is-open`, `&[open]`, `& > .x`,
+// `&&` — all put a non-word character after the `&` and are correctly ignored: they nest a state
+// onto a name that already exists, which is orthogonal to how that name was spelled.
+const AMPERSAND_CONCAT = /&[A-Za-z0-9_-]+/g;
+
+// …with one exception, and it is not a rare one. A transition class (`.fade { &-enter-from {} }`)
+// is a concatenation the author did not choose: the name is dictated by the framework, and the
+// flat spelling is not even available when the transition name is a prop. Counted as a preference
+// it is noise, and measurably the dominant kind: it was 16 of Element Plus's 35 concatenations and
+// 134 of Vuetify's 713 — the single largest false signal found in the corpus. Vue's
+// enter/leave/move set and the React-transition enter/exit/appear set are both listed.
+//
+// Both arms consult this: `&-enter-from` on the ampersand side, `.v-modal-enter` on the flat side.
+// One exclusion, applied once, so a framework's transition names cannot be discounted as evidence
+// on one side while still counting as evidence on the other.
+const TRANSITION_SUFFIX = /^(?:enter|leave|exit|appear|move)(?:-(?:from|to|active|done))?$/;
+
+// Only a hyphen separator makes a transition name, so `&__enter` and `&--active` stay BEM.
+const AMPERSAND_TRANSITION = /^&(?:-{1,2})([A-Za-z0-9_-]+)$/;
+
+const isTransitionConcat = (concat: string): boolean => {
+  const tail = AMPERSAND_TRANSITION.exec(concat)?.[1];
+  return tail !== undefined && TRANSITION_SUFFIX.test(tail);
+};
+
+// Sass and Less can assemble a selector out of a variable — `.#{$class-prefix}button` (Bulma),
+// `.@{ant-prefix}-btn` (Ant Design) — and what those compile to is unknowable without evaluating
+// the stylesheet. Masking the interpolation with a character no class name can contain lets the
+// walk below keep its bearings on the rest of the file while the name itself is skipped rather
+// than guessed at: those two libraries name nearly every class this way, so a guess would be
+// fiction dressed as evidence.
+const INTERPOLATION = /[#@$]\{[^}]*\}/g;
+const INTERPOLATION_MARK = '\uFFFD';
+
+/**
+ * Drop the spans where a `&` or a leading `.` means nothing: line continuations first, so a wrapped
+ * string literal is a single line by the time the string pass sees it, then block comments, quoted
+ * strings (`content: "&amp;"` is not a selector), then line comments. Order matters — strings
+ * inside a commented-out rule are gone before the string pass can see them.
+ *
+ * The `//` pass also truncates an _unquoted_ `url(https://…)`, which at worst costs a signal on the
+ * rest of that line; nothing downstream treats an undercount as evidence of the opposite habit.
+ */
+const stripStylesheetNoise = (body: string): string =>
+  body
+    .replace(/\\\r?\n[ \t]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, '""')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(INTERPOLATION, INTERPOLATION_MARK);
+
+/** One rule's selector prelude, plus whether any _selector_ encloses it. */
+interface SelectorRule {
+  readonly prelude: string;
+  readonly topLevel: boolean;
+}
+
+// What makes a rule top-level is that no *selector* encloses it — an at-rule does not count.
+// `@media`, `@supports`, `@layer`, and a mixin `@include` wrapping a whole file all leave the
+// selectors inside them exactly as top-level as they were, because they compile to the same
+// selector, unnested. Anchoring on column 0 instead would read such a file as declaring nothing at
+// all, and that is not hypothetical: Vuetify wraps every component stylesheet in
+// `@include tools.layer('components')`, which hid all 374 of its full-name BEM declarations and
+// reported a library that writes both spellings as writing only `&`.
+
+function* bracedRules(body: string): Generator<SelectorRule> {
+  const delimiter = /[{}();]/g;
+  // One entry per open brace: true when that brace belongs to a selector rather than an at-rule.
+  const enclosing: boolean[] = [];
+  let selectorDepth = 0;
+  // A `;` ends a statement and so discards the prelude built so far — unless it is inside
+  // parentheses, where it separates a Less mixin definition's parameters (`.size(@w; @h) {}`).
+  // Discarding there would leave `@h)` as the prelude, which reads as an at-rule: the mixin would
+  // then be transparent, and the nested selectors it holds would be scored as top-level ones.
+  let parens = 0;
+  let preludeStart = 0;
+  let token = delimiter.exec(body);
+  while (token !== null) {
+    if (token[0] === '{') {
+      const prelude = body.slice(preludeStart, token.index).trim();
+      const isSelector = !prelude.startsWith('@');
+      if (isSelector) {
+        yield { prelude, topLevel: selectorDepth === 0 };
+        selectorDepth += 1;
+      }
+      enclosing.push(isSelector);
+      parens = 0;
+      preludeStart = token.index + 1;
+    } else if (token[0] === '}') {
+      if (enclosing.pop() === true) selectorDepth -= 1;
+      parens = 0;
+      preludeStart = token.index + 1;
+    } else if (token[0] === '(') {
+      parens += 1;
+    } else if (token[0] === ')') {
+      parens = Math.max(0, parens - 1);
+    } else if (parens === 0) {
+      preludeStart = token.index + 1;
+    }
+    token = delimiter.exec(body);
+  }
+}
+
+// In the indented syntaxes a rule is opened by a line and closed by the indentation dropping back,
+// so the same question — what encloses this — is answered off the indent ladder instead of braces.
+// A declaration (`color: red`, `$size: 4px`, `@include x`) opens nothing; a line starting with
+// selector punctuation (`.card`, `&:hover`, `:root`) does; a bare element (`body`, `a`) is a
+// selector too, which is why it is only ruled out by looking like a declaration first.
+const DECLARATION = /^[-A-Za-z$][\w-]*\s*:/;
+const SELECTOR_PUNCTUATION = /^[.#&%[*>+~:]/;
+const ELEMENT_SELECTOR = /^[A-Za-z][\w-]*(?:[\s,.:#[]|$)/;
+
+function* indentedRules(body: string): Generator<SelectorRule> {
+  const open: { indent: number; isSelector: boolean }[] = [];
+  let selectorDepth = 0;
+  for (const line of body.split('\n')) {
+    const content = line.trim();
+    if (content === '') continue;
+    const indent = line.length - line.trimStart().length;
+    for (let top = open.at(-1); top !== undefined && top.indent >= indent; top = open.at(-1)) {
+      if (open.pop()?.isSelector === true) selectorDepth -= 1;
+    }
+    if (content.startsWith('@')) {
+      open.push({ indent, isSelector: false });
+      continue;
+    }
+    if (
+      !SELECTOR_PUNCTUATION.test(content) &&
+      (DECLARATION.test(content) || !ELEMENT_SELECTOR.test(content))
+    ) {
+      continue;
+    }
+    yield { prelude: content, topLevel: selectorDepth === 0 };
+    open.push({ indent, isSelector: true });
+    selectorDepth += 1;
+  }
+}
+
+// `.sass` and `.styl` carry no braces, and `.styl` accepts either syntax — so the file is asked
+// rather than its extension. Interpolation is masked by this point, so a `#{…}` cannot be mistaken
+// for a block.
+const rulesOf = (body: string): Generator<SelectorRule> =>
+  body.includes('{') ? bracedRules(body) : indentedRules(body);
+
+const LEADING_CLASS = /^\.([A-Za-z_-][A-Za-z0-9_-]*)/;
+
+/**
+ * The class names a prelude _declares_: the leading class of each comma-separated selector. A name
+ * further along (`.card .icon`, `.card > .icon`) is a reference to a name declared elsewhere rather
+ * than a declaration of its own, so only the leading one counts.
+ */
+const declaredClasses = (prelude: string): string[] => {
+  const names: string[] = [];
+  for (const part of prelude.split(',')) {
+    const selector = part.trim();
+    const name = LEADING_CLASS.exec(selector)?.[1];
+    if (name === undefined) continue;
+    // Two things wear a class selector's clothes without declaring a class. A Less mixin
+    // *definition* (`.size(@w; @h) {}`) — the `(` right after the name is what separates it from
+    // `.size:hover`, and Ant Design ships 100+ of them, enough on its own to manufacture a flat
+    // majority for a library whose real class names are every one of them interpolated. And a name
+    // the interpolation truncated (`.btn-@{variant}`), whose full spelling is unknowable.
+    const next = selector[name.length + 1];
+    if (next === '(' || next === INTERPOLATION_MARK) continue;
+    names.push(name);
+  }
+  return names;
+};
+
+/** What one stylesheet contributes to the project-wide tally. */
+export interface StylesheetNames {
+  /** `&` concatenations that build a name, transition classes excluded. */
+  readonly ampersand: number;
+  /** Every top-level class name it declares, one entry per occurrence. */
+  readonly topLevel: readonly string[];
+}
+
+/**
+ * Read one stylesheet body. Pure, and exported so the walk is testable on its own rather than only
+ * through a temp directory.
+ */
+export const readStylesheetNames = (body: string): StylesheetNames => {
+  const clean = stripStylesheetNoise(body);
+  const concats = clean.match(AMPERSAND_CONCAT) ?? [];
+  const topLevel: string[] = [];
+  for (const rule of rulesOf(clean)) {
+    if (!rule.topLevel) continue;
+    topLevel.push(...declaredClasses(rule.prelude));
+  }
+  return { ampersand: concats.filter(concat => !isTransitionConcat(concat)).length, topLevel };
+};
+
+// BEM punctuation is self-evidently a compound name: nothing but a block+element or a
+// block+modifier is spelled `__x` or `--x`, so it needs no corroboration from the rest of the
+// project.
+const BEM_PUNCTUATED = /(?:__|--)[A-Za-z0-9_-]/;
+
+/**
+ * Is this name the full spelling of a compound one? BEM punctuation answers on its own; a
+ * single-hyphen scheme (`.accordion-body`) cannot, because `.accordion-body` and `.el-button` are
+ * textually identical and only one of them is a compound name.
+ *
+ * What separates them is the rest of the project: `.accordion` is declared somewhere and `.el` is
+ * not. That cross-reference is why the flat arm is counted per project rather than per file — and
+ * it is what lets the flat side see the most common scheme there is. Measured on the corpus it
+ * takes Bootstrap from 0 votes to 174 and BootstrapVue from 0 to 37, while leaving every library
+ * that really does concatenate on the `ampersand` verdict it already had.
+ */
+const isCompoundClassName = (name: string, declared: ReadonlySet<string>): boolean => {
+  if (BEM_PUNCTUATED.test(name)) return true;
+  for (let at = 1; at < name.length; at += 1) {
+    const char = name[at];
+    if (char !== '-' && char !== '_') continue;
+    if (!declared.has(name.slice(0, at))) continue;
+    return !TRANSITION_SUFFIX.test(name.slice(at).replace(/^[-_]+/, ''));
+  }
+  return false;
+};
+
+/**
+ * Sum one project's stylesheets into a tally. Pure. The flat arm needs every file's names before it
+ * can score any of them, which is the whole reason this stage exists separately from
+ * {@link readStylesheetNames}.
+ */
+export const tallyClassNaming = (
+  files: Iterable<StylesheetNames>,
+): Omit<ClassNamingTally, 'filesScanned'> => {
+  let ampersand = 0;
+  const occurrences: string[] = [];
+  for (const file of files) {
+    ampersand += file.ampersand;
+    occurrences.push(...file.topLevel);
+  }
+  const declared = new Set(occurrences);
+  let flat = 0;
+  for (const name of occurrences) {
+    if (isCompoundClassName(name, declared)) flat += 1;
+  }
+  return { ampersand, flat };
+};
+
+/** Concatenate an SFC's preprocessor <style> blocks; '' when it has none. */
+const sfcPreprocessorStyles = (body: string): string =>
+  [...body.matchAll(SFC_PREPROCESSOR_STYLE_BLOCK)].map(m => m[1]).join('\n');
+
+// A tally, unlike the Tailwind marker scan, cannot stop at the first hit — every file is a vote.
+// The cap is what keeps that bounded on a repo with a pathological stylesheet count; 400 files is
+// far past the point where a convention is established, so raising it could only re-decide a vote
+// that is already lopsided.
+const CLASS_NAMING_FILE_CAP = 400;
+
+/**
+ * Walk the project's preprocessor stylesheets (and the preprocessor <style> blocks of its SFCs) and
+ * tally how they spell compound class names. Undefined when it found none to read.
+ *
+ * The walk keeps each file's _names_ rather than its text: scoring the flat arm needs the whole
+ * project's vocabulary at once, and holding a few thousand class names is nothing next to holding
+ * every stylesheet that produced them.
+ */
+const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefined> => {
+  const files: StylesheetNames[] = [];
+  for await (const rel of walkRepoFiles(root, {
+    extensions: [...NESTING_STYLESHEET_EXTENSIONS, ...SFC_EXTENSIONS],
+    cap: CLASS_NAMING_FILE_CAP,
+  })) {
+    let body: string;
+    try {
+      // eslint-disable-next-line no-await-in-loop -- sequential scan, bounded by the cap above
+      body = await readFile(join(root, rel), 'utf8');
+    } catch {
+      continue;
+    }
+    const isSfc = SFC_EXTENSIONS.some(ext => rel.endsWith(ext));
+    const source = isSfc ? sfcPreprocessorStyles(body) : body;
+    // An SFC with no preprocessor style block is not a stylesheet that voted "no habit" — it is a
+    // file with nothing to say, and counting it would dilute filesScanned into a meaningless number.
+    if (source.trim() === '') continue;
+    files.push(readStylesheetNames(source));
+  }
+  return files.length === 0
+    ? undefined
+    : { ...tallyClassNaming(files), filesScanned: files.length };
+};
+
 /** Do the filesystem IO once, up front, so detectProfile can stay pure. */
 export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput> => {
   const root = resolve(rootDir);
@@ -204,7 +542,12 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
   const probed = await Promise.all(PROBE_CONFIG_FILES.map(name => fileExists(join(root, name))));
   const presentConfigFiles = PROBE_CONFIG_FILES.filter((_, i) => probed[i] === true);
 
-  const tailwindCssEntry = await findTailwindCssEntry(root);
+  // Two independent repo walks, both IO-bound — run them together so the class-naming scan costs
+  // essentially nothing in wall clock on top of the Tailwind marker probe that was already here.
+  const [tailwindCssEntry, classNamingTally] = await Promise.all([
+    findTailwindCssEntry(root),
+    scanClassNaming(root),
+  ]);
 
   // One extra read, and only when such a config exists: what it loads decides whether the project
   // generates utility classes at all, which no filename or dependency can answer.
@@ -220,6 +563,7 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
     presentConfigFiles,
     ...(tailwindCssEntry === undefined ? {} : { tailwindCssEntry }),
     ...(unoConfigDeclaresVocabulary === null ? {} : { unoConfigDeclaresVocabulary }),
+    ...(classNamingTally === undefined ? {} : { classNamingTally }),
   };
 };
 
@@ -456,6 +800,46 @@ const detectSvgHandling = (deps: Record<string, string>): SvgResult => {
   };
 };
 
+// How many `&` concatenations it takes before this is called a habit rather than an accident.
+//
+// The cross-reference closed the asymmetry this floor was first written for — the flat arm can now
+// see a single-hyphen scheme — but it did not make the arms equal, because one thing still votes
+// only on one side. A name whose block is never *declared* as a selector (styled entirely through
+// its elements, or through a mixin) is invisible to the flat arm, while every `&` in the same file
+// is counted. So a project with a handful of concatenations and an unlucky vocabulary can still
+// score `ampersand > flat` while writing flat names throughout, which is what this covers.
+//
+// The direction is chosen on cost, not on likelihood: reporting `ampersand` wrongly imposes the
+// unsearchable spelling this whole feature exists to avoid, while reporting `flat` wrongly emits a
+// valid, searchable, merely-unidiomatic file.
+//
+// The value is insurance, not a fitted threshold, and the measurement says so. Across 1229 real
+// stylesheets the scores are Ant Design v4 4894, Vuetify 579, Element Plus 19, and Bootstrap /
+// BootstrapVue / Bulma 0 — nothing lands between 1 and 18, so this line separates none of them.
+const AMPERSAND_FLOOR = 5;
+
+/**
+ * Decide the project's compound-class-name habit from the tally. Pure.
+ *
+ * A plurality decides it, and a tie goes to `flat`: the two spellings compile identically, so the
+ * tiebreak costs nothing at build time and buys back the property that only the flat form has — the
+ * name in the stylesheet is the name in the markup, so it can be searched for. `undefined` means
+ * the scan found no compound class either way, which is a real third answer ("this project has no
+ * habit to match") and not a quiet vote for flat.
+ */
+const detectClassNaming = (
+  tally: ClassNamingTally | undefined,
+): { style?: ClassNamingStyle; reason: string } => {
+  if (tally === undefined) return { reason: 'no preprocessor stylesheet found' };
+  const { ampersand, flat, filesScanned } = tally;
+  const counts = `${ampersand} &-assembled vs ${flat} full-name in ${filesScanned} stylesheet(s)`;
+  if (ampersand === 0 && flat === 0) return { reason: `no compound class name found (${counts})` };
+  if (ampersand > flat && ampersand < AMPERSAND_FLOOR) {
+    return { style: 'flat', reason: `${counts} — below the floor for an & habit` };
+  }
+  return { style: ampersand > flat ? 'ampersand' : 'flat', reason: counts };
+};
+
 /** Pure decision function over the gathered snapshot — the unit under test. */
 export const detectProfile = (input: ProjectInput): ProjectProfile => {
   const deps = allDeps(input.packageJson);
@@ -474,6 +858,9 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
     `styling=${styling.system}${styling.tailwindVersion === undefined ? '' : ` v${styling.tailwindVersion}`}: ${styling.reason}`,
   );
 
+  const classNaming = detectClassNaming(input.classNamingTally);
+  evidence.push(`classNaming=${classNaming.style ?? 'none'}: ${classNaming.reason}`);
+
   const svg = detectSvgHandling(deps);
   evidence.push(
     `svg=${svg.mode}${svg.loader === undefined ? '' : ` (${svg.loader})`}: ${svg.reason}`,
@@ -489,6 +876,7 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
       ...(styling.tailwindVersion === undefined
         ? {}
         : { tailwindVersion: styling.tailwindVersion }),
+      ...(classNaming.style === undefined ? {} : { classNaming: classNaming.style }),
     },
     svg: {
       mode: svg.mode,

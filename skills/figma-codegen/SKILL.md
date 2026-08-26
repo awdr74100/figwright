@@ -180,5 +180,14 @@ isn't enough. Dropping a frame's animation is a fidelity miss, the same class as
   grounding miss, not a simplification.
 - **Export visual assets, don't fake them.** A grey box or a hand-typed wordmark is a miss.
 - **Match the project, not a house style.** Mirror the existing import style, file layout, and naming.
+- **Spell class names in full; don't assemble them from `&`.** In a language whose `&` concatenates
+  (SCSS / Sass / Less / Stylus / postcss-nested) `.card { &__title {} }` compiles to
+  `.card__title` — a name that exists only after
+  compilation, so the class the markup carries appears nowhere in the source and adjusting one rule
+  means searching a fragment like `__title` and reading every hit. Declare it flat at the top level
+  instead. `profile.styling.classNaming` (on `component_map` / `token_map`) reports the project's own
+  habit and **the project wins**: `ampersand` → write `&__title`; `flat` or absent → write flat.
+  → [`references/stylesheets.md`](./references/stylesheets.md) for the descendant-selector trap that
+  looks like the fix and isn't, and what `&` is still the right tool for.
 - **Render and verify before you call it done.** (See `references/verify.md`.)
 - Never write a config file or wizard prompt; everything is inferred from the project + the tools.
