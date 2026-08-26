@@ -110,9 +110,16 @@ return `profile.styling.classNaming`, read from the project's **own** preprocess
   Tailwind project, or one that only uses single-word classes). There is no habit to match, so write
   flat.
 
-If you are extending an existing stylesheet rather than writing a new one, that file's own spelling
-outranks the repo-wide verdict — a plurality across the project says nothing about the file you're
-editing.
+**A verdict is a plurality, and plenty of projects are genuinely mixed.** Vuetify writes its modifiers
+with `&` (`&--prominent`) and its elements in full (`.v-alert__border`) — 579 concatenations against
+489 flat declarations, which one word has to compress. So `ampersand` never means that _every_ name in
+that project is assembled, and a verdict is never a licence to overwrite a spelling you can already
+see.
+
+Two consequences. If you are **extending** an existing stylesheet, that file's own spelling outranks
+the repo-wide verdict — a plurality across the project says nothing about the file you're editing. And
+if you are **adding** one, read a sibling first: the stylesheet next to it in the same component
+directory tells you what belongs there more precisely than a repo-wide count can.
 
 **`classNaming` answers how, not what to call things.** It reports whether names are assembled or
 written out; it says nothing about the separator. Plenty of projects spell compound names with a
