@@ -380,6 +380,27 @@ describe('tallyClassNaming (pure)', () => {
     expect(tallyClassNaming('  .card__title { color: red; }').flat).toBe(0);
   });
 
+  it('does not count a transition class as a preference for `&`', () => {
+    // The author did not choose this spelling — the framework did, and the flat form is not even
+    // available when the transition name is a prop. Measured on real libraries this was the
+    // largest false signal: 16 of Element Plus's 35 concatenations, 134 of Vuetify's 713.
+    const body = `.fade {
+  &-enter-from { opacity: 0; }
+  &-enter-active { transition: opacity 0.2s; }
+  &-leave-to { opacity: 0; }
+  &-move { transition: transform 0.2s; }
+  &-exit-done { display: none; }
+}`;
+    expect(tallyClassNaming(body).ampersand).toBe(0);
+  });
+
+  it('still counts a BEM name that merely starts with a transition word', () => {
+    // The exclusion is keyed on a hyphen separator, so `__enter` / `--active` stay BEM.
+    expect(
+      tallyClassNaming('.dialog {\n  &__enter { top: 0; }\n  &--active { top: 0; }\n}'),
+    ).toEqual({ ampersand: 2, flat: 0 });
+  });
+
   it('counts a full compound name only at the top level', () => {
     // `.card { .card__title {} }` compiles to the descendant selector `.card .card__title`, which
     // is neither spelling — it is the wrong fix for this problem, so it must not vote for flat.
@@ -429,6 +450,25 @@ describe('detectProfile — classNaming', () => {
     ).toBe('flat');
   });
 
+  it('does not let a handful of incidental concatenations claim an `&` habit', () => {
+    // FLAT_COMPOUND cannot see a single-hyphen flat scheme (`.accordion-body` — Bootstrap's whole
+    // vocabulary), so a bare `ampersand > flat` lets one legacy file outvote a flat majority that
+    // was never counted. Below the floor the verdict is flat, because a wrong `ampersand` imposes
+    // the unsearchable spelling while a wrong `flat` is merely unidiomatic.
+    const p = detectProfile(
+      baseInput({ classNamingTally: { ampersand: 4, flat: 0, filesScanned: 60 } }),
+    );
+    expect(p.styling.classNaming).toBe('flat');
+    expect(p.evidence.some(e => e.includes('below the floor'))).toBe(true);
+  });
+
+  it('accepts an `&` habit once it is established rather than incidental', () => {
+    expect(
+      detectProfile(baseInput({ classNamingTally: { ampersand: 5, flat: 0, filesScanned: 60 } }))
+        .styling.classNaming,
+    ).toBe('ampersand');
+  });
+
   it('breaks a tie toward flat', () => {
     // The two spellings compile identically, so the tiebreak costs nothing and keeps the property
     // only the flat form has: the name in the stylesheet is the name you can search for.
@@ -440,6 +480,18 @@ describe('detectProfile — classNaming', () => {
 });
 
 describe('scanClassNaming (real fs)', () => {
+  // Sized past AMPERSAND_FLOOR on purpose: a habit is what a real component stylesheet looks like,
+  // and a fixture with two concatenations is exactly the incidental case the floor exists to reject.
+  const BEM_SCSS = `.card {
+  &__title { font-weight: 700; }
+  &__body { padding: 16px; }
+  &__footer { border-top: 1px solid; }
+  &__action { cursor: pointer; }
+  &--wide { width: 100%; }
+  &--muted { opacity: 0.6; }
+}
+`;
+
   const withProject = async (
     files: Record<string, string>,
     assert: (dir: string) => Promise<void>,
@@ -462,14 +514,11 @@ describe('scanClassNaming (real fs)', () => {
   };
 
   it("learns the `&` habit from the project's own .scss", async () => {
-    await withProject(
-      { 'src/card.scss': '.card {\n  &__title { color: red; }\n  &--wide { width: 100%; }\n}\n' },
-      async dir => {
-        const p = await analyzeProject(dir);
-        expect(p.styling.system).toBe('scss');
-        expect(p.styling.classNaming).toBe('ampersand');
-      },
-    );
+    await withProject({ 'src/card.scss': BEM_SCSS }, async dir => {
+      const p = await analyzeProject(dir);
+      expect(p.styling.system).toBe('scss');
+      expect(p.styling.classNaming).toBe('ampersand');
+    });
   });
 
   it('learns the flat habit the same way', async () => {
@@ -486,7 +535,7 @@ describe('scanClassNaming (real fs)', () => {
       {
         'src/Card.vue':
           '<template><div class="card" /></template>\n' +
-          '<style lang="scss" scoped>\n.card {\n  &__title { color: red; }\n}\n</style>\n',
+          `<style lang="scss" scoped>\n${BEM_SCSS}</style>\n`,
       },
       async dir => {
         expect((await analyzeProject(dir)).styling.classNaming).toBe('ampersand');
@@ -512,7 +561,7 @@ describe('scanClassNaming (real fs)', () => {
           { length: 50 },
           (_, i) => `.legacy__row-${i} { color: red; }`,
         ).join('\n'),
-        'src/card.scss': '.card {\n  &__title { color: red; }\n}\n',
+        'src/card.scss': BEM_SCSS,
       },
       async dir => {
         expect((await analyzeProject(dir)).styling.classNaming).toBe('ampersand');
@@ -523,12 +572,12 @@ describe('scanClassNaming (real fs)', () => {
   it('counts .pcss / <style lang="postcss">, since postcss-nested concatenates the same way', async () => {
     await withProject(
       {
-        'src/card.pcss': '.card {\n  &__title { color: red; }\n}\n',
-        'src/Row.vue': '<style lang="postcss">\n.row {\n  &__cell { color: red; }\n}\n</style>\n',
+        'src/card.pcss': BEM_SCSS,
+        'src/Row.vue': `<style lang="postcss">\n${BEM_SCSS}</style>\n`,
       },
       async dir => {
         const input = await gatherProjectInput(dir);
-        expect(input.classNamingTally).toEqual({ ampersand: 2, flat: 0, filesScanned: 2 });
+        expect(input.classNamingTally).toEqual({ ampersand: 12, flat: 0, filesScanned: 2 });
         expect(detectProfile(input).styling.classNaming).toBe('ampersand');
       },
     );

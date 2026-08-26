@@ -35,6 +35,12 @@ markup:
 }
 ```
 
+The cost is real and worth naming: `&__title` keeps the block name in one place, so renaming `.card`
+to `.panel` is a one-line edit where the flat form is a find-and-replace across every element. That is
+the trade the `&` style is bought with — and it is a smaller win than it looks, because the
+find-and-replace it saves you is the same search that flat spelling made possible in the first place.
+Searching happens every time you touch the file; renaming a block happens roughly never.
+
 ## The fix that looks right and isn't
 
 Do **not** keep the nesting and just spell the name out inside it:
@@ -107,3 +113,12 @@ return `profile.styling.classNaming`, read from the project's **own** preprocess
 If you are extending an existing stylesheet rather than writing a new one, that file's own spelling
 outranks the repo-wide verdict — a plurality across the project says nothing about the file you're
 editing.
+
+**`classNaming` answers how, not what to call things.** It reports whether names are assembled or
+written out; it says nothing about the separator. Plenty of projects spell compound names with a
+single hyphen and no BEM punctuation at all (`.accordion-body`, `.accordion-header` — Bootstrap's
+entire vocabulary), and the detector cannot see that scheme, because `.accordion-body` and
+`.el-button` are textually identical and only one of them is a compound name. So read the project's
+separator off its actual class names before inventing `__`, and never introduce BEM punctuation into a
+repo that has none — the flat rule on this page is about spelling a name in full, not about which
+punctuation goes in it.

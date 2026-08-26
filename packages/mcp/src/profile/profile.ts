@@ -250,13 +250,28 @@ const SFC_PREPROCESSOR_STYLE_BLOCK =
 // The forms that do not build a name — `&:hover`, `&::before`, `&.is-open`, `&[open]`, `& > .x`,
 // `&&` — all put a non-word character after the `&` and are correctly ignored: they nest a state
 // onto a name that already exists, which is orthogonal to how that name was spelled.
-const AMPERSAND_CONCAT = /&[A-Za-z0-9_-]/g;
+const AMPERSAND_CONCAT = /&[A-Za-z0-9_-]+/g;
+
+// …with one exception, and it is not a rare one. A transition class (`.fade { &-enter-from {} }`)
+// is a concatenation the author did not choose: the name is dictated by the framework, and the
+// flat spelling is not even available when the transition name is a prop. Counted as a preference
+// it is noise, and measurably the dominant kind: it was 16 of Element Plus's 35 concatenations and
+// 134 of Vuetify's 713 — the single largest false signal found in the corpus. Vue's
+// enter/leave/move set and the React-transition enter/exit/appear set are both listed. Only hyphen
+// separators are matched, so `&__enter` and `&--active` stay BEM and are deliberately left alone.
+const TRANSITION_CLASS = /^&-{1,2}(?:enter|leave|exit|appear|move)(?:-(?:from|to|active|done))?$/;
 
 // A compound class declared in full at the top level. Anchored to column 0 because in both braced
 // and indented syntax a nested rule is indented and a top-level one is not — what every formatter
 // in this ecosystem emits. That anchor is also what keeps the descendant-selector anti-pattern
 // (`.card { .card__title {} }`, which is indented and compiles to `.card .card__title`) from being
 // miscounted as a vote for flat: it is not the flat form, it is a third, wrong one.
+//
+// Known limit, and the reason the two arms are not symmetric: this sees only BEM-punctuated names.
+// A project that spells compound names with a single hyphen (`.accordion-body` — Bootstrap's whole
+// scheme) casts no vote, because `.accordion-body` and `.el-button` are textually identical and
+// only one of them is a compound name; no regex separates a block+element from a kebab-case block.
+// So a silent flat majority is possible, which is exactly what AMPERSAND_FLOOR below answers.
 const FLAT_COMPOUND = /^\.[A-Za-z_-][A-Za-z0-9_-]*?(?:__|--)[A-Za-z0-9_-]/gm;
 
 /**
@@ -279,8 +294,9 @@ const stripStylesheetNoise = (body: string): string =>
  */
 export const tallyClassNaming = (body: string): Omit<ClassNamingTally, 'filesScanned'> => {
   const clean = stripStylesheetNoise(body);
+  const concats = clean.match(AMPERSAND_CONCAT) ?? [];
   return {
-    ampersand: (clean.match(AMPERSAND_CONCAT) ?? []).length,
+    ampersand: concats.filter(c => !TRANSITION_CLASS.test(c)).length,
     flat: (clean.match(FLAT_COMPOUND) ?? []).length,
   };
 };
@@ -596,6 +612,21 @@ const detectSvgHandling = (deps: Record<string, string>): SvgResult => {
   };
 };
 
+// How many `&` concatenations it takes before this is called a habit rather than an accident. The
+// two arms are not symmetric — FLAT_COMPOUND cannot see a single-hyphen flat scheme — so a bare
+// `ampersand > flat` lets a handful of incidental concatenations outvote a flat majority it never
+// counted. The floor is where that asymmetry is paid for, and the direction is chosen on cost, not
+// on likelihood: reporting `ampersand` wrongly imposes the unsearchable spelling this whole feature
+// exists to avoid, while reporting `flat` wrongly emits a valid, searchable, merely-unidiomatic
+// file.
+//
+// The value is insurance, not a fitted threshold, and the measurement says so. Across 1229 real
+// stylesheets the scores are Ant Design v4 4894, Vuetify 579, Element Plus 19, and Bootstrap /
+// BootstrapVue / Bulma 0 — nothing lands between 1 and 18, so this line separates none of them. It
+// exists for the case the corpus does not contain: a repo whose flat scheme is single-hyphen (thus
+// invisible to FLAT_COMPOUND) carrying one legacy file that concatenates.
+const AMPERSAND_FLOOR = 5;
+
 /**
  * Decide the project's compound-class-name habit from the tally. Pure.
  *
@@ -612,6 +643,9 @@ const detectClassNaming = (
   const { ampersand, flat, filesScanned } = tally;
   const counts = `${ampersand} &-assembled vs ${flat} full-name in ${filesScanned} stylesheet(s)`;
   if (ampersand === 0 && flat === 0) return { reason: `no compound class name found (${counts})` };
+  if (ampersand > flat && ampersand < AMPERSAND_FLOOR) {
+    return { style: 'flat', reason: `${counts} — below the floor for an & habit` };
+  }
   return { style: ampersand > flat ? 'ampersand' : 'flat', reason: counts };
 };
 
