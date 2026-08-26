@@ -10,6 +10,7 @@ import {
   gatherProjectInput,
   isUtilityFirst,
   type ProjectInput,
+  tallyClassNaming,
 } from '../../src/profile/profile.js';
 
 const baseInput = (over: Partial<ProjectInput> = {}): ProjectInput => ({
@@ -269,6 +270,7 @@ describe('detectProfile (pure)', () => {
     expect(p.evidence.some(e => e.startsWith('framework='))).toBe(true);
     expect(p.evidence.some(e => e.startsWith('styling='))).toBe(true);
     expect(p.evidence.some(e => e.startsWith('svg='))).toBe(true);
+    expect(p.evidence.some(e => e.startsWith('classNaming='))).toBe(true);
   });
 });
 
@@ -334,5 +336,218 @@ describe('gatherProjectInput + analyzeProject (real fs)', () => {
     expect(p.styling.system).toBe('tailwind');
     expect(p.styling.tailwindVersion).toBe(4);
     expect(p.styling.configPath).toBe('src/app.css');
+  });
+});
+
+describe('tallyClassNaming (pure)', () => {
+  it('counts `&` glued onto a name fragment, in either BEM position', () => {
+    expect(tallyClassNaming('.card { &__title { color: red; } &--wide { width: 100%; } }')).toEqual(
+      { ampersand: 2, flat: 0 },
+    );
+  });
+
+  it('ignores the `&` forms that nest a state instead of building a name', () => {
+    // These say nothing about how the name was spelled — a flat stylesheet nests them too — so
+    // counting them would report `ampersand` for a project that never concatenates.
+    const body = `.card__title {
+      &:hover { color: red; }
+      &::before { content: ''; }
+      &.is-open { display: block; }
+      &[aria-current='page'] { font-weight: 700; }
+      & > .icon { width: 1rem; }
+      && { color: blue; }
+    }`;
+    expect(tallyClassNaming(body).ampersand).toBe(0);
+  });
+
+  it('does not read a `&` out of a comment or a quoted value', () => {
+    // `content: "&amp;"` and a commented-out rule are the two ways a stylesheet holds an `&` that
+    // is not a selector at all.
+    const body = [
+      '.crumb::after { content: "&nbsp;"; }',
+      '/* .card { &__title {} } */',
+      '// &--legacy',
+      '.card__label { color: red; }',
+    ].join('\n');
+    expect(tallyClassNaming(body)).toEqual({ ampersand: 0, flat: 1 });
+  });
+
+  it('treats column 0 as "top level", which is what every formatter in this ecosystem emits', () => {
+    // The documented assumption behind the flat count, pinned so it fails loudly rather than
+    // drifting. An unformatted file that indents its top-level rules simply under-counts, which
+    // moves the plurality toward `flat` — never toward reporting a habit the project lacks.
+    expect(tallyClassNaming('.card__title { color: red; }').flat).toBe(1);
+    expect(tallyClassNaming('  .card__title { color: red; }').flat).toBe(0);
+  });
+
+  it('counts a full compound name only at the top level', () => {
+    // `.card { .card__title {} }` compiles to the descendant selector `.card .card__title`, which
+    // is neither spelling — it is the wrong fix for this problem, so it must not vote for flat.
+    expect(tallyClassNaming('.card {\n  .card__title { color: red; }\n}').flat).toBe(0);
+    expect(tallyClassNaming('.card__title { color: red; }').flat).toBe(1);
+  });
+
+  it('does not mistake a top-level custom property for a compound class', () => {
+    expect(tallyClassNaming(':root {\n--color-primary-500: #6266f0;\n}').flat).toBe(0);
+  });
+
+  it('reads the indented (.sass / .styl) syntax too, which has no braces to anchor on', () => {
+    expect(tallyClassNaming('.card\n  &__title\n    color: red\n')).toEqual({
+      ampersand: 1,
+      flat: 0,
+    });
+  });
+});
+
+describe('detectProfile — classNaming', () => {
+  it('reports no habit when the project has no preprocessor stylesheet', () => {
+    const p = detectProfile(baseInput());
+    expect(p.styling.classNaming).toBeUndefined();
+    expect(p.evidence).toContain('classNaming=none: no preprocessor stylesheet found');
+  });
+
+  it('separates "no stylesheets" from "stylesheets, but no compound class"', () => {
+    // Both leave classNaming undefined, but only one of them means the scan actually looked and
+    // found the project has no habit to match — the evidence line has to be able to say which.
+    const p = detectProfile(
+      baseInput({ classNamingTally: { ampersand: 0, flat: 0, filesScanned: 7 } }),
+    );
+    expect(p.styling.classNaming).toBeUndefined();
+    expect(p.evidence.some(e => e.startsWith('classNaming=none: no compound class name'))).toBe(
+      true,
+    );
+  });
+
+  it('follows the plurality in either direction', () => {
+    expect(
+      detectProfile(baseInput({ classNamingTally: { ampersand: 30, flat: 2, filesScanned: 9 } }))
+        .styling.classNaming,
+    ).toBe('ampersand');
+    expect(
+      detectProfile(baseInput({ classNamingTally: { ampersand: 2, flat: 30, filesScanned: 9 } }))
+        .styling.classNaming,
+    ).toBe('flat');
+  });
+
+  it('breaks a tie toward flat', () => {
+    // The two spellings compile identically, so the tiebreak costs nothing and keeps the property
+    // only the flat form has: the name in the stylesheet is the name you can search for.
+    const p = detectProfile(
+      baseInput({ classNamingTally: { ampersand: 4, flat: 4, filesScanned: 3 } }),
+    );
+    expect(p.styling.classNaming).toBe('flat');
+  });
+});
+
+describe('scanClassNaming (real fs)', () => {
+  const withProject = async (
+    files: Record<string, string>,
+    assert: (dir: string) => Promise<void>,
+  ) => {
+    const dir = await mkdtemp(join(tmpdir(), 'profile-naming-'));
+    try {
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ devDependencies: { sass: '^1' } }),
+      );
+      for (const [rel, body] of Object.entries(files)) {
+        const abs = join(dir, rel);
+        await mkdir(join(abs, '..'), { recursive: true });
+        await writeFile(abs, body);
+      }
+      await assert(dir);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("learns the `&` habit from the project's own .scss", async () => {
+    await withProject(
+      { 'src/card.scss': '.card {\n  &__title { color: red; }\n  &--wide { width: 100%; }\n}\n' },
+      async dir => {
+        const p = await analyzeProject(dir);
+        expect(p.styling.system).toBe('scss');
+        expect(p.styling.classNaming).toBe('ampersand');
+      },
+    );
+  });
+
+  it('learns the flat habit the same way', async () => {
+    await withProject(
+      { 'src/card.scss': '.card { color: red; }\n.card__title { font-weight: 700; }\n' },
+      async dir => {
+        expect((await analyzeProject(dir)).styling.classNaming).toBe('flat');
+      },
+    );
+  });
+
+  it('reads an SFC <style lang="scss"> block, which is the only stylesheet many Vue repos have', async () => {
+    await withProject(
+      {
+        'src/Card.vue':
+          '<template><div class="card" /></template>\n' +
+          '<style lang="scss" scoped>\n.card {\n  &__title { color: red; }\n}\n</style>\n',
+      },
+      async dir => {
+        expect((await analyzeProject(dir)).styling.classNaming).toBe('ampersand');
+      },
+    );
+  });
+
+  it('ignores a plain SFC <style> block — CSS nesting cannot concatenate, so it holds no vote', async () => {
+    await withProject(
+      { 'src/Card.vue': '<style>\n.card { color: red; }\n</style>\n' },
+      async dir => {
+        const p = await analyzeProject(dir);
+        expect(p.styling.classNaming).toBeUndefined();
+        expect(p.evidence).toContain('classNaming=none: no preprocessor stylesheet found');
+      },
+    );
+  });
+
+  it('ignores .css entirely, so a big stylesheet cannot outvote the preprocessor files', async () => {
+    await withProject(
+      {
+        'src/legacy.css': Array.from(
+          { length: 50 },
+          (_, i) => `.legacy__row-${i} { color: red; }`,
+        ).join('\n'),
+        'src/card.scss': '.card {\n  &__title { color: red; }\n}\n',
+      },
+      async dir => {
+        expect((await analyzeProject(dir)).styling.classNaming).toBe('ampersand');
+      },
+    );
+  });
+
+  it('counts .pcss / <style lang="postcss">, since postcss-nested concatenates the same way', async () => {
+    await withProject(
+      {
+        'src/card.pcss': '.card {\n  &__title { color: red; }\n}\n',
+        'src/Row.vue': '<style lang="postcss">\n.row {\n  &__cell { color: red; }\n}\n</style>\n',
+      },
+      async dir => {
+        const input = await gatherProjectInput(dir);
+        expect(input.classNamingTally).toEqual({ ampersand: 2, flat: 0, filesScanned: 2 });
+        expect(detectProfile(input).styling.classNaming).toBe('ampersand');
+      },
+    );
+  });
+
+  it('does not let a vendored stylesheet cast a vote', async () => {
+    await withProject(
+      {
+        'src/card.scss': '.card__title { color: red; }\n',
+        'node_modules/ui-kit/theme.scss': Array.from(
+          { length: 40 },
+          () => '.x {\n  &__y { color: red; }\n}',
+        ).join('\n'),
+      },
+      async dir => {
+        const input = await gatherProjectInput(dir);
+        expect(input.classNamingTally).toEqual({ ampersand: 0, flat: 1, filesScanned: 1 });
+        expect(detectProfile(input).styling.classNaming).toBe('flat');
+      },
+    );
   });
 });

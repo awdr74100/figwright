@@ -57,6 +57,15 @@ export const isUtilityFirst = (system: StylingSystem): boolean =>
 export const SVG_IMPORT_MODES = ['component', 'url'] as const;
 export type SvgImportMode = (typeof SVG_IMPORT_MODES)[number];
 
+// How the project's own stylesheets spell a compound (BEM-style) class name: 'ampersand' assembles
+// it from the parent (`.card { &__title {} }`), 'flat' declares it in full (`.card__title {}`).
+// Both compile to the same selector, so this is a convention question, not a correctness one — and
+// the reason codegen has to ground it rather than pick is that a generated stylesheet which spells
+// names the other way than the rest of the repo is the kind of mismatch nobody notices until they
+// try to grep for one.
+export const CLASS_NAMING_STYLES = ['ampersand', 'flat'] as const;
+export type ClassNamingStyle = (typeof CLASS_NAMING_STYLES)[number];
+
 export interface ProjectProfile {
   rootDir: string;
   framework: Framework;
@@ -73,6 +82,15 @@ export interface ProjectProfile {
     configPath?: string;
     /** Tailwind major version (3 or 4) — v4 is CSS-first, changing where tokens are defined. */
     tailwindVersion?: number;
+    /**
+     * How the project's existing preprocessor stylesheets spell a compound (BEM-style) class —
+     * `ampersand` (`.card { &__title {} }`) or `flat` (`.card__title {}`) — so a generated
+     * stylesheet matches the repo instead of imposing a house style. Absent when the project has no
+     * such stylesheet, or none of them declares a compound class at all (a Tailwind project, or one
+     * that only uses single-word classes): with no habit to match, write `flat`, whose names
+     * survive a search for the class the markup actually carries.
+     */
+    classNaming?: ClassNamingStyle;
   };
   /**
    * How the project turns an imported .svg into something renderable — so codegen imports/uses
@@ -118,6 +136,23 @@ export interface ProjectInput {
    * not exist there.
    */
   unoConfigDeclaresVocabulary?: boolean;
+  /**
+   * Tally of how the project's own preprocessor stylesheets spell compound class names, summed over
+   * every file the scan read. Undefined when the project has no such stylesheet to learn from —
+   * which is not the same as a zeroed tally (stylesheets exist but declare no compound class), and
+   * the two produce different evidence lines.
+   */
+  classNamingTally?: ClassNamingTally;
+}
+
+/** Compound-class-name spellings counted across a project's preprocessor stylesheets. */
+export interface ClassNamingTally {
+  /** Occurrences of `&` glued onto a name fragment (`&__title`, `&--primary`). */
+  ampersand: number;
+  /** Top-level selectors declaring a compound class in full (`.card__title`). */
+  flat: number;
+  /** Stylesheets (or SFC preprocessor `<style>` blocks) actually read. */
+  filesScanned: number;
 }
 
 interface PackageJson {
@@ -193,6 +228,105 @@ const findTailwindCssEntry = async (root: string): Promise<string | undefined> =
   return undefined;
 };
 
+// Stylesheet languages whose `&` *concatenates* into a new selector token, so `.card { &__title {} }`
+// compiles to `.card__title`. `.pcss`/`.postcss` are here because postcss-nested concatenates the
+// same way; bare `.css` is deliberately excluded even though such a project can run through the same
+// plugin. Native CSS nesting makes `&` an element reference rather than string concatenation, so
+// `&__title` is not even valid there — and .css is common enough that counting it would bury a real
+// preprocessor habit under votes from files that mostly never had the syntax to cast one. A
+// postcss-nested project keeping `&__` in plain .css therefore reads as "no habit", which lands on
+// the flat default: still valid CSS there, just not its convention.
+const NESTING_STYLESHEET_EXTENSIONS = ['.scss', '.sass', '.less', '.styl', '.pcss', '.postcss'];
+
+// Vue and Svelte projects routinely keep every stylesheet inside the component file, so a repo with
+// a firm `&__` habit can own zero .scss files. Only a block declaring a preprocessor `lang` can
+// concatenate — a bare <style> is CSS, excluded for the same reason as .css above.
+const SFC_EXTENSIONS = ['.vue', '.svelte'];
+const SFC_PREPROCESSOR_STYLE_BLOCK =
+  /<style\b[^>]*\blang\s*=\s*["'](?:scss|sass|less|stylus|styl|postcss|pcss)["'][^>]*>([\s\S]*?)<\/style>/gi;
+
+// `&` glued straight onto a name fragment: `&__title`, `&--primary`, `&-sm`. `&` carries no other
+// meaning in a stylesheet, so once comments and strings are gone a textual match *is* the signal.
+// The forms that do not build a name — `&:hover`, `&::before`, `&.is-open`, `&[open]`, `& > .x`,
+// `&&` — all put a non-word character after the `&` and are correctly ignored: they nest a state
+// onto a name that already exists, which is orthogonal to how that name was spelled.
+const AMPERSAND_CONCAT = /&[A-Za-z0-9_-]/g;
+
+// A compound class declared in full at the top level. Anchored to column 0 because in both braced
+// and indented syntax a nested rule is indented and a top-level one is not — what every formatter
+// in this ecosystem emits. That anchor is also what keeps the descendant-selector anti-pattern
+// (`.card { .card__title {} }`, which is indented and compiles to `.card .card__title`) from being
+// miscounted as a vote for flat: it is not the flat form, it is a third, wrong one.
+const FLAT_COMPOUND = /^\.[A-Za-z_-][A-Za-z0-9_-]*?(?:__|--)[A-Za-z0-9_-]/gm;
+
+/**
+ * Drop the spans where a `&` or a leading `.` means nothing: block comments, quoted strings
+ * (`content: "&amp;"` is not a selector), then line comments. Order matters — strings inside a
+ * commented-out rule are gone before the string pass can see them.
+ *
+ * The `//` pass also truncates an _unquoted_ `url(https://…)`, which at worst costs a signal on the
+ * rest of that line; nothing downstream treats an undercount as evidence of the opposite habit.
+ */
+const stripStylesheetNoise = (body: string): string =>
+  body
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, '""')
+    .replace(/\/\/[^\n]*/g, ' ');
+
+/**
+ * Count both spellings of a compound class name in one stylesheet body. Pure, and exported so the
+ * regex heuristics above are testable on their own rather than only through a temp directory.
+ */
+export const tallyClassNaming = (body: string): Omit<ClassNamingTally, 'filesScanned'> => {
+  const clean = stripStylesheetNoise(body);
+  return {
+    ampersand: (clean.match(AMPERSAND_CONCAT) ?? []).length,
+    flat: (clean.match(FLAT_COMPOUND) ?? []).length,
+  };
+};
+
+/** Concatenate an SFC's preprocessor <style> blocks; '' when it has none. */
+const sfcPreprocessorStyles = (body: string): string =>
+  [...body.matchAll(SFC_PREPROCESSOR_STYLE_BLOCK)].map(m => m[1]).join('\n');
+
+// A tally, unlike the Tailwind marker scan, cannot stop at the first hit — every file is a vote.
+// The cap is what keeps that bounded on a repo with a pathological stylesheet count; 400 files is
+// far past the point where a convention is established, so raising it could only re-decide a vote
+// that is already lopsided.
+const CLASS_NAMING_FILE_CAP = 400;
+
+/**
+ * Walk the project's preprocessor stylesheets (and the preprocessor <style> blocks of its SFCs) and
+ * tally how they spell compound class names. Undefined when it found none to read.
+ */
+const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefined> => {
+  let ampersand = 0;
+  let flat = 0;
+  let filesScanned = 0;
+  for await (const rel of walkRepoFiles(root, {
+    extensions: [...NESTING_STYLESHEET_EXTENSIONS, ...SFC_EXTENSIONS],
+    cap: CLASS_NAMING_FILE_CAP,
+  })) {
+    let body: string;
+    try {
+      // eslint-disable-next-line no-await-in-loop -- sequential scan, bounded by the cap above
+      body = await readFile(join(root, rel), 'utf8');
+    } catch {
+      continue;
+    }
+    const isSfc = SFC_EXTENSIONS.some(ext => rel.endsWith(ext));
+    const source = isSfc ? sfcPreprocessorStyles(body) : body;
+    // An SFC with no preprocessor style block is not a stylesheet that voted "no habit" — it is a
+    // file with nothing to say, and counting it would dilute filesScanned into a meaningless number.
+    if (source.trim() === '') continue;
+    filesScanned += 1;
+    const tally = tallyClassNaming(source);
+    ampersand += tally.ampersand;
+    flat += tally.flat;
+  }
+  return filesScanned === 0 ? undefined : { ampersand, flat, filesScanned };
+};
+
 /** Do the filesystem IO once, up front, so detectProfile can stay pure. */
 export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput> => {
   const root = resolve(rootDir);
@@ -204,7 +338,12 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
   const probed = await Promise.all(PROBE_CONFIG_FILES.map(name => fileExists(join(root, name))));
   const presentConfigFiles = PROBE_CONFIG_FILES.filter((_, i) => probed[i] === true);
 
-  const tailwindCssEntry = await findTailwindCssEntry(root);
+  // Two independent repo walks, both IO-bound — run them together so the class-naming scan costs
+  // essentially nothing in wall clock on top of the Tailwind marker probe that was already here.
+  const [tailwindCssEntry, classNamingTally] = await Promise.all([
+    findTailwindCssEntry(root),
+    scanClassNaming(root),
+  ]);
 
   // One extra read, and only when such a config exists: what it loads decides whether the project
   // generates utility classes at all, which no filename or dependency can answer.
@@ -220,6 +359,7 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
     presentConfigFiles,
     ...(tailwindCssEntry === undefined ? {} : { tailwindCssEntry }),
     ...(unoConfigDeclaresVocabulary === null ? {} : { unoConfigDeclaresVocabulary }),
+    ...(classNamingTally === undefined ? {} : { classNamingTally }),
   };
 };
 
@@ -456,6 +596,25 @@ const detectSvgHandling = (deps: Record<string, string>): SvgResult => {
   };
 };
 
+/**
+ * Decide the project's compound-class-name habit from the tally. Pure.
+ *
+ * A plurality decides it, and a tie goes to `flat`: the two spellings compile identically, so the
+ * tiebreak costs nothing at build time and buys back the property that only the flat form has — the
+ * name in the stylesheet is the name in the markup, so it can be searched for. `undefined` means
+ * the scan found no compound class either way, which is a real third answer ("this project has no
+ * habit to match") and not a quiet vote for flat.
+ */
+const detectClassNaming = (
+  tally: ClassNamingTally | undefined,
+): { style?: ClassNamingStyle; reason: string } => {
+  if (tally === undefined) return { reason: 'no preprocessor stylesheet found' };
+  const { ampersand, flat, filesScanned } = tally;
+  const counts = `${ampersand} &-assembled vs ${flat} full-name in ${filesScanned} stylesheet(s)`;
+  if (ampersand === 0 && flat === 0) return { reason: `no compound class name found (${counts})` };
+  return { style: ampersand > flat ? 'ampersand' : 'flat', reason: counts };
+};
+
 /** Pure decision function over the gathered snapshot — the unit under test. */
 export const detectProfile = (input: ProjectInput): ProjectProfile => {
   const deps = allDeps(input.packageJson);
@@ -474,6 +633,9 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
     `styling=${styling.system}${styling.tailwindVersion === undefined ? '' : ` v${styling.tailwindVersion}`}: ${styling.reason}`,
   );
 
+  const classNaming = detectClassNaming(input.classNamingTally);
+  evidence.push(`classNaming=${classNaming.style ?? 'none'}: ${classNaming.reason}`);
+
   const svg = detectSvgHandling(deps);
   evidence.push(
     `svg=${svg.mode}${svg.loader === undefined ? '' : ` (${svg.loader})`}: ${svg.reason}`,
@@ -489,6 +651,7 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
       ...(styling.tailwindVersion === undefined
         ? {}
         : { tailwindVersion: styling.tailwindVersion }),
+      ...(classNaming.style === undefined ? {} : { classNaming: classNaming.style }),
     },
     svg: {
       mode: svg.mode,

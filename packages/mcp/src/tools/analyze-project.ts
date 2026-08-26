@@ -19,7 +19,16 @@ export const analyzeProjectTool: ToolSpec = {
     'the server filesystem. rootDir defaults to the server cwd. Detects Tailwind v3 (config file) and ' +
     'v4 (CSS-first @import/@theme) and reports tailwindVersion, and UnoCSS (uno.config.* / a ' +
     "@unocss package) as styling.system 'unocss'; detects svg loader (svgr / " +
-    'vite-svg-loader / …) → svg.mode component vs url + an import hint.',
+    "vite-svg-loader / …) → svg.mode component vs url + an import hint. Also reads the project's " +
+    'own preprocessor stylesheets (.scss/.sass/.less/.styl/.pcss, and SFC <style lang="scss"> ' +
+    'blocks) to ' +
+    'report styling.classNaming — how it spells a compound BEM-style class: ' +
+    "'ampersand' (.card { &__title {} }) or 'flat' (.card__title {}). Match it. When it is absent " +
+    'the project has no such habit: declare class names flat and in full, so the class the markup ' +
+    'carries is findable by searching for it — a name assembled from & exists only after ' +
+    'compilation. Never "flatten" by nesting the full name (.card { .card__title {} }): that ' +
+    'compiles to the descendant selector .card .card__title, adding specificity and breaking the ' +
+    'moment the element is not a DOM descendant.',
   inputSchema,
   kind: 'local',
   // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
