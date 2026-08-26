@@ -257,48 +257,235 @@ const AMPERSAND_CONCAT = /&[A-Za-z0-9_-]+/g;
 // flat spelling is not even available when the transition name is a prop. Counted as a preference
 // it is noise, and measurably the dominant kind: it was 16 of Element Plus's 35 concatenations and
 // 134 of Vuetify's 713 — the single largest false signal found in the corpus. Vue's
-// enter/leave/move set and the React-transition enter/exit/appear set are both listed. Only hyphen
-// separators are matched, so `&__enter` and `&--active` stay BEM and are deliberately left alone.
-const TRANSITION_CLASS = /^&-{1,2}(?:enter|leave|exit|appear|move)(?:-(?:from|to|active|done))?$/;
-
-// A compound class declared in full at the top level. Anchored to column 0 because in both braced
-// and indented syntax a nested rule is indented and a top-level one is not — what every formatter
-// in this ecosystem emits. That anchor is also what keeps the descendant-selector anti-pattern
-// (`.card { .card__title {} }`, which is indented and compiles to `.card .card__title`) from being
-// miscounted as a vote for flat: it is not the flat form, it is a third, wrong one.
+// enter/leave/move set and the React-transition enter/exit/appear set are both listed.
 //
-// Known limit, and the reason the two arms are not symmetric: this sees only BEM-punctuated names.
-// A project that spells compound names with a single hyphen (`.accordion-body` — Bootstrap's whole
-// scheme) casts no vote, because `.accordion-body` and `.el-button` are textually identical and
-// only one of them is a compound name; no regex separates a block+element from a kebab-case block.
-// So a silent flat majority is possible, which is exactly what AMPERSAND_FLOOR below answers.
-const FLAT_COMPOUND = /^\.[A-Za-z_-][A-Za-z0-9_-]*?(?:__|--)[A-Za-z0-9_-]/gm;
+// Both arms consult this: `&-enter-from` on the ampersand side, `.v-modal-enter` on the flat side.
+// One exclusion, applied once, so a framework's transition names cannot be discounted as evidence
+// on one side while still counting as evidence on the other.
+const TRANSITION_SUFFIX = /^(?:enter|leave|exit|appear|move)(?:-(?:from|to|active|done))?$/;
+
+// Only a hyphen separator makes a transition name, so `&__enter` and `&--active` stay BEM.
+const AMPERSAND_TRANSITION = /^&(?:-{1,2})([A-Za-z0-9_-]+)$/;
+
+const isTransitionConcat = (concat: string): boolean => {
+  const tail = AMPERSAND_TRANSITION.exec(concat)?.[1];
+  return tail !== undefined && TRANSITION_SUFFIX.test(tail);
+};
+
+// Sass and Less can assemble a selector out of a variable — `.#{$class-prefix}button` (Bulma),
+// `.@{ant-prefix}-btn` (Ant Design) — and what those compile to is unknowable without evaluating
+// the stylesheet. Masking the interpolation with a character no class name can contain lets the
+// walk below keep its bearings on the rest of the file while the name itself is skipped rather
+// than guessed at: those two libraries name nearly every class this way, so a guess would be
+// fiction dressed as evidence.
+const INTERPOLATION = /[#@$]\{[^}]*\}/g;
+const INTERPOLATION_MARK = '\uFFFD';
 
 /**
- * Drop the spans where a `&` or a leading `.` means nothing: block comments, quoted strings
- * (`content: "&amp;"` is not a selector), then line comments. Order matters — strings inside a
- * commented-out rule are gone before the string pass can see them.
+ * Drop the spans where a `&` or a leading `.` means nothing: line continuations first, so a wrapped
+ * string literal is a single line by the time the string pass sees it, then block comments, quoted
+ * strings (`content: "&amp;"` is not a selector), then line comments. Order matters — strings
+ * inside a commented-out rule are gone before the string pass can see them.
  *
  * The `//` pass also truncates an _unquoted_ `url(https://…)`, which at worst costs a signal on the
  * rest of that line; nothing downstream treats an undercount as evidence of the opposite habit.
  */
 const stripStylesheetNoise = (body: string): string =>
   body
+    .replace(/\\\r?\n[ \t]*/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(['"])(?:\\.|(?!\1)[^\\\n])*\1/g, '""')
-    .replace(/\/\/[^\n]*/g, ' ');
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(INTERPOLATION, INTERPOLATION_MARK);
+
+/** One rule's selector prelude, plus whether any _selector_ encloses it. */
+interface SelectorRule {
+  readonly prelude: string;
+  readonly topLevel: boolean;
+}
+
+// What makes a rule top-level is that no *selector* encloses it — an at-rule does not count.
+// `@media`, `@supports`, `@layer`, and a mixin `@include` wrapping a whole file all leave the
+// selectors inside them exactly as top-level as they were, because they compile to the same
+// selector, unnested. Anchoring on column 0 instead would read such a file as declaring nothing at
+// all, and that is not hypothetical: Vuetify wraps every component stylesheet in
+// `@include tools.layer('components')`, which hid all 374 of its full-name BEM declarations and
+// reported a library that writes both spellings as writing only `&`.
+
+function* bracedRules(body: string): Generator<SelectorRule> {
+  const delimiter = /[{}();]/g;
+  // One entry per open brace: true when that brace belongs to a selector rather than an at-rule.
+  const enclosing: boolean[] = [];
+  let selectorDepth = 0;
+  // A `;` ends a statement and so discards the prelude built so far — unless it is inside
+  // parentheses, where it separates a Less mixin definition's parameters (`.size(@w; @h) {}`).
+  // Discarding there would leave `@h)` as the prelude, which reads as an at-rule: the mixin would
+  // then be transparent, and the nested selectors it holds would be scored as top-level ones.
+  let parens = 0;
+  let preludeStart = 0;
+  let token = delimiter.exec(body);
+  while (token !== null) {
+    if (token[0] === '{') {
+      const prelude = body.slice(preludeStart, token.index).trim();
+      const isSelector = !prelude.startsWith('@');
+      if (isSelector) {
+        yield { prelude, topLevel: selectorDepth === 0 };
+        selectorDepth += 1;
+      }
+      enclosing.push(isSelector);
+      parens = 0;
+      preludeStart = token.index + 1;
+    } else if (token[0] === '}') {
+      if (enclosing.pop() === true) selectorDepth -= 1;
+      parens = 0;
+      preludeStart = token.index + 1;
+    } else if (token[0] === '(') {
+      parens += 1;
+    } else if (token[0] === ')') {
+      parens = Math.max(0, parens - 1);
+    } else if (parens === 0) {
+      preludeStart = token.index + 1;
+    }
+    token = delimiter.exec(body);
+  }
+}
+
+// In the indented syntaxes a rule is opened by a line and closed by the indentation dropping back,
+// so the same question — what encloses this — is answered off the indent ladder instead of braces.
+// A declaration (`color: red`, `$size: 4px`, `@include x`) opens nothing; a line starting with
+// selector punctuation (`.card`, `&:hover`, `:root`) does; a bare element (`body`, `a`) is a
+// selector too, which is why it is only ruled out by looking like a declaration first.
+const DECLARATION = /^[-A-Za-z$][\w-]*\s*:/;
+const SELECTOR_PUNCTUATION = /^[.#&%[*>+~:]/;
+const ELEMENT_SELECTOR = /^[A-Za-z][\w-]*(?:[\s,.:#[]|$)/;
+
+function* indentedRules(body: string): Generator<SelectorRule> {
+  const open: { indent: number; isSelector: boolean }[] = [];
+  let selectorDepth = 0;
+  for (const line of body.split('\n')) {
+    const content = line.trim();
+    if (content === '') continue;
+    const indent = line.length - line.trimStart().length;
+    for (let top = open.at(-1); top !== undefined && top.indent >= indent; top = open.at(-1)) {
+      if (open.pop()?.isSelector === true) selectorDepth -= 1;
+    }
+    if (content.startsWith('@')) {
+      open.push({ indent, isSelector: false });
+      continue;
+    }
+    if (
+      !SELECTOR_PUNCTUATION.test(content) &&
+      (DECLARATION.test(content) || !ELEMENT_SELECTOR.test(content))
+    ) {
+      continue;
+    }
+    yield { prelude: content, topLevel: selectorDepth === 0 };
+    open.push({ indent, isSelector: true });
+    selectorDepth += 1;
+  }
+}
+
+// `.sass` and `.styl` carry no braces, and `.styl` accepts either syntax — so the file is asked
+// rather than its extension. Interpolation is masked by this point, so a `#{…}` cannot be mistaken
+// for a block.
+const rulesOf = (body: string): Generator<SelectorRule> =>
+  body.includes('{') ? bracedRules(body) : indentedRules(body);
+
+const LEADING_CLASS = /^\.([A-Za-z_-][A-Za-z0-9_-]*)/;
 
 /**
- * Count both spellings of a compound class name in one stylesheet body. Pure, and exported so the
- * regex heuristics above are testable on their own rather than only through a temp directory.
+ * The class names a prelude _declares_: the leading class of each comma-separated selector. A name
+ * further along (`.card .icon`, `.card > .icon`) is a reference to a name declared elsewhere rather
+ * than a declaration of its own, so only the leading one counts.
  */
-export const tallyClassNaming = (body: string): Omit<ClassNamingTally, 'filesScanned'> => {
+const declaredClasses = (prelude: string): string[] => {
+  const names: string[] = [];
+  for (const part of prelude.split(',')) {
+    const selector = part.trim();
+    const name = LEADING_CLASS.exec(selector)?.[1];
+    if (name === undefined) continue;
+    // Two things wear a class selector's clothes without declaring a class. A Less mixin
+    // *definition* (`.size(@w; @h) {}`) — the `(` right after the name is what separates it from
+    // `.size:hover`, and Ant Design ships 100+ of them, enough on its own to manufacture a flat
+    // majority for a library whose real class names are every one of them interpolated. And a name
+    // the interpolation truncated (`.btn-@{variant}`), whose full spelling is unknowable.
+    const next = selector[name.length + 1];
+    if (next === '(' || next === INTERPOLATION_MARK) continue;
+    names.push(name);
+  }
+  return names;
+};
+
+/** What one stylesheet contributes to the project-wide tally. */
+export interface StylesheetNames {
+  /** `&` concatenations that build a name, transition classes excluded. */
+  readonly ampersand: number;
+  /** Every top-level class name it declares, one entry per occurrence. */
+  readonly topLevel: readonly string[];
+}
+
+/**
+ * Read one stylesheet body. Pure, and exported so the walk is testable on its own rather than only
+ * through a temp directory.
+ */
+export const readStylesheetNames = (body: string): StylesheetNames => {
   const clean = stripStylesheetNoise(body);
   const concats = clean.match(AMPERSAND_CONCAT) ?? [];
-  return {
-    ampersand: concats.filter(c => !TRANSITION_CLASS.test(c)).length,
-    flat: (clean.match(FLAT_COMPOUND) ?? []).length,
-  };
+  const topLevel: string[] = [];
+  for (const rule of rulesOf(clean)) {
+    if (!rule.topLevel) continue;
+    topLevel.push(...declaredClasses(rule.prelude));
+  }
+  return { ampersand: concats.filter(concat => !isTransitionConcat(concat)).length, topLevel };
+};
+
+// BEM punctuation is self-evidently a compound name: nothing but a block+element or a
+// block+modifier is spelled `__x` or `--x`, so it needs no corroboration from the rest of the
+// project.
+const BEM_PUNCTUATED = /(?:__|--)[A-Za-z0-9_-]/;
+
+/**
+ * Is this name the full spelling of a compound one? BEM punctuation answers on its own; a
+ * single-hyphen scheme (`.accordion-body`) cannot, because `.accordion-body` and `.el-button` are
+ * textually identical and only one of them is a compound name.
+ *
+ * What separates them is the rest of the project: `.accordion` is declared somewhere and `.el` is
+ * not. That cross-reference is why the flat arm is counted per project rather than per file — and
+ * it is what lets the flat side see the most common scheme there is. Measured on the corpus it
+ * takes Bootstrap from 0 votes to 174 and BootstrapVue from 0 to 37, while leaving every library
+ * that really does concatenate on the `ampersand` verdict it already had.
+ */
+const isCompoundClassName = (name: string, declared: ReadonlySet<string>): boolean => {
+  if (BEM_PUNCTUATED.test(name)) return true;
+  for (let at = 1; at < name.length; at += 1) {
+    const char = name[at];
+    if (char !== '-' && char !== '_') continue;
+    if (!declared.has(name.slice(0, at))) continue;
+    return !TRANSITION_SUFFIX.test(name.slice(at).replace(/^[-_]+/, ''));
+  }
+  return false;
+};
+
+/**
+ * Sum one project's stylesheets into a tally. Pure. The flat arm needs every file's names before it
+ * can score any of them, which is the whole reason this stage exists separately from
+ * {@link readStylesheetNames}.
+ */
+export const tallyClassNaming = (
+  files: Iterable<StylesheetNames>,
+): Omit<ClassNamingTally, 'filesScanned'> => {
+  let ampersand = 0;
+  const occurrences: string[] = [];
+  for (const file of files) {
+    ampersand += file.ampersand;
+    occurrences.push(...file.topLevel);
+  }
+  const declared = new Set(occurrences);
+  let flat = 0;
+  for (const name of occurrences) {
+    if (isCompoundClassName(name, declared)) flat += 1;
+  }
+  return { ampersand, flat };
 };
 
 /** Concatenate an SFC's preprocessor <style> blocks; '' when it has none. */
@@ -314,11 +501,13 @@ const CLASS_NAMING_FILE_CAP = 400;
 /**
  * Walk the project's preprocessor stylesheets (and the preprocessor <style> blocks of its SFCs) and
  * tally how they spell compound class names. Undefined when it found none to read.
+ *
+ * The walk keeps each file's _names_ rather than its text: scoring the flat arm needs the whole
+ * project's vocabulary at once, and holding a few thousand class names is nothing next to holding
+ * every stylesheet that produced them.
  */
 const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefined> => {
-  let ampersand = 0;
-  let flat = 0;
-  let filesScanned = 0;
+  const files: StylesheetNames[] = [];
   for await (const rel of walkRepoFiles(root, {
     extensions: [...NESTING_STYLESHEET_EXTENSIONS, ...SFC_EXTENSIONS],
     cap: CLASS_NAMING_FILE_CAP,
@@ -335,12 +524,11 @@ const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefin
     // An SFC with no preprocessor style block is not a stylesheet that voted "no habit" — it is a
     // file with nothing to say, and counting it would dilute filesScanned into a meaningless number.
     if (source.trim() === '') continue;
-    filesScanned += 1;
-    const tally = tallyClassNaming(source);
-    ampersand += tally.ampersand;
-    flat += tally.flat;
+    files.push(readStylesheetNames(source));
   }
-  return filesScanned === 0 ? undefined : { ampersand, flat, filesScanned };
+  return files.length === 0
+    ? undefined
+    : { ...tallyClassNaming(files), filesScanned: files.length };
 };
 
 /** Do the filesystem IO once, up front, so detectProfile can stay pure. */
@@ -612,19 +800,22 @@ const detectSvgHandling = (deps: Record<string, string>): SvgResult => {
   };
 };
 
-// How many `&` concatenations it takes before this is called a habit rather than an accident. The
-// two arms are not symmetric — FLAT_COMPOUND cannot see a single-hyphen flat scheme — so a bare
-// `ampersand > flat` lets a handful of incidental concatenations outvote a flat majority it never
-// counted. The floor is where that asymmetry is paid for, and the direction is chosen on cost, not
-// on likelihood: reporting `ampersand` wrongly imposes the unsearchable spelling this whole feature
-// exists to avoid, while reporting `flat` wrongly emits a valid, searchable, merely-unidiomatic
-// file.
+// How many `&` concatenations it takes before this is called a habit rather than an accident.
+//
+// The cross-reference closed the asymmetry this floor was first written for — the flat arm can now
+// see a single-hyphen scheme — but it did not make the arms equal, because one thing still votes
+// only on one side. A name whose block is never *declared* as a selector (styled entirely through
+// its elements, or through a mixin) is invisible to the flat arm, while every `&` in the same file
+// is counted. So a project with a handful of concatenations and an unlucky vocabulary can still
+// score `ampersand > flat` while writing flat names throughout, which is what this covers.
+//
+// The direction is chosen on cost, not on likelihood: reporting `ampersand` wrongly imposes the
+// unsearchable spelling this whole feature exists to avoid, while reporting `flat` wrongly emits a
+// valid, searchable, merely-unidiomatic file.
 //
 // The value is insurance, not a fitted threshold, and the measurement says so. Across 1229 real
 // stylesheets the scores are Ant Design v4 4894, Vuetify 579, Element Plus 19, and Bootstrap /
-// BootstrapVue / Bulma 0 — nothing lands between 1 and 18, so this line separates none of them. It
-// exists for the case the corpus does not contain: a repo whose flat scheme is single-hyphen (thus
-// invisible to FLAT_COMPOUND) carrying one legacy file that concatenates.
+// BootstrapVue / Bulma 0 — nothing lands between 1 and 18, so this line separates none of them.
 const AMPERSAND_FLOOR = 5;
 
 /**

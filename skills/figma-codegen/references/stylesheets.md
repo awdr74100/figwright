@@ -117,8 +117,9 @@ editing.
 **`classNaming` answers how, not what to call things.** It reports whether names are assembled or
 written out; it says nothing about the separator. Plenty of projects spell compound names with a
 single hyphen and no BEM punctuation at all (`.accordion-body`, `.accordion-header` — Bootstrap's
-entire vocabulary), and the detector cannot see that scheme, because `.accordion-body` and
-`.el-button` are textually identical and only one of them is a compound name. So read the project's
-separator off its actual class names before inventing `__`, and never introduce BEM punctuation into a
-repo that has none — the flat rule on this page is about spelling a name in full, not about which
-punctuation goes in it.
+entire vocabulary). Those do count as flat: `.accordion-body` and `.el-button` are textually
+identical, so what tells them apart is the rest of the project — `.accordion` is declared somewhere
+and `.el` is not. But a `flat` verdict still says nothing about _which_ punctuation the project uses.
+So read the project's separator off its actual class names before inventing `__`, and never introduce
+BEM punctuation into a repo that has none — the flat rule on this page is about spelling a name in
+full, not about which punctuation goes in it.

@@ -9,6 +9,7 @@ import {
   detectProfile,
   gatherProjectInput,
   isUtilityFirst,
+  readStylesheetNames,
   type ProjectInput,
   tallyClassNaming,
 } from '../../src/profile/profile.js';
@@ -339,11 +340,15 @@ describe('gatherProjectInput + analyzeProject (real fs)', () => {
   });
 });
 
-describe('tallyClassNaming (pure)', () => {
+describe('readStylesheetNames / tallyClassNaming (pure)', () => {
+  /** Score a whole project the way the scan does: read each file, then cross-reference the set. */
+  const tallyOf = (...bodies: string[]) => tallyClassNaming(bodies.map(readStylesheetNames));
+
   it('counts `&` glued onto a name fragment, in either BEM position', () => {
-    expect(tallyClassNaming('.card { &__title { color: red; } &--wide { width: 100%; } }')).toEqual(
-      { ampersand: 2, flat: 0 },
-    );
+    expect(tallyOf('.card { &__title { color: red; } &--wide { width: 100%; } }')).toEqual({
+      ampersand: 2,
+      flat: 0,
+    });
   });
 
   it('ignores the `&` forms that nest a state instead of building a name', () => {
@@ -357,7 +362,7 @@ describe('tallyClassNaming (pure)', () => {
       & > .icon { width: 1rem; }
       && { color: blue; }
     }`;
-    expect(tallyClassNaming(body).ampersand).toBe(0);
+    expect(tallyOf(body).ampersand).toBe(0);
   });
 
   it('does not read a `&` out of a comment or a quoted value', () => {
@@ -369,15 +374,23 @@ describe('tallyClassNaming (pure)', () => {
       '// &--legacy',
       '.card__label { color: red; }',
     ].join('\n');
-    expect(tallyClassNaming(body)).toEqual({ ampersand: 0, flat: 1 });
+    expect(tallyOf(body)).toEqual({ ampersand: 0, flat: 1 });
   });
 
-  it('treats column 0 as "top level", which is what every formatter in this ecosystem emits', () => {
-    // The documented assumption behind the flat count, pinned so it fails loudly rather than
-    // drifting. An unformatted file that indents its top-level rules simply under-counts, which
-    // moves the plurality toward `flat` — never toward reporting a habit the project lacks.
-    expect(tallyClassNaming('.card__title { color: red; }').flat).toBe(1);
-    expect(tallyClassNaming('  .card__title { color: red; }').flat).toBe(0);
+  it('joins a wrapped line before reading it, so its tail is not mistaken for a rule', () => {
+    // Verbatim shape from Vuetify's VAlert.sass. Left unjoined, the continuation lands in column 0,
+    // the string pass can no longer see it as a value, and `content . ."` reads as an element
+    // selector — one that then encloses every real rule indented under the wrapper, so the
+    // declarations after it are scored as nested and never counted.
+    const body = [
+      "@include tools.layer('components')",
+      '  .v-alert',
+      '    grid-template-areas: "prepend content append close" ". \\',
+      'content . ."',
+      '  .v-alert-title',
+      '    font-weight: 600',
+    ];
+    expect(tallyOf(body.join('\n'))).toEqual({ ampersand: 0, flat: 1 });
   });
 
   it('does not count a transition class as a preference for `&`', () => {
@@ -391,32 +404,111 @@ describe('tallyClassNaming (pure)', () => {
   &-move { transition: transform 0.2s; }
   &-exit-done { display: none; }
 }`;
-    expect(tallyClassNaming(body).ampersand).toBe(0);
+    expect(tallyOf(body).ampersand).toBe(0);
   });
 
   it('still counts a BEM name that merely starts with a transition word', () => {
     // The exclusion is keyed on a hyphen separator, so `__enter` / `--active` stay BEM.
-    expect(
-      tallyClassNaming('.dialog {\n  &__enter { top: 0; }\n  &--active { top: 0; }\n}'),
-    ).toEqual({ ampersand: 2, flat: 0 });
+    expect(tallyOf('.dialog {\n  &__enter { top: 0; }\n  &--active { top: 0; }\n}')).toEqual({
+      ampersand: 2,
+      flat: 0,
+    });
   });
 
   it('counts a full compound name only at the top level', () => {
     // `.card { .card__title {} }` compiles to the descendant selector `.card .card__title`, which
     // is neither spelling — it is the wrong fix for this problem, so it must not vote for flat.
-    expect(tallyClassNaming('.card {\n  .card__title { color: red; }\n}').flat).toBe(0);
-    expect(tallyClassNaming('.card__title { color: red; }').flat).toBe(1);
+    expect(tallyOf('.card {\n  .card__title { color: red; }\n}').flat).toBe(0);
+    expect(tallyOf('.card__title { color: red; }').flat).toBe(1);
   });
 
-  it('does not mistake a top-level custom property for a compound class', () => {
-    expect(tallyClassNaming(':root {\n--color-primary-500: #6266f0;\n}').flat).toBe(0);
+  it('still counts a rule that only an at-rule encloses', () => {
+    // `@media`, `@layer` and a wrapping `@include` compile their contents to the same selector,
+    // unnested — so what they contain is as top-level as it was. Reading indentation instead would
+    // have scored these files as declaring nothing, which is not a hypothetical: it is why the
+    // corpus first reported Vuetify as writing no full names at all.
+    expect(tallyOf('@media (min-width: 40em) {\n  .card__title { color: red; }\n}').flat).toBe(1);
+    expect(tallyOf('@layer components {\n  .card__title { color: red; }\n}').flat).toBe(1);
+    expect(tallyOf('@include layer(components) {\n  .card__title { color: red; }\n}').flat).toBe(1);
   });
 
   it('reads the indented (.sass / .styl) syntax too, which has no braces to anchor on', () => {
-    expect(tallyClassNaming('.card\n  &__title\n    color: red\n')).toEqual({
-      ampersand: 1,
-      flat: 0,
-    });
+    expect(tallyOf('.card\n  &__title\n    color: red\n')).toEqual({ ampersand: 1, flat: 0 });
+    // The same at-rule wrapper, in the syntax where every real file has one.
+    expect(
+      tallyOf("@include tools.layer('components')\n  .card__title\n    color: red\n").flat,
+    ).toBe(1);
+    // …and nesting still has to be nesting: an enclosing *selector* disqualifies it.
+    expect(tallyOf('.card\n  .card__title\n    color: red\n').flat).toBe(0);
+  });
+
+  it('does not mistake a top-level custom property for a compound class', () => {
+    expect(tallyOf(':root {\n--color-primary-500: #6266f0;\n}').flat).toBe(0);
+  });
+
+  it('lets a single-hyphen scheme vote by cross-referencing the block it belongs to', () => {
+    // `.accordion-body` and `.el-button` are textually identical; only one is a compound name. What
+    // separates them is whether the project declares the head as a name of its own — which is the
+    // whole reason the flat arm is scored per project rather than per file.
+    expect(tallyOf('.accordion { }\n.accordion-body { }\n').flat).toBe(1);
+    expect(tallyOf('.el-button { }\n').flat).toBe(0);
+  });
+
+  it('cross-references across files, not only within one', () => {
+    // The block and the element it belongs to routinely live in different files; a per-file view
+    // would see `.card-title` with no `.card` in sight and score a project's whole scheme as absent.
+    expect(tallyOf('.card { }\n', '.card-title { }\n').flat).toBe(1);
+  });
+
+  it('counts BEM punctuation without corroboration from the rest of the project', () => {
+    // Nothing but a compound name is spelled `__x`, so unlike a single-hyphen name it does not need
+    // its block to have been declared anywhere.
+    expect(tallyOf('.card__title { color: red; }\n').flat).toBe(1);
+  });
+
+  it('excludes a transition class on the flat side as well', () => {
+    // The same exclusion as the `&` arm, on the other spelling of the same framework-dictated name
+    // — applying it to one side only would discount a habit as evidence while still counting it.
+    expect(tallyOf('.fade { }\n.fade-enter { }\n.fade-leave-to { }\n').flat).toBe(0);
+  });
+
+  it('does not read a Less mixin definition as a declared class name', () => {
+    // `.size(@w, @h) {}` declares no class, and Ant Design ships 100+ of them. Read as names they
+    // manufactured a flat majority for a library whose real class names are all interpolated.
+    // Both parameter separators are pinned: `;` is the one that ends a statement everywhere else,
+    // so a mixin written with it is the case where the prelude is easiest to lose.
+    expect(readStylesheetNames('.size(@w, @h) {\n  width: @w;\n}\n').topLevel).toEqual([]);
+    expect(readStylesheetNames('.size(@w; @h) {\n  width: @w;\n}\n').topLevel).toEqual([]);
+    expect(
+      readStylesheetNames('.typography-title-1() {\n  font-size: 2rem;\n}\n').topLevel,
+    ).toEqual([]);
+    expect(tallyOf('.size(@w, @h) { width: @w; }\n.size-lg { width: 4rem; }\n').flat).toBe(0);
+  });
+
+  it('keeps a mixin definition opaque, so what it nests is not scored as top level', () => {
+    // The `;` between a mixin's parameters is the only `;` that does not end a statement. Treating
+    // it as one leaves `@h)` as the prelude, which reads as an at-rule — and an at-rule is
+    // transparent, so `.card__title` inside the mixin would be counted as a top-level declaration
+    // when what it actually compiles to is a nested rule at every call site.
+    expect(tallyOf('.mixin(@w; @h) {\n  .card__title { width: @w; }\n}\n').flat).toBe(0);
+  });
+
+  it('skips an interpolated name instead of guessing at what it compiles to', () => {
+    // Bulma and Ant Design build nearly every selector this way. The name is unknowable without
+    // evaluating the stylesheet, and a guess would be fiction dressed as evidence.
+    expect(readStylesheetNames('.#{$class-prefix}button { color: red; }\n').topLevel).toEqual([]);
+    expect(readStylesheetNames('.@{ant-prefix}-btn { color: red; }\n').topLevel).toEqual([]);
+    expect(readStylesheetNames('.btn-@{variant} { color: red; }\n').topLevel).toEqual([]);
+  });
+
+  it('takes the leading class of each selector in a group, and only the leading one', () => {
+    // `.card .icon` references a name declared elsewhere rather than declaring one here, so
+    // counting it would let a descendant selector vouch for a name the project never defines.
+    expect(readStylesheetNames('.card, .panel { color: red; }\n').topLevel).toEqual([
+      'card',
+      'panel',
+    ]);
+    expect(readStylesheetNames('.card .icon { color: red; }\n').topLevel).toEqual(['card']);
   });
 });
 
