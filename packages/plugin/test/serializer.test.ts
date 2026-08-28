@@ -117,6 +117,60 @@ describe('serializeFlat', () => {
     expect(serializeFlatSync(fake()).arcData).toBeUndefined();
   });
 
+  it("derives a CSS angle for a linear gradient from the owning node's proportions", () => {
+    // The same matrix on two differently shaped nodes: the angle must follow the node, not just the
+    // matrix, or every non-square gradient is emitted rotated.
+    const gradient = {
+      type: 'GRADIENT_LINEAR',
+      visible: true,
+      opacity: 1,
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+      gradientTransform: [
+        [0.5, 0.5, 0],
+        [0, 1, 0],
+      ],
+    };
+    const wide = serializeFlatSync(fake({ width: 400, height: 100, fills: [gradient] }));
+    const square = serializeFlatSync(fake({ width: 200, height: 200, fills: [gradient] }));
+    // Both angles are what live Figma actually rendered for this matrix at these sizes.
+    expect((wide.fills as readonly { cssAngle?: number }[])[0]?.cssAngle).toBe(165.96);
+    expect((square.fills as readonly { cssAngle?: number }[])[0]?.cssAngle).toBe(135);
+    // The matrix still ships alongside it — the write side round-trips that, not the angle.
+    expect(
+      (wide.fills as readonly { gradientTransform?: number[][] }[])[0]?.gradientTransform,
+    ).toEqual([
+      [0.5, 0.5, 0],
+      [0, 1, 0],
+    ]);
+  });
+
+  it('omits cssAngle for gradient types that are not an angle in CSS', () => {
+    for (const type of ['GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']) {
+      const out = serializeFlatSync(
+        fake({
+          width: 400,
+          height: 100,
+          fills: [
+            {
+              type,
+              visible: true,
+              opacity: 1,
+              gradientStops: [{ position: 0, color: { r: 1, g: 0, b: 0, a: 1 } }],
+              gradientTransform: [
+                [0.5, 0.5, 0],
+                [0, 1, 0],
+              ],
+            },
+          ],
+        }),
+      );
+      expect((out.fills as readonly { cssAngle?: number }[])[0]?.cssAngle).toBeUndefined();
+    }
+  });
+
   it('marks fills=mixed when value is not an array', () => {
     const out = serializeFlatSync(fake({ fills: Symbol('figma.mixed') }));
     expect(out.fills).toBe(MIXED);
@@ -147,6 +201,8 @@ describe('serializeFlat', () => {
         type: 'GRADIENT_LINEAR',
         visible: true,
         opacity: 0.8,
+        // The identity matrix is a left-to-right ramp; on the 10×10 fake node that is 90deg.
+        cssAngle: 90,
         gradientStops: [
           { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
           { position: 1, color: { r: 0, g: 0, b: 1, a: 0.5 } },
@@ -816,6 +872,58 @@ describe('serializeFlat — typography', () => {
     expect(mixed.textCase).toBe(MIXED);
   });
 
+  it("derives cssAngle for a gradient text run from the TEXT node's own size", () => {
+    // A run's gradient spans the whole text box, not the run — so the node's size is the right
+    // reference. Without it a gradient-filled headline loses its angle the way a node fill would.
+    const gradient = {
+      type: 'GRADIENT_LINEAR',
+      visible: true,
+      opacity: 1,
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+      gradientTransform: [
+        [0.5, 0.5, 0],
+        [0, 1, 0],
+      ],
+    };
+    const segments = [
+      {
+        characters: 'A',
+        start: 0,
+        end: 1,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 20,
+        fills: [{ type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 0 } }],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+      {
+        characters: 'B',
+        start: 1,
+        end: 2,
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 20,
+        fills: [gradient],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        width: 400,
+        height: 100,
+        characters: 'AB',
+        fills: MIXED,
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    const runFills = out.segments?.[1]?.fills as readonly { cssAngle?: number }[] | undefined;
+    expect(runFills?.[0]?.cssAngle).toBe(165.96);
+  });
+
   it('expands per-run segments only for mixed-style text', () => {
     const segments = [
       {
@@ -1374,14 +1482,17 @@ describe('serializer — variable bindings on paints / effects / grids', () => {
   const ALIAS2 = { type: 'VARIABLE_ALIAS', id: 'VariableID:5157:5006' };
 
   it('carries a bound colour on a solid paint', () => {
-    const out = serializePaint({
-      type: 'SOLID',
-      visible: true,
-      opacity: 1,
-      blendMode: 'NORMAL',
-      color: { r: 0.1, g: 0.2, b: 0.3 },
-      boundVariables: { color: ALIAS },
-    } as unknown as Paint);
+    const out = serializePaint(
+      {
+        type: 'SOLID',
+        visible: true,
+        opacity: 1,
+        blendMode: 'NORMAL',
+        color: { r: 0.1, g: 0.2, b: 0.3 },
+        boundVariables: { color: ALIAS },
+      } as unknown as Paint,
+      null,
+    );
     expect(out).toEqual({
       type: 'SOLID',
       visible: true,
@@ -1392,37 +1503,46 @@ describe('serializer — variable bindings on paints / effects / grids', () => {
   });
 
   it('omits the field on an unbound paint, including Figma’s empty boundVariables', () => {
-    const empty = serializePaint({
-      type: 'SOLID',
-      visible: true,
-      opacity: 1,
-      color: { r: 0, g: 1, b: 0 },
-      boundVariables: {},
-    } as unknown as Paint);
+    const empty = serializePaint(
+      {
+        type: 'SOLID',
+        visible: true,
+        opacity: 1,
+        color: { r: 0, g: 1, b: 0 },
+        boundVariables: {},
+      } as unknown as Paint,
+      null,
+    );
     expect(empty).not.toHaveProperty('boundVariables');
-    const absent = serializePaint({
-      type: 'SOLID',
-      visible: true,
-      opacity: 1,
-      color: { r: 0, g: 1, b: 0 },
-    } as unknown as Paint);
+    const absent = serializePaint(
+      {
+        type: 'SOLID',
+        visible: true,
+        opacity: 1,
+        color: { r: 0, g: 1, b: 0 },
+      } as unknown as Paint,
+      null,
+    );
     expect(absent).not.toHaveProperty('boundVariables');
   });
 
   it('binds gradient stops independently of each other', () => {
-    const out = serializePaint({
-      type: 'GRADIENT_LINEAR',
-      visible: true,
-      opacity: 1,
-      gradientTransform: [
-        [1, 0, 0],
-        [0, 1, 0],
-      ],
-      gradientStops: [
-        { position: 0, color: { r: 0, g: 0, b: 0, a: 1 }, boundVariables: { color: ALIAS } },
-        { position: 1, color: { r: 1, g: 1, b: 1, a: 1 } },
-      ],
-    } as unknown as Paint) as { gradientStops: { boundVariables?: unknown }[] };
+    const out = serializePaint(
+      {
+        type: 'GRADIENT_LINEAR',
+        visible: true,
+        opacity: 1,
+        gradientTransform: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        gradientStops: [
+          { position: 0, color: { r: 0, g: 0, b: 0, a: 1 }, boundVariables: { color: ALIAS } },
+          { position: 1, color: { r: 1, g: 1, b: 1, a: 1 } },
+        ],
+      } as unknown as Paint,
+      null,
+    ) as { gradientStops: { boundVariables?: unknown }[] };
     expect(out.gradientStops[0]?.boundVariables).toEqual({ color: 'VariableID:5157:5005' });
     expect(out.gradientStops[1]).not.toHaveProperty('boundVariables');
   });

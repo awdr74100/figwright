@@ -7,7 +7,10 @@ import { boundVariablesSchema } from './binding-schema.js';
 // required and unknown keys pass through) so a paint read back from get_node round-trips into a
 // write unchanged — matching the previous hand-written schema, which set no additionalProperties.
 // The plugin's toFigmaPaint does the real enforcement (a gradient must carry gradientStops + a 2×3
-// gradientTransform; unsupported types are rejected).
+// gradientTransform; unsupported types are rejected). A read-back gradient also carries the derived
+// `cssAngle`; it rides through on the loose shape and is ignored, and it stays OUT of the declared
+// arguments on purpose — it is not an input, and declaring it would register a plugin-facing
+// argument that no plugin version will ever honour.
 
 const rgb = z.object({ r: z.number(), g: z.number(), b: z.number() });
 const rgba = z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number() });

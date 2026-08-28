@@ -19,6 +19,35 @@ const fakeFigma = (
   }) as unknown as typeof figma;
 
 describe('set_fills handler', () => {
+  it('ignores the read-only cssAngle when a read gradient is written straight back', async () => {
+    // get_design_context now returns cssAngle on linear gradients; feeding that paint back into
+    // set_fills unchanged must still work, and must not leak a derived field into Figma.
+    const node = { id: '1:1', fills: [] as unknown };
+    const handler = createSetFillsHandler(fakeFigma({ '1:1': node }));
+    await handler({
+      nodeId: '1:1',
+      fills: [
+        {
+          type: 'GRADIENT_LINEAR',
+          visible: true,
+          opacity: 1,
+          cssAngle: 165.96,
+          gradientStops: [{ position: 0, color: { r: 1, g: 0, b: 0, a: 1 } }],
+          gradientTransform: [
+            [1, 0, 0],
+            [-1, 1, 0],
+          ],
+        },
+      ],
+    });
+
+    expect((node.fills as Record<string, unknown>[])[0]).not.toHaveProperty('cssAngle');
+    expect((node.fills as { gradientTransform?: number[][] }[])[0]?.gradientTransform).toEqual([
+      [1, 0, 0],
+      [-1, 1, 0],
+    ]);
+  });
+
   it('applies SOLID fills to a node and returns ok + nodeId', async () => {
     const node = { id: '1:1', fills: [] as unknown };
     const handler = createSetFillsHandler(fakeFigma({ '1:1': node }));

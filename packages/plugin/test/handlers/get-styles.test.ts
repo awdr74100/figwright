@@ -24,6 +24,44 @@ const fakeFigma = (
 const alias = (id: string): unknown => ({ type: 'VARIABLE_ALIAS', id });
 
 describe('get_styles handler', () => {
+  it('reports no cssAngle on a paint style’s gradient', async () => {
+    // A style belongs to no node, so it has no aspect ratio and the angle genuinely does not exist
+    // — as opposed to being unknown. Handing one a size here would invent a number.
+    const handler = createGetStylesHandler(
+      fakeFigma({
+        paints: [
+          {
+            id: 'S:9',
+            name: 'Brand/Gradient',
+            key: 'k9',
+            description: '',
+            paints: [
+              {
+                type: 'GRADIENT_LINEAR',
+                visible: true,
+                opacity: 1,
+                gradientStops: [{ position: 0, color: { r: 1, g: 0, b: 0, a: 1 } }],
+                gradientTransform: [
+                  [0.5, 0.5, 0],
+                  [0, 1, 0],
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const out = (await handler({})) as {
+      paints: { paints: { cssAngle?: number; gradientTransform?: number[][] }[] }[];
+    };
+    expect(out.paints[0]?.paints[0]).not.toHaveProperty('cssAngle');
+    // The matrix is still there — it is what a write round-trips, and the only direction source.
+    expect(out.paints[0]?.paints[0]?.gradientTransform).toEqual([
+      [0.5, 0.5, 0],
+      [0, 1, 0],
+    ]);
+  });
+
   it('groups the four style categories with their payloads', async () => {
     const handler = createGetStylesHandler(
       fakeFigma({

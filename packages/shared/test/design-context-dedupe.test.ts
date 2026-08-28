@@ -19,6 +19,37 @@ const textNode = (id: string, family: string, style: string, size: number): Desi
 });
 
 describe('dedupeStyles', () => {
+  it('carries a gradient’s cssAngle into globalVars, and keeps differently-angled gradients apart', () => {
+    // The angle is what codegen actually emits, so dropping it here would leave the deduped view
+    // with only the raw matrix again. And two nodes sharing a matrix but not a shape genuinely
+    // render at different angles — collapsing them into one entry is the bug this field fixes.
+    const paint = (cssAngle: number) => ({
+      type: 'GRADIENT_LINEAR',
+      visible: true,
+      opacity: 1,
+      cssAngle,
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+      gradientTransform: [
+        [0.5, 0.5, 0],
+        [0, 1, 0],
+      ],
+    });
+    const { globalVars } = dedupeStyles([
+      { id: '1:1', name: 'Wide', type: 'FRAME', fills: [paint(165.96)] },
+      { id: '1:2', name: 'Square', type: 'FRAME', fills: [paint(135)] },
+      { id: '1:3', name: 'Wide again', type: 'FRAME', fills: [paint(165.96)] },
+    ] as never);
+
+    const entries = Object.values(globalVars.styles) as { cssAngle?: number }[][];
+    const angles = entries.map(e => e[0]?.cssAngle).toSorted();
+    // Three nodes, two distinct angles → two entries, and the repeat still dedupes.
+    expect(entries).toHaveLength(2);
+    expect(angles).toEqual([135, 165.96]);
+  });
+
   it('converts SOLID fills to hex and replaces them with a globalVars ref', () => {
     const n: DesignContextNode = {
       id: 'a',
