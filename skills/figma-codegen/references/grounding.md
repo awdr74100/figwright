@@ -120,8 +120,18 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
   `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
   (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour.** Map the
-  stops directly (`linear-gradient(<angle>, #A 0%, #B 100%)`, `radial-gradient(...)`); derive the
-  direction from `gradientTransform` (top→bottom linear is the common case) and confirm it in verify.
+  stops directly (`linear-gradient(<angle>, #A 0%, #B 100%)`, `radial-gradient(...)`). A
+  `GRADIENT_LINEAR` also carries **`cssAngle`** — the ready-to-emit degrees for
+  `linear-gradient(<cssAngle>deg, …)`. **Use it verbatim; never re-derive the angle from
+  `gradientTransform`.** The angle is not a property of the matrix alone: Figma positions the ramp in
+  the node's _normalized_ space, so the same matrix is a different angle on a differently shaped node
+  (a corner-to-corner ramp is `135deg` on a 200×200 node but `165.96deg` on a 400×100 one) — that
+  aspect correction is already baked into `cssAngle`. When `cssAngle` is absent the angle genuinely
+  isn't derivable (a paint style, which belongs to no node and so has no proportions, or a degenerate
+  matrix): fall back to the stops and say the direction was assumed. The radial / angular / diamond
+  types have no `cssAngle` — their CSS mapping is a centre and radii, not an angle. It is read-only:
+  writing a paint back ignores it, so a gradient's direction is changed through
+  `gradientTransform`, never by editing `cssAngle`.
 - **Image fit.** An `IMAGE` (or `VIDEO`) fill carries `scaleMode` — the object-fit equivalent:
   `FILL` → `object-cover`, `FIT` → `object-contain`, `CROP` → `cover` + a position, `TILE` →
   `background-repeat: repeat`. Apply it to the exported image so it isn't stretched or letterboxed.

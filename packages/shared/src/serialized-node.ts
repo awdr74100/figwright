@@ -64,6 +64,17 @@ const GradientPaintSchema = z.object({
   opacity: z.number(),
   gradientStops: z.array(SerializedColorStopSchema),
   gradientTransform: z.array(z.array(z.number())),
+  /**
+   * The ready-to-emit CSS angle in degrees for `linear-gradient(<deg>, …)`, derived from
+   * `gradientTransform` AND the owning node's aspect ratio — the same matrix is a different angle
+   * on a differently shaped node, so it cannot be read off the matrix alone.
+   *
+   * Present only on `GRADIENT_LINEAR` paints serialized as part of a node. Absent on a paint style
+   * (a style belongs to no node, so it has no aspect ratio and no derivable angle) and on the
+   * radial / angular / diamond types, whose CSS mapping is a centre and radii rather than an
+   * angle.
+   */
+  cssAngle: z.number().optional(),
 });
 
 /**

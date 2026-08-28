@@ -18,6 +18,8 @@ import {
   serializeNode as serializeBase,
 } from '@figwright/shared';
 
+import { cssAngleFromGradientTransform } from './gradient-angle.js';
+
 const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||
   paint.type === 'GRADIENT_RADIAL' ||
@@ -63,7 +65,22 @@ export const collectBindings = (raw: unknown): SerializedBindings | undefined =>
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
-export const serializePaint = (paint: Paint): SerializedPaint => {
+/**
+ * The owning node's rendered size, needed to turn a gradient's axis matrix into a CSS angle. `null`
+ * means the paint has no owning node (a paint style), where the angle genuinely does not exist
+ * rather than merely being unknown.
+ */
+export interface PaintOwnerSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * `ownerSize` is required rather than optional on purpose: a caller that forgot to pass it would
+ * silently emit gradients with no angle, and nothing would fail. Making the "no owner" case an
+ * explicit `null` turns that omission into a type error instead.
+ */
+export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): SerializedPaint => {
   const visible = paint.visible ?? true;
   const opacity = paint.opacity ?? 1;
   if (paint.type === 'SOLID') {
@@ -86,10 +103,17 @@ export const serializePaint = (paint: Paint): SerializedPaint => {
       [1, 0, 0],
       [0, 1, 0],
     ];
+    // Only GRADIENT_LINEAR maps onto a CSS angle; the other three are a centre plus radii, so
+    // reporting an "angle" for them would be a confident lie rather than a missing field.
+    const cssAngle =
+      paint.type === 'GRADIENT_LINEAR' && ownerSize !== null
+        ? cssAngleFromGradientTransform(transform, ownerSize.width, ownerSize.height)
+        : undefined;
     return {
       type: paint.type,
       visible,
       opacity,
+      ...(cssAngle === undefined ? {} : { cssAngle }),
       gradientStops: stops.map(s => {
         const stop: SerializedColorStop = {
           position: s.position,
@@ -356,6 +380,9 @@ const SEGMENT_FIELDS = [
 /** Break a mixed-style TEXT node into runs of uniform styling (so inline bold/links/colors survive). */
 const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
   const segments = text.getStyledTextSegments([...SEGMENT_FIELDS]);
+  // A gradient on a text run is positioned across the whole TEXT node's box, not the run's, so the
+  // node's own size is what turns its axis matrix into a CSS angle — same as for a node fill.
+  const ownerSize = { width: text.width, height: text.height };
   return segments.map(s => {
     const out: SerializedTextSegment = {
       characters: s.characters,
@@ -363,7 +390,7 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
       end: s.end,
       fontName: { family: s.fontName.family, style: s.fontName.style },
       fontSize: s.fontSize,
-      fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint)) : [],
+      fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint, ownerSize)) : [],
       textDecoration: s.textDecoration,
       textCase: s.textCase,
     };
@@ -482,14 +509,23 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       };
     }
   }
+  // A linear gradient's CSS angle depends on the node's proportions, not just its axis matrix, so
+  // the paints of this node get its size threaded in. Paint styles serialize with no size and
+  // correctly report no angle.
+  const ownerSize =
+    typeof out.width === 'number' && typeof out.height === 'number'
+      ? { width: out.width, height: out.height }
+      : null;
   if ('fills' in node) {
     const fills = (node as { fills: unknown }).fills;
-    out.fills = Array.isArray(fills) ? fills.map(p => serializePaint(p as Paint)) : MIXED;
+    out.fills = Array.isArray(fills)
+      ? fills.map(p => serializePaint(p as Paint, ownerSize))
+      : MIXED;
   }
   if ('strokes' in node) {
     const strokes = (node as { strokes: unknown }).strokes;
     if (Array.isArray(strokes) && strokes.length > 0) {
-      out.strokes = strokes.map(p => serializePaint(p as Paint));
+      out.strokes = strokes.map(p => serializePaint(p as Paint, ownerSize));
       const weight = (node as { strokeWeight?: unknown }).strokeWeight;
       if (typeof weight === 'number') {
         out.strokeWeight = weight;

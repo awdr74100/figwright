@@ -59,6 +59,8 @@ export interface SimplifiedPaint {
   gradientStops?: { position: number; color: string }[];
   /** The gradient's 2×3 axis matrix — the direction/angle, needed to emit a correct CSS gradient. */
   gradientTransform?: number[][];
+  /** Ready-to-emit `linear-gradient(<deg>, …)` angle, already corrected for the node's aspect ratio. */
+  cssAngle?: number;
   /** IMAGE/VIDEO object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat. */
   scaleMode?: string;
   /** In-fill colour grading (exposure/contrast/…): export the composited render, not the original. */
@@ -85,6 +87,9 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     // Carry the axis matrix too — without it the gradient direction/angle is lost and the LLM can
     // only guess (or flatten the gradient to a solid colour, the classic miss).
     out.gradientTransform = paint.gradientTransform;
+    // The angle the matrix alone can't give: it depends on the owning node's aspect ratio, which is
+    // gone by the time a deduped paint is read. Present only for linear gradients on a real node.
+    if (paint.cssAngle !== undefined) out.cssAngle = paint.cssAngle;
   } else if ('scaleMode' in paint && paint.scaleMode !== undefined) {
     out.scaleMode = paint.scaleMode;
     if ('filtersApplied' in paint && paint.filtersApplied === true) out.filtersApplied = true;

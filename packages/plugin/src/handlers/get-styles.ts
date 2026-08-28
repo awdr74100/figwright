@@ -100,7 +100,10 @@ export const createGetStylesHandler =
         name: s.name,
         key: s.key,
         description: s.description,
-        paints: s.paints.map(serializePaint),
+        // A paint style belongs to no node, so it has no aspect ratio and no derivable gradient
+        // angle — hence the explicit null. Called through an arrow, never point-free: map would
+        // otherwise pass the array index as the second argument.
+        paints: s.paints.map(p => serializePaint(p, null)),
       })),
       texts: textStyles.map(s => {
         const style: SerializedTextStyle = {
