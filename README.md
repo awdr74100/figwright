@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-light.svg">
-  <img alt="Figwright" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/logo-full-light.svg" width="480" height="240">
+  <source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-full-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/logo-full-light.svg">
+  <img alt="Figwright" src="./.github/assets/logo-full-light.svg" width="480" height="240">
 </picture>
 
 Where Playwright drives the browser, Figwright drives Figma.
@@ -26,13 +26,13 @@ It works in both directions:
 **Read** — turn a Figma selection into framework-aware code, grounded on faithful, de-duplicated design context (layout, typography, variables, components).
 
 <p align="center">
-  <img alt="Figwright turning a Figma selection into code" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/figma-to-code.gif" width="820">
+  <img alt="Figwright turning a Figma selection into code" src="./.github/assets/figma-to-code.gif" width="820">
 </p>
 
 **Write** — author and edit the canvas directly: frames, text, auto-layout, styles, variables, components, whole screens.
 
 <p align="center">
-  <img alt="Figwright building a design directly on the Figma canvas" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/code-to-figma.gif" width="820">
+  <img alt="Figwright building a design directly on the Figma canvas" src="./.github/assets/code-to-figma.gif" width="820">
 </p>
 
 Everything runs on your machine and talks to Figma through a plugin, so it needs **no Figma Dev Mode seat** and **no paid tier**.
@@ -93,7 +93,7 @@ By design Figwright is **provider-first**: rather than a fixed compiler pipeline
 The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
 
 <p align="center">
-  <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-panel.png" width="820">
+  <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="./.github/assets/plugin-panel.png" width="820">
 </p>
 
 <p align="center">
@@ -103,13 +103,13 @@ The Figma-side plugin isn't a black box. It shows every call as it happens, lets
 And it follows your Figma theme, light or dark.
 
 <p align="center">
-  <img alt="The same panel side by side in Figma's light and dark themes" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-theme.png" width="616">
+  <img alt="The same panel side by side in Figma's light and dark themes" src="./.github/assets/plugin-theme.png" width="616">
 </p>
 
 The window is yours to arrange. Drag the bottom-right corner to resize it — a taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
 
 <p align="center">
-  <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="https://raw.githubusercontent.com/awdr74100/figwright/HEAD/.github/plugin-window.png" width="602">
+  <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="./.github/assets/plugin-window.png" width="602">
 </p>
 
 <p align="center">
