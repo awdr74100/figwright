@@ -36,6 +36,11 @@ export const createApplyStyleToNodeHandler =
         `apply_style_to_node: node ${p.nodeId} cannot take a ${String(p.field)} style`,
       );
     }
+    // No font load, deliberately, even for `text`. The typings say `setTextStyleIdAsync` "requires
+    // the font to be loaded", which reads like the caller's job — every other text write here does
+    // load first. It is not: verified in a real file, applying a text style succeeds with neither
+    // the node's current face nor the style's own face loaded in the session. Being async is how
+    // the setter affords that. Adding a load would be a pointless round trip.
     await (fn as (id: string) => Promise<void>).call(node, p.styleId);
 
     const result: MutateResult = { ok: true, nodeId: node.id };

@@ -127,15 +127,58 @@ describe('set_text_properties handler', () => {
     expect(node.textWrapStyle).toBe('BALANCE');
   });
 
-  it('does not load fonts when only layout/overflow props change', async () => {
+  // Figma refuses these three against an unloaded font exactly as it refuses a typography write,
+  // so each is checked on its own: `{nodeId, maxLines: 3}` threw `Cannot write to node with
+  // unloaded font` in a real file while `{nodeId, fontSize: 24, maxLines: 3}` went through, which
+  // is why the miss survived — any call that also touched typography loaded the font on the way
+  // past. A mock cannot reproduce the refusal, so what is pinned here is that the load happens.
+  it.each(['textAutoResize', 'textTruncation', 'maxLines'])(
+    'loads the node font before writing %s on its own',
+    async field => {
+      const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+      const node = {
+        id: '1:1',
+        type: 'TEXT',
+        fontName: { family: 'Inter', style: 'Regular' },
+        characters: 'hi',
+        textAutoResize: 'NONE',
+        textTruncation: 'DISABLED',
+        maxLines: null,
+      };
+      const value = { textAutoResize: 'HEIGHT', textTruncation: 'ENDING', maxLines: 3 }[field];
+
+      await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+        nodeId: '1:1',
+        [field]: value,
+      });
+
+      expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+      expect(node[field as keyof typeof node]).toBe(value);
+    },
+  );
+
+  it('clears maxLines with an explicit null, still loading the font first', async () => {
     const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
-    const node = { id: '1:1', type: 'TEXT', textAutoResize: 'NONE' };
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      fontName: { family: 'Inter', style: 'Regular' },
+      characters: 'hi',
+      maxLines: 3,
+    };
     await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
       nodeId: '1:1',
-      textAutoResize: 'HEIGHT',
+      maxLines: null,
     });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+    expect(node.maxLines).toBeNull();
+  });
+
+  it('loads nothing when there is nothing to write', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = { id: '1:1', type: 'TEXT', fontName: { family: 'Inter', style: 'Regular' } };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({ nodeId: '1:1' });
     expect(loadFontAsync).not.toHaveBeenCalled();
-    expect(node.textAutoResize).toBe('HEIGHT');
   });
 
   it('throws on non-TEXT node, missing node, or bad input', async () => {
