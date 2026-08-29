@@ -1,23 +1,28 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-full-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="./.github/assets/logo-full-light.svg">
-  <img alt="Figwright" src="./.github/assets/logo-full-light.svg" width="480" height="240">
-</picture>
+<br />
 
-Where Playwright drives the browser, Figwright drives Figma.
+<picture><source media="(prefers-color-scheme: dark)" srcset="./.github/assets/logo-full-dark.svg"><source media="(prefers-color-scheme: light)" srcset="./.github/assets/logo-full-light.svg"><img alt="Figwright" src="./.github/assets/logo-full-light.svg" width="499" height="150"></picture>
+
+<br />
+
+<p align="center">
+  A free, two-way Figma MCP server for coding agents.
+  <br />
+  Pairs with a Figma plugin, not a Dev Mode seat.
+</p>
+
+[About](#about) · [Setup](#setup) · [Skills](#skills) · [Tools](#tools) · [Plugin](#plugin) · [FAQ](#faq) · [Contributing](#contributing)
 
 [![npm](https://img.shields.io/npm/v/@figwright/mcp?logo=npm&color=cb3837)](https://www.npmjs.com/package/@figwright/mcp)
 [![CI](https://github.com/awdr74100/figwright/actions/workflows/ci.yml/badge.svg)](https://github.com/awdr74100/figwright/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Glama MCP server](https://glama.ai/mcp/servers/awdr74100/figwright/badges/score.svg)](https://glama.ai/mcp/servers/awdr74100/figwright)
 
 <a href="https://trendshift.io/repositories/68274?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-68274" target="_blank" rel="noopener noreferrer"><img alt="Figwright on Trendshift" src="https://trendshift.io/api/badge/trendshift/repositories/68274/daily?language=TypeScript" width="250" height="55"></a>
 
 </div>
 
-## What is Figwright?
+## About
 
 Figwright connects an **MCP server** to a **Figma plugin** over a local WebSocket relay, so an AI agent — Claude Code, Cursor, Codex, or any other MCP client — can work _with_ Figma instead of just looking at it.
 
@@ -35,88 +40,18 @@ It works in both directions:
   <img alt="Figwright building a design directly on the Figma canvas" src="./.github/assets/code-to-figma.gif" width="820">
 </p>
 
-Everything runs on your machine and talks to Figma through a plugin, so it needs **no Figma Dev Mode seat** and **no paid tier**.
+Everything runs on your machine: the server, the relay, and the plugin. Your designs are never sent anywhere.
 
 ## Why Figwright
 
-- **Free** — no Figma Dev Mode or paid seat. The official Dev Mode MCP is gated; Figwright isn't.
+- **Not gated** — the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
 - **Bidirectional** — not read-only. **112 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen** — Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
-- **Any MCP client** — Claude Code, Cursor, and other MCP-capable agents all work the same way.
 - **Open & extensible** — the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
 
-## How it works
+## Setup
 
-Your MCP client talks to the `@figwright/mcp` server over stdio; the server relays to the Figma plugin over a local WebSocket. Several clients can share one plugin — they elect a leader that owns the connection — and the transport is built to ride out dropped sockets:
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ MCP CLIENTS  —  one per agent                                       │
-│ Claude Code · Cursor · Claude · any MCP-capable client              │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │  MCP protocol over stdio
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ @figwright/mcp  —  your client launches one; they elect a leader    │
-│                                                                     │
-│ LEADER   (owns the single plugin connection)                        │
-│    • WebSocket relay · request idempotency                          │
-│    • routes to the most-recently-active file                        │
-│    • session resume · "busy ≠ dead" heartbeat                       │
-│    • endpoints:  /ws (plugin) · /ping (health) · /rpc (followers)   │
-│                                                                     │
-│ FOLLOWERS                                                           │
-│    • forward tool calls to the leader over HTTP /rpc                │
-│    • take over automatically if the leader exits                    │
-└─────────────────────────────────────────────────────────────────────┘
-                                   │  local WebSocket · msgpack (binary)
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ FIGMA  (desktop or browser)                                         │
-│                                                                     │
-│ ┌─────────────────────────────────────────────────────────────────┐ │
-│ │ Figwright plugin                                                │ │
-│ │   • UI (Vue 3 iframe): WebSocket client + heartbeat             │ │
-│ │   • sandbox: executes Figma Plugin API calls                    │ │
-│ └─────────────────────────────────────────────────────────────────┘ │
-│                                                                     │
-│              │ Figma Plugin API                                     │
-│              ▼                                                      │
-│            Canvas                                                   │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-By design Figwright is **provider-first**: rather than a fixed compiler pipeline, the tools surface honest design context and let the model generate code that matches _your_ codebase. The [`figma-codegen`](#skills) skill encodes this approach.
-
-## The plugin
-
-The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
-
-<p align="center">
-  <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="./.github/assets/plugin-panel.png" width="820">
-</p>
-
-<p align="center">
-  <sub><b>Activity</b> — every call, with timing and a jump to the nodes it touched · <b>Payload</b> — exactly what the model received · <b>Debug</b> — health, versions, and a one-click diagnostic bundle</sub>
-</p>
-
-And it follows your Figma theme, light or dark.
-
-<p align="center">
-  <img alt="The same panel side by side in Figma's light and dark themes" src="./.github/assets/plugin-theme.png" width="616">
-</p>
-
-The window is yours to arrange. Drag the bottom-right corner to resize it — a taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
-
-<p align="center">
-  <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="./.github/assets/plugin-window.png" width="602">
-</p>
-
-<p align="center">
-  <sub><b>Resize</b> — drag the corner, the size sticks · <b>Background</b> — the panel hides, the relay stays connected</sub>
-</p>
-
-## Quick start
+You need an **MCP client** (Claude Code, Cursor, …), **Node.js 20.19+ or 22.12+**, and **Figma**. The free Figma tier is enough, though the desktop app is needed to import the plugin. The server runs via `npx` as its own process, so its Node version is independent of the one your project builds with; Node 18/21 and 22.0–22.11 are not supported.
 
 ### 1. Add the server to your MCP client
 
@@ -194,11 +129,76 @@ Figwright exposes **112 MCP tools** in three groups:
 > [!TIP]
 > Your MCP client lists every tool at connect time — that's always the authoritative, up-to-date catalog.
 
-## Requirements
+## Plugin
 
-- An **MCP client** (Claude Code, Cursor, …).
-- **Node.js 20.19+ or 22.12+** — the server runs via `npx`, as its own process, so this is independent of the Node version your project builds with. (This is the modern-Node baseline; Node 18/21 and 22.0–22.11 aren't supported.)
-- **Figma** — the free tier is enough; the desktop app is needed to import the plugin in development.
+The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
+
+<p align="center">
+  <img alt="The Figwright panel: an activity log of tool calls, an expanded call showing the exact payload sent to the model, and a debug tab with connection and call statistics" src="./.github/assets/plugin-panel.png" width="820">
+</p>
+
+<p align="center">
+  <sub><b>Activity</b> — every call, with timing and a jump to the nodes it touched · <b>Payload</b> — exactly what the model received · <b>Debug</b> — health, versions, and a one-click diagnostic bundle</sub>
+</p>
+
+And it follows your Figma theme, light or dark.
+
+<p align="center">
+  <img alt="The same panel side by side in Figma's light and dark themes" src="./.github/assets/plugin-theme.png" width="616">
+</p>
+
+The window is yours to arrange. Drag the bottom-right corner to resize it — a taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
+
+<p align="center">
+  <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="./.github/assets/plugin-window.png" width="602">
+</p>
+
+<p align="center">
+  <sub><b>Resize</b> — drag the corner, the size sticks · <b>Background</b> — the panel hides, the relay stays connected</sub>
+</p>
+
+## How it works
+
+Your MCP client talks to the `@figwright/mcp` server over stdio; the server relays to the Figma plugin over a local WebSocket. Several clients can share one plugin — they elect a leader that owns the connection — and the transport is built to ride out dropped sockets:
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ MCP CLIENTS  —  one per agent                                       │
+│ Claude Code · Cursor · Claude · any MCP-capable client              │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │  MCP protocol over stdio
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ @figwright/mcp  —  your client launches one; they elect a leader    │
+│                                                                     │
+│ LEADER   (owns the single plugin connection)                        │
+│    • WebSocket relay · request idempotency                          │
+│    • routes to the most-recently-active file                        │
+│    • session resume · "busy ≠ dead" heartbeat                       │
+│    • endpoints:  /ws (plugin) · /ping (health) · /rpc (followers)   │
+│                                                                     │
+│ FOLLOWERS                                                           │
+│    • forward tool calls to the leader over HTTP /rpc                │
+│    • take over automatically if the leader exits                    │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │  local WebSocket · msgpack (binary)
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ FIGMA  (desktop or browser)                                         │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ Figwright plugin                                                │ │
+│ │   • UI (Vue 3 iframe): WebSocket client + heartbeat             │ │
+│ │   • sandbox: executes Figma Plugin API calls                    │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│              │ Figma Plugin API                                     │
+│              ▼                                                      │
+│            Canvas                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+By design Figwright is **provider-first**: rather than a fixed compiler pipeline, the tools surface honest design context and let the model generate code that matches _your_ codebase. The [`figma-codegen`](#skills) skill encodes this approach.
 
 ## Security
 
