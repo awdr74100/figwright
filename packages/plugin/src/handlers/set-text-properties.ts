@@ -3,12 +3,11 @@ import type { MutateResult } from '@figwright/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 
 /**
- * Set a TEXT node's typography + layout/overflow props. Typography (fontName/fontSize/lineHeight/
- * letterSpacing/textCase/textDecoration/paragraphSpacing/paragraphIndent) mutates the node's runs,
- * so Figma requires every font on the node — plus the target fontName, if changing it — to be
- * loaded first. Layout/overflow props (textAutoResize/truncation/maxLines) are node-level and need
- * no font load. Applied in order autoResize → truncation → maxLines because maxLines only takes
- * effect once truncation is ENDING.
+ * Set a TEXT node's typography + layout/overflow props. Figma requires every font on the node —
+ * plus the target fontName, if changing it — to be loaded before _any_ of them is written: the
+ * layout/overflow three (textAutoResize/truncation/maxLines) are refused the same way typography
+ * is, despite reading as node-level settings. Applied in order autoResize → truncation → maxLines
+ * because maxLines only takes effect once truncation is ENDING.
  */
 export const createSetTextPropertiesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -61,9 +60,17 @@ export const createSetTextPropertiesHandler =
     }
     const text = node as TextNode;
 
-    // Typography mutations require fonts loaded. Load the node's current font(s) (so range mutations
-    // like fontSize/letterSpacing succeed) plus the new fontName, if one is being assigned.
-    const settingTypography =
+    // Every write below needs the node's font(s) loaded — the layout/overflow three included, which
+    // is not obvious and was got wrong here: Figma rejects `maxLines`, `textTruncation` and
+    // `textAutoResize` with `Cannot write to node with unloaded font` just as it rejects a
+    // typography write, so `{nodeId, maxLines: 3}` threw while `{nodeId, fontSize: 24, maxLines: 3}`
+    // succeeded. Nothing in the type checker or a mocked test can see that; the batch inverse that
+    // restores these same fields has always reloaded the captured fonts first.
+    //
+    // Load the node's current font(s) — every one of them when the node is mixed, so a range-wide
+    // mutation succeeds — plus the new fontName, if one is being assigned. Skipped only when there
+    // is nothing to write at all, which is the one case that touches no text.
+    const willWrite =
       p.fontName !== undefined ||
       p.fontSize !== undefined ||
       p.lineHeight !== undefined ||
@@ -72,27 +79,30 @@ export const createSetTextPropertiesHandler =
       p.textDecoration !== undefined ||
       p.paragraphSpacing !== undefined ||
       p.paragraphIndent !== undefined ||
-      p.textWrapStyle !== undefined;
-    if (settingTypography) {
+      p.textWrapStyle !== undefined ||
+      p.textAutoResize !== undefined ||
+      p.textTruncation !== undefined ||
+      p.maxLines !== undefined;
+    if (willWrite) {
       const fonts: FontName[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
           ? text.getRangeAllFontNames(0, text.characters.length)
           : [text.fontName as FontName];
       if (p.fontName !== undefined) fonts.push(p.fontName);
       await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
-
-      if (p.fontName !== undefined) text.fontName = p.fontName;
-      if (p.fontSize !== undefined) text.fontSize = p.fontSize as number;
-      if (p.lineHeight !== undefined) text.lineHeight = p.lineHeight as LineHeight;
-      if (p.letterSpacing !== undefined) text.letterSpacing = p.letterSpacing as LetterSpacing;
-      if (p.textCase !== undefined) text.textCase = p.textCase as TextNode['textCase'];
-      if (p.textDecoration !== undefined)
-        text.textDecoration = p.textDecoration as TextNode['textDecoration'];
-      if (p.paragraphSpacing !== undefined) text.paragraphSpacing = p.paragraphSpacing as number;
-      if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
-      if (p.textWrapStyle !== undefined)
-        text.textWrapStyle = p.textWrapStyle as TextNode['textWrapStyle'];
     }
+
+    if (p.fontName !== undefined) text.fontName = p.fontName;
+    if (p.fontSize !== undefined) text.fontSize = p.fontSize as number;
+    if (p.lineHeight !== undefined) text.lineHeight = p.lineHeight as LineHeight;
+    if (p.letterSpacing !== undefined) text.letterSpacing = p.letterSpacing as LetterSpacing;
+    if (p.textCase !== undefined) text.textCase = p.textCase as TextNode['textCase'];
+    if (p.textDecoration !== undefined)
+      text.textDecoration = p.textDecoration as TextNode['textDecoration'];
+    if (p.paragraphSpacing !== undefined) text.paragraphSpacing = p.paragraphSpacing as number;
+    if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
+    if (p.textWrapStyle !== undefined)
+      text.textWrapStyle = p.textWrapStyle as TextNode['textWrapStyle'];
 
     if (p.textAutoResize !== undefined)
       text.textAutoResize = p.textAutoResize as TextNode['textAutoResize'];
