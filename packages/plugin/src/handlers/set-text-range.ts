@@ -121,6 +121,9 @@ export const createSetTextRangeHandler =
       }
       // Design-system bindings: shared styles (async setters), then variable bindings last so a bound
       // variable wins over a direct value set on the same field above.
+      // The face this style carries is not preloaded above, and does not need to be — the async
+      // style-id setters load what they need themselves (see apply-style-to-node.ts, where the same
+      // thing was checked against a real file with nothing loaded at all).
       if (r.textStyleId !== undefined)
         await text.setRangeTextStyleIdAsync(start, end, r.textStyleId);
       if (r.fillStyleId !== undefined)
