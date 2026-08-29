@@ -92,19 +92,23 @@ const CANARIES: Canary[] = [
     json: { minItems: 1, type: 'array', items: { type: 'string' } },
   },
   {
-    // Every member carries a bare `type` and nothing else. The constrained union below is the same
-    // construct with a check added, and the two are pinned separately because a renderer is free to
-    // treat them differently.
+    // Zod 4.5 folds a union whose members carry nothing but a `type` into a type array; 4.4 wrote
+    // it as `anyOf: [{type: 'string'}, {type: 'null'}]`. Both spell the same constraint in
+    // draft 2020-12, and the array form is the one OpenAI's structured outputs documents for a
+    // nullable field — but it is what a client reads, so it is pinned rather than left to drift.
     what: 'nullable scalar (union of bare types)',
     schema: z.string().nullable(),
-    json: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    json: { type: ['string', 'null'] },
   },
   {
     what: 'union of two bare non-null types',
     schema: z.union([z.boolean(), z.string()]),
-    json: { anyOf: [{ type: 'boolean' }, { type: 'string' }] },
+    json: { type: ['boolean', 'string'] },
   },
   {
+    // A member carrying a check has nowhere to go in a type array, so this stays `anyOf`. That is
+    // the boundary between the two renderings: it is why `set_text_properties.maxLines` moved in
+    // 4.5 and the `minLength`-carrying members of `set_variable_code_syntax` did not.
     what: 'nullable with a check on the non-null member',
     schema: z.union([z.string().min(1), z.null()]),
     json: { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },

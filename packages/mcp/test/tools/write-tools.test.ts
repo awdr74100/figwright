@@ -208,7 +208,7 @@ describe('M2 write tool definitions', () => {
       required: ['nodeId'],
       properties: {
         textTruncation: { enum: ['DISABLED', 'ENDING'] },
-        maxLines: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+        maxLines: { type: ['number', 'null'] },
         textAutoResize: { enum: ['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'] },
         paragraphSpacing: { type: 'number', minimum: 0 },
         paragraphIndent: { type: 'number', minimum: 0 },
