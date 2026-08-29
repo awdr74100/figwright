@@ -4,7 +4,7 @@ Thanks for your interest in Figwright! Contributions of all kinds are welcome: b
 
 This guide covers the **contribution process**. For the **technical deep-dive** (architecture, the monorepo layout, the tech stack, and gotchas) read **[AGENTS.md](./AGENTS.md)**, which is the canonical guide for working in this repo.
 
-By participating, please keep interactions respectful and constructive. We want Figwright to be a welcoming project for everyone.
+By participating you agree to uphold our [Code of Conduct](./CODE_OF_CONDUCT.md): keep interactions respectful and constructive, so Figwright stays a welcoming project for everyone.
 
 ## Ways to contribute
 
