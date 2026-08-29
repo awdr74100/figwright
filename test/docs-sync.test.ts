@@ -26,3 +26,30 @@ describe('README tool counts', () => {
     expect(claims).toEqual(claims.map(() => ALL_TOOL_SPECS.length));
   });
 });
+
+// The front page opens with a nav row of in-page links, and the body links to its own sections too.
+// Renaming a heading silently breaks every one of them — GitHub renders a dead `#anchor` as an
+// ordinary link that scrolls nowhere, so nothing complains. Derive the anchors GitHub would mint
+// and check each link resolves.
+
+/** GitHub's heading slug: lowercase, drop punctuation, spaces to hyphens. */
+const slugify = (heading: string): string =>
+  heading
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/gu, '')
+    .replace(/\s+/gu, '-');
+
+describe('README in-page links', () => {
+  it.each(README_PATHS)('%s resolves every #anchor to a heading it contains', path => {
+    const body = readFileSync(join(import.meta.dirname, '..', path), 'utf8');
+    const anchors = new Set(
+      [...body.matchAll(/^#{1,6}\s+(.+)$/gmu)].map(m => slugify(m[1] as string)),
+    );
+    const dead = [...body.matchAll(/\]\((#[-\w]+)\)/gu)]
+      .map(m => m[1] as string)
+      .filter(link => !anchors.has(link.slice(1)));
+
+    expect(dead, `${path}: link(s) pointing at no heading`).toEqual([]);
+  });
+});
