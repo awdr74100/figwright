@@ -18,6 +18,16 @@ JSON-RPC at it, and asserts the advertised contract against what the specs decla
 `pnpm test`. That gate answers *did anything break*; it does not answer *what moved*, which is what
 an audit is for — Stage 5 covers the difference.
 
+**Know the one thing that gate cannot see.** Its schema check compares the SDK's output against
+`test/tool-schema.ts`'s derivation, and both call the same `z.toJSONSchema`. That is independent of
+the *SDK* — it catches an SDK that stops asking Zod the same question — but not of *Zod*: when Zod
+changes what it answers, both sides move together and the equality still holds. An SDK bump that
+also moves the resolved `zod` version (its range is `^4.2.0`, so it shares the repo's copy) can
+therefore reshape every client's schema with this gate green.
+`packages/mcp/test/json-schema-generation.test.ts` covers that half by pinning each construct's
+rendering by hand — if a bump moves the Zod version, read its diff too, and let `probe.mjs` name
+which tools changed.
+
 Target version: whatever the user named, otherwise the latest `@modelcontextprotocol/server` on npm.
 
 ## Stage 0 — Resolve versions
@@ -143,9 +153,11 @@ Two different questions, two tools. Run both.
 pnpm build && pnpm vitest run packages/mcp/test/e2e/mcp-wire.test.ts
 ```
 
-It asserts the advertised tool set, each tool's JSON Schema against an SDK-independent derivation of
-its `inputShape`, the dialect, annotations, prompts, a live `tools/call`, the bad-argument path, and
-that a 2024-11-05 client is still served. Red here means the release moved something that matters.
+It asserts the advertised tool set, each tool's JSON Schema against a derivation that is independent
+of the SDK (but not of Zod — see above), the dialect, annotations, prompts, a live `tools/call`, the
+bad-argument path, and that a 2024-11-05 client is still served. Red here means the release moved
+something that matters. If the bump also moved `zod`, run
+`pnpm vitest run packages/mcp/test/json-schema-generation.test.ts` as a second gate.
 
 **The probe — what moved?** A gate is a boolean; an audit has to name the change. `probe.mjs` boots
 the same built server, snapshots everything a client can observe, and diffs two snapshots.
