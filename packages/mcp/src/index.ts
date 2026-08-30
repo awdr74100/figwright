@@ -17,6 +17,7 @@ import { normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { annotationsFor } from './tools/annotations.js';
+import { BATCH_TOOL_NAME } from './tools/batch.js';
 import { COMPONENT_MAP_TOOL_NAME, handleComponentMap } from './tools/component-map.js';
 import { handleDesignContext } from './tools/design-context-guard.js';
 import { DESIGN_DIFF_TOOL_NAME, handleDesignDiff } from './tools/design-diff.js';
@@ -32,6 +33,7 @@ import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
 import { captureSkew, withSkewNotice } from './tools/skew-notice.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
+import { checkBatchOps } from './tools/wire-schema.js';
 
 const SERVER_NAME = 'figwright';
 const SERVER_VERSION = pkg.version;
@@ -163,6 +165,14 @@ const createMcpServer = (): McpServer => {
     const run: ToolHandler =
       SPECIAL_HANDLERS[spec.name] ??
       (async args => {
+        // batch is the one tool the SDK cannot fully check for us: `ops[].params` is a free-form
+        // record, so what each op actually asks for is never matched against the schema of the tool
+        // it names. Every other tool's arguments were validated against that same schema on the way
+        // in, which is why this runs for batch alone rather than for the whole loop.
+        if (spec.name === BATCH_TOOL_NAME) {
+          const rejection = checkBatchOps(args);
+          if (rejection !== null) throw new Error(rejection.message);
+        }
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
         return textResult(await dispatch(spec.name, dispatchArgs));

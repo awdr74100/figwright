@@ -345,6 +345,48 @@ describe('leader endpoints', () => {
     expect(calls).toBe(0);
   });
 
+  it('POST /rpc looks inside a batch, which no schema above it can describe', async () => {
+    // batch's own schema says ops[].params is a free-form record, so the envelope check passes and
+    // the bad op would otherwise reach the sandbox — which hands params to the write handler
+    // verbatim. `calls` is what proves it stopped here, before the batch could apply and unwind.
+    const b = await startLeader();
+    let calls = 0;
+    await attachFakePlugin(b, async () => {
+      calls += 1;
+      return { ok: true };
+    });
+
+    const resp = await callRpc(b.port, {
+      requestId: 'r-batch',
+      toolName: 'batch',
+      args: {
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'fine' } },
+          { tool: 'set_opacity', params: { nodeId: '1:1', opacity: 'half' } },
+        ],
+      },
+    });
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(resp.code).toBe(ErrorCode.InvalidParams);
+    expect(resp.message).toMatch(/ops\[1\]/);
+    expect(resp.message).toMatch(/opacity/);
+    expect(calls).toBe(0);
+  });
+
+  it('POST /rpc forwards a batch whose ops are all well formed', async () => {
+    const b = await startLeader();
+    let seen: unknown = null;
+    await attachFakePlugin(b, async (_method, params) => {
+      seen = params;
+      return { ok: true, results: [{ ok: true }] };
+    });
+
+    const args = { ops: [{ tool: 'rename_node', params: { nodeId: '1:1', name: 'fine' } }] };
+    const resp = await callRpc(b.port, { requestId: 'r-batch-ok', toolName: 'batch', args });
+    expect(resp).toMatchObject({ kind: 'ok' });
+    expect(seen).toEqual(args);
+  });
+
   it('POST /rpc accepts a no-argument tool called with args omitted', async () => {
     // How every zero-argument read is actually called — and `undefined` is not an object, so it has
     // to be checked as the empty one the plugin sees rather than rejected.

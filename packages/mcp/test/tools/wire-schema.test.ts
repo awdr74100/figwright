@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { ErrorCode } from '@figwright/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { handleAnalyzeProject } from '../../src/tools/analyze-project.js';
@@ -16,7 +17,7 @@ import { handleSaveImageFills } from '../../src/tools/save-image-fills.js';
 import { handleSaveScreenshots } from '../../src/tools/save-screenshots.js';
 import { handleScanComponents } from '../../src/tools/scan-components.js';
 import { handleTokenMap } from '../../src/tools/token-map.js';
-import { WIRE_TOOL_SCHEMAS, wireToolSchema } from '../../src/tools/wire-schema.js';
+import { checkBatchOps, WIRE_TOOL_SCHEMAS, wireToolSchema } from '../../src/tools/wire-schema.js';
 
 let root: string;
 
@@ -232,5 +233,86 @@ describe('server-built plugin payloads satisfy the schema the leader validates',
       spec => spec.kind === 'local' && !covered.has(spec.name),
     ).map(spec => spec.name);
     expect(uncovered).toEqual([]);
+  });
+});
+
+describe('checkBatchOps', () => {
+  const batch = (ops: unknown[]): unknown => ({ ops });
+
+  it('passes a batch whose ops each match the schema of the tool they name', () => {
+    expect(
+      checkBatchOps(
+        batch([
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'renamed' } },
+          { tool: 'set_opacity', params: { nodeId: '1:1', opacity: 0.5 } },
+          { tool: 'move_nodes', params: { nodeIds: ['1:2'], dx: 5, dy: -5 } },
+        ]),
+      ),
+    ).toBeNull();
+  });
+
+  it('names the op index and its tool when arguments are missing', () => {
+    // Which op is wrong is the whole answer here: a batch is one call, so "invalid arguments" with
+    // no index leaves the caller to bisect thirty ops by hand.
+    const rejection = checkBatchOps(
+      batch([
+        { tool: 'rename_node', params: { nodeId: '1:1', name: 'ok' } },
+        { tool: 'set_fills', params: { nodeId: '1:1' } },
+      ]),
+    );
+    expect(rejection?.code).toBe(ErrorCode.InvalidParams);
+    expect(rejection?.message).toMatch(/ops\[1\]/);
+    expect(rejection?.message).toMatch(/set_fills/);
+    expect(rejection?.message).toMatch(/fills/);
+  });
+
+  it('catches an argument of the wrong type, which the sandbox would act on', () => {
+    const rejection = checkBatchOps(
+      batch([{ tool: 'set_opacity', params: { nodeId: '1:1', opacity: 'half' } }]),
+    );
+    expect(rejection?.code).toBe(ErrorCode.InvalidParams);
+    expect(rejection?.message).toMatch(/opacity/);
+  });
+
+  it('refuses an op naming a tool no sandbox handler exists for', () => {
+    for (const tool of ['not_a_tool', 'token_map']) {
+      // token_map is a real tool — it just is not one the plugin serves, so an op naming it could
+      // never have been applied either.
+      const rejection = checkBatchOps(batch([{ tool, params: {} }]));
+      expect(rejection?.code).toBe(ErrorCode.MethodNotFound);
+      expect(rejection?.message).toMatch(new RegExp(tool));
+    }
+  });
+
+  it('leaves "which tools may be batched" to the plugin', () => {
+    // delete_nodes is a real, well-formed plugin tool that is deliberately not batchable (it cannot
+    // be rolled back). The sandbox refuses it by name, with the reason; inventing a second copy of
+    // that allowlist here is what this test exists to prevent.
+    expect(
+      checkBatchOps(batch([{ tool: 'delete_nodes', params: { nodeIds: ['1:1'] } }])),
+    ).toBeNull();
+  });
+
+  it('treats an omitted params the way the sandbox does', () => {
+    // parseOps substitutes `{}`, so an op with no params is a call with no arguments — fine for a
+    // tool that needs none, and a missing-argument error for one that does.
+    expect(checkBatchOps(batch([{ tool: 'create_frame' }]))).toBeNull();
+    expect(checkBatchOps(batch([{ tool: 'rename_node' }]))?.code).toBe(ErrorCode.InvalidParams);
+  });
+
+  it('accepts a field it has never heard of, exactly as the top level does', () => {
+    expect(
+      checkBatchOps(
+        batch([{ tool: 'rename_node', params: { nodeId: '1:1', name: 'x', fromTheFuture: 1 } }]),
+      ),
+    ).toBeNull();
+  });
+
+  it('says nothing about a shape the batch schema itself rejects', () => {
+    // ops missing, not an array, or an op with no tool name: all rejected by batch's own schema
+    // before this runs at either call site. Answering here too would just be a second opinion.
+    expect(checkBatchOps({})).toBeNull();
+    expect(checkBatchOps({ ops: 'nope' })).toBeNull();
+    expect(checkBatchOps(batch([{ params: {} }]))).toBeNull();
   });
 });

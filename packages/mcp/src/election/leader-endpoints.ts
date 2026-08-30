@@ -11,7 +11,7 @@ import { decode, encode } from '@msgpack/msgpack';
 
 import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
 import type { Relay } from '../relay/relay.js';
-import { WIRE_TOOL_SCHEMAS } from '../tools/wire-schema.js';
+import { checkWireCall, type WireRejection } from '../tools/wire-schema.js';
 
 export const PING_PATH = '/ping';
 export const RPC_PATH = '/rpc';
@@ -40,14 +40,6 @@ export interface LeaderEndpointDeps {
   rpcTimeoutMs?: number;
   /** Test override for ABDICATE_QUIET_WINDOW_MS. */
   abdicateQuietWindowMs?: number;
-}
-
-/** Issues named in a rejection: enough to fix the call, bounded so a bad payload can't set the size. */
-const MAX_REPORTED_ISSUES = 3;
-
-export interface WireRejection {
-  code: ErrorCode;
-  message: string;
 }
 
 /**
@@ -80,30 +72,8 @@ export interface WireRejection {
  *   caller's original arguments are what gets forwarded; this only decides whether to forward
  *   them.
  */
-export const checkWireArgs = (req: RpcRequest, leaderBuildId: number): WireRejection | null => {
-  if ((req.buildId ?? 0) > leaderBuildId) return null;
-
-  const schema = WIRE_TOOL_SCHEMAS.get(req.toolName);
-  if (schema === undefined) {
-    return { code: ErrorCode.MethodNotFound, message: `no tool named '${req.toolName}'` };
-  }
-
-  // An omitted `args` is how a no-argument tool is called, and it is what the plugin sees as an
-  // empty parameter object — so it is checked as one rather than waved through.
-  const parsed = schema.safeParse(req.args ?? {});
-  if (parsed.success) return null;
-
-  const { issues } = parsed.error;
-  const detail = issues
-    .slice(0, MAX_REPORTED_ISSUES)
-    .map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
-    .join('; ');
-  const rest = issues.length - MAX_REPORTED_ISSUES;
-  return {
-    code: ErrorCode.InvalidParams,
-    message: `invalid arguments for '${req.toolName}' — ${detail}${rest > 0 ? ` (+${rest} more)` : ''}`,
-  };
-};
+export const checkWireArgs = (req: RpcRequest, leaderBuildId: number): WireRejection | null =>
+  (req.buildId ?? 0) > leaderBuildId ? null : checkWireCall(req.toolName, req.args);
 
 const readBody = (req: IncomingMessage): Promise<Buffer> =>
   new Promise<Buffer>((resolve, reject) => {

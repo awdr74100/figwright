@@ -382,6 +382,27 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect(res.error).toBeUndefined();
   });
 
+  it('rejects a batch whose inner op could not have worked, without a plugin in the room', async () => {
+    // The half of the batch check that only the assembled server exercises. batch's schema calls
+    // ops[].params a free-form record, so the SDK passes this call through; the refusal has to come
+    // from the handler wiring in index.ts, which had no coverage of its own. No plugin is connected,
+    // so a call that got past the check would sit in the relay queue until its budget expired —
+    // answering at once is itself the evidence that it did not.
+    const res = await client.send('tools/call', {
+      name: 'batch',
+      arguments: {
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'fine' } },
+          { tool: 'set_opacity', params: { nodeId: '1:1', opacity: 'half' } },
+        ],
+      },
+    });
+    expect(res.result?.isError).toBe(true);
+    const content = res.result?.content as { type: string; text: string }[];
+    expect(content[0]?.text).toMatch(/ops\[1\]/);
+    expect(content[0]?.text).toMatch(/opacity/);
+  });
+
   it('rejects a call to a tool it does not advertise', async () => {
     const res = await client.send('tools/call', { name: 'no_such_tool', arguments: {} });
     expect(res.error?.code).toBe(-32602);
