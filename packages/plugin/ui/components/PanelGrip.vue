@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { usePanelWindow } from '../composables/usePanelWindow.js';
 
-const { onResizeStart, onResizeMove, onResizeEnd } = usePanelWindow();
+const { onResizeStart } = usePanelWindow();
 </script>
 
 <!--
@@ -27,14 +27,17 @@ const { onResizeStart, onResizeMove, onResizeEnd } = usePanelWindow();
   only a quarter of its width is lost. Screenshots at device scale 2 hide that entirely; check this
   in the real window, not in a render.
 -->
+<!--
+  Only the press is bound here. The rest of the drag lives on `window` (see usePanelWindow): a 16px
+  target is one the pointer leaves on the first move, so binding move and release to it would make
+  the drag depend on pointer capture holding — which is what makes a resize stop halfway when it
+  does not.
+-->
 <template>
   <div
     class="absolute right-0 bottom-0 size-4 cursor-nwse-resize touch-none text-faint transition-colors duration-150 hover:text-fg"
     title="Drag to resize"
     @pointerdown="onResizeStart"
-    @pointermove="onResizeMove"
-    @pointerup="onResizeEnd"
-    @pointercancel="onResizeEnd"
   >
     <svg
       aria-hidden="true"
