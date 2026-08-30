@@ -421,6 +421,15 @@ interface ParsedOp {
   params: unknown;
 }
 
+/**
+ * The tools an op may name, derived from the inverse map rather than listed again — membership in
+ * INVERSES _is_ the allowlist, so the two can never disagree. Exported for the cross-package
+ * registry gate: the server refuses a batch op whose tool has no wire schema, so a tool that
+ * becomes batchable without being plugin-dispatched would be refused before it ever reached this
+ * handler.
+ */
+export const BATCHABLE_TOOLS: readonly string[] = Object.keys(INVERSES);
+
 const parseOps = (params: unknown): ParsedOp[] => {
   const ops = (params as { ops?: unknown } | null)?.ops;
   if (!Array.isArray(ops)) throw new TypeError('batch: ops must be an array');

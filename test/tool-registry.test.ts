@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
+import { WIRE_TOOL_SCHEMAS } from '../packages/mcp/src/tools/wire-schema.js';
 import { toToolDefinition } from '../packages/mcp/test/tool-schema.js';
+import { BATCHABLE_TOOLS } from '../packages/plugin/src/handlers/batch.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
@@ -102,5 +104,19 @@ describe('tool registry', () => {
       missingType(toToolDefinition(spec).inputSchema, spec.name, offenders);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('batchable ops', () => {
+  it('every tool a batch may name has a wire schema on the server', () => {
+    // The server checks each op's params against the schema of the tool it names, and refuses an op
+    // naming a tool it has no schema for. Making a tool batchable without it being one the server
+    // dispatches to the plugin would therefore have the server refuse an op this handler could
+    // actually have applied — a rejection invented by the gap between the two lists, not by the
+    // caller. The plugin owns *which* tools are batchable; this only pins that each one is a tool
+    // the server can describe.
+    const undescribed = BATCHABLE_TOOLS.filter(name => !WIRE_TOOL_SCHEMAS.has(name));
+    expect(undescribed).toEqual([]);
+    expect(BATCHABLE_TOOLS.length).toBeGreaterThan(0);
   });
 });
