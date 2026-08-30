@@ -1,6 +1,6 @@
 {
   "name": "@figwright/mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Free, two-way Figma MCP server. Turn designs into framework-aware code, and push code back to the canvas. Works with Claude Code, Cursor, Codex, and any MCP client.",
   "keywords": [
     "claude-code",

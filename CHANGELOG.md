@@ -1,5 +1,59 @@
 # Changelog
 
+## v0.5.0
+
+[compare changes](https://github.com/awdr74100/figwright/compare/v0.4.0...v0.5.0)
+
+### 🚀 Enhancements
+
+- **text:** Read and write textWrapStyle across nodes, runs and text styles ([#147](https://github.com/awdr74100/figwright/pull/147))
+- **tokens:** Read Tailwind v3 JS configs as a project token source ([#148](https://github.com/awdr74100/figwright/pull/148))
+- **tokens:** Read UnoCSS configs as a project token source ([#149](https://github.com/awdr74100/figwright/pull/149))
+- **tokens:** Read SCSS variables as a project token source ([#151](https://github.com/awdr74100/figwright/pull/151))
+- **tokens:** Tell the caller when a token build tool wrote the tokens somewhere pruned ([#152](https://github.com/awdr74100/figwright/pull/152))
+- Carry export bytes as msgpack bin instead of base64 ([#156](https://github.com/awdr74100/figwright/pull/156))
+- Carry variable bindings through the write path ([#167](https://github.com/awdr74100/figwright/pull/167))
+- **codegen:** Ground BEM class-name spelling instead of defaulting to `&` ([#175](https://github.com/awdr74100/figwright/pull/175))
+- **codegen:** Derive a linear gradient's CSS angle from the node it fills ([#177](https://github.com/awdr74100/figwright/pull/177))
+- Validate tool arguments where they enter the relay, and complete the shutdown triggers ([#188](https://github.com/awdr74100/figwright/pull/188))
+
+### 🩹 Fixes
+
+- **scan:** Read SFC script blocks with a scanner instead of a regex ([#144](https://github.com/awdr74100/figwright/pull/144))
+- **walk:** Return repo files in a deterministic order ([#153](https://github.com/awdr74100/figwright/pull/153))
+- **tokens:** Report a token build tool's output even when other tokens were found ([#154](https://github.com/awdr74100/figwright/pull/154))
+- **election:** Recover from a leader that holds the port but stops answering ([#159](https://github.com/awdr74100/figwright/pull/159))
+- **design-context:** Stop handing codegen a coordinate dump when a tree is over budget ([#162](https://github.com/awdr74100/figwright/pull/162))
+- Stop dropping the variables a style's paints and effects bind ([#166](https://github.com/awdr74100/figwright/pull/166))
+- Load a text style's font before writing it, and let its typography bind to variables ([#168](https://github.com/awdr74100/figwright/pull/168))
+- **plugin-ui:** Stop a tab switch from flashing a scrollbar ([#171](https://github.com/awdr74100/figwright/pull/171))
+- **plugin:** Load the node font before every set_text_properties write ([#180](https://github.com/awdr74100/figwright/pull/180))
+- **plugin:** Stop a resize drag from depending on pointer capture holding ([#189](https://github.com/awdr74100/figwright/pull/189))
+
+### 📖 Documentation
+
+- Add the Trendshift badge ([#181](https://github.com/awdr74100/figwright/pull/181))
+- Overhaul the README front page, add a Code of Conduct ([#184](https://github.com/awdr74100/figwright/pull/184))
+
+### 🏡 Chore
+
+- **format:** Exclude the generated CHANGELOG from oxfmt ([#140](https://github.com/awdr74100/figwright/pull/140))
+
+### ✅ Tests
+
+- **mcp:** Gate era dispatch with the ping 2026-07-28 deleted ([#146](https://github.com/awdr74100/figwright/pull/146))
+- **contract:** Close the local-tool hole in the plugin argument gate ([#157](https://github.com/awdr74100/figwright/pull/157))
+- Close the two races behind the intermittent CI failure ([#160](https://github.com/awdr74100/figwright/pull/160))
+- **text-style:** Pin the multi-mode font preload, now that it can be measured ([#169](https://github.com/awdr74100/figwright/pull/169))
+
+### 🤖 CI
+
+- Split the gate into a lint job and an OS matrix ([#163](https://github.com/awdr74100/figwright/pull/163))
+
+### ❤️ Contributors
+
+- Roya ([@awdr74100](https://github.com/awdr74100))
+
 ## v0.4.0
 
 [compare changes](https://github.com/awdr74100/figwright/compare/v0.3.0...v0.4.0)
