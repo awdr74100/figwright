@@ -8,6 +8,7 @@ describe('wireShutdown', () => {
   it.each([
     ['proc', 'SIGINT'],
     ['proc', 'SIGTERM'],
+    ['proc', 'SIGHUP'],
     ['stdin', 'end'],
     ['stdin', 'close'],
   ] as const)('runs shutdown when %s emits %s', (source, event) => {
@@ -30,6 +31,7 @@ describe('wireShutdown', () => {
     stdin.emit('close');
     proc.emit('SIGTERM');
     proc.emit('SIGINT');
+    proc.emit('SIGHUP');
     expect(calls).toBe(1);
   });
 
