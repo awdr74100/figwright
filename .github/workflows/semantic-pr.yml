@@ -25,7 +25,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Match the commit-type vocabulary used across the repo.
+          # Match the commit-type vocabulary used across the repo. `revert` is
+          # deliberately absent: the Conventional Commits spec does not define
+          # revert behaviour ("we leave it to tooling authors"), and changelogen
+          # has no `revert` type, so such a commit would be dropped from the
+          # changelog in silence. Type a revert by its effect instead —
+          # `fix(relay): revert the msgpack bin wire format` lands in Fixes,
+          # which is where a reader looks for what changed for them, and carries
+          # the right semver. GitHub's own Revert button produces `Revert "…"`,
+          # which fails this gate on all three counts anyway, so the title has to
+          # be rewritten by hand either way.
           types: |
             feat
             fix
@@ -37,4 +46,31 @@ jobs:
             build
             perf
             style
-            revert
+          # A closed vocabulary, and every title has to pick from it. The axis is
+          # the capability a reader of the changelog experiences, NOT the package
+          # the diff lands in: Figwright ships one product, so `mcp` / `shared`
+          # would say nothing (they would be four fifths of every release), while
+          # `codegen` / `design` / `relay` say which part of it moved. See
+          # CONTRIBUTING.md for what each one covers and where the boundaries run.
+          scopes: |
+            codegen
+            design
+            grounding
+            tools
+            relay
+            plugin
+            skills
+            deps
+            repo
+          requireScope: true
+          # An unscoped title is not an unclassifiable change — it is one nobody
+          # had a list to pick from. Requiring the scope is what keeps the
+          # generated changelog uniform, since changelogen renders the scope as
+          # the bold lead-in of every line and an entry without one reads as an
+          # outlier next to the rest of its section.
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            didn't match the configured pattern. Please ensure that the subject
+            doesn't start with an uppercase character (changelogen capitalizes
+            it when rendering the changelog).
