@@ -47,7 +47,7 @@ const envPort = Number(process.env.FIGWRIGHT_PORT);
 const PORT = Number.isInteger(envPort) && envPort > 0 && envPort < 65_536 ? envPort : DEFAULT_PORT;
 
 const node = new Node({ serverVersion: SERVER_VERSION, port: PORT, log });
-const follower = new Follower({ leaderUrl: node.leaderUrl, log });
+const follower = new Follower({ leaderUrl: node.leaderUrl, log, buildId: BUILD_ID });
 const election = new Election({ node, follower, buildId: BUILD_ID, log });
 
 let currentDetach: (() => void) | null = null;

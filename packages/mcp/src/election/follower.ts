@@ -37,6 +37,12 @@ export interface FollowerOptions {
   pingTimeoutMs?: number;
   fetch?: FetchFn;
   log?: (msg: string) => void;
+  /**
+   * This process's build stamp, sent on every RPC so the leader can tell whether its own tool
+   * schemas are authoritative for the call (see RpcRequestSchema.buildId). Defaults to 0, which is
+   * what an unbundled process reports and the value that gets a call validated.
+   */
+  buildId?: number;
 }
 
 export class Follower {
@@ -49,6 +55,7 @@ export class Follower {
       pingTimeoutMs: opts.pingTimeoutMs ?? DEFAULT_PING_TIMEOUT_MS,
       fetch: opts.fetch ?? globalThis.fetch.bind(globalThis),
       log: opts.log ?? ((): void => {}),
+      buildId: opts.buildId ?? 0,
     };
   }
 
@@ -162,6 +169,7 @@ export class Follower {
       toolName,
       ...(args === undefined ? {} : { args }),
       ...(sessionId === undefined ? {} : { sessionId }),
+      buildId: this.opts.buildId,
     };
     const bytes = encode(rpc);
     const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);

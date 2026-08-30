@@ -13,6 +13,7 @@ import {
   type HelloParams,
   SystemMethod,
 } from '@figwright/shared';
+import { decode } from '@msgpack/msgpack';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
@@ -205,6 +206,45 @@ describe('Follower HTTP client', () => {
     const resp = await f.sendRpc('get_doc', {}, 'r-budget', undefined, 300);
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+  });
+
+  it('sendRpc declares this process\'s build on every call', async () => {
+    // The leader uses it to decide whether its own tool schemas are authoritative for the call, so
+    // a follower that stopped sending it would quietly start being judged by a stranger's schemas.
+    const sent: unknown[] = [];
+    const f = new Follower({
+      leaderUrl: 'http://127.0.0.1:1',
+      buildId: 4_242,
+      rpcTimeoutMs: 200,
+      fetch: async (_url, init) => {
+        const body = init?.body as Buffer;
+        // Offset + length, not the whole underlying pool: Node hands out Buffers that share one.
+        sent.push(decode(new Uint8Array(body.buffer, body.byteOffset, body.byteLength)));
+        throw new Error('probe');
+      },
+    });
+    await f.sendRpc('get_document', {}, 'r-build');
+    expect(sent).toEqual([
+      { requestId: 'r-build', toolName: 'get_document', args: {}, buildId: 4_242 },
+    ]);
+  });
+
+  it('sendRpc declares 0 when this process has no build stamp', async () => {
+    // An unbundled process (vitest, tsx). 0 is the oldest thing in the room, which is the side of
+    // the comparison that gets validated — the safe default for something that is not a release.
+    const sent: unknown[] = [];
+    const f = new Follower({
+      leaderUrl: 'http://127.0.0.1:1',
+      rpcTimeoutMs: 200,
+      fetch: async (_url, init) => {
+        const body = init?.body as Buffer;
+        // Offset + length, not the whole underlying pool: Node hands out Buffers that share one.
+        sent.push(decode(new Uint8Array(body.buffer, body.byteOffset, body.byteLength)));
+        throw new Error('probe');
+      },
+    });
+    await f.sendRpc('get_document', undefined, 'r-nobuild');
+    expect(sent).toEqual([{ requestId: 'r-nobuild', toolName: 'get_document', buildId: 0 }]);
   });
 
   it('resolveActiveSession reads the leader-picked session id', async () => {
