@@ -36,6 +36,15 @@ export interface ShutdownWiring {
  * class — armed when the trigger fires, it force-exits after hardExitDelayMs unless the graceful
  * path exited first.
  *
+ * SIGHUP completes the signal side of the same idea. It is the one signal in the "your session is
+ * gone" family that no other trigger stands in for on every platform: on Windows it is what a
+ * closed console window raises, and SIGTERM does not exist there at all. Leaving it unhandled is
+ * not the zombie the paragraph above describes — the POSIX default for SIGHUP already terminates
+ * the process promptly, port and all — but it terminates it _instead of_ this shutdown, so the
+ * relay is severed rather than closed and the exit is reported as a signal death rather than an
+ * ordinary one. Installing a listener removes that default and puts the exit back under the same
+ * single path, where hardExit is the thing that guarantees it still ends.
+ *
  * Returns the trigger itself, because stdin EOF is not the only way to lose the client. A transport
  * that dies on its own — the SDK closes it when a read fails fatally — detaches from stdin without
  * ending it, so none of the triggers above ever fire. The caller wires that in through the returned
@@ -60,6 +69,7 @@ export const wireShutdown = ({
   };
   proc.on('SIGINT', once);
   proc.on('SIGTERM', once);
+  proc.on('SIGHUP', once);
   stdin.on('end', once);
   stdin.on('close', once);
   return once;

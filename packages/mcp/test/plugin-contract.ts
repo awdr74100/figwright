@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ALL_TOOL_SPECS } from '../src/tools/registry.js';
+import { WIRE_TOOL_SCHEMAS } from '../src/tools/wire-schema.js';
 
 /**
  * Derive the argument surface every plugin-dispatched tool sends over the relay.
@@ -74,27 +74,16 @@ export const collect = (schema: z.ZodType, prefix: string, out: Set<string>): vo
 
 export type PluginToolContract = Record<string, readonly string[]>;
 
-/** True when `path` is `arg` itself or something nested under it (`outPath`, `outPath.dir`). */
-const isUnder = (path: string, arg: string): boolean =>
-  path === arg || path.startsWith(`${arg}.`) || path.startsWith(`${arg}[`);
-
 export const derivePluginContract = (): PluginToolContract => {
   const contract: Record<string, readonly string[]> = {};
-  for (const spec of ALL_TOOL_SPECS) {
-    // A local tool with no sandbox handler of its own contributes nothing here; one that has a
-    // handler contributes its schema minus the fields that never leave the server.
-    const serverOnly = spec.kind === 'local' ? spec.serverOnlyArgs : undefined;
-    if (spec.kind === 'local' && (serverOnly === null || serverOnly === undefined)) continue;
-    const schemaPaths = new Set<string>();
-    collect(spec.inputSchema, '', schemaPaths);
-    const paths = new Set(
-      [...schemaPaths].filter(path => !(serverOnly ?? []).some(arg => isUnder(path, arg))),
-    );
-    // Server-added arguments reach the same handlers and drop just as silently, but appear in no
-    // schema — `forVision` was the worst measured case and would have been invisible here.
-    for (const arg of spec.injectedArgs ?? []) paths.add(arg);
-    if (spec.kind === 'write') paths.add('requestId');
-    contract[spec.name] = [...paths].toSorted();
+  // WIRE_TOOL_SCHEMAS already is `inputSchema − serverOnlyArgs + injectedArgs (+ requestId)`: the
+  // projection this file used to compute for itself, and the one the leader now validates incoming
+  // arguments against. Reading it here is what keeps "what the plugin is sent" and "what the leader
+  // will accept" from being two descriptions that can disagree.
+  for (const [name, schema] of WIRE_TOOL_SCHEMAS) {
+    const paths = new Set<string>();
+    collect(schema, '', paths);
+    contract[name] = [...paths].toSorted();
   }
   return contract;
 };

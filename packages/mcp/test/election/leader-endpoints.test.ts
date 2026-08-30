@@ -23,6 +23,7 @@ import { WebSocket } from 'ws';
 import {
   ABDICATE_PATH,
   attachLeaderEndpoints,
+  checkWireArgs,
   type LeaderEndpointDeps,
   PING_PATH,
   RPC_PATH,
@@ -215,7 +216,11 @@ describe('leader endpoints', () => {
     const b = await startLeader();
     await attachFakePlugin(b, async () => ({ ok: true }), '0.0.1');
 
-    const resp = await callRpc(b.port, { requestId: 'r-skew', toolName: 'set_fills', args: {} });
+    const resp = await callRpc(b.port, {
+      requestId: 'r-skew',
+      toolName: 'set_fills',
+      args: { nodeId: '1:1', fills: [] },
+    });
 
     if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
     expect(resp.notice).toMatch(/older than this server/i);
@@ -226,7 +231,11 @@ describe('leader endpoints', () => {
     const b = await startLeader();
     await attachFakePlugin(b, async () => ({ ok: true }));
 
-    const resp = await callRpc(b.port, { requestId: 'r-ok', toolName: 'set_fills', args: {} });
+    const resp = await callRpc(b.port, {
+      requestId: 'r-ok',
+      toolName: 'set_fills',
+      args: { nodeId: '1:1', fills: [] },
+    });
 
     if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
     expect(resp.notice).toBeUndefined();
@@ -236,7 +245,7 @@ describe('leader endpoints', () => {
     const b = await startLeader(50);
     const resp = await callRpc(b.port, {
       requestId: 'r-2',
-      toolName: 'whatever',
+      toolName: 'get_document',
     });
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(resp.code).toBe(ErrorCode.Timeout);
@@ -247,16 +256,18 @@ describe('leader endpoints', () => {
     const b = await startLeader(1_000);
     const respPromise = callRpc(b.port, {
       requestId: 'r-flush',
-      toolName: 'late_tool',
-      args: { x: 1 },
+      toolName: 'get_node',
+      // The extra key is the point: validation strips unknown keys, so forwarding its output
+      // instead of the caller's own arguments would silently drop a field a newer caller sent.
+      args: { nodeId: '1:1', fieldFromTheFuture: 7 },
     });
 
     await new Promise(r => setTimeout(r, 50));
     expect(b.relay.queuedCount()).toBe(1);
 
     await attachFakePlugin(b, async (method, params) => {
-      expect(method).toBe('late_tool');
-      expect(params).toEqual({ x: 1 });
+      expect(method).toBe('get_node');
+      expect(params).toEqual({ nodeId: '1:1', fieldFromTheFuture: 7 });
       return { ok: 'flushed' };
     });
 
@@ -287,9 +298,140 @@ describe('leader endpoints', () => {
     await new Promise<void>(resolve => ws.once('message', () => resolve()));
     b.plugins.push(ws);
 
-    const resp = await callRpc(b.port, { requestId: 'r-3', toolName: 'slow_tool' });
+    const resp = await callRpc(b.port, { requestId: 'r-3', toolName: 'get_document' });
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(resp.code).toBe(ErrorCode.Timeout);
+  });
+
+  it('POST /rpc refuses a tool name no sandbox handler exists for', async () => {
+    // The sandbox answers METHOD_NOT_FOUND for an unknown method; the leader answers the same, one
+    // hop earlier. `calls` is what proves the earlier hop: nothing reached the plugin.
+    const b = await startLeader();
+    let calls = 0;
+    await attachFakePlugin(b, async () => {
+      calls += 1;
+      return { ok: true };
+    });
+
+    const resp = await callRpc(b.port, {
+      requestId: 'r-unknown',
+      toolName: 'definitely_not_a_tool',
+    });
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(resp.code).toBe(ErrorCode.MethodNotFound);
+    expect(resp.message).toMatch(/definitely_not_a_tool/);
+    // Echoed rather than blanked: the caller correlates by it, and a rejection it cannot match up
+    // is a rejection it has to wait out.
+    expect(resp.requestId).toBe('r-unknown');
+    expect(calls).toBe(0);
+  });
+
+  it('POST /rpc refuses arguments the sandbox handler could not use', async () => {
+    const b = await startLeader();
+    let calls = 0;
+    await attachFakePlugin(b, async () => {
+      calls += 1;
+      return { ok: true };
+    });
+
+    // set_fills without a node to paint. The sandbox reads `params` off a loose cast and would act
+    // on it; nothing between here and `figma.*` checks it but this.
+    const resp = await callRpc(b.port, { requestId: 'r-bad', toolName: 'set_fills', args: {} });
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(resp.code).toBe(ErrorCode.InvalidParams);
+    expect(resp.message).toMatch(/set_fills/);
+    // Names the field, so the answer says what to fix rather than that something was wrong.
+    expect(resp.message).toMatch(/nodeId/);
+    expect(calls).toBe(0);
+  });
+
+  it('POST /rpc looks inside a batch, which no schema above it can describe', async () => {
+    // batch's own schema says ops[].params is a free-form record, so the envelope check passes and
+    // the bad op would otherwise reach the sandbox — which hands params to the write handler
+    // verbatim. `calls` is what proves it stopped here, before the batch could apply and unwind.
+    const b = await startLeader();
+    let calls = 0;
+    await attachFakePlugin(b, async () => {
+      calls += 1;
+      return { ok: true };
+    });
+
+    const resp = await callRpc(b.port, {
+      requestId: 'r-batch',
+      toolName: 'batch',
+      args: {
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'fine' } },
+          { tool: 'set_opacity', params: { nodeId: '1:1', opacity: 'half' } },
+        ],
+      },
+    });
+    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
+    expect(resp.code).toBe(ErrorCode.InvalidParams);
+    expect(resp.message).toMatch(/ops\[1\]/);
+    expect(resp.message).toMatch(/opacity/);
+    expect(calls).toBe(0);
+  });
+
+  it('POST /rpc forwards a batch whose ops are all well formed', async () => {
+    const b = await startLeader();
+    let seen: unknown = null;
+    await attachFakePlugin(b, async (_method, params) => {
+      seen = params;
+      return { ok: true, results: [{ ok: true }] };
+    });
+
+    const args = { ops: [{ tool: 'rename_node', params: { nodeId: '1:1', name: 'fine' } }] };
+    const resp = await callRpc(b.port, { requestId: 'r-batch-ok', toolName: 'batch', args });
+    expect(resp).toMatchObject({ kind: 'ok' });
+    expect(seen).toEqual(args);
+  });
+
+  it('POST /rpc accepts a no-argument tool called with args omitted', async () => {
+    // How every zero-argument read is actually called — and `undefined` is not an object, so it has
+    // to be checked as the empty one the plugin sees rather than rejected.
+    const b = await startLeader();
+    await attachFakePlugin(b, async () => ({ ok: true }));
+    const resp = await callRpc(b.port, { requestId: 'r-noargs', toolName: 'get_document' });
+    expect(resp).toMatchObject({ kind: 'ok', result: { ok: true } });
+  });
+
+  it('POST /rpc does not judge a caller that declares a strictly newer build', async () => {
+    // An older leader keeps the port while it stays busy, so it really can be the one checking a
+    // newer follower's call — against schemas that predate it. `fills` as an object is not just an
+    // unknown key, it is a field this build would reject outright, which is what makes the skip
+    // observable rather than incidental.
+    const b = await startLeader(5_000, { buildId: 100 });
+    let seen: unknown = null;
+    await attachFakePlugin(b, async (_method, params) => {
+      seen = params;
+      return { ok: true };
+    });
+
+    const resp = await callRpc(b.port, {
+      requestId: 'r-newer',
+      toolName: 'set_fills',
+      args: { nodeId: '1:1', fills: { fromTheFuture: true } },
+      buildId: 101,
+    });
+    expect(resp).toMatchObject({ kind: 'ok' });
+    expect(seen).toEqual({ nodeId: '1:1', fills: { fromTheFuture: true } });
+  });
+
+  it('POST /rpc still checks a caller on the same build or an older one', async () => {
+    const b = await startLeader(5_000, { buildId: 100 });
+    await attachFakePlugin(b, async () => ({ ok: true }));
+
+    for (const buildId of [100, 99, undefined]) {
+      const resp = await callRpc(b.port, {
+        requestId: `r-${String(buildId)}`,
+        toolName: 'set_fills',
+        args: { nodeId: '1:1', fills: { fromTheFuture: true } },
+        ...(buildId === undefined ? {} : { buildId }),
+      });
+      if (resp.kind !== 'err') throw new Error(`expected err for buildId ${String(buildId)}`);
+      expect(resp.code).toBe(ErrorCode.InvalidParams);
+    }
   });
 
   it('POST /rpc rejects invalid msgpack body', async () => {
@@ -503,5 +645,40 @@ describe('POST /abdicate', () => {
     expect((await postAbdicate(b.port, 'not json{{')).status).toBe(400);
     expect((await postAbdicate(b.port, {})).status).toBe(400);
     expect((await postAbdicate(b.port, { buildId: 'newest' })).status).toBe(400);
+  });
+});
+
+describe('checkWireArgs', () => {
+  it('bounds how much of a bad payload it quotes back', () => {
+    // The message is built from the caller's own input, so its length is the caller's to set unless
+    // something caps it. Several bad fields, three named, the rest counted — the count is left open
+    // because how many issues a schema raises for one payload is the schema's business, not this
+    // cap's.
+    const rejection = checkWireArgs(
+      {
+        requestId: 'r',
+        toolName: 'set_auto_layout',
+        args: {
+          nodeId: 1,
+          layoutMode: 'SIDEWAYS',
+          itemSpacing: 'wide',
+          paddingTop: 'lots',
+          primaryAxisSizingMode: 'HUGE',
+        },
+      },
+      0,
+    );
+    expect(rejection?.code).toBe(ErrorCode.InvalidParams);
+    expect(rejection?.message).toMatch(/\(\+\d+ more\)$/);
+    expect(rejection?.message.split(';')).toHaveLength(3);
+  });
+
+  it('passes a call it has nothing to object to', () => {
+    expect(
+      checkWireArgs(
+        { requestId: 'r', toolName: 'rename_node', args: { nodeId: '1:1', name: 'x' } },
+        0,
+      ),
+    ).toBeNull();
   });
 });

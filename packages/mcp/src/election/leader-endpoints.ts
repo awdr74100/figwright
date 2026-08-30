@@ -1,10 +1,17 @@
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'node:http';
 
-import { ErrorCode, getRelayBudget, RpcRequestSchema, type RpcResponse } from '@figwright/shared';
+import {
+  ErrorCode,
+  getRelayBudget,
+  type RpcRequest,
+  RpcRequestSchema,
+  type RpcResponse,
+} from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
 import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
 import type { Relay } from '../relay/relay.js';
+import { checkWireCall, type WireRejection } from '../tools/wire-schema.js';
 
 export const PING_PATH = '/ping';
 export const RPC_PATH = '/rpc';
@@ -34,6 +41,39 @@ export interface LeaderEndpointDeps {
   /** Test override for ABDICATE_QUIET_WINDOW_MS. */
   abdicateQuietWindowMs?: number;
 }
+
+/**
+ * Check a tool call arriving over /rpc against the arguments its sandbox handler expects.
+ *
+ * /rpc is the one door into the relay that the MCP SDK is not standing behind. A call made in this
+ * process was validated against the tool's input schema before it got here; a call that arrives
+ * over HTTP was validated by whoever sent it, and the sandbox does not re-check — `dispatchSandbox
+ * Message` hands `params` to the handler as `unknown`, and handlers read fields off a loose cast.
+ * So for anything that is not a Figwright follower, the arguments reaching `figma.*` had been
+ * checked exactly zero times. Everything else about this request is already validated: the Host,
+ * the Origin, the content type, the envelope. This is the part that actually reaches the file.
+ *
+ * The leader answers for a name it has no schema for the same way the sandbox does — the sandbox
+ * replies METHOD_NOT_FOUND for an unknown method — just one hop earlier, and without spending the
+ * tool's whole relay budget to learn it.
+ *
+ * Two things this deliberately does not do:
+ *
+ * - It does not judge a caller that declares a strictly newer build. The newest build normally wins
+ *   the port, but a continuously busy older leader keeps it (see ABDICATE_QUIET_WINDOW_MS), so an
+ *   older leader really can be the one checking a newer follower's call. Its schemas are then the
+ *   narrower ones, and rejecting on them would turn a working call into an error — a regression in
+ *   exactly the reliability this is meant to protect. Enum values are where that bites: adding one
+ *   is a widening the older schema cannot know about, and it has happened (`layoutMode` gained
+ *   'GRID'). Ordering the two ends by the build stamp the election already ranks them by costs one
+ *   optional field and removes the whole class.
+ * - It does not touch the payload. Zod objects strip unknown keys, so the parsed output of a
+ *   forward-compatible call is the call minus the field that made it forward-compatible. The
+ *   caller's original arguments are what gets forwarded; this only decides whether to forward
+ *   them.
+ */
+export const checkWireArgs = (req: RpcRequest, leaderBuildId: number): WireRejection | null =>
+  (req.buildId ?? 0) > leaderBuildId ? null : checkWireCall(req.toolName, req.args);
 
 const readBody = (req: IncomingMessage): Promise<Buffer> =>
   new Promise<Buffer>((resolve, reject) => {
@@ -204,6 +244,19 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         }
 
         const { requestId, toolName, args, sessionId } = rpc.data;
+
+        const rejection = checkWireArgs(rpc.data, deps.buildId ?? 0);
+        if (rejection !== null) {
+          log(`[leader] refused ${toolName}: ${rejection.message}`);
+          writeMsgpack(res, 400, {
+            kind: 'err',
+            requestId,
+            code: rejection.code,
+            message: rejection.message,
+          });
+          return;
+        }
+
         try {
           // Only the leader holds the relay, so the skew warning has to travel back with the result:
           // a follower has no other way to know which plugin build served its call. Captured as the
@@ -213,6 +266,8 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
           // same headroom as a direct one; deps.rpcTimeoutMs overrides (tests).
           const result = await relay.sendRequest(
             toolName,
+            // The caller's own arguments, never checkWireArgs' parsed output: parsing strips keys
+            // this build does not know, which is precisely what a newer caller needs kept.
             args,
             deps.rpcTimeoutMs ?? getRelayBudget(toolName),
             sessionId,
