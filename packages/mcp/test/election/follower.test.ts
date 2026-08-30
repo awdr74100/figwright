@@ -149,13 +149,13 @@ describe('Follower HTTP client', () => {
   it('sendRpc round-trips through leader to plugin', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async (method, params) => {
-      expect(method).toBe('get_doc');
+      expect(method).toBe('get_design_context');
       expect(params).toEqual({ depth: 2 });
       return { name: 'My Doc', pages: 3 };
     });
 
     const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
-    const resp = await f.sendRpc('get_doc', { depth: 2 }, 'r-42');
+    const resp = await f.sendRpc('get_design_context', { depth: 2 }, 'r-42');
     if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
     expect(resp.requestId).toBe('r-42');
     expect(resp.result).toEqual({ name: 'My Doc', pages: 3 });
@@ -164,7 +164,7 @@ describe('Follower HTTP client', () => {
   it('sendRpc surfaces leader-side err response', async () => {
     const b = await startLeaderWithTimeout(50);
     const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
-    const resp = await f.sendRpc('whatever', undefined, 'r-no-plugin');
+    const resp = await f.sendRpc('get_document', undefined, 'r-no-plugin');
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(resp.code).toBe(ErrorCode.Timeout);
     expect(resp.requestId).toBe('r-no-plugin');
@@ -175,7 +175,7 @@ describe('Follower HTTP client', () => {
       leaderUrl: 'http://127.0.0.1:1',
       rpcTimeoutMs: 200,
     });
-    const resp = await f.sendRpc('x', undefined, 'r-dead');
+    const resp = await f.sendRpc('get_document', undefined, 'r-dead');
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(resp.code).toBe(ErrorCode.Internal);
     expect(resp.requestId).toBe('r-dead');
@@ -188,7 +188,7 @@ describe('Follower HTTP client', () => {
     const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
     const abort = new AbortController();
     const started = Date.now();
-    const pending = f.sendRpc('get_doc', {}, 'r-abort', undefined, 60_000, abort.signal);
+    const pending = f.sendRpc('get_document', {}, 'r-abort', undefined, 60_000, abort.signal);
     setTimeout(() => abort.abort(new Error('port conflict')), 50);
 
     const resp = await pending;
@@ -203,12 +203,12 @@ describe('Follower HTTP client', () => {
     const b = await startLeader();
     const f = new Follower({ leaderUrl: `http://127.0.0.1:${b.port}` });
     const started = Date.now();
-    const resp = await f.sendRpc('get_doc', {}, 'r-budget', undefined, 300);
+    const resp = await f.sendRpc('get_document', {}, 'r-budget', undefined, 300);
     if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
     expect(Date.now() - started).toBeGreaterThanOrEqual(250);
   });
 
-  it('sendRpc declares this process\'s build on every call', async () => {
+  it("sendRpc declares this process's build on every call", async () => {
     // The leader uses it to decide whether its own tool schemas are authoritative for the call, so
     // a follower that stopped sending it would quietly start being judged by a stranger's schemas.
     const sent: unknown[] = [];
