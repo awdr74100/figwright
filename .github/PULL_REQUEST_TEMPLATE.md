@@ -2,7 +2,9 @@
 Thank you for contributing to Figwright!
 
 Before opening the PR, please make sure:
-- The PR title follows Conventional Commits (`feat: …`, `fix: …`, `docs: …`).
+- The PR title follows Conventional Commits, `type(scope): subject`, with a
+  lowercase subject and a scope from the nine in CONTRIBUTING.md (`codegen`,
+  `design`, `grounding`, `tools`, `relay`, `plugin`, `skills`, `deps`, `repo`).
   It is validated by CI, and with squash merges it becomes the commit on
   `main` and drives the changelog — write it carefully.
 - For anything non-trivial, an issue was opened first to agree on the
