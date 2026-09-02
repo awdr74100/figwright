@@ -22,7 +22,16 @@ export const setAutoLayoutTool: ToolSpec = {
     paddingLeft: z.number().optional(),
     // HORIZONTAL / VERTICAL
     itemSpacing: z.number().optional(),
-    primaryAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional(),
+    primaryAxisAlignItems: z
+      .enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN', 'SPACE_EVENLY', 'SPACE_AROUND'])
+      .optional()
+      .describe(
+        'Main-axis distribution (CSS justify-content). MIN / CENTER / MAX pack the children; ' +
+          'the SPACE_* values spread them — SPACE_BETWEEN puts the extra space only between ' +
+          'children (first and last flush with the edges), SPACE_EVENLY makes every gap equal ' +
+          'including the two edge gaps, SPACE_AROUND gives each child equal space on both sides ' +
+          'so the edge gaps are half the gaps between children',
+      ),
     counterAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'BASELINE']).optional(),
     layoutWrap: z.enum(['NO_WRAP', 'WRAP']).optional(),
     counterAxisSpacing: z
