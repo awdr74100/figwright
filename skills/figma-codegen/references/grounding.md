@@ -158,7 +158,8 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   a `layout` object with the _exact_ spacing; don't reverse-engineer padding/gap/justify from child
   `x/y/w/h`. `mode` `HORIZONTAL`/`VERTICAL` → `flex-row`/`flex-col`; `padding*` → `p-*`; for H/V
   `itemSpacing` → `gap`, `primaryAxisAlignItems`/`counterAxisAlignItems` → `justify-*`/`items-*`
-  (`SPACE_BETWEEN` → `justify-between`). When `layoutWrap: 'WRAP'` (a tag cloud / chip group /
+  (`SPACE_BETWEEN` → `justify-between`, `SPACE_EVENLY` → `justify-evenly`, `SPACE_AROUND` →
+  `justify-around` — three distinct distributions, not synonyms). When `layoutWrap: 'WRAP'` (a tag cloud / chip group /
   gallery) the frame also carries the cross-axis row spacing: `counterAxisSpacing` is the gap
   **between wrapped rows** (→ `flex-wrap` + the row part of `gap-x/gap-y`; with a single `gap` only
   when it equals `itemSpacing`), and `counterAxisAlignContent: 'SPACE_BETWEEN'` distributes the rows
