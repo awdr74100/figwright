@@ -158,7 +158,15 @@ describe('M2 write tool definitions', () => {
     expect(setAutoLayoutToolDefinition.name).toBe(SET_AUTO_LAYOUT_TOOL_NAME);
     expect(setAutoLayoutToolDefinition.inputSchema).toMatchObject({
       required: ['nodeId', 'layoutMode'],
-      properties: { layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID'] } },
+      properties: {
+        layoutMode: { enum: ['NONE', 'HORIZONTAL', 'VERTICAL', 'GRID'] },
+        // Pinned for the same reason as set_text_properties below: plugin-typings widened this
+        // union in 1.137.0 (SPACE_EVENLY / SPACE_AROUND), and nothing else in the suite would
+        // notice the list drifting from what Figma accepts.
+        primaryAxisAlignItems: {
+          enum: ['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN', 'SPACE_EVENLY', 'SPACE_AROUND'],
+        },
+      },
     });
     expect(setBlendModeToolDefinition.name).toBe(SET_BLEND_MODE_TOOL_NAME);
     expect(setBlendModeToolDefinition.inputSchema).toMatchObject({
