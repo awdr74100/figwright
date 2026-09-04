@@ -2,6 +2,8 @@ node_modules/
 dist/
 build/
 coverage/
+# Vitest 5 writes reporter output and test attachments here (html / json / junit / blob).
+.vitest/
 .DS_Store
 *.log
 .idea/
