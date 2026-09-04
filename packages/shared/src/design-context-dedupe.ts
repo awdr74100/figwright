@@ -130,6 +130,10 @@ const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
 interface TextStyleBundle {
   fontFamily: string;
   fontStyle: string;
+  // Part of the identity, not a decoration: the bundle is content-hashed into a `text_N` ref, so
+  // leaving a variable font's axis values out would fold two different weights of the same named
+  // instance onto one entry and hand codegen the wrong one.
+  fontVariationSettings?: Record<string, number>;
   fontSize: number;
   lineHeight?: SerializedLineHeight;
   letterSpacing?: SerializedLetterSpacing;
@@ -198,6 +202,9 @@ export const dedupeStyles = (
         fontStyle: n.fontName.style,
         fontSize: n.fontSize,
       };
+      if (n.fontName.variationSettings !== undefined) {
+        bundle.fontVariationSettings = n.fontName.variationSettings;
+      }
       // Fold the rest of the typography (the fields a Figma text style carries) into the same bundle,
       // and drop the now-redundant inline copy. A `mixed` value (per-segment styling) isn't a single
       // style value, so leave it inline as the honest signal instead of forcing it into the bundle.
