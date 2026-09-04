@@ -126,7 +126,8 @@ When a single text block mixes styles — a link inside a sentence, a bold word,
 `set_text_range` (`ranges: [{ start, end, … }]`), the write-side mirror of what codegen reads back as
 `segments`. **Never split an inline link/emphasis into its own sibling node** (it breaks reflow and
 reads as separate text). Each range takes the same props as a read segment — `fontName` / `fills` /
-`textDecoration` for emphasis, `hyperlink` for links, `listOptions` + `indentation` for real
+`textDecoration` for emphasis (a `fontName` may carry `variationSettings` to emphasise with a
+variable font's weight axis rather than a separate face), `hyperlink` for links, `listOptions` + `indentation` for real
 `<ol>`/`<ul>` items — plus design-system bindings `textStyleId` / `fillStyleId` / `boundVariables`, so
 the link tracks `Primary/500` rather than a one-off hex. Set the whole string first (`create_text` /
 `set_text`), then style the ranges.
