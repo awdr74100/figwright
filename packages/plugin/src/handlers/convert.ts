@@ -77,24 +77,16 @@ export const toFigmaVariableValue = (value: SerializedVariableValue): VariableVa
   return value;
 };
 
-// Reactions: the Figma Action/Trigger types are strict discriminated unions, so we pass through the
-// fields we serialized and cast — set_reactions is meant for round-tripping get_reactions output.
-const toFigmaTrigger = (t: SerializedTrigger | null): Trigger | null => {
-  if (t === null) return null;
-  const out: Record<string, unknown> = { type: t.type };
-  if (t.timeout !== undefined) out.timeout = t.timeout;
-  if (t.delay !== undefined) out.delay = t.delay;
-  return out as unknown as Trigger;
-};
+// Reactions: the Figma Action/Trigger types are strict discriminated unions, so we hand the wire
+// object over whole and cast. Whitelisting fields here is what makes a round-trip lossy — the
+// per-variant required fields (ON_KEY_DOWN's keyCodes, SET_VARIABLE's variableId, a directional
+// transition's direction/matchLayers, an overlay's overlayRelativePosition) are precisely the ones
+// no shared subset contains. setReactionsAsync validates the result, so a shape Figma cannot use is
+// rejected there rather than applied.
+const toFigmaTrigger = (t: SerializedTrigger | null): Trigger | null =>
+  t === null ? null : ({ ...t } as unknown as Trigger);
 
-const toFigmaAction = (a: SerializedAction): Action => {
-  const out: Record<string, unknown> = { type: a.type };
-  if (a.destinationId !== undefined) out.destinationId = a.destinationId;
-  if (a.navigation !== undefined) out.navigation = a.navigation;
-  if (a.url !== undefined) out.url = a.url;
-  if (a.transition !== undefined) out.transition = a.transition;
-  return out as unknown as Action;
-};
+const toFigmaAction = (a: SerializedAction): Action => ({ ...a }) as unknown as Action;
 
 /** Wire reaction → Figma Reaction (modern `actions` array form). */
 export const toFigmaReaction = (r: SerializedReaction): Reaction =>
