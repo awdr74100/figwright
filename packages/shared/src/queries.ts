@@ -265,11 +265,17 @@ export type GetAnnotationsResult = z.infer<typeof GetAnnotationsResultSchema>;
  * UPDATE_MEDIA_RUNTIME's `mediaAction`, CONDITIONAL's whole `conditionalBlocks` body, and a
  * directional transition's `direction`/`matchLayers`. Naming a field below documents it for the
  * agent; it is the looseness, not the list, that carries it.
+ *
+ * The typings are the source for the names, but not the last word on which of them a write accepts:
+ * a few are emitted by Figma and refused back. Those are called out where they sit.
  */
 export const SerializedTriggerSchema = z.looseObject({
   type: z.string(),
   timeout: z.number().optional(),
   delay: z.number().optional(),
+  // Marks a legacy hover trigger. Read-only in practice: setReactionsAsync refuses a trigger
+  // carrying it as an unrecognized key, and Figma does not put it on an ordinary MOUSE_ENTER it
+  // hands back — so it is described for what a read may contain, not offered as one to author.
   deprecatedVersion: z.boolean().optional(),
   device: z.string().optional(),
   keyCodes: z.array(z.number()).optional(),
@@ -277,18 +283,31 @@ export const SerializedTriggerSchema = z.looseObject({
 });
 export type SerializedTrigger = z.infer<typeof SerializedTriggerSchema>;
 
-/** Figma's Easing — a named curve, plus the control points when it is a custom bezier or spring. */
+/**
+ * Figma's Easing — a named curve, plus the control points when it is a custom bezier or spring.
+ *
+ * Every control point is optional, including the ones the typings declare as required. Figma is the
+ * authority on what a curve needs and this format only carries it, so a requirement stated here can
+ * only ever be wrong in the expensive direction: rejecting a call Figma would have accepted. That
+ * is not hypothetical — the typings give EasingFunctionSpring an `initialVelocity`, and
+ * setReactionsAsync rejects a spring carrying one as an unrecognized key.
+ */
 export const SerializedEasingSchema = z.looseObject({
   type: z.string(),
   easingFunctionCubicBezier: z
-    .looseObject({ x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number() })
+    .looseObject({
+      x1: z.number().optional(),
+      y1: z.number().optional(),
+      x2: z.number().optional(),
+      y2: z.number().optional(),
+    })
     .optional(),
   easingFunctionSpring: z
     .looseObject({
-      mass: z.number(),
-      stiffness: z.number(),
-      damping: z.number(),
-      initialVelocity: z.number(),
+      mass: z.number().optional(),
+      stiffness: z.number().optional(),
+      damping: z.number().optional(),
+      initialVelocity: z.number().optional(),
     })
     .optional(),
 });
@@ -331,7 +350,9 @@ export const SerializedActionSchema = z.looseObject({
    * destination frame's own `overlayPositionType` is MANUAL — and that property is readonly on
    * FramePrototypingMixin, so no plugin can set it; it is chosen on the overlay frame in Figma.
    */
-  overlayRelativePosition: z.looseObject({ x: z.number(), y: z.number() }).optional(),
+  overlayRelativePosition: z
+    .looseObject({ x: z.number().optional(), y: z.number().optional() })
+    .optional(),
   preserveScrollPosition: z.boolean().optional(),
   resetVideoPosition: z.boolean().optional(),
   resetScrollPosition: z.boolean().optional(),
@@ -360,7 +381,7 @@ export const SerializedActionSchema = z.looseObject({
     .array(
       z.looseObject({
         condition: SerializedVariableDataSchema.optional(),
-        actions: z.array(z.looseObject({ type: z.string() })).optional(),
+        actions: z.array(z.looseObject({ type: z.string().optional() })).optional(),
       }),
     )
     .optional(),
