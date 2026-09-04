@@ -365,6 +365,35 @@ describe('serializeFlat', () => {
     expect(out.fontName).toEqual({ family: 'Inter', style: 'Bold' });
   });
 
+  it("carries a variable font's axis values on the node-level fontName", () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Hello',
+        fontSize: 16,
+        fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 650, slnt: -4 } },
+      }),
+    );
+    expect(out.fontName).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 650, slnt: -4 },
+    });
+  });
+
+  it('omits variationSettings entirely for a static font (never an empty object)', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Hello',
+        fontSize: 16,
+        fontName: { family: 'Inter', style: 'Bold' },
+      }),
+    );
+    expect(out.fontName).toEqual({ family: 'Inter', style: 'Bold' });
+    expect(Object.hasOwn(out.fontName as object, 'variationSettings')).toBe(false);
+  });
+
   it('marks fontSize/fontName mixed when figma.mixed', () => {
     const out = serializeFlatSync(
       fake({
@@ -965,6 +994,46 @@ describe('serializeFlat — typography', () => {
     });
     expect(out.segments?.[1]?.fills).toEqual([
       { type: 'SOLID', visible: true, opacity: 1, color: { r: 0, g: 0, b: 1 } },
+    ]);
+  });
+
+  it("carries a variable font's axis values onto each per-run segment", () => {
+    // A run is where a weight override most often lives — an inline emphasis that is wght 700 of
+    // the same named instance rather than a separate Bold face.
+    const segments = [
+      {
+        characters: 'A',
+        start: 0,
+        end: 1,
+        fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 400 } },
+        fontSize: 14,
+        fills: [],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+      {
+        characters: 'B',
+        start: 1,
+        end: 2,
+        fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 700 } },
+        fontSize: 14,
+        fills: [],
+        textDecoration: 'NONE',
+        textCase: 'ORIGINAL',
+      },
+    ];
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'AB',
+        fontSize: 14,
+        fontName: Symbol('figma.mixed'),
+        getStyledTextSegments: () => segments,
+      }),
+    );
+    expect(out.segments?.map(seg => seg.fontName)).toEqual([
+      { family: 'Inter', style: 'Regular', variationSettings: { wght: 400 } },
+      { family: 'Inter', style: 'Regular', variationSettings: { wght: 700 } },
     ]);
   });
 

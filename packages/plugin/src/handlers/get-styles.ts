@@ -11,6 +11,7 @@ import {
   collectBindings,
   serializeCodeSyntax,
   serializeEffect,
+  serializeFontName,
   serializeLayoutGrid,
   serializePaint,
 } from '../serializer.js';
@@ -111,7 +112,7 @@ export const createGetStylesHandler =
           name: s.name,
           key: s.key,
           description: s.description,
-          fontName: { family: s.fontName.family, style: s.fontName.style },
+          fontName: serializeFontName(s.fontName),
           fontSize: s.fontSize,
           lineHeight: serializeLineHeight(s.lineHeight),
           letterSpacing: { unit: s.letterSpacing.unit, value: s.letterSpacing.value },

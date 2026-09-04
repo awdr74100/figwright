@@ -6,6 +6,7 @@ import {
   type SerializedColorStop,
   type SerializedComponentProperty,
   type SerializedEffect,
+  type SerializedFontName,
   type SerializedGridChild,
   type SerializedGridTrack,
   type SerializedLayoutGrid,
@@ -388,7 +389,7 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
       characters: s.characters,
       start: s.start,
       end: s.end,
-      fontName: { family: s.fontName.family, style: s.fontName.style },
+      fontName: serializeFontName(s.fontName),
       fontSize: s.fontSize,
       fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint, ownerSize)) : [],
       textDecoration: s.textDecoration,
@@ -687,7 +688,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
     const text = node as TextNode;
     out.characters = text.characters;
     out.fontSize = typeof text.fontSize === 'number' ? text.fontSize : MIXED;
-    out.fontName = isFontName(text.fontName) ? { ...text.fontName } : MIXED;
+    out.fontName = isFontName(text.fontName) ? serializeFontName(text.fontName) : MIXED;
     out.textAlignHorizontal = text.textAlignHorizontal;
     out.textAlignVertical = text.textAlignVertical;
     out.lineHeight = serializeLineHeight(text.lineHeight);
@@ -749,6 +750,19 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
 
 const isFontName = (value: unknown): value is FontName =>
   typeof value === 'object' && value !== null && 'family' in value && 'style' in value;
+
+/**
+ * Copy a Figma `FontName` onto the wire. `variationSettings` is what makes a variable font's weight
+ * / slant / optical size visible at all — hand-picking `{ family, style }` (as every one of these
+ * call sites used to) reports "Inter Regular" for text that is actually rendering at wght 650.
+ * Absent on a static family and on editors predating the API, so it is copied conditionally:
+ * `exactOptionalPropertyTypes` forbids writing the key as `undefined`.
+ */
+export const serializeFontName = (font: FontName): SerializedFontName => {
+  const out: SerializedFontName = { family: font.family, style: font.style };
+  if (font.variationSettings !== undefined) out.variationSettings = { ...font.variationSettings };
+  return out;
+};
 
 const toBase = (node: SceneNode): SerializedNode =>
   serializeBase({
