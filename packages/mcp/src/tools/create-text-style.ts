@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { textStyleBindingsSchema } from './binding-schema.js';
+import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const CREATE_TEXT_STYLE_TOOL_NAME = 'create_text_style';
@@ -15,7 +16,7 @@ export const createTextStyleTool: ToolSpec = {
     'single node use set_text_properties instead. Returns { ok, styleId, name }.',
   inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Heading/H1"'),
-    fontName: z.object({ family: z.string(), style: z.string() }).optional(),
+    fontName: fontNameSchema.optional(),
     fontSize: z.number().optional(),
     lineHeight: z
       .object({ unit: z.enum(['AUTO', 'PIXELS', 'PERCENT']), value: z.number().optional() })

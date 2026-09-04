@@ -163,6 +163,33 @@ describe('get_styles handler', () => {
     expect(result.texts[0]?.lineHeight).toEqual({ unit: 'AUTO' });
   });
 
+  it("carries a text style's variable-font axis values", async () => {
+    // A design system's weight scale can live entirely on one named instance; without these the
+    // whole scale reads back as the same "Inter Regular".
+    const handler = createGetStylesHandler(
+      fakeFigma({
+        texts: [
+          {
+            id: 'S:6',
+            name: 'Heading/H1',
+            key: 'k6',
+            description: '',
+            fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 720 } },
+            fontSize: 32,
+            lineHeight: { unit: 'AUTO' },
+            letterSpacing: { unit: 'PIXELS', value: 0 },
+          },
+        ],
+      }),
+    );
+    const result = (await handler(undefined)) as GetStylesResult;
+    expect(result.texts[0]?.fontName).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 720 },
+    });
+  });
+
   it('returns empty arrays when the document has no styles', async () => {
     const result = (await createGetStylesHandler(fakeFigma())(undefined)) as GetStylesResult;
     expect(result).toEqual({ paints: [], texts: [], effects: [], grids: [] });

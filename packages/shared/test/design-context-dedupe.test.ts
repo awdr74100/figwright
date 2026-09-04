@@ -225,6 +225,49 @@ describe('dedupeStyles', () => {
     });
   });
 
+  it('keeps two weights of one variable font apart instead of folding them onto a single ref', () => {
+    // Both are "Inter Regular"; only the axis values differ. Leaving variationSettings out of the
+    // bundle made these hash the same, so a heading and its body copy shared one `text_N` entry and
+    // codegen emitted whichever weight happened to be registered first for both.
+    const heading: DesignContextNode = {
+      ...textNode('heading', 'Inter', 'Regular', 16),
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 700 } },
+    };
+    const body: DesignContextNode = {
+      ...textNode('body', 'Inter', 'Regular', 16),
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 400 } },
+    };
+    const { nodes, globalVars } = dedupeStyles([heading, body]);
+
+    expect(nodes[0]?.textStyle).not.toBe(nodes[1]?.textStyle);
+    expect(Object.keys(globalVars.styles)).toHaveLength(2);
+    expect(globalVars.styles[nodes[0]!.textStyle!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Regular',
+      fontVariationSettings: { wght: 700 },
+      fontSize: 16,
+    });
+  });
+
+  it('still shares one entry when the axis values match', () => {
+    const make = (id: string): DesignContextNode => ({
+      ...textNode(id, 'Inter', 'Regular', 16),
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 550 } },
+    });
+    const { nodes, globalVars } = dedupeStyles([make('a'), make('b')]);
+    expect(Object.keys(globalVars.styles)).toHaveLength(1);
+    expect(nodes[0]?.textStyle).toBe(nodes[1]?.textStyle);
+  });
+
+  it("leaves a static font's bundle exactly as it was (no empty axis key)", () => {
+    const { nodes, globalVars } = dedupeStyles([textNode('s', 'Inter', 'Regular', 16)]);
+    expect(globalVars.styles[nodes[0]!.textStyle!]).toEqual({
+      fontFamily: 'Inter',
+      fontStyle: 'Regular',
+      fontSize: 16,
+    });
+  });
+
   it('folds paragraphSpacing / paragraphIndent / textWrapStyle into the textStyle bundle (style-level, like lineHeight)', () => {
     const body: DesignContextNode = {
       ...textNode('body', 'Inter', 'Regular', 16),

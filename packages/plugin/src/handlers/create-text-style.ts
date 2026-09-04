@@ -1,9 +1,4 @@
-import type {
-  SerializedFontName,
-  SerializedLetterSpacing,
-  SerializedLineHeight,
-  StyleResult,
-} from '@figwright/shared';
+import type { SerializedLetterSpacing, SerializedLineHeight, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import {
@@ -11,7 +6,7 @@ import {
   resolveTextStyleBindings,
   type TextStyleBindings,
 } from './bindings.js';
-import { toFigmaLineHeight } from './convert.js';
+import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
 
 export const createCreateTextStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -39,17 +34,19 @@ export const createCreateTextStyleHandler =
         ? undefined
         : await resolveTextStyleBindings(figmaCtx, bindings, 'create_text_style');
 
-    let fontName: FontName | undefined;
+    let fontName: FontNameInput | undefined;
     if (p.fontName !== undefined) {
-      const fn = p.fontName as SerializedFontName;
-      fontName = { family: fn.family, style: fn.style };
+      fontName = toFigmaFontName(p.fontName as Record<string, unknown>);
       await figmaCtx.loadFontAsync(fontName);
     }
 
     const style = figmaCtx.createTextStyle();
     try {
       style.name = p.name;
-      if (fontName !== undefined) style.fontName = fontName;
+      // `fontName` is declared as `FontName` even though its own JSDoc says the API accepts a
+      // `FontNameInput` — the typings widened the setters but not the property. Cast rather than
+      // force a `style` the caller may have deliberately left to Figma to resolve.
+      if (fontName !== undefined) style.fontName = fontName as FontName;
       // Every typography write below needs the style's own face loaded — Figma rejects them with
       // `Cannot write to node with unloaded font` otherwise, and a style the plugin did not put a
       // font on has none loaded. This load cannot fail on caller input: the face is either the one

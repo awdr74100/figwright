@@ -50,7 +50,9 @@ an orphan collection behind.
   Slashes in the name group it (`Brand/Primary`).
 - **`create_text_style`** (`name`, `fontName`, `fontSize`, `lineHeight`, `letterSpacing`) — the font
   is loaded before assignment; `lineHeight.unit` is `AUTO` / `PIXELS` / `PERCENT` (AUTO omits the
-  value).
+  value). `fontName` is `{ family, style?, variationSettings? }`: on a variable family a whole weight
+  ramp can be one `family` + `{ wght: … }` per style, and `style` may be omitted to let Figma resolve
+  the closest named instance. `get_fonts` reports which axes a family accepts under `variationAxes`.
 - Effect / grid styles have their own create tools.
 - **Editing an existing style** (the design system already has it, and code changed its value): use
   `update_paint_style` / `update_text_style` / `update_effect_style` (`styleId` + only the fields that

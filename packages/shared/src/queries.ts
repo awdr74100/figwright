@@ -232,7 +232,16 @@ export const FontUsageSchema = z.object({
 });
 export type FontUsage = z.infer<typeof FontUsageSchema>;
 
-export const GetFontsResultSchema = z.object({ fonts: z.array(FontUsageSchema) });
+/**
+ * `variationAxes` is family-wide, not per (family, style) — so it sits beside `fonts` rather than
+ * repeating on every row of the same family. A family appears only when it is a variable font; its
+ * absence means static (or an editor too old to report axes). The tags are what
+ * `fontName.variationSettings` accepts on the write tools.
+ */
+export const GetFontsResultSchema = z.object({
+  fonts: z.array(FontUsageSchema),
+  variationAxes: z.record(z.string(), z.array(z.string())).optional(),
+});
 export type GetFontsResult = z.infer<typeof GetFontsResultSchema>;
 
 // ── get_annotations ──────────────────────────────────────────────────────────

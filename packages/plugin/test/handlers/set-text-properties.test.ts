@@ -36,6 +36,63 @@ describe('set_text_properties handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  it("writes a variable font's axis values through, and loads that exact font", async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 650 } },
+    });
+    expect(node.fontName).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 650 },
+    });
+    expect(loadFontAsync).toHaveBeenCalledWith({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 650 },
+    });
+  });
+
+  it('accepts a fontName with no style, so Figma resolves the closest named instance', async () => {
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      fontName: { family: 'Inter', variationSettings: { wght: 900 } },
+    });
+    // No `style: undefined` key — Figma reads the presence of the key, not its value.
+    expect(node.fontName).toEqual({ family: 'Inter', variationSettings: { wght: 900 } });
+    expect(Object.hasOwn(node.fontName, 'style')).toBe(false);
+  });
+
+  it('rejects a non-numeric axis value instead of handing it to Figma', async () => {
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma(node))({
+        nodeId: '1:1',
+        fontName: { family: 'Inter', variationSettings: { wght: '650' } },
+      }),
+    ).rejects.toThrow(/variationSettings\.wght must be a number/);
+    // Rejected before the write, so the node is untouched.
+    expect(node.fontName).toEqual({ family: 'Inter', style: 'Regular' });
+  });
+
   it('leaves omitted fields untouched (partial update)', async () => {
     const node = {
       id: '1:1',

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { textStyleBindingsSchema } from './binding-schema.js';
+import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const UPDATE_TEXT_STYLE_TOOL_NAME = 'update_text_style';
@@ -16,7 +17,7 @@ export const updateTextStyleTool: ToolSpec = {
   inputSchema: z.object({
     styleId: z.string().describe('Text style id to update'),
     name: z.string().optional(),
-    fontName: z.object({ family: z.string(), style: z.string() }).optional(),
+    fontName: fontNameSchema.optional(),
     fontSize: z.number().optional(),
     lineHeight: z
       .object({ unit: z.enum(['AUTO', 'PIXELS', 'PERCENT']), value: z.number().optional() })

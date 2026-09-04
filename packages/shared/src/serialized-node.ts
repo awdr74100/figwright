@@ -126,6 +126,14 @@ export type SerializedPaint = z.infer<typeof SerializedPaintSchema>;
 export const SerializedFontNameSchema = z.object({
   family: z.string(),
   style: z.string(),
+  /**
+   * Variable-font axis values keyed by OpenType axis tag — `{ wght: 650, slnt: -5 }`, the same
+   * shape as CSS `font-variation-settings`. Figma reports every axis the family defines, not just
+   * the ones overridden, so a static family carries none and the field is absent. Two runs sharing
+   * a family + style but disagreeing here are genuinely different type: this is the dimension that
+   * makes them distinguishable.
+   */
+  variationSettings: z.record(z.string(), z.number()).optional(),
 });
 export type SerializedFontName = z.infer<typeof SerializedFontNameSchema>;
 
