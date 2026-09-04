@@ -9,6 +9,20 @@ import { decode, encode } from '@msgpack/msgpack';
 
 import { ABDICATE_PATH, PING_PATH, RPC_PATH } from './leader-endpoints.js';
 
+/**
+ * Release the body of a response we are returning without reading. `fetch` delivers the body as a
+ * stream separate from the status and headers, so an early return on `res.status` alone leaves that
+ * stream open — undici keeps the socket held until the request times out or is collected.
+ * Cancelling is the explicit release.
+ *
+ * Deliberately fire-and-forget: every caller is inside a try/catch whose result depends on which
+ * branch it returned from, so awaiting a cancel that rejected would turn a diagnosed outcome
+ * ('unsupported', undefined) into a generic error.
+ */
+const releaseBody = (res: Response): void => {
+  void res.body?.cancel().catch(() => undefined);
+};
+
 export const DEFAULT_FOLLOWER_RPC_TIMEOUT_MS = 35_000;
 export const DEFAULT_PING_TIMEOUT_MS = 2_000;
 
@@ -73,7 +87,10 @@ export class Follower {
       const res = await this.opts.fetch(`${this.opts.leaderUrl}${PING_PATH}`, {
         signal: AbortSignal.timeout(this.opts.pingTimeoutMs),
       });
-      if (!res.ok) return undefined;
+      if (!res.ok) {
+        releaseBody(res);
+        return undefined;
+      }
       const body: unknown = await res.json();
       return typeof body === 'object' && body !== null
         ? (body as Record<string, unknown>)
@@ -122,8 +139,14 @@ export class Follower {
       });
       // A leader that predates the endpoint 404s ("not found" catch-all) — it can't be retired
       // programmatically, only by a human killing it (ping's buildSkew message covers that).
-      if (res.status === 404) return 'unsupported';
-      if (!res.ok) return 'error';
+      if (res.status === 404) {
+        releaseBody(res);
+        return 'unsupported';
+      }
+      if (!res.ok) {
+        releaseBody(res);
+        return 'error';
+      }
       const body: unknown = await res.json();
       if (typeof body !== 'object' || body === null) return 'error';
       if ((body as { ok?: unknown }).ok === true) return 'ok';
