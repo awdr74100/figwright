@@ -1,6 +1,7 @@
 import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { toFigmaFontName } from './convert.js';
 
 /**
  * Set a TEXT node's typography + layout/overflow props. Figma requires every font on the node —
@@ -14,7 +15,7 @@ export const createSetTextPropertiesHandler =
   async params => {
     const p = (params ?? {}) as {
       nodeId?: unknown;
-      fontName?: { family: string; style: string };
+      fontName?: unknown;
       fontSize?: unknown;
       lineHeight?: unknown;
       letterSpacing?: unknown;
@@ -70,6 +71,9 @@ export const createSetTextPropertiesHandler =
     // Load the node's current font(s) — every one of them when the node is mixed, so a range-wide
     // mutation succeeds — plus the new fontName, if one is being assigned. Skipped only when there
     // is nothing to write at all, which is the one case that touches no text.
+    const fontName =
+      p.fontName === undefined ? undefined : toFigmaFontName(p.fontName as Record<string, unknown>);
+
     const willWrite =
       p.fontName !== undefined ||
       p.fontSize !== undefined ||
@@ -84,15 +88,19 @@ export const createSetTextPropertiesHandler =
       p.textTruncation !== undefined ||
       p.maxLines !== undefined;
     if (willWrite) {
-      const fonts: FontName[] =
+      const fonts: FontNameInput[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
           ? text.getRangeAllFontNames(0, text.characters.length)
           : [text.fontName as FontName];
-      if (p.fontName !== undefined) fonts.push(p.fontName);
+      if (fontName !== undefined) fonts.push(fontName);
       await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
     }
 
-    if (p.fontName !== undefined) text.fontName = p.fontName;
+    // `fontName` is declared as `FontName` (style required) even though the API accepts a
+    // `FontNameInput` — its own JSDoc says so, and that is the only way to express "the instance
+    // closest to these axis values" without knowing the family's style names. The typings never
+    // widened the property alongside the setters, hence the cast.
+    if (fontName !== undefined) text.fontName = fontName as FontName;
     if (p.fontSize !== undefined) text.fontSize = p.fontSize as number;
     if (p.lineHeight !== undefined) text.lineHeight = p.lineHeight as LineHeight;
     if (p.letterSpacing !== undefined) text.letterSpacing = p.letterSpacing as LetterSpacing;

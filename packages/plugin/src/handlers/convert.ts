@@ -55,6 +55,42 @@ export const toFigmaLayoutGrid = (g: SerializedLayoutGrid): LayoutGrid => {
   throw new TypeError(`unsupported layout grid pattern: ${g.pattern}`);
 };
 
+/**
+ * Wire font → Figma `FontNameInput`. `style` is optional: Figma then resolves the named instance
+ * closest to `variationSettings`, which is how a caller holding a CSS weight expresses itself
+ * without knowing what the family calls that instance. Rebuilt field by field rather than passed
+ * through, so nothing beyond the three known keys reaches `figma.*`.
+ */
+export const toFigmaFontName = (fn: {
+  family?: unknown;
+  style?: unknown;
+  variationSettings?: unknown;
+}): FontNameInput => {
+  if (typeof fn.family !== 'string') throw new TypeError('fontName.family must be a string');
+  // Built mutably — `FontNameInput`'s own fields are readonly, and the result is assignable to it.
+  const out: { family: string; style?: string; variationSettings?: Record<string, number> } = {
+    family: fn.family,
+  };
+  if (fn.style !== undefined) {
+    if (typeof fn.style !== 'string') throw new TypeError('fontName.style must be a string');
+    out.style = fn.style;
+  }
+  if (fn.variationSettings !== undefined) {
+    if (typeof fn.variationSettings !== 'object' || fn.variationSettings === null) {
+      throw new TypeError('fontName.variationSettings must be an object of axis tag → number');
+    }
+    const axes: Record<string, number> = {};
+    for (const [tag, value] of Object.entries(fn.variationSettings)) {
+      if (typeof value !== 'number') {
+        throw new TypeError(`fontName.variationSettings.${tag} must be a number`);
+      }
+      axes[tag] = value;
+    }
+    out.variationSettings = axes;
+  }
+  return out;
+};
+
 /** Wire line height → Figma LineHeight (AUTO omits value). */
 export const toFigmaLineHeight = (lh: SerializedLineHeight): LineHeight => {
   if (lh.unit === 'AUTO') return { unit: 'AUTO' };

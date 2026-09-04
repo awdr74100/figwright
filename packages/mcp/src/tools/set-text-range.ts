@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { fontNameSchema } from './font-name-schema.js';
 import { paintItemSchema } from './paint-schema.js';
 import type { ToolSpec } from './spec.js';
 
@@ -12,10 +13,7 @@ export const SET_TEXT_RANGE_TOOL_NAME = 'set_text_range';
 const rangeSchema = z.object({
   start: z.number().describe('Start char offset (inclusive)'),
   end: z.number().describe('End char offset (exclusive)'),
-  fontName: z
-    .object({ family: z.string(), style: z.string() })
-    .optional()
-    .describe('e.g. { family: "Inter", style: "Bold" } — makes the run bold/italic'),
+  fontName: fontNameSchema.optional(),
   fontSize: z.number().optional(),
   fills: z
     .array(paintItemSchema)

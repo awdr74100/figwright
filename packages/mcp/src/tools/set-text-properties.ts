@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SET_TEXT_PROPERTIES_TOOL_NAME = 'set_text_properties';
@@ -20,7 +21,8 @@ export const setTextPropertiesTool: ToolSpec = {
   name: SET_TEXT_PROPERTIES_TOOL_NAME,
   description:
     "Set a TEXT node's typography and layout/overflow properties. Typography: fontName " +
-    '({ family, style }), fontSize, lineHeight, letterSpacing, textCase, textDecoration, ' +
+    "({ family, style?, variationSettings? } — variationSettings carries a variable font's axis " +
+    'values, e.g. { wght: 650 }), fontSize, lineHeight, letterSpacing, textCase, textDecoration, ' +
     'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
     'into at "\\n" — the write half of the same fields get_design_context reads), textWrapStyle ' +
     '(BALANCE evens the line lengths of a heading, PRETTY avoids an orphan last word — the same ' +
@@ -30,10 +32,7 @@ export const setTextPropertiesTool: ToolSpec = {
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id'),
     // Typography (font load happens automatically when any of these is set)
-    fontName: z
-      .object({ family: z.string(), style: z.string() })
-      .optional()
-      .describe('Font family + style, e.g. { family: "Inter", style: "Bold" }'),
+    fontName: fontNameSchema.optional(),
     fontSize: z.number().positive().optional().describe('Font size in px'),
     lineHeight: lineHeight.optional(),
     letterSpacing: letterSpacing.optional(),

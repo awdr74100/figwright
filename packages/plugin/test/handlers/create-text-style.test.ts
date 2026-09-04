@@ -67,6 +67,35 @@ describe('create_text_style handler', () => {
     expect(result).toEqual({ ok: true, styleId: 'S:0', name: 'Heading/H1' });
   });
 
+  it("assigns a variable font's axis values onto the style and loads that exact font", async () => {
+    const { figma: f, loaded, style } = fakeFigma();
+    await createCreateTextStyleHandler(f)({
+      name: 'Heading/H1',
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 750 } },
+    });
+    expect(style.fontName).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 750 },
+    });
+    expect(loaded[0]).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 750 },
+    });
+  });
+
+  it('rejects a malformed fontName before creating anything (no orphan style)', async () => {
+    const { figma: f, createTextStyle } = fakeFigma();
+    await expect(
+      createCreateTextStyleHandler(f)({
+        name: 'Heading/H1',
+        fontName: { family: 'Inter', variationSettings: { wght: null } },
+      }),
+    ).rejects.toThrow(/variationSettings\.wght must be a number/);
+    expect(createTextStyle).not.toHaveBeenCalled();
+  });
+
   it("loads the style's own font before setting textWrapStyle (Figma rejects it otherwise)", async () => {
     // Live Figma answers `Cannot write to node with unloaded font "Inter Regular"` here: unlike
     // fontSize / lineHeight / letterSpacing, this writes through to the style's text runs. With

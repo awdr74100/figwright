@@ -2,12 +2,12 @@ import type { MutateResult, SerializedLineHeight, SerializedPaint } from '@figwr
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
-import { toFigmaLineHeight } from './convert.js';
+import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
 
 interface RangeInput {
   start: number;
   end: number;
-  fontName?: { family: string; style: string };
+  fontName?: Record<string, unknown>;
   fontSize?: number;
   fills?: SerializedPaint[];
   textDecoration?: string;
@@ -67,13 +67,24 @@ export const createSetTextRangeHandler =
     // plus any target fontName a range assigns, deduped, before mutating. getRangeAllFontNames
     // returns a non-extensible (frozen) array in Figma's runtime, so copy into a fresh array before
     // pushing the target fonts (a plain push throws "object is not extensible").
-    const fonts: FontName[] = [
+    const fonts: FontNameInput[] = [
       ...(len > 0 ? text.getRangeAllFontNames(0, len) : [text.fontName as FontName]),
     ];
-    for (const r of ranges) if (r.fontName) fonts.push(r.fontName);
+    // Rebuilt once here, then reused for both the preload and the write below, so a malformed
+    // fontName is rejected before any range mutates rather than partway through the loop.
+    const rangeFonts = new Map<RangeInput, FontNameInput>();
+    for (const r of ranges) {
+      if (r.fontName === undefined) continue;
+      const font = toFigmaFontName(r.fontName);
+      rangeFonts.set(r, font);
+      fonts.push(font);
+    }
     const seen = new Set<string>();
+    // Deduped on family + style alone, deliberately: loading is per face, and variation values
+    // affect what gets rendered rather than what gets loaded. A style-less input loads the whole
+    // family, so it gets its own key rather than colliding with a named instance of it.
     const uniqueFonts = fonts.filter(f => {
-      const key = `${f.family} ${f.style}`;
+      const key = `${f.family} ${f.style ?? '*'}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -86,7 +97,8 @@ export const createSetTextRangeHandler =
     for (const r of ranges) {
       const { start, end } = r;
       // Direct values first.
-      if (r.fontName !== undefined) text.setRangeFontName(start, end, r.fontName);
+      const font = rangeFonts.get(r);
+      if (font !== undefined) text.setRangeFontName(start, end, font);
       if (r.fontSize !== undefined) text.setRangeFontSize(start, end, r.fontSize);
       // A run's paints carry their own bindings, exactly like a node's — distinct from the
       // range-level `boundVariables` applied below, which binds a field on the run itself.

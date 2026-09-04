@@ -1,9 +1,4 @@
-import type {
-  SerializedFontName,
-  SerializedLetterSpacing,
-  SerializedLineHeight,
-  StyleResult,
-} from '@figwright/shared';
+import type { SerializedLetterSpacing, SerializedLineHeight, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import {
@@ -11,7 +6,7 @@ import {
   resolveTextStyleBindings,
   type TextStyleBindings,
 } from './bindings.js';
-import { toFigmaLineHeight } from './convert.js';
+import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
 
 export const createUpdateTextStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -39,9 +34,10 @@ export const createUpdateTextStyleHandler =
     if (typeof p.name === 'string') ts.name = p.name;
     // A new fontName must be loaded before assignment (Figma throws otherwise).
     if (p.fontName !== undefined) {
-      const fn = p.fontName as SerializedFontName;
-      await figmaCtx.loadFontAsync({ family: fn.family, style: fn.style });
-      ts.fontName = { family: fn.family, style: fn.style };
+      const fontName = toFigmaFontName(p.fontName as Record<string, unknown>);
+      await figmaCtx.loadFontAsync(fontName);
+      // Declared as `FontName` though the API accepts a `FontNameInput` — see create_text_style.
+      ts.fontName = fontName as FontName;
     }
     // So must the style's CURRENT face, before any typography write — fontSize / lineHeight /
     // letterSpacing / textWrapStyle all write through to the style's text runs, and Figma rejects

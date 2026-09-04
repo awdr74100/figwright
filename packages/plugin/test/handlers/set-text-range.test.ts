@@ -54,6 +54,65 @@ const makeFigma = (
   }) as unknown as typeof figma;
 
 describe('set_text_range handler', () => {
+  it("carries a run's variable-font axis values into setRangeFontName", async () => {
+    const text = makeText();
+    const figma = makeFigma(text);
+    await createSetTextRangeHandler(figma)({
+      nodeId: 'T:1',
+      ranges: [
+        {
+          start: 9,
+          end: 14,
+          fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 700 } },
+        },
+      ],
+    });
+    expect(text.setRangeFontName).toHaveBeenCalledWith(9, 14, {
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 700 },
+    });
+  });
+
+  it('loads a variable face once per family + style, not once per axis value', async () => {
+    // Variation values change what renders, not what loads — two runs at different weights of the
+    // same named instance need exactly one load, so the preload must not treat them as two faces.
+    const text = makeText();
+    const figma = makeFigma(text);
+    await createSetTextRangeHandler(figma)({
+      nodeId: 'T:1',
+      ranges: [
+        {
+          start: 0,
+          end: 5,
+          fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 400 } },
+        },
+        {
+          start: 5,
+          end: 9,
+          fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 700 } },
+        },
+      ],
+    });
+    expect(figma.loadFontAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a malformed fontName before any range is written', async () => {
+    const text = makeText();
+    const figma = makeFigma(text);
+    await expect(
+      createSetTextRangeHandler(figma)({
+        nodeId: 'T:1',
+        ranges: [
+          { start: 0, end: 5, fontSize: 12 },
+          { start: 5, end: 9, fontName: { family: 'Inter', variationSettings: { wght: 'bold' } } },
+        ],
+      }),
+    ).rejects.toThrow(/variationSettings\.wght must be a number/);
+    // The first range is valid and comes first — it must not have been applied.
+    expect(text.setRangeFontSize).not.toHaveBeenCalled();
+  });
+
   it('applies visual + spacing props to a range and loads the fonts first', async () => {
     const text = makeText();
     const figma = makeFigma(text);

@@ -23,6 +23,30 @@ const fakeFigma = (
 };
 
 describe('update_text_style handler', () => {
+  it("assigns a variable font's axis values onto the style", async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    const { figma: f, loaded } = fakeFigma(style);
+    await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      fontName: { family: 'Inter', style: 'Regular', variationSettings: { wght: 300 } },
+    });
+    expect(style.fontName).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 300 },
+    });
+    expect(loaded[0]).toEqual({
+      family: 'Inter',
+      style: 'Regular',
+      variationSettings: { wght: 300 },
+    });
+  });
+
   it('updates given fields (loading a new font first) and leaves omitted ones unchanged', async () => {
     const style: Record<string, unknown> = {
       id: 'S:0',
