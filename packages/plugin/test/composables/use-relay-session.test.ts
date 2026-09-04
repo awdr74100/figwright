@@ -122,7 +122,6 @@ const withSession = (): ReturnType<typeof useRelaySession> => {
 
 describe('useRelaySession', () => {
   beforeEach(async () => {
-    vi.clearAllMocks();
     await setVisibility('visible');
   });
 
