@@ -316,6 +316,69 @@ describe('Follower HTTP client', () => {
     expect(await f.requestAbdication(200)).toBe('error');
   });
 
+  /**
+   * A response whose body reports whether anything released it. `fetch` streams the body separately
+   * from the status, so a branch that returns on `res.status` alone leaves the stream — and the
+   * socket behind it — held until the request times out.
+   */
+  const bodyWatcher = (
+    status: number,
+    onCancel: () => void = () => {},
+  ): { res: Response; cancelled: () => boolean } => {
+    let cancelled = false;
+    const body = new ReadableStream({
+      cancel() {
+        cancelled = true;
+        onCancel();
+      },
+    });
+    return { res: new Response(body, { status }), cancelled: () => cancelled };
+  };
+
+  it('releases the response body when a ping is answered with a non-2xx', async () => {
+    const { res, cancelled } = bodyWatcher(503);
+    const f = new Follower({
+      leaderUrl: 'http://127.0.0.1:1',
+      pingTimeoutMs: 200,
+      fetch: async () => res,
+    });
+    expect(await f.ping()).toBe(false);
+    expect(cancelled()).toBe(true);
+  });
+
+  it('releases the response body on the abdication paths that never read it', async () => {
+    // 404 is the leader-predates-the-endpoint branch and 500 the generic failure; both return on
+    // the status alone, so both have to let the body go.
+    for (const [status, outcome] of [
+      [404, 'unsupported'],
+      [500, 'error'],
+    ] as const) {
+      const { res, cancelled } = bodyWatcher(status);
+      const f = new Follower({
+        leaderUrl: 'http://127.0.0.1:1',
+        pingTimeoutMs: 200,
+        fetch: async () => res,
+      });
+      expect(await f.requestAbdication(200)).toBe(outcome);
+      expect(cancelled()).toBe(true);
+    }
+  });
+
+  it('still reports the diagnosed outcome when releasing the body itself fails', async () => {
+    // Why the release is fire-and-forget rather than awaited: these callers sit inside a try/catch
+    // that maps any throw to 'error', so awaiting a rejected cancel would turn "this leader is too
+    // old to abdicate" into an indistinguishable transport failure.
+    const { res } = bodyWatcher(404, () => {
+      throw new Error('cancel failed');
+    });
+    const f = new Follower({
+      leaderUrl: 'http://127.0.0.1:1',
+      pingTimeoutMs: 200,
+      fetch: async () => res,
+    });
+    expect(await f.requestAbdication(200)).toBe('unsupported');
+  });
+
   it('sendRpc threads sessionId so the leader pins the call', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async () => ({ ok: true }));
