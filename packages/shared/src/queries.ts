@@ -251,27 +251,144 @@ export const GetAnnotationsResultSchema = z.object({
 export type GetAnnotationsResult = z.infer<typeof GetAnnotationsResultSchema>;
 
 // ── get_reactions ────────────────────────────────────────────────────────────
-export const SerializedTriggerSchema = z.object({
+/**
+ * Prototype triggers and actions, as they travel between the sandbox and the agent.
+ *
+ * These formats are lossless on purpose, and both mappers (`get-reactions.ts` serializing out,
+ * `convert.ts` converting back) copy every key rather than picking known ones. The pair is a
+ * round-trip — `get_reactions` output is what `set_reactions` takes back — so a field this format
+ * drops is a field written back as missing, silently rewriting the interaction.
+ *
+ * A picked subset cannot express these unions at all. Figma's `Trigger` has 7 variants and `Action`
+ * 9, and the fields that separate them are _required_ per variant and shared with no other:
+ * ON_KEY_DOWN's `keyCodes`, SET_VARIABLE's `variableId`, SET_VARIABLE_MODE's collection/mode pair,
+ * UPDATE_MEDIA_RUNTIME's `mediaAction`, CONDITIONAL's whole `conditionalBlocks` body, and a
+ * directional transition's `direction`/`matchLayers`. Naming a field below documents it for the
+ * agent; it is the looseness, not the list, that carries it.
+ *
+ * The typings are the source for the names, but not the last word on which of them a write accepts:
+ * a few are emitted by Figma and refused back. Those are called out where they sit.
+ */
+export const SerializedTriggerSchema = z.looseObject({
   type: z.string(),
   timeout: z.number().optional(),
   delay: z.number().optional(),
+  // Marks a legacy hover trigger. Read-only in practice: setReactionsAsync refuses a trigger
+  // carrying it as an unrecognized key, and Figma does not put it on an ordinary MOUSE_ENTER it
+  // hands back — so it is described for what a read may contain, not offered as one to author.
+  deprecatedVersion: z.boolean().optional(),
+  device: z.string().optional(),
+  keyCodes: z.array(z.number()).optional(),
+  mediaHitTime: z.number().optional(),
 });
 export type SerializedTrigger = z.infer<typeof SerializedTriggerSchema>;
 
 /**
- * Bounded action wire-format: common NODE / URL / BACK / CLOSE fields; exotic actions keep type
- * only.
+ * Figma's Easing — a named curve, plus the control points when it is a custom bezier or spring.
+ *
+ * Every control point is optional, including the ones the typings declare as required. Figma is the
+ * authority on what a curve needs and this format only carries it, so a requirement stated here can
+ * only ever be wrong in the expensive direction: rejecting a call Figma would have accepted. That
+ * is not hypothetical — the typings give EasingFunctionSpring an `initialVelocity`, and
+ * setReactionsAsync rejects a spring carrying one as an unrecognized key.
  */
-export const SerializedActionSchema = z.object({
+export const SerializedEasingSchema = z.looseObject({
   type: z.string(),
+  easingFunctionCubicBezier: z
+    .looseObject({
+      x1: z.number().optional(),
+      y1: z.number().optional(),
+      x2: z.number().optional(),
+      y2: z.number().optional(),
+    })
+    .optional(),
+  easingFunctionSpring: z
+    .looseObject({
+      mass: z.number().optional(),
+      stiffness: z.number().optional(),
+      damping: z.number().optional(),
+      initialVelocity: z.number().optional(),
+    })
+    .optional(),
+});
+export type SerializedEasing = z.infer<typeof SerializedEasingSchema>;
+
+/** SimpleTransition (DISSOLVE / SMART_ANIMATE / SCROLL_ANIMATE) plus the directional variants. */
+export const SerializedTransitionSchema = z.looseObject({
+  type: z.string(),
+  duration: z.number().optional(),
+  easing: SerializedEasingSchema.optional(),
+  direction: z.string().optional(),
+  matchLayers: z.boolean().optional(),
+});
+export type SerializedTransition = z.infer<typeof SerializedTransitionSchema>;
+
+/**
+ * Figma's VariableData — a typed value, or an expression tree over further VariableData.
+ *
+ * `value` is a union of the primitives and one open object rather than `unknown`: an untyped
+ * property is the shape that once let set_variable_value's value be coerced to a string in transit,
+ * and a registry test refuses one anywhere in a published schema. The object member is where a
+ * color, an alias, an easing curve or an expression lands — described no further because an
+ * expression nests into itself, and carried intact because it is loose.
+ */
+export const SerializedVariableDataSchema = z.looseObject({
+  type: z.string().optional(),
+  resolvedType: z.string().optional(),
+  value: z.union([z.boolean(), z.number(), z.string(), z.looseObject({})]).optional(),
+});
+export type SerializedVariableData = z.infer<typeof SerializedVariableDataSchema>;
+
+export const SerializedActionSchema = z.looseObject({
+  type: z.string(),
+  // NODE
   destinationId: z.string().nullable().optional(),
   navigation: z.string().optional(),
+  transition: SerializedTransitionSchema.nullable().optional(),
+  /**
+   * Where an overlay opens relative to its default position. Figma only honours it when the
+   * destination frame's own `overlayPositionType` is MANUAL — and that property is readonly on
+   * FramePrototypingMixin, so no plugin can set it; it is chosen on the overlay frame in Figma.
+   */
+  overlayRelativePosition: z
+    .looseObject({ x: z.number().optional(), y: z.number().optional() })
+    .optional(),
+  preserveScrollPosition: z.boolean().optional(),
+  resetVideoPosition: z.boolean().optional(),
+  resetScrollPosition: z.boolean().optional(),
+  resetInteractiveComponents: z.boolean().optional(),
+  // URL
   url: z.string().optional(),
-  transition: z.object({ type: z.string(), duration: z.number().optional() }).nullable().optional(),
+  openInNewTab: z.boolean().optional(),
+  // UPDATE_MEDIA_RUNTIME
+  mediaAction: z.string().optional(),
+  amountToSkip: z.number().optional(),
+  newTimestamp: z.number().optional(),
+  // SET_VARIABLE / SET_VARIABLE_MODE
+  variableId: z.string().nullable().optional(),
+  variableValue: SerializedVariableDataSchema.optional(),
+  variableCollectionId: z.string().nullable().optional(),
+  variableModeId: z.string().nullable().optional(),
+  /**
+   * CONDITIONAL's blocks: a condition and the actions to run when it holds.
+   *
+   * Those nested actions are described one level deep and left open, rather than pointed back at
+   * this schema. A self-reference would be published to MCP clients as a JSON Schema `$ref`, which
+   * this server has never emitted, and buying a fuller description of a rarely-written action with
+   * a new shape of client-compatibility risk is a bad trade. Looseness carries the rest.
+   */
+  conditionalBlocks: z
+    .array(
+      z.looseObject({
+        condition: SerializedVariableDataSchema.optional(),
+        actions: z.array(z.looseObject({ type: z.string().optional() })).optional(),
+      }),
+    )
+    .optional(),
 });
 export type SerializedAction = z.infer<typeof SerializedActionSchema>;
 
-export const SerializedReactionSchema = z.object({
+export const SerializedReactionSchema = z.looseObject({
   trigger: SerializedTriggerSchema.nullable(),
   actions: z.array(SerializedActionSchema),
 });

@@ -53,7 +53,7 @@
  * keeps the warning meaningful: a plugin one patch behind a server that changed no arguments is
  * fine, and crying wolf there would teach an agent to discount the warning that matters.
  */
-export const MIN_PLUGIN_VERSION = '0.5.0';
+export const MIN_PLUGIN_VERSION = '0.6.0';
 
 const parse = (version: string): { core: [number, number, number]; pre: string | null } | null => {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-([\w.-]+))?(?:\+[\w.-]+)?$/.exec(version);
