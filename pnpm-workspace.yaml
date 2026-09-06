@@ -1,11 +1,4 @@
 packages:
   - 'packages/*'
 
-onlyBuiltDependencies:
-  - esbuild
-  - '@parcel/watcher'
-  - '@tailwindcss/oxide'
-  - oxlint
-  - oxfmt
-
 minimumReleaseAge: 0
