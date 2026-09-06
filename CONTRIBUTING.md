@@ -15,7 +15,7 @@ By participating you agree to uphold our [Code of Conduct](./CODE_OF_CONDUCT.md)
 ## Prerequisites
 
 - **Node.js 24 LTS or newer** (see [`.node-version`](./.node-version)).
-- **pnpm 11**: this is a pnpm workspace; the version is pinned via `packageManager` in the root `package.json`, so [Corepack](https://nodejs.org/api/corepack.html) uses it automatically.
+- **pnpm 12**: this is a pnpm workspace; the version is pinned via `packageManager` in the root `package.json`, so [Corepack](https://nodejs.org/api/corepack.html) uses it automatically.
 
 ## Getting started
 
