@@ -12,6 +12,7 @@ const baseState = (activity: ActivityEntry[]): RelayClientState => ({
   serverVersion: '0.1.0',
   lastError: null,
   versionNotice: null,
+  foregroundFlag: true,
   connectedAt: 1_000,
   reconnectCount: 2,
   totalCalls: activity.length,

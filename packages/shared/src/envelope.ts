@@ -73,18 +73,52 @@ export const HelloResultSchema = z.object({
   // A plugin old enough to lack this field ignores it (the client casts rather than parses), which
   // is the point — it costs nothing to send and lets any plugin new enough say so in its panel.
   skewNotice: z.string().optional(),
+  /**
+   * This server reads `ActivityParams.foreground`, so the plugin may report its file identity from
+   * a background tab without that being taken as a claim on routing.
+   *
+   * Negotiated here rather than inferred from `serverVersion` for two reasons. A version comparison
+   * would need a constant naming the release this shipped in, which does not exist yet while it is
+   * being written — both halves of a dev tree report the previous version, so the plugin would take
+   * the compatibility path against the very server that understands it, and the new path would go
+   * untested by hand. And it is the wrong question: what matters is whether this peer acts on the
+   * field, which is exactly what it can say for itself.
+   *
+   * Absent means an older server, which ignores unknown params. Against one, a background tab must
+   * go back to staying silent: that server reads any activity event as a routing claim, so
+   * announcing identity from a hidden tab would let a background file steal the agent — the bug the
+   * visibility gate was added to fix.
+   */
+  foregroundFlag: z.boolean().optional(),
 });
 export type HelloResult = z.infer<typeof HelloResultSchema>;
 
 /**
- * Params for the plugin → leader `$activity` event. Sent when sandbox emits a context push
- * (selection / page change). Carries enough file/page identity so the leader can advertise "you are
- * routed to file X, page Y" back through `ping` for multi-plugin debugging.
+ * Params for the plugin → leader `$activity` event. Sent when the sandbox emits a context push
+ * (open / selection / page change). Carries enough file/page identity so the leader can advertise
+ * "you are routed to file X, page Y" back through `ping` for multi-plugin debugging.
+ *
+ * The event answers two separate questions, and conflating them was a bug worth a note. _Which file
+ * is this?_ is always true and always worth recording. _Should this file win routing?_ is only true
+ * for the tab the user is actually looking at — a background tab that claimed it would steal the
+ * agent out from under them. The event used to answer only the second, by not being sent at all
+ * from a background tab, which meant the leader knew nothing about any file the user had not
+ * recently been in: `fileName` stayed null for every session that had merely connected.
+ * `foreground` splits them, so identity can be reported unconditionally while routing stays gated.
  */
 export const ActivityParamsSchema = z.object({
   fileName: z.string(),
   pageId: z.string(),
   pageName: z.string(),
+  /**
+   * Whether this plugin's tab was in the foreground when the event fired — the routing signal.
+   *
+   * Optional because a plugin that predates it never sends one, and such a plugin only ever emitted
+   * from a visible tab: absent therefore means the same thing as true, which is what the leader
+   * treats it as. `document.visibilityState` is the only reliable source for it; window `focus`
+   * fires on every open tab at once and was measured stealing routing to background files.
+   */
+  foreground: z.boolean().optional(),
 });
 export type ActivityParams = z.infer<typeof ActivityParamsSchema>;
 

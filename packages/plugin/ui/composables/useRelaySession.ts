@@ -44,18 +44,33 @@ export const useRelaySession = (appVersion: string): RelaySession => {
   const visibility = useDocumentVisibility();
 
   // Re-assert this session's activity from the latest known context. The leader routes to the
-  // most-recently-active session, so emitting bumps this plugin to the front. No-op until the sandbox
-  // has pushed at least one context (file/page identity is required by ActivityParams).
+  // most-recently-active session, so emitting from the foreground bumps this plugin to the front.
+  // No-op until the sandbox has pushed at least one context (file/page identity is required by
+  // ActivityParams).
   const emitActivity = (): void => {
     const c = context.value;
     if (c === null) return;
     // Only the foreground tab reports `visible`; background tabs are `hidden` (verified empirically on
-    // Figma desktop). Gating activity on visibility means only the file the user is actually looking at
-    // ever claims routing — so switching tabs auto-follows the foreground file, and a background tab can
-    // never steal routing via a broadcast focus/visibility event. This is the core of selection/visibility
-    // -driven routing. See [[project-routing-stability-backlog]].
-    if (visibility.value !== 'visible') return;
-    client.notifyActivity({ fileName: c.fileName, pageId: c.pageId, pageName: c.pageName });
+    // Figma desktop). That flag — not whether the event is sent — is what gates routing: only the file
+    // the user is actually looking at ever claims it, so switching tabs auto-follows the foreground
+    // file and a background tab can never steal routing via a broadcast focus/visibility event. See
+    // [[project-routing-stability-backlog]].
+    //
+    // The event itself is sent either way, because it also carries this session's identity, and a
+    // background tab suppressing that left the leader with no name for any file the user had not
+    // recently been in — including, right after any reconnect, all of them. `use_file` matches on
+    // those names, so withholding them made a plainly-open file unclaimable.
+    //
+    // Unless the server is too old to read the flag, in which case any event at all is a claim on
+    // routing and a hidden tab has to stay quiet — the pre-negotiation behaviour, exactly.
+    const foreground = visibility.value === 'visible';
+    if (!foreground && !state.value.foregroundFlag) return;
+    client.notifyActivity({
+      fileName: c.fileName,
+      pageId: c.pageId,
+      pageName: c.pageName,
+      foreground,
+    });
   };
 
   const stopContext = onSandboxContext(event => {
@@ -75,7 +90,8 @@ export const useRelaySession = (appVersion: string): RelaySession => {
   // the `visibilitychange` event, which only fires on the tab whose visibility actually changed. We
   // deliberately do NOT react to window `focus`: that fires on EVERY tab when the user returns to the Figma
   // app (it's not per-tab), which is exactly the broadcast that made background files steal routing.
-  // emitActivity's `visible` gate keeps the background side (going → hidden) silent.
+  // Only the → visible edge is worth an event; going to the background changes neither this session's
+  // identity nor who should own routing, so there is nothing to say.
   watch(visibility, v => {
     if (v !== 'visible') return;
     // Returning to the foreground unfreezes throttled timers. Browsers throttle (and after a few minutes
@@ -88,8 +104,19 @@ export const useRelaySession = (appVersion: string): RelaySession => {
 
   // Mirror the relay client's state into a ref — subscribe synchronously so the panel reflects the
   // initial state, then tear everything down when the component's reactive scope is disposed.
+  //
+  // Re-announcing on every fresh connection is what makes the identity half of $activity reliable.
+  // A leader that has just taken the port has no record of this session — the id is minted by the
+  // plugin and survives, but the *server* holding it does not — so it starts out knowing nothing
+  // about which file this is. Nothing else would tell it until the user next clicked something in
+  // this tab, and every leader handover and server restart puts every open plugin in that state at
+  // once. Sent with the real foreground flag, so a background tab re-announcing cannot take routing.
+  let wasConnected = false;
   const stopSubscribe = client.subscribe(s => {
     state.value = s;
+    const isConnected = s.status === 'connected';
+    if (isConnected && !wasConnected) emitActivity();
+    wasConnected = isConnected;
   });
   tryOnScopeDispose(() => {
     stopSubscribe();

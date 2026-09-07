@@ -317,7 +317,7 @@ Yes. Several MCP servers can share a single plugin via leader/follower **electio
 
 Yes, once each agent claims its file.
 
-By default calls follow whichever file you last touched, so switching tabs switches what the agent sees — the right behaviour for one agent, and the wrong one for two, since the agent whose file isn't in front would silently get the other file's nodes.
+By default calls follow whichever file you last touched, so switching tabs switches what the agent sees — the right behaviour for one agent, and the wrong one for two, since the agent whose file isn't in front would silently get the other file's nodes. Whenever more than one file is open and an agent hasn't claimed one, every result it gets says so, so it can claim one before building anything on the wrong file.
 
 `list_files` shows every file that currently has the plugin open, and `use_file` claims one for that agent:
 

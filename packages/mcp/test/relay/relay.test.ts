@@ -746,6 +746,122 @@ describe('Relay hello loop', () => {
     wsB.close();
   });
 
+  it('a background session reports its file without taking routing', async () => {
+    // The two halves of $activity. Identity must land unconditionally — `use_file` matches on the
+    // name, and a file nobody has clicked in lately is exactly the one a second agent wants — while
+    // the routing claim stays gated, or a background tab pulls the agent out of the file the user
+    // is actually in.
+    const { port, relay } = await startRelay();
+    const sidA = newId();
+    const sidB = newId();
+
+    const wsA = await connect(port);
+    wsA.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hA',
+          sessionId: sidA,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsA);
+    await new Promise(r => setTimeout(r, 5));
+
+    const wsB = await connect(port);
+    wsB.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hB',
+          sessionId: sidB,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsB);
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    await new Promise(r => setTimeout(r, 5));
+    wsA.send(
+      encodeEnvelope(
+        createEvent({
+          id: 'a1',
+          sessionId: sidA,
+          method: SystemMethod.Activity,
+          params: {
+            fileName: 'Background File',
+            pageId: 'p-9',
+            pageName: 'Hidden',
+            foreground: false,
+          },
+        }),
+      ),
+    );
+    await new Promise(r => setTimeout(r, 20));
+
+    // Named, and findable by name…
+    expect(relay.sessions.get(sidA)?.fileName).toBe('Background File');
+    expect(relay.listSessionInfo().find(x => x.id === sidA)?.fileName).toBe('Background File');
+    // …but routing did not move.
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    wsA.close();
+    wsB.close();
+  });
+
+  it('treats a plugin that sends no foreground flag as the foreground', async () => {
+    // Backward compatibility: a plugin predating the flag only ever emitted from a visible tab, so
+    // absent has to mean true — reading it as false would freeze routing on such a plugin.
+    const { port, relay } = await startRelay();
+    const sidA = newId();
+    const sidB = newId();
+
+    const wsA = await connect(port);
+    wsA.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hA',
+          sessionId: sidA,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsA);
+    await new Promise(r => setTimeout(r, 5));
+
+    const wsB = await connect(port);
+    wsB.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'hB',
+          sessionId: sidB,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(wsB);
+    expect(relay.pickActiveSession()?.id).toBe(sidB);
+
+    await new Promise(r => setTimeout(r, 5));
+    wsA.send(
+      encodeEnvelope(
+        createEvent({
+          id: 'a1',
+          sessionId: sidA,
+          method: SystemMethod.Activity,
+          params: { fileName: 'Old Plugin File', pageId: 'p-1', pageName: 'Cover' },
+        }),
+      ),
+    );
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(relay.pickActiveSession()?.id).toBe(sidA);
+  });
+
   it('a reconnect (resumed session) does NOT bump routing — only a fresh session does', async () => {
     const { port, relay } = await startRelay();
     const sidA = newId();

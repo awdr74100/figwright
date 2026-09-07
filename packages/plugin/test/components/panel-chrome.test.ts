@@ -23,6 +23,7 @@ const state: RelayClientState = {
   serverVersion: '0.3.0',
   lastError: null,
   versionNotice: null,
+  foregroundFlag: true,
   connectedAt: Date.now(),
   reconnectCount: 0,
   totalCalls: 0,

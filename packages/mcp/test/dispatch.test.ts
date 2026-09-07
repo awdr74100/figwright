@@ -1,10 +1,11 @@
 import { ErrorCode, type RpcResponse } from '@figwright/shared';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   DispatchError,
   dispatchTargeted,
   dispatchTool,
+  resetRoutingNoticeCache,
   resolveRoutingSession,
 } from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
@@ -12,7 +13,7 @@ import { portConflictMessage } from '../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../src/election/node.js';
 import type { PluginSessionInfo } from '../src/routing/sessions.js';
 import { clearFileTarget, setFileTarget } from '../src/routing/target.js';
-import { captureSkew } from '../src/tools/skew-notice.js';
+import { captureSkew } from '../src/tools/notices.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
   ({
@@ -589,5 +590,103 @@ describe('dispatchTargeted', () => {
     );
     // It probed, found only another file, and refused rather than serving that one.
     expect(seen).toEqual(['t:s-2', 'list_files:s-3']);
+  });
+});
+
+describe('ambiguous-routing notice', () => {
+  const info = (id: string, fileName: string): PluginSessionInfo => ({
+    id,
+    fileName,
+    pageName: 'Page 1',
+    lastActivityAt: 1,
+    pluginVersion: '0.5.0',
+  });
+
+  const leaderWith = (sessions: readonly PluginSessionInfo[]): Node =>
+    makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: {
+            skewNotice: () => null,
+            listSessionInfo: () => sessions,
+            pickActiveSessionId: () => sessions[0]?.id,
+            sendRequest: async () => ({ ok: true }),
+          },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+
+  /** Run one dispatch with notice capture armed and return the text appended to the result. */
+  const noticeFrom = async (run: () => Promise<unknown>): Promise<string> => {
+    const result = await captureSkew(
+      async () => {
+        await run();
+        return { content: [{ type: 'text' as const, text: '{}' }] };
+      },
+      r => r,
+    );
+    return result.content.map(c => (c.type === 'text' ? c.text : '')).join('');
+  };
+
+  beforeEach(() => {
+    resetRoutingNoticeCache();
+    clearFileTarget();
+  });
+
+  afterEach(() => {
+    clearFileTarget();
+  });
+
+  it('warns when two files are open and nothing is claimed', async () => {
+    const node = leaderWith([info('s-1', 'Brand'), info('s-2', 'Marketing')]);
+    const text = await noticeFrom(() =>
+      dispatchTargeted({ node, follower: makeFollower({}) }, 't', {}),
+    );
+    expect(text).toContain('MORE THAN ONE FIGMA FILE IS OPEN');
+    expect(text).toContain('Brand');
+    expect(text).toContain('Marketing');
+    expect(text).toContain('use_file');
+  });
+
+  it('says nothing when only one file is open', async () => {
+    // The common case, and the one that must stay free of noise.
+    const node = leaderWith([info('s-1', 'Brand')]);
+    const text = await noticeFrom(() =>
+      dispatchTargeted({ node, follower: makeFollower({}) }, 't', {}),
+    );
+    expect(text).not.toContain('MORE THAN ONE');
+  });
+
+  it('says nothing once a file is claimed', async () => {
+    const node = leaderWith([info('s-1', 'Brand'), info('s-2', 'Marketing')]);
+    setFileTarget({ sessionId: 's-2', fileName: 'Marketing' });
+    const text = await noticeFrom(() =>
+      dispatchTargeted({ node, follower: makeFollower({}) }, 't', {}),
+    );
+    expect(text).not.toContain('MORE THAN ONE');
+  });
+
+  it('warns on the multi-call path too, which pins even when unclaimed', async () => {
+    // component_map and icon_map resolve one session up front so their sub-calls stay together, so
+    // they never reach the unclaimed branch of dispatchTargeted — and they are the tools whose
+    // output is most expensive to have built on the wrong file.
+    const node = leaderWith([info('s-1', 'Brand'), info('s-2', 'Marketing')]);
+    const text = await noticeFrom(() =>
+      resolveRoutingSession({ node, follower: makeFollower({}) }),
+    );
+    expect(text).toContain('MORE THAN ONE FIGMA FILE IS OPEN');
+  });
+
+  it('names a session that has not reported its file yet', async () => {
+    const node = leaderWith([
+      info('s-1', 'Brand'),
+      { ...info('s-2', 'x'), fileName: null } as PluginSessionInfo,
+    ]);
+    const text = await noticeFrom(() =>
+      dispatchTargeted({ node, follower: makeFollower({}) }, 't', {}),
+    );
+    expect(text).toContain('(unnamed, session s-2)');
   });
 });

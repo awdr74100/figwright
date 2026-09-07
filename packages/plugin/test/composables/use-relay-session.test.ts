@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => {
     serverVersion: null,
     lastError: null,
     versionNotice: null,
+    // The connected server reads ActivityParams.foreground, so a background tab may announce its
+    // file. The compatibility path (an older server, which cannot) has its own case below.
+    foregroundFlag: true,
     connectedAt: null,
     reconnectCount: 0,
     totalCalls: 0,
@@ -140,18 +143,26 @@ describe('useRelaySession', () => {
         fileName: 'Design File',
         pageId: 'page-1',
         pageName: 'Page 1',
+        foreground: true,
       });
     });
 
     // The bug this guards: a background file claiming routing and stealing tool calls from the file
-    // the user is actually looking at.
-    it('never claims routing while the tab is hidden', async () => {
+    // the user is actually looking at. It guards the *claim*, which is `foreground`, not the event —
+    // the event also carries this session's file identity, and withholding that left the leader
+    // unable to name any file the user had not recently been in (use_file matches on those names).
+    it('reports itself but never claims routing while the tab is hidden', async () => {
       await setVisibility('hidden');
       withSession();
 
       pushContext();
 
-      expect(mocks.notifyActivity).not.toHaveBeenCalled();
+      expect(mocks.notifyActivity).toHaveBeenCalledWith({
+        fileName: 'Design File',
+        pageId: 'page-1',
+        pageName: 'Page 1',
+        foreground: false,
+      });
     });
 
     it('still wakes the connection on a context push while hidden', async () => {
@@ -163,22 +174,27 @@ describe('useRelaySession', () => {
       // wake() is deliberately outside the visibility gate: a stalled reconnect should recover even
       // in a background tab, it just must not claim routing.
       expect(mocks.wake).toHaveBeenCalled();
-      expect(mocks.notifyActivity).not.toHaveBeenCalled();
+      expect(mocks.notifyActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ foreground: false }),
+      );
     });
 
     it('re-claims routing when the tab returns to the foreground', async () => {
       await setVisibility('hidden');
       withSession();
       pushContext();
-      expect(mocks.notifyActivity).not.toHaveBeenCalled();
+      expect(mocks.notifyActivity).toHaveBeenLastCalledWith(
+        expect.objectContaining({ foreground: false }),
+      );
 
       await setVisibility('visible');
 
       expect(mocks.wake).toHaveBeenCalled();
-      expect(mocks.notifyActivity).toHaveBeenCalledWith({
+      expect(mocks.notifyActivity).toHaveBeenLastCalledWith({
         fileName: 'Design File',
         pageId: 'page-1',
         pageName: 'Page 1',
+        foreground: true,
       });
     });
 
@@ -191,6 +207,97 @@ describe('useRelaySession', () => {
 
       await setVisibility('hidden');
 
+      expect(mocks.notifyActivity).not.toHaveBeenCalled();
+    });
+
+    // A leader that has just taken the port has no record of this session, so it starts out not
+    // knowing which file this is — and a handover or server restart puts every open plugin in that
+    // state at once. Nothing else would tell it until the user next clicked in this tab.
+    it('re-announces its file whenever the connection comes up', () => {
+      withSession();
+      pushContext();
+      vi.clearAllMocks();
+
+      mocks.getEmitState()?.({ ...mocks.baseState, status: 'connected' });
+
+      expect(mocks.notifyActivity).toHaveBeenCalledWith({
+        fileName: 'Design File',
+        pageId: 'page-1',
+        pageName: 'Page 1',
+        foreground: true,
+      });
+    });
+
+    it('re-announces a background file without claiming routing for it', async () => {
+      withSession();
+      pushContext();
+      await setVisibility('hidden');
+      vi.clearAllMocks();
+
+      mocks.getEmitState()?.({ ...mocks.baseState, status: 'connected' });
+
+      expect(mocks.notifyActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ foreground: false }),
+      );
+    });
+
+    it('announces once per connection, not on every state change', () => {
+      withSession();
+      pushContext();
+      vi.clearAllMocks();
+
+      const emit = mocks.getEmitState();
+      emit?.({ ...mocks.baseState, status: 'connected' });
+      emit?.({ ...mocks.baseState, status: 'connected', totalCalls: 1 });
+
+      expect(mocks.notifyActivity).toHaveBeenCalledTimes(1);
+    });
+
+    it('announces again after a drop and reconnect', () => {
+      withSession();
+      pushContext();
+      vi.clearAllMocks();
+
+      const emit = mocks.getEmitState();
+      emit?.({ ...mocks.baseState, status: 'connected' });
+      emit?.({ ...mocks.baseState, status: 'reconnecting' });
+      emit?.({ ...mocks.baseState, status: 'connected' });
+
+      expect(mocks.notifyActivity).toHaveBeenCalledTimes(2);
+    });
+
+    // Against a server that predates the flag, any activity event is read as a claim on routing, so
+    // a hidden tab announcing itself would let a background file steal the agent — the exact bug the
+    // visibility gate was added to fix. Silence is the only safe answer there.
+    it('stays silent from the background against a server that cannot read the flag', async () => {
+      withSession();
+      mocks.getEmitState()?.({ ...mocks.baseState, status: 'connected', foregroundFlag: false });
+      await setVisibility('hidden');
+      vi.clearAllMocks();
+
+      pushContext();
+
+      expect(mocks.notifyActivity).not.toHaveBeenCalled();
+    });
+
+    it('still claims routing from the foreground against such a server', async () => {
+      withSession();
+      mocks.getEmitState()?.({ ...mocks.baseState, status: 'connected', foregroundFlag: false });
+      vi.clearAllMocks();
+
+      pushContext();
+
+      expect(mocks.notifyActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ foreground: true }),
+      );
+    });
+
+    it('says nothing on connect before any context has arrived', () => {
+      withSession();
+
+      mocks.getEmitState()?.({ ...mocks.baseState, status: 'connected' });
+
+      // No context yet means no file identity to announce.
       expect(mocks.notifyActivity).not.toHaveBeenCalled();
     });
 
@@ -213,6 +320,7 @@ describe('useRelaySession', () => {
         fileName: 'Design File',
         pageId: 'page-2',
         pageName: 'Page 2',
+        foreground: true,
       });
     });
 

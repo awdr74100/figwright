@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 
-import { captureSkew, reportSkew, withSkewNotice } from '../../src/tools/skew-notice.js';
+import { captureSkew, reportSkew, withSkewNotice } from '../../src/tools/notices.js';
 
 const result = (text: string): CallToolResult => ({ content: [{ type: 'text', text }] });
 const NOTICE = 'Figwright plugin v0.3.0 is older than this server (v0.4.0).';

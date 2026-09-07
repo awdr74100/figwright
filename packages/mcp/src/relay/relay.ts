@@ -467,6 +467,9 @@ export class Relay {
       serverVersion: this.opts.serverVersion,
       protocolVersion: PROTOCOL_VERSION,
       sessionResumed: resumed,
+      // This server separates "which file is this?" from "should this file win routing?", so a
+      // background tab is safe to announce itself. See handleEnvelope's $activity branch.
+      foregroundFlag: true,
       ...(compatible
         ? {}
         : { skewNotice: pluginSkewNotice(parsed.data.clientVersion, this.opts.serverVersion) }),
@@ -483,14 +486,19 @@ export class Relay {
     // replies and tool responses must NOT bump lastActivityAt — both fire on a timer / on
     // server-initiated calls and would race the two sessions to a coin flip every 15s.
     if (env.kind === 'evt' && env.method === SystemMethod.Activity) {
-      session.lastActivityAt = Date.now();
       const parsed = ActivityParamsSchema.safeParse(env.params);
       if (parsed.success) {
-        // Params carry the current file/page so `ping` can advertise it; routing decision and
-        // user-facing label come off the same event.
+        // Identity is recorded unconditionally — knowing which file a session is in is never
+        // something a background tab should be denied, and `use_file` needs it to match a name.
         session.fileName = parsed.data.fileName;
         session.pageId = parsed.data.pageId;
         session.pageName = parsed.data.pageName;
+      }
+      // Routing is not. Only the tab the user is actually looking at may claim it; a background tab
+      // that bumped this would pull the agent out of the file the user is in. A plugin that predates
+      // the flag omits it, and only ever emitted from a visible tab, so absent means foreground.
+      if (!parsed.success || parsed.data.foreground !== false) {
+        session.lastActivityAt = Date.now();
       }
       return;
     }

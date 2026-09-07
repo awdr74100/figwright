@@ -54,6 +54,12 @@ export interface RelayClientState {
    * updating the plugin. So it is kept apart and shown in the header, where they already are.
    */
   versionNotice: string | null;
+  /**
+   * Whether the connected server reads `ActivityParams.foreground` (from the hello handshake).
+   * False against an older server, which treats any activity event as a claim on routing — so a
+   * background tab has to stay silent there rather than announce its file.
+   */
+  foregroundFlag: boolean;
   /** Epoch ms of the current connection, or null while not connected (for uptime). */
   connectedAt: number | null;
   /** How many times the live socket dropped and was re-established. */
@@ -77,6 +83,7 @@ export const initialRelayState = (): RelayClientState => ({
   serverVersion: null,
   lastError: null,
   versionNotice: null,
+  foregroundFlag: false,
   connectedAt: null,
   reconnectCount: 0,
   totalCalls: 0,

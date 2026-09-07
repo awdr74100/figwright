@@ -5,7 +5,7 @@ import { type Node, NodeRole } from './election/node.js';
 import type { PluginSessionInfo } from './routing/sessions.js';
 import { getFileTarget, resolveFileTarget } from './routing/target.js';
 import { namedSessions, type SessionDispatch } from './tools/list-files.js';
-import { reportSkew } from './tools/skew-notice.js';
+import { reportRouting, reportSkew } from './tools/notices.js';
 
 export const DEFAULT_DISPATCH_MAX_ATTEMPTS = 3;
 export const DEFAULT_DISPATCH_RETRY_DELAY_MS = 1_500;
@@ -170,6 +170,10 @@ export const resolveRoutingSession = async (ctx: DispatchContext): Promise<strin
   // undefined so sub-calls run unpinned, and don't waste an HTTP round-trip on it.
   if (ctx.node.isConflicted()) return undefined;
   if (getFileTarget() !== null) return resolveTargetFor(ctx);
+  // A multi-call tool pins the active session so its sub-calls stay together, which means they
+  // never reach dispatchTargeted's unclaimed branch. Warn from here instead, or the grounding tools
+  // — the ones whose output is most expensive to build on — would be the quiet ones.
+  await noteAmbiguousRouting(ctx).catch(() => undefined);
   if (ctx.node.isLeader()) {
     return ctx.node.getLeader()?.relay.pickActiveSessionId();
   }
@@ -183,6 +187,48 @@ export const resolveRoutingSession = async (ctx: DispatchContext): Promise<strin
  */
 const isPinnedSessionGone = (err: unknown): boolean =>
   err instanceof Error && err.message.includes('pinned session not connected');
+
+/**
+ * How long a "how many files are open?" read is reused for the ambiguity warning below.
+ *
+ * The count is only ever used to decide whether to warn, so a few seconds of staleness costs
+ * nothing, while re-reading it per call would put an HTTP round-trip on the follower path of every
+ * single tool call — including the single-plugin case, which is most of them and pays nothing
+ * today.
+ */
+export const ROUTING_NOTICE_TTL_MS = 10_000;
+
+let sessionCountCache: { sessions: readonly PluginSessionInfo[]; at: number } | null = null;
+
+/** Test seam: forget the cached session count. */
+export const resetRoutingNoticeCache = (): void => {
+  sessionCountCache = null;
+};
+
+/**
+ * Warn when this process is following the foreground while more than one file is open.
+ *
+ * Reported per call rather than once, because the condition is not a property of the process: a
+ * second file can be opened at any point in a long task, and the call after that is the first one
+ * that can land in the wrong place. It stays cheap through the cache above and silent in the only
+ * case that matters for cost — one plugin, nothing ambiguous.
+ */
+const noteAmbiguousRouting = async (ctx: DispatchContext): Promise<void> => {
+  const now = Date.now();
+  if (sessionCountCache === null || now - sessionCountCache.at > ROUTING_NOTICE_TTL_MS) {
+    sessionCountCache = { sessions: await listPluginSessions(ctx), at: now };
+  }
+  const sessions = sessionCountCache.sessions;
+  if (sessions.length < 2) return;
+  const names = sessions.map(s => s.fileName ?? `(unnamed, session ${s.id})`);
+  reportRouting(
+    `${sessions.length} Figma files have Figwright open: ${names.join(', ')}. This call went to ` +
+      `whichever one was last touched in Figma, and that changes when the user switches tabs — so ` +
+      `a later call in this same task can land in a different file, silently. If you are working ` +
+      `in one specific file, claim it now with use_file({ fileName: "…" }) (list_files shows the ` +
+      `exact names and their sessionIds); every later call then goes there whatever is in front.`,
+  );
+};
 
 /** Dispatch `list_files` to one named session — the probing source's transport. */
 const sessionDispatch =
@@ -220,7 +266,11 @@ export const dispatchTargeted = async (
   opts: DispatchOptions = {},
 ): Promise<unknown> => {
   const target = getFileTarget();
-  if (target === null) return dispatchTool(ctx, toolName, args, opts);
+  if (target === null) {
+    // Best-effort: a warning that cannot be produced must never take the call down with it.
+    await noteAmbiguousRouting(ctx).catch(() => undefined);
+    return dispatchTool(ctx, toolName, args, opts);
+  }
 
   try {
     return await dispatchTool(ctx, toolName, args, { ...opts, sessionId: target.sessionId });

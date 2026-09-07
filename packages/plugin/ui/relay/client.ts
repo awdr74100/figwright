@@ -339,6 +339,7 @@ export class RelayClient {
           // — every call still runs — so it belongs in the banner rather than as an error, and it
           // has to survive the successful connect that clears everything else.
           versionNotice: result.skewNotice ?? null,
+          foregroundFlag: result.foregroundFlag === true,
           connectedAt: Date.now(),
         });
         this.opts.log(`[relay-client] connected to :${port} (resumed=${result.sessionResumed})`);
