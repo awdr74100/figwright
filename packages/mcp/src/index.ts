@@ -32,7 +32,7 @@ import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
-import { captureSkew, withSkewNotice } from './tools/notices.js';
+import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS } from './tools/registry.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
@@ -209,9 +209,10 @@ const createMcpServer = (): McpServer => {
     // call, is what replaces the refusal this used to be: the agent is told before it reports
     // success to the user.
     const handler: ToolHandler = async args =>
-      captureSkew(
+      captureNotices(
         () => run(normalizeIdArgs(args)),
-        (result, notice) => withSkewNotice(result, notice),
+        (result, notices) =>
+          withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
       );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;

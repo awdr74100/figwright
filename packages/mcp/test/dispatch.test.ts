@@ -13,7 +13,7 @@ import { portConflictMessage } from '../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../src/election/node.js';
 import type { PluginSessionInfo } from '../src/routing/sessions.js';
 import { clearFileTarget, setFileTarget } from '../src/routing/target.js';
-import { captureSkew } from '../src/tools/notices.js';
+import { captureNotices, withRoutingNotice } from '../src/tools/notices.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
   ({
@@ -247,13 +247,13 @@ describe('dispatchTool', () => {
     });
     let seen: string | null = null;
 
-    await captureSkew(
+    await captureNotices(
       async () => {
         await dispatchTool({ node, follower: makeFollower({}) }, 'set_fills', {});
         return { content: [] };
       },
-      (result, notice) => {
-        seen = notice;
+      (result, notices) => {
+        seen = notices.skew;
         return result;
       },
     );
@@ -277,13 +277,13 @@ describe('dispatchTool', () => {
     });
     let seen: string | null = null;
 
-    await captureSkew(
+    await captureNotices(
       async () => {
         await dispatchTool({ node, follower }, 'set_fills', {});
         return { content: [] };
       },
-      (result, notice) => {
-        seen = notice;
+      (result, notices) => {
+        seen = notices.skew;
         return result;
       },
     );
@@ -298,13 +298,13 @@ describe('dispatchTool', () => {
     });
     let seen: string | null = 'unset';
 
-    await captureSkew(
+    await captureNotices(
       async () => {
         await dispatchTool({ node, follower }, 'set_fills', {});
         return { content: [] };
       },
-      (result, notice) => {
-        seen = notice;
+      (result, notices) => {
+        seen = notices.skew;
         return result;
       },
     );
@@ -620,12 +620,13 @@ describe('ambiguous-routing notice', () => {
 
   /** Run one dispatch with notice capture armed and return the text appended to the result. */
   const noticeFrom = async (run: () => Promise<unknown>): Promise<string> => {
-    const result = await captureSkew(
+    const result = await captureNotices(
       async () => {
         await run();
         return { content: [{ type: 'text' as const, text: '{}' }] };
       },
-      r => r,
+      // The same composition index.ts applies, so what this reads is what an agent would.
+      (r, notices) => withRoutingNotice(r, notices.routing),
     );
     return result.content.map(c => (c.type === 'text' ? c.text : '')).join('');
   };

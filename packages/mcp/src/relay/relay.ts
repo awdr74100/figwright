@@ -126,7 +126,7 @@ export class Relay {
      *   calls to plugins on different builds cannot read each other's answer.
      * - Invoking it _here_ rather than from the socket handler is what lets the caller attribute the
      *   result at all. The handler runs in the socket's async context, so anything context-scoped a
-     *   caller set up (`captureSkew`) is invisible from there — a callback fired at that point
+     *   caller set up (`captureNotices`) is invisible from there — a callback fired at that point
      *   reaches nobody, which is precisely what shipped until an end-to-end test caught it.
      */
     onServed?: (servingSessionId: string | undefined) => void,

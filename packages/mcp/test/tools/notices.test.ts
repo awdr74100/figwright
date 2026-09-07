@@ -1,7 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 
-import { captureSkew, reportSkew, withSkewNotice } from '../../src/tools/notices.js';
+import { captureNotices, reportSkew, withSkewNotice } from '../../src/tools/notices.js';
 
 const result = (text: string): CallToolResult => ({ content: [{ type: 'text', text }] });
 const NOTICE = 'Figwright plugin v0.3.0 is older than this server (v0.4.0).';
@@ -12,14 +12,14 @@ const textOf = (from: CallToolResult, index: number): string => {
   return block !== undefined && block.type === 'text' ? block.text : '';
 };
 
-describe('captureSkew', () => {
+describe('captureNotices', () => {
   it('scopes a report to the call that caused it', async () => {
-    const captured = await captureSkew(
+    const captured = await captureNotices(
       async () => {
         reportSkew(NOTICE);
         return result('{}');
       },
-      (r, notice) => withSkewNotice(r, notice),
+      (r, notices) => withSkewNotice(r, notices.skew),
     );
 
     expect(captured.content).toHaveLength(2);
@@ -30,13 +30,13 @@ describe('captureSkew', () => {
     // when the first call ran — so the first tool call after the server started shipped unwarned.
     // That is the call most likely to be a write, and the one an agent is most likely to trust.
     let first: string | null = 'unset';
-    await captureSkew(
+    await captureNotices(
       async () => {
         reportSkew(NOTICE);
         return result('{}');
       },
-      (r, notice) => {
-        first = notice;
+      (r, notices) => {
+        first = notices.skew;
         return r;
       },
     );
@@ -45,7 +45,7 @@ describe('captureSkew', () => {
   });
 
   it('does not leak a warning into the next call', async () => {
-    await captureSkew(
+    await captureNotices(
       async () => {
         reportSkew(NOTICE);
         return result('{}');
@@ -55,10 +55,10 @@ describe('captureSkew', () => {
 
     // The plugin was updated between calls; this one must come back clean.
     let second: string | null = 'unset';
-    await captureSkew(
+    await captureNotices(
       async () => result('{}'),
-      (r, notice) => {
-        second = notice;
+      (r, notices) => {
+        second = notices.skew;
         return r;
       },
     );
@@ -70,14 +70,14 @@ describe('captureSkew', () => {
     // ping and the map tools dispatch more than once; if any plugin involved is out of date the
     // result as a whole is unverified, so a later clean report must not clear an earlier warning.
     let notice: string | null = 'unset';
-    await captureSkew(
+    await captureNotices(
       async () => {
         reportSkew(NOTICE);
         reportSkew(null);
         return result('{}');
       },
-      (r, n) => {
-        notice = n;
+      (r, notices) => {
+        notice = notices.skew;
         return r;
       },
     );
@@ -91,7 +91,7 @@ describe('captureSkew', () => {
     // "this tool is broken" and looks for another way round, which is the same misdirection as a
     // silent wrong write.
     await expect(
-      captureSkew(
+      captureNotices(
         async () => {
           reportSkew(NOTICE);
           throw new Error('METHOD_NOT_FOUND: no sandbox handler (method=export_video)');
@@ -104,7 +104,7 @@ describe('captureSkew', () => {
   it('leaves a failure untouched when the plugin is current', async () => {
     const original = new Error('node not found');
     await expect(
-      captureSkew(
+      captureNotices(
         () => Promise.reject(original),
         r => r,
       ),

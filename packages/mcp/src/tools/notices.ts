@@ -18,7 +18,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
  * argument, or served by a different Figma file than the agent believes it is working in. Neither
  * leaves a trace in the payload, so neither can be left for the caller to ask about.
  */
-interface NoticeBox {
+export interface NoticeBox {
   skew: string | null;
   routing: string | null;
 }
@@ -39,14 +39,14 @@ const asRoutingBlock = (notice: string): string =>
   `\n\n⚠️ MORE THAN ONE FIGMA FILE IS OPEN\n${notice}`;
 
 /** Run a tool call with notice capture armed, then hand what was captured to `finish`. */
-export const captureSkew = async (
+export const captureNotices = async (
   run: () => Promise<CallToolResult>,
-  finish: (result: CallToolResult, notice: string | null) => CallToolResult,
+  finish: (result: CallToolResult, notices: NoticeBox) => CallToolResult,
 ): Promise<CallToolResult> => {
   const box: NoticeBox = { skew: null, routing: null };
   try {
     const result = await store.run(box, run);
-    return finish(withRoutingNotice(result, box.routing), box.skew);
+    return finish(result, box);
   } catch (err) {
     // A failure needs the warning as much as a result does — more, arguably: an out-of-date plugin
     // answers METHOD_NOT_FOUND for every tool it predates, and unattributed that reads as "this
