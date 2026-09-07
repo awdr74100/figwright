@@ -17,6 +17,7 @@ import { handleSaveImageFills } from '../../src/tools/save-image-fills.js';
 import { handleSaveScreenshots } from '../../src/tools/save-screenshots.js';
 import { handleScanComponents } from '../../src/tools/scan-components.js';
 import { handleTokenMap } from '../../src/tools/token-map.js';
+import { handleUseFile } from '../../src/tools/use-file.js';
 import { checkBatchOps, WIRE_TOOL_SCHEMAS, wireToolSchema } from '../../src/tools/wire-schema.js';
 
 let root: string;
@@ -178,6 +179,27 @@ describe('server-built plugin payloads satisfy the schema the leader validates',
       label: 'icon_map',
       run: d => handleIconMap(d, { rootDir: root, nodeId: '1:1' }),
       expected: ['get_design_context'],
+    },
+    {
+      tool: 'use_file',
+      label: 'use_file (asks every connected session which file it is in)',
+      // Its dispatcher is per session rather than per tool, so the session id is dropped here and
+      // the tool + arguments — the part the wire schema judges — go through unchanged.
+      run: d =>
+        handleUseFile(
+          {},
+          async () => [
+            {
+              id: 's-1',
+              fileName: 'A',
+              pageName: 'Page 1',
+              lastActivityAt: 1,
+              pluginVersion: '0.5.0',
+            },
+          ],
+          (_sessionId, toolName, args) => d(toolName, args),
+        ),
+      expected: ['list_files'],
     },
   ];
 

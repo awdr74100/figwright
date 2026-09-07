@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
-import { dispatchTool } from '../dispatch.js';
+import { dispatchTargeted } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
+import { getFileTarget } from '../routing/target.js';
 import type { ToolSpec } from './spec.js';
 
 export const PING_TOOL_NAME = 'ping';
@@ -12,7 +13,10 @@ export const pingTool: ToolSpec = {
   description:
     'Health check. Returns server info plus, when a plugin is connected, end-to-end info from the ' +
     'Figma sandbox. On a follower it also reports the leader’s version and build, and warns ' +
-    '(versionSkew / buildSkew) when a stale older server still owns the plugin.',
+    '(versionSkew / buildSkew) when a stale older server still owns the plugin. sessions.all names ' +
+    'each connected file as of its last activity, so a file whose tab has not been in front since ' +
+    'it connected shows fileName: null — use list_files, which asks each plugin directly, when you ' +
+    'need the names (and use_file to claim one).',
   inputSchema: z.object({}),
   kind: 'read',
 };
@@ -58,7 +62,9 @@ export interface PingServerInfo {
  * Multi-plugin observability. `connectedCount` lets a user see when more than one Figma file has
  * the plugin open; `routedSessionId` names the session that handled this call (most-recently-active
  * wins). `routedFileName` / `routedPageName` come from the routed session's last `$activity` event
- * — null until that session has pushed at least one context update.
+ * — null until that session has pushed at least one context update, which is the state every plugin
+ * is in immediately after a reconnect (a leader handover, a server restart). `list_files` asks the
+ * plugins themselves and so always has the names; this stays cheap on purpose.
  */
 export interface PingSessionInfo {
   id: string;
@@ -78,6 +84,13 @@ export interface PingSessionsInfo {
   routedSessionId: string | null;
   routedFileName: string | null;
   routedPageName: string | null;
+  /**
+   * The file this server process has claimed with `use_file`, or null while it follows the
+   * foreground. Reported next to the routed one because the two differing is the normal state for a
+   * second agent, and telling them apart is the first thing anyone debugging this needs.
+   */
+  boundSessionId: string | null;
+  boundFileName: string | null;
   /** All connected sessions, newest activity first — quick `who's connected and where` table. */
   all: readonly PingSessionInfo[];
 }
@@ -110,6 +123,7 @@ const serverInfo = (ctx: PingContext): PingServerInfo => ({
 
 export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const server = serverInfo(ctx);
+  const target = getFileTarget();
 
   // Port conflict: :port is held by something that isn't answering as a Figwright leader. There's no
   // relay and no leader to reach, so report the clash directly instead of trying (and failing) to
@@ -138,6 +152,8 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
           routedSessionId: null,
           routedFileName: null,
           routedPageName: null,
+          boundSessionId: target?.sessionId ?? null,
+          boundFileName: target?.fileName ?? null,
           all: [],
         },
         plugin: null,
@@ -158,11 +174,13 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       routedSessionId: routed?.id ?? null,
       routedFileName: routed?.fileName ?? null,
       routedPageName: routed?.pageName ?? null,
+      boundSessionId: target?.sessionId ?? null,
+      boundFileName: target?.fileName ?? null,
       all,
     };
 
     try {
-      const plugin = await dispatchTool(
+      const plugin = await dispatchTargeted(
         {
           node: ctx.node,
           follower: ctx.follower,
@@ -212,7 +230,7 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
         };
 
   try {
-    const plugin = await dispatchTool(
+    const plugin = await dispatchTargeted(
       {
         node: ctx.node,
         follower: ctx.follower,

@@ -117,6 +117,7 @@ describe('normalizeIdArgs', () => {
       'modeId', // variable-mode ids
       'animationStyleId', // Motion applied-style instance ids
       'timelineId', // Motion timeline ids
+      'sessionId', // relay plugin-session ids (id-…), a server-side handle, never on the canvas
     ]);
     const covered = new Set<string>([...STRING_ID_FIELDS, 'nodeIds']);
     const offenders: string[] = [];

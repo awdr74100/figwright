@@ -24,6 +24,7 @@ import {
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { isAllowedHost, isAllowedWsOrigin } from '../local-access.js';
+import type { PluginSessionInfo } from '../routing/sessions.js';
 import { DEFAULT_DISCONNECT_GRACE_MS, type Session, SessionManager } from './session.js';
 
 export interface RelayOptions {
@@ -274,6 +275,27 @@ export class Relay {
       if (best === undefined || s.lastActivityAt > best.lastActivityAt) best = s;
     }
     return best;
+  }
+
+  /**
+   * Every connected session, newest activity first, in the shape both roles answer with.
+   *
+   * The leader reads it straight off its own records; a follower gets the identical list back from
+   * `/ping`. It has to be the same shape on both sides because file targeting compares names and
+   * ids across processes — a follower that saw a different list could bind to a session the leader
+   * would resolve differently.
+   */
+  listSessionInfo(): readonly PluginSessionInfo[] {
+    return this.sessions
+      .connected()
+      .toSorted((a, b) => b.lastActivityAt - a.lastActivityAt)
+      .map(s => ({
+        id: s.id,
+        fileName: s.fileName,
+        pageName: s.pageName,
+        lastActivityAt: s.lastActivityAt,
+        pluginVersion: s.clientVersion,
+      }));
   }
 
   /**

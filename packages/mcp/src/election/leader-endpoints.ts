@@ -138,6 +138,10 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         // Lets a follower resolve the leader's current routing target once, then pin a multi-call
         // tool's sub-calls to it. Absent/undefined when no plugin is connected.
         activeSessionId: relay.pickActiveSessionId() ?? null,
+        // Every connected plugin, so a follower can answer "which files are open?" without a relay
+        // of its own. `plugins` above is this list's length and stays for older followers, which
+        // read it and would not know what to do with this.
+        sessions: relay.listSessionInfo(),
       });
       return;
     }

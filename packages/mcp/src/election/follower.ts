@@ -7,6 +7,7 @@ import {
 } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
+import type { PluginSessionInfo } from '../routing/sessions.js';
 import { ABDICATE_PATH, PING_PATH, RPC_PATH } from './leader-endpoints.js';
 
 /**
@@ -170,6 +171,34 @@ export class Follower {
     const body = await this.fetchPing();
     const id = body?.activeSessionId;
     return typeof id === 'string' ? id : undefined;
+  }
+
+  /**
+   * The plugin sessions the leader currently holds, for file targeting (see routing/target.ts).
+   *
+   * Validated field by field rather than cast: this is a follower reading another process's JSON,
+   * and a leader old enough to predate the field answers without it. An empty list is what that
+   * older leader produces, and it is also what "no plugin is connected" produces — both end in the
+   * same place, an agent told nothing is available to bind, which is true either way.
+   */
+  async listSessions(): Promise<readonly PluginSessionInfo[]> {
+    const body = await this.fetchPing();
+    const raw = body?.sessions;
+    if (!Array.isArray(raw)) return [];
+    const out: PluginSessionInfo[] = [];
+    for (const entry of raw as readonly unknown[]) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const s = entry as Record<string, unknown>;
+      if (typeof s.id !== 'string') continue;
+      out.push({
+        id: s.id,
+        fileName: typeof s.fileName === 'string' ? s.fileName : null,
+        pageName: typeof s.pageName === 'string' ? s.pageName : null,
+        lastActivityAt: typeof s.lastActivityAt === 'number' ? s.lastActivityAt : 0,
+        pluginVersion: typeof s.pluginVersion === 'string' ? s.pluginVersion : 'unknown',
+      });
+    }
+    return out;
   }
 
   async sendRpc(

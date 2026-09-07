@@ -1,10 +1,17 @@
 import { ErrorCode, type RpcResponse } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { DispatchError, dispatchTool, resolveRoutingSession } from '../src/dispatch.js';
+import {
+  DispatchError,
+  dispatchTargeted,
+  dispatchTool,
+  resolveRoutingSession,
+} from '../src/dispatch.js';
 import type { Follower } from '../src/election/follower.js';
 import { portConflictMessage } from '../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../src/election/node.js';
+import type { PluginSessionInfo } from '../src/routing/sessions.js';
+import { clearFileTarget, setFileTarget } from '../src/routing/target.js';
 import { captureSkew } from '../src/tools/skew-notice.js';
 
 const makeNode = (overrides: Partial<Node>): Node =>
@@ -482,5 +489,105 @@ describe('resolveRoutingSession', () => {
     const node = makeNode({ isLeader: () => false, getLeader: () => null });
     const follower = makeFollower({ resolveActiveSession: async () => 'remote-sess' });
     expect(await resolveRoutingSession({ node, follower })).toBe('remote-sess');
+  });
+});
+
+describe('dispatchTargeted', () => {
+  const info = (id: string, fileName: string): PluginSessionInfo => ({
+    id,
+    fileName,
+    pageName: 'Page 1',
+    lastActivityAt: 1,
+    pluginVersion: '0.5.0',
+  });
+
+  /** A leader whose relay refuses any session id but `live`, the way the real one does. */
+  const leaderServing = (
+    live: string,
+    sessions: readonly PluginSessionInfo[],
+    seen: string[],
+  ): Node =>
+    makeNode({
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          relay: {
+            skewNotice: () => null,
+            listSessionInfo: () => sessions,
+            sendRequest: async (
+              name: string,
+              _args: unknown,
+              _timeout: number,
+              sessionId?: string,
+            ) => {
+              seen.push(`${name}:${sessionId ?? '(unpinned)'}`);
+              if (sessionId !== undefined && sessionId !== live) {
+                throw new Error(`pinned session not connected (sessionId=${sessionId}, method=t)`);
+              }
+              // The probing source asks each session which file it is in.
+              if (name === 'list_files') {
+                return {
+                  files: [
+                    {
+                      fileKey: null,
+                      fileName: sessions.find(x => x.id === sessionId)?.fileName ?? null,
+                      currentPage: { id: 'p', name: 'Page 1' },
+                    },
+                  ],
+                };
+              }
+              return { served: sessionId };
+            },
+          },
+          http: undefined as never,
+          port: 0,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+
+  afterEach(() => {
+    clearFileTarget();
+  });
+
+  it('dispatches unpinned when no file is claimed', async () => {
+    // The single-agent default: this wrapper must be invisible until someone claims a file.
+    const seen: string[] = [];
+    const node = leaderServing('s-1', [info('s-1', 'Brand')], seen);
+    await dispatchTargeted({ node, follower: makeFollower({}) }, 't', {});
+    expect(seen).toEqual(['t:(unpinned)']);
+  });
+
+  it('pins straight to the claimed session without a liveness round-trip first', async () => {
+    // Checking up front would cost every call an extra /ping on the follower path; the relay
+    // already refuses a dead pin for free, so the check happens only when it fires.
+    const seen: string[] = [];
+    const node = leaderServing('s-2', [info('s-2', 'Marketing')], seen);
+    setFileTarget({ sessionId: 's-2', fileName: 'Marketing' });
+    await dispatchTargeted({ node, follower: makeFollower({}) }, 't', {});
+    // Exactly one dispatch: no liveness check, no list_files fan-out.
+    expect(seen).toEqual(['t:s-2']);
+  });
+
+  it('recovers the claim by file name when the panel was reopened, then retries', async () => {
+    const seen: string[] = [];
+    // The old session is gone; the same file is back under a new id.
+    const node = leaderServing('s-9', [info('s-9', 'Marketing')], seen);
+    setFileTarget({ sessionId: 's-2', fileName: 'Marketing' });
+    const result = await dispatchTargeted({ node, follower: makeFollower({}) }, 't', {});
+    // The refusal is what triggers the probe: the plugins are asked their names only then, because
+    // the relay's cached names are empty for a session that has just reconnected.
+    expect(seen).toEqual(['t:s-2', 'list_files:s-9', 't:s-9']);
+    expect(result).toEqual({ served: 's-9' });
+  });
+
+  it('fails rather than falling back to another file when the claim cannot be recovered', async () => {
+    // The bug this whole feature exists to prevent: answering with somebody else's nodes.
+    const seen: string[] = [];
+    const node = leaderServing('s-3', [info('s-3', 'Brand')], seen);
+    setFileTarget({ sessionId: 's-2', fileName: 'Marketing' });
+    await expect(dispatchTargeted({ node, follower: makeFollower({}) }, 't', {})).rejects.toThrow(
+      /"Marketing" is no longer connected/,
+    );
+    // It probed, found only another file, and refused rather than serving that one.
+    expect(seen).toEqual(['t:s-2', 'list_files:s-3']);
   });
 });

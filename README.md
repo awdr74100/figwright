@@ -45,7 +45,7 @@ Everything runs on your machine: the server, the relay, and the plugin. Your des
 ## Why Figwright
 
 - **Not gated**: the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
-- **Bidirectional**: not read-only. **112 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
+- **Bidirectional**: not read-only. **113 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen**: Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
 - **Open & extensible**: the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
 
@@ -120,9 +120,9 @@ npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-cod
 
 ## Tools
 
-Figwright exposes **112 MCP tools** in three groups:
+Figwright exposes **113 MCP tools** in three groups:
 
-- **Read**: selection, document and node inspection, styles, variables, components, fonts, reactions, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM).
+- **Read**: selection, document and node inspection, styles, variables, components, fonts, reactions, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM); plus `list_files` / `use_file` for working across more than one open Figma file at once.
 - **Write**: create and edit frames, text, shapes, auto-layout, effects, styles, variables, components (including authoring their boolean/text/instance-swap properties), pages, reactions, and Motion animations (keyframes, animation-style presets, timelines); plus a `batch` tool to apply many edits at once.
 - **Grounding**: `get_design_context` for faithful, de-duplicated design context, and `component_map` / `token_map` / `icon_map`, which join Figma data to your codebase so codegen reuses what you already have; plus `design_diff`, which reports what changed in a design against a saved baseline so you update only the affected code.
 
@@ -309,6 +309,24 @@ It runs in both, with less available than in Figma Design, because those editors
 <summary><strong>Can more than one agent use the same plugin at once?</strong></summary>
 
 Yes. Several MCP servers can share a single plugin via leader/follower **election**: one leads, the others follow, with a graceful handoff if the leader goes away.
+
+</details>
+
+<details>
+<summary><strong>Can two agents work on two different Figma files at the same time?</strong></summary>
+
+Yes, once each agent claims its file.
+
+By default calls follow whichever file you last touched, so switching tabs switches what the agent sees — the right behaviour for one agent, and the wrong one for two, since the agent whose file isn't in front would silently get the other file's nodes.
+
+`list_files` shows every file that currently has the plugin open, and `use_file` claims one for that agent:
+
+```text
+> use the marketing site file
+  → use_file({ fileName: "Marketing Site" })
+```
+
+The claim belongs to that agent's own server process, so it never affects the other agent, it survives closing and reopening the plugin panel, and calls keep reaching the file even while its tab sits in the background. If two open files share a name (`x` and a second `x`), `use_file` refuses the name and asks for the `sessionId` that `list_files` prints, rather than guessing. Release it with `use_file({ release: true })` to go back to following the foreground file.
 
 </details>
 

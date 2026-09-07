@@ -116,6 +116,7 @@ import { unlockNodesTool } from './unlock-nodes.js';
 import { updateEffectStyleTool } from './update-effect-style.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
+import { useFileTool } from './use-file.js';
 
 /** Every tool the MCP server registers, in ListTools order. */
 export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
@@ -141,6 +142,7 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   getMotionStylesTool,
   getNodeMotionTool,
   listFilesTool,
+  useFileTool,
   getDesignContextTool,
   getScreenshotTool,
   saveScreenshotsTool,
