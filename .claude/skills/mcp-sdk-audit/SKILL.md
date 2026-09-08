@@ -8,7 +8,7 @@ the wire contract is unchanged.
 
 **Do not reason about this the way `figma-typings-audit` reasons about plugin typings.** That package
 is types-only, so `tsc` is a real gate. This one is a **runtime dependency**: it serializes every
-tool result, generates the JSON Schema for all ~112 tools, and negotiates the protocol version. A
+tool result, generates the JSON Schema for every tool, and negotiates the protocol version. A
 release can leave every type identical and still change what clients see. `pnpm typecheck` will stay
 green through it.
 
@@ -131,7 +131,7 @@ second zod copy beside the repo's own.
    - the negotiated **protocol version** (`LATEST_PROTOCOL_VERSION`, `SUPPORTED_PROTOCOL_VERSIONS`,
      `FIRST_MODERN_PROTOCOL_VERSION`) — moving it changes what every connecting client sees, and
      dropping an old entry can cut off an older client outright;
-   - the **JSON Schema** generated per tool — Figwright advertises ~112 of them, they are the LLM's
+   - the **JSON Schema** generated per tool — one for every tool Figwright registers, they are the LLM's
      entire spec, and a `$ref`/`allOf`/`additionalProperties` shift has broken third-party clients
      before (see `project_moonshot_ref_immunity`);
    - **era selection in `serveStdio`** — which revision a given opening exchange lands on;

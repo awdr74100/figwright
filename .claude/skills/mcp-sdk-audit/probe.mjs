@@ -108,7 +108,7 @@ const capture = async repo => {
     promptCount: prompts.length,
     // Each tool exactly as the wire carries it — the whole object, not a chosen subset. An earlier
     // version stored only inputSchema and annotations, and so reported "no change" across the v1→v2
-    // upgrade that silently dropped `execution.taskSupport` from all 112 tools, and across a
+    // upgrade that silently dropped `execution.taskSupport` from every tool, and across a
     // rewritten tool description. What an audit needs to know is precisely the thing nobody thought
     // to allowlist, so the allowlist is the bug: capture everything and let the diff find it.
     tools: Object.fromEntries(

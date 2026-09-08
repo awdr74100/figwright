@@ -15,7 +15,7 @@ import { toToolDefinition } from './tool-schema.js';
 // of properties among the hundreds advertised. A Zod release can therefore reshape what every
 // client sees while all six gates stay green.
 //
-// Canaries, not a snapshot of all 112 schemas: the variable under test is Zod's rendering, not our
+// Canaries, not a snapshot of every schema: the variable under test is Zod's rendering, not our
 // tool list. Adding a tool must not touch this file — only a change in how Zod renders should. The
 // coverage tests below are what keep that trade honest, by failing when a tool starts using a
 // construct no canary pins.

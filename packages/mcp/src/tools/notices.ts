@@ -115,12 +115,12 @@ export const withRoutingNotice = (
  *
  * A non-null `notice` is itself the proof that this call reached the plugin: it can only have been
  * set by a dispatch. Filtering on the spec's `kind` as well was both redundant and wrong — `local`
- * marks a tool whose _handler_ runs on the server, not one that never talks to Figma, and eight of
- * the ten wear that label while dispatching (`component_map`, `token_map`, `icon_map`,
- * `design_diff`, the export and save tools). Those are the grounding tools, so suppressing their
- * warning hid it on exactly the results most likely to be built on. `analyze_project` and
- * `scan_components` really are filesystem-only and stay silent for the reason that actually holds:
- * nothing dispatched, so there is nothing to attribute.
+ * marks a tool whose _handler_ runs on the server, not one that never talks to Figma, and all but
+ * two of them wear that label while dispatching (`component_map`, `token_map`, `icon_map`,
+ * `design_diff`, `use_file`, the export and save tools). Those are the grounding tools, so
+ * suppressing their warning hid it on exactly the results most likely to be built on. The two
+ * exceptions, `analyze_project` and `scan_components`, really are filesystem-only and stay silent
+ * for the reason that actually holds: nothing dispatched, so there is nothing to attribute.
  */
 export const withSkewNotice = (result: CallToolResult, notice: string | null): CallToolResult => {
   if (notice === null) return result;

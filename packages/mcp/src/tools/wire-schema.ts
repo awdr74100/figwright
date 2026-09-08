@@ -52,9 +52,9 @@ export const wireToolSchema = (spec: ToolSpec): z.ZodObject | null => {
  * Every tool name the relay can legitimately carry, mapped to the schema its arguments must
  * satisfy.
  *
- * The key set is exactly the sandbox handler registry's — 105 entries, verified equal in both
- * directions — because both are projections of the same tool list. A name outside it is a name no
- * handler exists for.
+ * The key set is exactly the sandbox handler registry's — verified equal in both directions —
+ * because both are projections of the same tool list. A name outside it is a name no handler exists
+ * for.
  */
 export const WIRE_TOOL_SCHEMAS: ReadonlyMap<string, z.ZodObject> = new Map(
   ALL_TOOL_SPECS.flatMap(spec => {
