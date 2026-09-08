@@ -59,9 +59,12 @@ export const classifySvgColor = (svg: string): SvgColorContract => {
  * Scan the project for curated `.svg` icon files (gitignore-aware), reading each one's color
  * contract.
  */
-export const scanRepoSvgs = async (rootDir: string): Promise<RepoSvg[]> => {
+export const scanRepoSvgs = async (
+  rootDir: string,
+): Promise<{ svgs: RepoSvg[]; omitted: number }> => {
   const out: RepoSvg[] = [];
-  for await (const path of walkRepoFiles(rootDir, { extensions: ['.svg'] })) {
+  const walk = await walkRepoFiles(rootDir, { extensions: ['.svg'] });
+  for (const path of walk.files) {
     let content: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- bounded by the walker's cap; clarity over batching
@@ -76,7 +79,7 @@ export const scanRepoSvgs = async (rootDir: string): Promise<RepoSvg[]> => {
       colorContract: classifySvgColor(content),
     });
   }
-  return out;
+  return { svgs: out, omitted: walk.omitted };
 };
 
 // Icon component libraries: when one is installed, an unmapped Figma icon can be imported from it

@@ -643,7 +643,7 @@ describe('scanComponents (real fs)', () => {
   });
 
   it('finds components across heterogeneous folders and skips node_modules + vendor', async () => {
-    const comps = await scanComponents(dir, ['.tsx', '.jsx']);
+    const { components: comps } = await scanComponents(dir, ['.tsx', '.jsx']);
     const names = comps.map(c => c.name).toSorted();
     expect(names).toEqual(['Button', 'CartItem']); // not Evil (node_modules) or Vendored (vendor)
     expect(comps.every(c => !/node_modules|vendor/.test(c.filePath))).toBe(true);
@@ -659,7 +659,7 @@ describe('scanComponents (real fs)', () => {
         join(vueDir, 'src', 'components', 'Button.vue'),
         '<script setup lang="ts">defineProps<{ size?: string }>()</script><template><button/></template>',
       );
-      const comps = await scanComponents(vueDir, ['.vue']);
+      const { components: comps } = await scanComponents(vueDir, ['.vue']);
       expect(comps.map(c => c.name)).toEqual(['Button']);
       expect(comps[0]?.framework).toBe('vue');
       // The Vue SFC's defineProps<{ size?: string }>() is parsed, not just the filename baseline.
@@ -687,7 +687,7 @@ describe('scanComponents (real fs)', () => {
         `import { Injectable } from '@angular/core';
          @Injectable() export class DataService {}`,
       );
-      const comps = await scanComponents(ngDir, ['.ts']);
+      const { components: comps } = await scanComponents(ngDir, ['.ts']);
       expect(comps.map(c => c.name)).toEqual(['Button']); // not DataService
       expect(comps[0]?.framework).toBe('angular');
       expect(comps[0]?.propNames).toEqual(['size']);

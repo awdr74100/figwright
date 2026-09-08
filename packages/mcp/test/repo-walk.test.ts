@@ -19,9 +19,7 @@ const collect = async (
   root: string,
   opts?: Parameters<typeof walkRepoFiles>[1],
 ): Promise<string[]> => {
-  const out: string[] = [];
-  for await (const rel of walkRepoFiles(root, opts)) out.push(rel);
-  return out.toSorted();
+  return (await walkRepoFiles(root, opts)).files.toSorted();
 };
 
 afterEach(async () => {
@@ -83,6 +81,23 @@ describe('walkRepoFiles', () => {
     expect((await collect(root, { extensions: ['.tsx'], cap: 3 })).length).toBe(3);
   });
 
+  it('reports how many matching files the cap left out', async () => {
+    // The count is what lets a caller say its answer came from a subset. Zero is the load-bearing
+    // value: without it, a pool missing two thirds of the repo is indistinguishable from a repo
+    // that simply declares less.
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 10; i += 1) files[`src/F${i}.tsx`] = 'x';
+    const root = await make(files);
+    expect(await walkRepoFiles(root, { extensions: ['.tsx'], cap: 3 })).toMatchObject({
+      omitted: 7,
+    });
+    expect(await walkRepoFiles(root, { extensions: ['.tsx'], cap: 10 })).toMatchObject({
+      omitted: 0,
+    });
+    // Counted after the filters, not before: files the walk was never asked for are not "omitted".
+    expect(await walkRepoFiles(root, { extensions: ['.css'] })).toMatchObject({ omitted: 0 });
+  });
+
   it('filters by extension, or yields everything when none given', async () => {
     const root = await make({ 'a.tsx': 'x', 'b.css': 'x', 'c.md': 'x' });
     expect(await collect(root, { extensions: ['.css'] })).toEqual(['b.css']);
@@ -96,9 +111,7 @@ const rawCollect = async (
   root: string,
   opts?: Parameters<typeof walkRepoFiles>[1],
 ): Promise<string[]> => {
-  const out: string[] = [];
-  for await (const rel of walkRepoFiles(root, opts)) out.push(rel);
-  return out;
+  return (await walkRepoFiles(root, opts)).files;
 };
 
 describe('walkRepoFiles ordering', () => {
@@ -136,6 +149,44 @@ describe('walkRepoFiles ordering', () => {
       'src/index.css',
       'zz/later.css',
       'src/a/b/deep.css',
+    ]);
+  });
+
+  it('returns the same files on every run when the repo is over the cap', async () => {
+    // The determinism test above stays under the default cap, so it never exercised the truncation
+    // path — and fdir's own `withMaxFiles` truncated a concurrently-built array, making *which*
+    // files survived a race. Same shape as above, but small enough a cap to overflow: this returned
+    // 5 different sets across 10 runs before the cap moved into walkRepoFiles.
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 60; i += 1) {
+      files[`pkg${i}/a.css`] = 'x';
+      files[`pkg${i}/nested/b.css`] = 'x';
+      files[`pkg${i}/nested/deep/c.css`] = 'x';
+    }
+    const root = await make(files);
+    const runs: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
+      runs.push((await rawCollect(root, { extensions: ['.css'], cap: 50 })).join('\n'));
+    }
+    expect(new Set(runs).size).toBe(1);
+  });
+
+  it('keeps the canonically-first files when it caps, not an arbitrary prefix', async () => {
+    // Membership, not just count — the cap test above asserts only the length, which any arbitrary
+    // 3 files satisfy, and that is the half of the contract the concurrent truncation broke. Sibling
+    // branches are what race here: whichever `aN/` directory's readdir landed first used to fill the
+    // two slots below the shallow file (15 runs of this fixture returned 4 different sets).
+    const files: Record<string, string> = { 'zz/shallow.css': 'x' };
+    for (let i = 0; i < 8; i += 1) {
+      files[`a${i}/n/deep/0.css`] = 'x';
+      files[`a${i}/n/deep/1.css`] = 'x';
+    }
+    const root = await make(files);
+    expect(await rawCollect(root, { extensions: ['.css'], cap: 3 })).toEqual([
+      'zz/shallow.css', // depth beats name
+      'a0/n/deep/0.css', // then code unit, so the first branch wins both remaining slots
+      'a0/n/deep/1.css',
     ]);
   });
 

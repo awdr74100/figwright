@@ -19,6 +19,7 @@ const baseInput = (over: Partial<ProjectInput> = {}): ProjectInput => ({
   packageJson: null,
   hasTsconfig: false,
   presentConfigFiles: [],
+  cssScanOmitted: 0,
   ...over,
 });
 
@@ -512,6 +513,40 @@ describe('readStylesheetNames / tallyClassNaming (pure)', () => {
   });
 });
 
+describe('detectProfile — a CSS scan that was cut short', () => {
+  it('flags a styling verdict that rests on not finding a Tailwind v4 entry', () => {
+    // "No v4 entry" is hard evidence in the cascade — it hands a UnoCSS config the win and drops
+    // the v4 configPath — so a verdict reached without reading every .css file has to say so.
+    const p = detectProfile(
+      baseInput({ packageJson: { devDependencies: { unocss: '^66' } }, cssScanOmitted: 1400 }),
+    );
+    expect(p.evidence.some(e => e.includes('1400 .css file(s) unread'))).toBe(true);
+    expect(p.evidence.some(e => e.includes('a v4 entry cannot be ruled out'))).toBe(true);
+  });
+
+  it('says nothing about the cap once the entry was actually found', () => {
+    // With the entry in hand the omission changes no reading, and a caveat on every large repo's
+    // profile is noise the caller has to re-evaluate every time.
+    const p = detectProfile(
+      baseInput({
+        packageJson: { devDependencies: { tailwindcss: '^4.0.0' } },
+        tailwindCssEntry: 'src/app.css',
+        cssScanOmitted: 1400,
+      }),
+    );
+    expect(p.styling.configPath).toBe('src/app.css');
+    expect(p.evidence.some(e => e.includes('cannot be ruled out'))).toBe(false);
+  });
+
+  it('says how many stylesheets the class-naming vote did not see', () => {
+    const p = detectProfile(
+      baseInput({ classNamingTally: { ampersand: 9, flat: 1, filesScanned: 400, omitted: 2600 } }),
+    );
+    expect(p.styling.classNaming).toBe('ampersand');
+    expect(p.evidence.some(e => e.includes('2600 more not read — file cap'))).toBe(true);
+  });
+});
+
 describe('detectProfile — classNaming', () => {
   it('reports no habit when the project has no preprocessor stylesheet', () => {
     const p = detectProfile(baseInput());
@@ -523,7 +558,7 @@ describe('detectProfile — classNaming', () => {
     // Both leave classNaming undefined, but only one of them means the scan actually looked and
     // found the project has no habit to match — the evidence line has to be able to say which.
     const p = detectProfile(
-      baseInput({ classNamingTally: { ampersand: 0, flat: 0, filesScanned: 7 } }),
+      baseInput({ classNamingTally: { ampersand: 0, flat: 0, filesScanned: 7, omitted: 0 } }),
     );
     expect(p.styling.classNaming).toBeUndefined();
     expect(p.evidence.some(e => e.startsWith('classNaming=none: no compound class name'))).toBe(
@@ -533,12 +568,14 @@ describe('detectProfile — classNaming', () => {
 
   it('follows the plurality in either direction', () => {
     expect(
-      detectProfile(baseInput({ classNamingTally: { ampersand: 30, flat: 2, filesScanned: 9 } }))
-        .styling.classNaming,
+      detectProfile(
+        baseInput({ classNamingTally: { ampersand: 30, flat: 2, filesScanned: 9, omitted: 0 } }),
+      ).styling.classNaming,
     ).toBe('ampersand');
     expect(
-      detectProfile(baseInput({ classNamingTally: { ampersand: 2, flat: 30, filesScanned: 9 } }))
-        .styling.classNaming,
+      detectProfile(
+        baseInput({ classNamingTally: { ampersand: 2, flat: 30, filesScanned: 9, omitted: 0 } }),
+      ).styling.classNaming,
     ).toBe('flat');
   });
 
@@ -548,7 +585,7 @@ describe('detectProfile — classNaming', () => {
     // was never counted. Below the floor the verdict is flat, because a wrong `ampersand` imposes
     // the unsearchable spelling while a wrong `flat` is merely unidiomatic.
     const p = detectProfile(
-      baseInput({ classNamingTally: { ampersand: 4, flat: 0, filesScanned: 60 } }),
+      baseInput({ classNamingTally: { ampersand: 4, flat: 0, filesScanned: 60, omitted: 0 } }),
     );
     expect(p.styling.classNaming).toBe('flat');
     expect(p.evidence.some(e => e.includes('below the floor'))).toBe(true);
@@ -556,8 +593,9 @@ describe('detectProfile — classNaming', () => {
 
   it('accepts an `&` habit once it is established rather than incidental', () => {
     expect(
-      detectProfile(baseInput({ classNamingTally: { ampersand: 5, flat: 0, filesScanned: 60 } }))
-        .styling.classNaming,
+      detectProfile(
+        baseInput({ classNamingTally: { ampersand: 5, flat: 0, filesScanned: 60, omitted: 0 } }),
+      ).styling.classNaming,
     ).toBe('ampersand');
   });
 
@@ -565,7 +603,7 @@ describe('detectProfile — classNaming', () => {
     // The two spellings compile identically, so the tiebreak costs nothing and keeps the property
     // only the flat form has: the name in the stylesheet is the name you can search for.
     const p = detectProfile(
-      baseInput({ classNamingTally: { ampersand: 4, flat: 4, filesScanned: 3 } }),
+      baseInput({ classNamingTally: { ampersand: 4, flat: 4, filesScanned: 3, omitted: 0 } }),
     );
     expect(p.styling.classNaming).toBe('flat');
   });
@@ -669,7 +707,12 @@ describe('scanClassNaming (real fs)', () => {
       },
       async dir => {
         const input = await gatherProjectInput(dir);
-        expect(input.classNamingTally).toEqual({ ampersand: 12, flat: 0, filesScanned: 2 });
+        expect(input.classNamingTally).toEqual({
+          ampersand: 12,
+          flat: 0,
+          filesScanned: 2,
+          omitted: 0,
+        });
         expect(detectProfile(input).styling.classNaming).toBe('ampersand');
       },
     );
@@ -686,7 +729,12 @@ describe('scanClassNaming (real fs)', () => {
       },
       async dir => {
         const input = await gatherProjectInput(dir);
-        expect(input.classNamingTally).toEqual({ ampersand: 0, flat: 1, filesScanned: 1 });
+        expect(input.classNamingTally).toEqual({
+          ampersand: 0,
+          flat: 1,
+          filesScanned: 1,
+          omitted: 0,
+        });
         expect(detectProfile(input).styling.classNaming).toBe('flat');
       },
     );

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { type ProjectProfile, readProjectDeps, type StylingSystem } from '../profile/profile.js';
+import { truncationNote } from '../repo-walk.js';
 import { detectTokenBuildTool, findGeneratedStylesheets } from './generated-tokens.js';
 import { parseTailwindConfig, parseUnoConfig } from './js-config.js';
 import { aggregateRepoCssTokens } from './repo-css.js';
@@ -116,6 +117,14 @@ const NAMED_FILES = 6;
 const SCSS_USE_NOTE =
   "a SCSS ref only resolves once the consuming file imports its `from` file. `from` is repo-relative and Sass resolves @use against the *importing* file, so re-resolve it from wherever the code is being written (a file in src/components imports '../styles/tokens', not the repo-relative path verbatim). `@use '<resolved>' as *` keeps the ref as written; a namespaced @use instead requires prefixing the ref with that namespace";
 
+// The pool notes above describe what *was* read. This one says what wasn't: a cap-truncated walk
+// pools a subset, and a token the join then fails to match looks identical to a token the project
+// never declared. Appended rather than woven in, so it costs nothing on the repos that fit.
+const truncationClause = (...walks: readonly { omitted: number }[]): string | undefined => {
+  const omitted = walks.reduce((n, w) => n + w.omitted, 0);
+  return omitted === 0 ? undefined : truncationNote('stylesheets', omitted);
+};
+
 const listFiles = (files: readonly string[]): string =>
   files.length <= NAMED_FILES
     ? files.join(', ')
@@ -172,10 +181,11 @@ const loadScssPool = async (rootDir: string): Promise<LoadedProjectTokens> => {
   // declaring file. Said over a pool of plain custom properties it told the caller to add an import
   // for a `var()` that needs none — a fabricated instruction, in the file the model then writes.
   const needsUse = tokens.some(t => t.from !== undefined);
+  const truncated = truncationClause(scss, css);
   return {
     tokens,
     source: null,
-    note: `aggregated ${tokens.length} token(s) from ${parts.join(' and ')}${needsUse ? `; ${SCSS_USE_NOTE}` : ''}`,
+    note: `aggregated ${tokens.length} token(s) from ${parts.join(' and ')}${needsUse ? `; ${SCSS_USE_NOTE}` : ''}${truncated === undefined ? '' : `; ${truncated}`}`,
     files: [...scss.files, ...css.files],
   };
 };
@@ -284,7 +294,7 @@ const readTokenSource = async (
       return {
         tokens: pooled.tokens,
         source: null,
-        note: `${source.path} declares no custom properties — the tokens are not in the detected entry; aggregated ${pooled.tokens.length} from ${pooled.files.length} CSS file(s): ${listFiles(pooled.files)}`,
+        note: `${source.path} declares no custom properties — the tokens are not in the detected entry; aggregated ${pooled.tokens.length} from ${pooled.files.length} CSS file(s): ${listFiles(pooled.files)}${truncationClause(pooled) === undefined ? '' : `; ${truncationClause(pooled)}`}`,
         files: pooled.files,
       };
     }
@@ -303,13 +313,15 @@ const readTokenSource = async (
   // No single token config detected (a plain CSS-variables project, or Tailwind whose @theme entry
   // wasn't located). Aggregate custom properties across the repo's CSS and let the join filter
   // them — incidental vars stay unmatched, so this can only add real matches, never regress.
-  const { tokens, files } = await aggregateRepoCssTokens(rootDir);
+  const pool = await aggregateRepoCssTokens(rootDir);
+  const { tokens, files } = pool;
   if (files.length > 0) {
+    const truncated = truncationClause(pool);
     return withPrefixedNote(
       {
         tokens,
         source: null,
-        note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}`,
+        note: `no single token config detected; aggregated ${tokens.length} custom properties from ${files.length} CSS file(s): ${listFiles(files)}${truncated === undefined ? '' : `; ${truncated}`}`,
         files,
       },
       refusal,
@@ -457,6 +469,8 @@ const loadJsConfigTokens = async (
       `also pooled ${css.tokens.length} CSS custom propert(ies) from ${css.files.length} file(s): ${listFiles(css.files)}`,
     );
   }
+  const cssTruncated = truncationClause(css);
+  if (cssTruncated !== undefined) notes.push(cssTruncated);
   // A config's theme scales are inlined into the utilities the framework generates, so those tokens
   // have no var() form — the ref to emit is the utility base (bg-primary-500). Said only when the
   // config actually produced such tokens: on a v4 project reading a JS config for `content` alone

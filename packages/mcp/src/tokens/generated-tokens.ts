@@ -43,32 +43,54 @@ export const detectTokenBuildTool = (deps: Readonly<Record<string, unknown>>): s
   return null;
 };
 
+// A minified bundle is not a token file; the shortest paths are the likeliest entry points.
+const byLikeliestEntry = (a: string, b: string): number =>
+  a.length - b.length || a.localeCompare(b);
+
 /**
  * Stylesheets sitting in the conventionally-pruned output directories, repo-relative and sorted so
  * the answer is stable. Never throws — a missing directory is simply no candidates.
+ *
+ * The cap is applied through `filter` for the same reason `walkRepoFiles` does it: fdir's
+ * `withMaxFiles` truncates a concurrently-built array, so above the cap _which_ files survive is a
+ * race, and sorting after the fact only orders a set that was already chosen at random.
+ *
+ * Unlike the walker, this one was never caught returning different answers — probed at 40, 200 and
+ * 1240-file `dist/` layouts, flat and nested, it was stable every time, because the shortest paths
+ * this ranks first are the ones nearest the crawl root and fdir reaches those before any
+ * concurrency can reorder anything. So this closes the race by construction rather than fixing an
+ * observed failure; the cost is one full crawl of an oversized `dist/` (8.3ms → 12.4ms over 20k
+ * files) on a path that only runs when the token pool came back empty.
  */
 export const findGeneratedStylesheets = async (rootDir: string): Promise<string[]> => {
   const found: string[] = [];
   for (const dir of OUTPUT_DIRS) {
-    let files: string[] = [];
+    const kept: string[] = [];
     try {
       // eslint-disable-next-line no-await-in-loop -- three fixed directories; clarity over batching
-      files = await new fdir()
+      await new fdir()
         .withRelativePaths()
         .withPathSeparator('/')
-        .withMaxFiles(CRAWL_CAP)
         .exclude(name => name.startsWith('.') || name === 'node_modules')
         .filter(path => {
           const base = path.slice(path.lastIndexOf('/') + 1);
-          return !base.startsWith('.') && STYLESHEET_EXTENSIONS.some(e => base.endsWith(e));
+          if (base.startsWith('.') || !STYLESHEET_EXTENSIONS.some(e => base.endsWith(e))) {
+            return false;
+          }
+          kept.push(path);
+          if (kept.length >= CRAWL_CAP * 2) {
+            kept.sort(byLikeliestEntry);
+            kept.length = CRAWL_CAP;
+          }
+          return false; // fdir keeps nothing — `kept` is the result
         })
         .crawl(`${rootDir}/${dir}`)
         .withPromise();
     } catch {
       continue;
     }
-    found.push(...files.map(rel => `${dir}/${rel}`));
+    kept.sort(byLikeliestEntry);
+    found.push(...kept.slice(0, CRAWL_CAP).map(rel => `${dir}/${rel}`));
   }
-  // A minified bundle is not a token file; the shortest paths are the likeliest entry points.
-  return found.toSorted((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, MAX_NAMED);
+  return found.toSorted(byLikeliestEntry).slice(0, MAX_NAMED);
 };

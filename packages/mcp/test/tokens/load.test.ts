@@ -160,6 +160,26 @@ describe('resolveTokenSource', () => {
     }
   });
 
+  it('says so in the note when the CSS pool was capped', async () => {
+    // Without this the note reads "aggregated N custom properties from 200 CSS file(s)" over a repo
+    // with 260, and a Figma variable that matches nothing comes back indistinguishable from one the
+    // project never declared. A clause, not a file list — the note is a diagnostic, not an inventory.
+    const dir = await mkdtemp(join(tmpdir(), 'load-cap-'));
+    try {
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await Promise.all(
+        Array.from({ length: 260 }, (_, i) =>
+          writeFile(join(dir, 'src', `f${String(i).padStart(3, '0')}.css`), `:root{--c${i}:red}`),
+        ),
+      );
+      const loaded = await loadProjectTokens(dir, await analyzeProject(dir), undefined);
+      expect(loaded.note).toContain('file cap reached');
+      expect(loaded.note).toContain('60 further stylesheets');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the utility ref on a real v4 @theme when the project also has a JS config', async () => {
     // `@config "../tailwind.config.js"` beside `@import "tailwindcss"` is v4's documented upgrade
     // path, so a genuine v4 project can have a root tailwind.config.* — which routes it to the

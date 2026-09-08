@@ -36,6 +36,29 @@ describe('aggregateRepoCssTokens', () => {
     expect(tokens.find(t => t.name === 'primary-500')?.value).toBe('#6266F0');
   });
 
+  it("carries the walk's omitted count so a capped pool cannot read as a complete one", async () => {
+    // MAX_CSS_FILES is 200. A pool that silently drops the rest looks exactly like a project that
+    // declares fewer tokens, which is the reading this count exists to prevent.
+    const big = await mkdtemp(join(tmpdir(), 'repocss-cap-'));
+    try {
+      await mkdir(join(big, 'src'), { recursive: true });
+      await Promise.all(
+        Array.from({ length: 260 }, (_, i) =>
+          writeFile(join(big, 'src', `f${String(i).padStart(3, '0')}.css`), `:root{--c${i}:red}`),
+        ),
+      );
+      const { files, omitted } = await aggregateRepoCssTokens(big);
+      expect(files.length).toBe(200);
+      expect(omitted).toBe(60);
+    } finally {
+      await rm(big, { recursive: true, force: true });
+    }
+  });
+
+  it('reports nothing omitted when the whole repo fits under the cap', async () => {
+    expect((await aggregateRepoCssTokens(dir)).omitted).toBe(0);
+  });
+
   it('returns empty when the repo has no CSS custom properties', async () => {
     const empty = await mkdtemp(join(tmpdir(), 'repocss-empty-'));
     try {

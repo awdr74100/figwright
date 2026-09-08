@@ -9,6 +9,7 @@ import {
   type ProjectProfile,
   readProjectDeps,
 } from '../profile/profile.js';
+import { truncationNote } from '../repo-walk.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
 import type { ToolSpec } from './spec.js';
 
@@ -42,6 +43,11 @@ export interface IconMapResult {
   iconLibraries: string[];
   profile: ProjectProfile;
   svgFileCount: number;
+  /**
+   * Present only when the walk's file cap was reached: says the result covers a subset of the repo,
+   * so an absent match reads as "not in the part that was read" rather than "not in the project".
+   */
+  truncationNote?: string;
 }
 
 export const iconMapTool: ToolSpec = {
@@ -90,7 +96,7 @@ export const handleIconMap = async (
   ]);
 
   const icons = collectFigmaIcons(context.nodes);
-  const mappings = joinIcons(icons, svgs, {
+  const mappings = joinIcons(icons, svgs.svgs, {
     threshold,
     svg: profile.svg,
     utilityFirst: isUtilityFirst(profile.styling.system),
@@ -102,6 +108,7 @@ export const handleIconMap = async (
     unmapped,
     iconLibraries: detectIconLibraries(deps),
     profile,
-    svgFileCount: svgs.length,
+    svgFileCount: svgs.svgs.length,
+    ...(svgs.omitted > 0 ? { truncationNote: truncationNote('.svg files', svgs.omitted) } : {}),
   };
 };

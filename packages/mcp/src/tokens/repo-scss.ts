@@ -30,6 +30,8 @@ export interface AggregatedScss {
   tokens: ProjectToken[];
   /** Repo-relative `.scss` files that contributed at least one token. */
   files: string[];
+  /** SCSS files the cap left unread — see `RepoWalk.omitted`. Zero means the pool is the whole repo. */
+  omitted: number;
 }
 
 /**
@@ -45,7 +47,8 @@ export const aggregateRepoScssTokens = async (rootDir: string): Promise<Aggregat
   const tokens: ProjectToken[] = [];
   const files: string[] = [];
 
-  for await (const rel of walkRepoFiles(rootDir, { extensions: ['.scss'], cap: MAX_SCSS_FILES })) {
+  const walk = await walkRepoFiles(rootDir, { extensions: ['.scss'], cap: MAX_SCSS_FILES });
+  for (const rel of walk.files) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential repo walk; clarity over batching
@@ -59,5 +62,5 @@ export const aggregateRepoScssTokens = async (rootDir: string): Promise<Aggregat
       files.push(rel);
     }
   }
-  return { tokens, files };
+  return { tokens, files, omitted: walk.omitted };
 };

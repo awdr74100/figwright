@@ -127,6 +127,13 @@ export interface ProjectInput {
    */
   tailwindCssEntry?: string;
   /**
+   * CSS files the entry scan's cap left unread. Only meaningful alongside a _missing_
+   * `tailwindCssEntry`: the marker could be in a file that was never opened, and the cascade below
+   * treats "no entry" as hard evidence — it hands a UnoCSS config the win over Tailwind v4 and
+   * drops the v4 `configPath`, both of which then read the wrong token source.
+   */
+  cssScanOmitted: number;
+  /**
    * Whether the UnoCSS config found at the root loads a preset that generates the Tailwind utility
    * vocabulary. Undefined when there is no such config, or when its `presets` could not be read —
    * both of which mean "assume it does", since that is what almost every UnoCSS project loads.
@@ -153,6 +160,11 @@ export interface ClassNamingTally {
   flat: number;
   /** Stylesheets (or SFC preprocessor `<style>` blocks) actually read. */
   filesScanned: number;
+  /**
+   * Stylesheets the cap left unread. Above zero the habit was inferred from a sample, and a
+   * convention split across a big repo can tally differently on the half that was read.
+   */
+  omitted: number;
 }
 
 interface PackageJson {
@@ -214,8 +226,9 @@ const readJson = async <T>(path: string): Promise<T | null> => {
  * Walk the repo's CSS files looking for the Tailwind v4 markers; returns the first matching file's
  * repo-relative path, or undefined. Directory pruning + .gitignore handling live in walkRepoFiles.
  */
-const findTailwindCssEntry = async (root: string): Promise<string | undefined> => {
-  for await (const rel of walkRepoFiles(root, { extensions: ['.css'], cap: 1000 })) {
+const findTailwindCssEntry = async (root: string): Promise<{ entry?: string; omitted: number }> => {
+  const walk = await walkRepoFiles(root, { extensions: ['.css'], cap: 1000 });
+  for (const rel of walk.files) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential scan, stops at first match
@@ -223,9 +236,11 @@ const findTailwindCssEntry = async (root: string): Promise<string | undefined> =
     } catch {
       continue;
     }
-    if (CSS_TAILWIND_IMPORT.test(body) || CSS_THEME_BLOCK.test(body)) return rel;
+    if (CSS_TAILWIND_IMPORT.test(body) || CSS_THEME_BLOCK.test(body)) {
+      return { entry: rel, omitted: walk.omitted };
+    }
   }
-  return undefined;
+  return { omitted: walk.omitted };
 };
 
 // Stylesheet languages whose `&` *concatenates* into a new selector token, so `.card { &__title {} }`
@@ -473,7 +488,7 @@ const isCompoundClassName = (name: string, declared: ReadonlySet<string>): boole
  */
 export const tallyClassNaming = (
   files: Iterable<StylesheetNames>,
-): Omit<ClassNamingTally, 'filesScanned'> => {
+): Omit<ClassNamingTally, 'filesScanned' | 'omitted'> => {
   let ampersand = 0;
   const occurrences: string[] = [];
   for (const file of files) {
@@ -508,10 +523,11 @@ const CLASS_NAMING_FILE_CAP = 400;
  */
 const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefined> => {
   const files: StylesheetNames[] = [];
-  for await (const rel of walkRepoFiles(root, {
+  const walk = await walkRepoFiles(root, {
     extensions: [...NESTING_STYLESHEET_EXTENSIONS, ...SFC_EXTENSIONS],
     cap: CLASS_NAMING_FILE_CAP,
-  })) {
+  });
+  for (const rel of walk.files) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential scan, bounded by the cap above
@@ -528,7 +544,7 @@ const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefin
   }
   return files.length === 0
     ? undefined
-    : { ...tallyClassNaming(files), filesScanned: files.length };
+    : { ...tallyClassNaming(files), filesScanned: files.length, omitted: walk.omitted };
 };
 
 /** Do the filesystem IO once, up front, so detectProfile can stay pure. */
@@ -544,7 +560,7 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
 
   // Two independent repo walks, both IO-bound — run them together so the class-naming scan costs
   // essentially nothing in wall clock on top of the Tailwind marker probe that was already here.
-  const [tailwindCssEntry, classNamingTally] = await Promise.all([
+  const [tailwindCss, classNamingTally] = await Promise.all([
     findTailwindCssEntry(root),
     scanClassNaming(root),
   ]);
@@ -561,7 +577,8 @@ export const gatherProjectInput = async (rootDir: string): Promise<ProjectInput>
     packageJson,
     hasTsconfig,
     presentConfigFiles,
-    ...(tailwindCssEntry === undefined ? {} : { tailwindCssEntry }),
+    ...(tailwindCss.entry === undefined ? {} : { tailwindCssEntry: tailwindCss.entry }),
+    cssScanOmitted: tailwindCss.omitted,
     ...(unoConfigDeclaresVocabulary === null ? {} : { unoConfigDeclaresVocabulary }),
     ...(classNamingTally === undefined ? {} : { classNamingTally }),
   };
@@ -831,14 +848,32 @@ const detectClassNaming = (
   tally: ClassNamingTally | undefined,
 ): { style?: ClassNamingStyle; reason: string } => {
   if (tally === undefined) return { reason: 'no preprocessor stylesheet found' };
-  const { ampersand, flat, filesScanned } = tally;
-  const counts = `${ampersand} &-assembled vs ${flat} full-name in ${filesScanned} stylesheet(s)`;
+  const { ampersand, flat, filesScanned, omitted } = tally;
+  // The omission belongs in the reason, not just in the tally: a plurality drawn from 400 of 3000
+  // stylesheets can differ from the project's actual habit, and the caller reading `classNaming` has
+  // no other way to know the vote was partial.
+  const counts = `${ampersand} &-assembled vs ${flat} full-name in ${filesScanned} stylesheet(s)${
+    omitted > 0 ? ` (${omitted} more not read — file cap)` : ''
+  }`;
   if (ampersand === 0 && flat === 0) return { reason: `no compound class name found (${counts})` };
   if (ampersand > flat && ampersand < AMPERSAND_FLOOR) {
     return { style: 'flat', reason: `${counts} — below the floor for an & habit` };
   }
   return { style: ampersand > flat ? 'ampersand' : 'flat', reason: counts };
 };
+
+/**
+ * Note a styling verdict that rests on _not_ having found a Tailwind v4 CSS entry, when the scan
+ * that looked for it was cut short. Said only in that combination: with an entry in hand the
+ * omission changes nothing, and saying it anyway would put a caveat on every big repo's profile.
+ */
+const withCssScanCaveat = (styling: StylingResult, input: ProjectInput): StylingResult =>
+  input.tailwindCssEntry === undefined && input.cssScanOmitted > 0
+    ? {
+        ...styling,
+        reason: `${styling.reason} (the Tailwind v4 CSS-entry scan hit its file cap with ${input.cssScanOmitted} .css file(s) unread, so a v4 entry cannot be ruled out)`,
+      }
+    : styling;
 
 /** Pure decision function over the gathered snapshot — the unit under test. */
 export const detectProfile = (input: ProjectInput): ProjectProfile => {
@@ -853,7 +888,7 @@ export const detectProfile = (input: ProjectInput): ProjectProfile => {
     `language=${language}: ${input.hasTsconfig ? 'tsconfig.json present' : 'typescript' in deps ? 'typescript dep' : 'no ts signal'}`,
   );
 
-  const styling = detectStyling(deps, input);
+  const styling = withCssScanCaveat(detectStyling(deps, input), input);
   evidence.push(
     `styling=${styling.system}${styling.tailwindVersion === undefined ? '' : ` v${styling.tailwindVersion}`}: ${styling.reason}`,
   );

@@ -11,6 +11,7 @@ import {
   parseMapFile,
 } from '../join/component-map.js';
 import { analyzeProject, type ProjectProfile } from '../profile/profile.js';
+import { truncationNote } from '../repo-walk.js';
 import { scanComponents } from '../scan/scan.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
 import type { ToolSpec } from './spec.js';
@@ -43,6 +44,11 @@ export interface ComponentMapResult {
    * row. Present only when at least one row is stale.
    */
   staleOverrides?: { figmaComponentName: string; name: string; filePath: string }[];
+  /**
+   * Present only when the walk's file cap was reached: says the result covers a subset of the repo,
+   * so an absent match reads as "not in the part that was read" rather than "not in the project".
+   */
+  truncationNote?: string;
 }
 
 export const componentMapTool: ToolSpec = {
@@ -130,7 +136,7 @@ export const handleComponentMap = async (
   const scanned = await scanComponents(rootDir, profile.componentExtensions);
 
   const usages = collectFigmaComponents(context.nodes);
-  const mappings = joinComponents(usages, scanned, {
+  const mappings = joinComponents(usages, scanned.components, {
     threshold,
     ...(overrides.size > 0 ? { overrides, overridesOnDisk } : {}),
   });
@@ -147,7 +153,10 @@ export const handleComponentMap = async (
     mappings,
     unmapped,
     profile,
-    scannedComponentCount: scanned.length,
+    scannedComponentCount: scanned.components.length,
     ...(staleOverrides.length > 0 ? { staleOverrides } : {}),
+    ...(scanned.omitted > 0
+      ? { truncationNote: truncationNote('source files', scanned.omitted) }
+      : {}),
   };
 };

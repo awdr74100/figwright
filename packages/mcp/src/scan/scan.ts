@@ -881,9 +881,10 @@ const frameworkForExt = (ext: string): ComponentFramework | null => {
 export const scanComponents = async (
   rootDir: string,
   extensions: readonly string[],
-): Promise<ScannedComponent[]> => {
+): Promise<{ components: ScannedComponent[]; omitted: number }> => {
   const out: ScannedComponent[] = [];
-  for await (const rel of walkRepoFiles(rootDir, { extensions })) {
+  const walk = await walkRepoFiles(rootDir, { extensions });
+  for (const rel of walk.files) {
     const framework = frameworkForExt(extname(rel));
     if (framework === null) continue;
     let code: string;
@@ -897,5 +898,5 @@ export const scanComponents = async (
     else if (framework === 'angular') out.push(...extractAngularComponents(rel, code));
     else out.push(...extractSfcComponent(rel, code, framework));
   }
-  return out;
+  return { components: out, omitted: walk.omitted };
 };

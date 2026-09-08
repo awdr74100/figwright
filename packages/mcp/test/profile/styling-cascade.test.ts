@@ -36,6 +36,7 @@ const detect = ({ v3, uno, css, deps, unoVocab }: Signals) => {
     packageJson: { devDependencies: deps ?? {} },
     hasTsconfig: true,
     presentConfigFiles,
+    cssScanOmitted: 0,
     ...(css === true ? { tailwindCssEntry: 'src/app.css' } : {}),
     ...(unoVocab === undefined ? {} : { unoConfigDeclaresVocabulary: unoVocab }),
   };

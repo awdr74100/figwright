@@ -63,7 +63,7 @@ describe('scanRepoSvgs', () => {
     await write('src/icons/logo.svg', '<svg><path fill="#123456"/></svg>');
     await write('node_modules/pkg/x.svg', '<svg><path fill="#000"/></svg>');
 
-    const svgs = await scanRepoSvgs(dir);
+    const { svgs } = await scanRepoSvgs(dir);
     const byName = Object.fromEntries(svgs.map(s => [s.fileName, s.colorContract]));
     expect(byName).toEqual({ search: 'currentColor', logo: 'fixed' });
     expect(svgs.some(s => s.path.includes('node_modules'))).toBe(false);

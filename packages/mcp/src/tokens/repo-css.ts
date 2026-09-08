@@ -19,6 +19,8 @@ export interface AggregatedCss {
   tokens: ProjectToken[];
   /** Repo-relative CSS files that contributed at least one custom property. */
   files: string[];
+  /** CSS files the cap left unread — see `RepoWalk.omitted`. Zero means the pool is the whole repo. */
+  omitted: number;
 }
 
 /**
@@ -31,7 +33,8 @@ export const aggregateRepoCssTokens = async (rootDir: string): Promise<Aggregate
   const tokens: ProjectToken[] = [];
   const files: string[] = [];
 
-  for await (const rel of walkRepoFiles(rootDir, { extensions: ['.css'], cap: MAX_CSS_FILES })) {
+  const walk = await walkRepoFiles(rootDir, { extensions: ['.css'], cap: MAX_CSS_FILES });
+  for (const rel of walk.files) {
     let body: string;
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential repo walk; clarity over batching
@@ -45,5 +48,5 @@ export const aggregateRepoCssTokens = async (rootDir: string): Promise<Aggregate
       files.push(rel);
     }
   }
-  return { tokens, files };
+  return { tokens, files, omitted: walk.omitted };
 };
