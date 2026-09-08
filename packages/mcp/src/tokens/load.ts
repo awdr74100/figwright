@@ -291,10 +291,11 @@ const readTokenSource = async (
     // confidence.)
     const pooled = await aggregateRepoCssTokens(rootDir);
     if (pooled.files.length > 0) {
+      const truncated = truncationClause(pooled);
       return {
         tokens: pooled.tokens,
         source: null,
-        note: `${source.path} declares no custom properties — the tokens are not in the detected entry; aggregated ${pooled.tokens.length} from ${pooled.files.length} CSS file(s): ${listFiles(pooled.files)}${truncationClause(pooled) === undefined ? '' : `; ${truncationClause(pooled)}`}`,
+        note: `${source.path} declares no custom properties — the tokens are not in the detected entry; aggregated ${pooled.tokens.length} from ${pooled.files.length} CSS file(s): ${listFiles(pooled.files)}${truncated === undefined ? '' : `; ${truncated}`}`,
         files: pooled.files,
       };
     }

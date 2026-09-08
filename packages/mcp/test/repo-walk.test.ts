@@ -18,9 +18,7 @@ const make = async (files: Record<string, string>): Promise<string> => {
 const collect = async (
   root: string,
   opts?: Parameters<typeof walkRepoFiles>[1],
-): Promise<string[]> => {
-  return (await walkRepoFiles(root, opts)).files.toSorted();
-};
+): Promise<string[]> => (await walkRepoFiles(root, opts)).files.toSorted();
 
 afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
@@ -110,9 +108,7 @@ describe('walkRepoFiles', () => {
 const rawCollect = async (
   root: string,
   opts?: Parameters<typeof walkRepoFiles>[1],
-): Promise<string[]> => {
-  return (await walkRepoFiles(root, opts)).files;
-};
+): Promise<string[]> => (await walkRepoFiles(root, opts)).files;
 
 describe('walkRepoFiles ordering', () => {
   it('returns the same sequence on every run over an unchanged repo', async () => {
