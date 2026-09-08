@@ -20,6 +20,19 @@ the user must have the target file open. Confirm a plugin is connected (`ping`) 
   view, modal/dialog/drawer/sidebar/panel, a single component, or a design-system asset.
 - **Not** for reading a Figma design into code — that's `figma-codegen`.
 
+## More than one Figma file open
+
+Every tool result says so when it applies, so you do not have to check up front: with two or more
+files connected and none claimed, results carry a `MORE THAN ONE FIGMA FILE IS OPEN` block naming
+them. It matters because calls otherwise follow whichever file the user last touched, which changes
+when they switch tabs — so a task can read one file and write to another and report success.
+
+When you see it, claim the file before doing anything else: `list_files` names every connected file,
+`use_file({ fileName })` claims one for this session (`use_file({ sessionId })` when two open files
+share a name — Figma allows that, and `x (Copy)` is how it happens). Every later call then reaches
+that file whatever is in front, including while its tab sits in the background. If the user has not
+said which file, ask — do not guess from the names.
+
 ## First, understand the environment, then build (provider-first)
 
 The write-side mirror of codegen's grounding, and the **most important habit**: an off-looking build

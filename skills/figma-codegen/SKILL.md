@@ -15,6 +15,19 @@ lifting so you are not guessing from a screenshot. This file is the router; deep
 - The user pastes a Figma URL/selection and asks for code ("code this", "build this component").
 - The user wants to extend an existing component to match a Figma frame.
 
+## More than one Figma file open
+
+Every tool result says so when it applies, so you do not have to check up front: with two or more
+files connected and none claimed, results carry a `MORE THAN ONE FIGMA FILE IS OPEN` block naming
+them. It matters because calls otherwise follow whichever file the user last touched, which changes
+when they switch tabs — so a task can read one file and write to another and report success.
+
+When you see it, claim the file before doing anything else: `list_files` names every connected file,
+`use_file({ fileName })` claims one for this session (`use_file({ sessionId })` when two open files
+share a name — Figma allows that, and `x (Copy)` is how it happens). Every later call then reaches
+that file whatever is in front, including while its tab sits in the background. If the user has not
+said which file, ask — do not guess from the names.
+
 ## Workflow
 
 Run the grounded tools against the selection, then generate — **trust them over the rendered image.**
