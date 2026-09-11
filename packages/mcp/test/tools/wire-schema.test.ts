@@ -273,6 +273,27 @@ describe('checkBatchOps', () => {
     ).toBeNull();
   });
 
+  it('accepts references for string-valued fields resolved by the plugin', () => {
+    expect(
+      checkBatchOps(
+        batch([
+          { tool: 'create_frame', as: 'frame', params: {} },
+          { tool: 'rename_node', params: { nodeId: { $ref: 'frame.nodeId' }, name: 'renamed' } },
+        ]),
+      ),
+    ).toBeNull();
+  });
+
+  it('still rejects references where the target field is numeric', () => {
+    const rejection = checkBatchOps(
+      batch([
+        { tool: 'set_opacity', params: { nodeId: '1:1', opacity: { $ref: 'frame.opacity' } } },
+      ]),
+    );
+    expect(rejection?.code).toBe(ErrorCode.InvalidParams);
+    expect(rejection?.message).toMatch(/opacity/);
+  });
+
   it('names the op index and its tool when arguments are missing', () => {
     // Which op is wrong is the whole answer here: a batch is one call, so "invalid arguments" with
     // no index leaves the caller to bisect thirty ops by hand.

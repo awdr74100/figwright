@@ -22,7 +22,7 @@
     "get_motion_styles": [],
     "get_node_motion": ["nodeId"],
     "list_files": [],
-    "get_design_context": ["budget", "dedupeComponents", "depth", "detail", "nodeId"],
+    "get_design_context": ["budget", "dedupeComponents", "depth", "detail", "nodeId", "nodeIds"],
     "get_screenshot": ["binary", "forVision", "format", "nodeIds", "scale"],
     "save_image_fills": ["binary", "nodeIds"],
     "export_pdf": ["binary", "nodeId"],
@@ -645,6 +645,6 @@
       "requestId"
     ],
     "set_timeline_duration": ["duration", "nodeId", "requestId", "timelineId"],
-    "batch": ["ops", "ops[].params", "ops[].tool", "requestId"]
+    "batch": ["ops", "ops[].as", "ops[].params", "ops[].tool", "requestId"]
   }
 }

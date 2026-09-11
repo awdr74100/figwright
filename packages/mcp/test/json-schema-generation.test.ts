@@ -55,6 +55,11 @@ const CANARIES: Canary[] = [
     schema: z.string().min(1),
     json: { type: 'string', minLength: 1 },
   },
+  {
+    what: 'string with a pattern bound',
+    schema: z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/),
+    json: { type: 'string', pattern: '^[A-Za-z][A-Za-z0-9_]*$' },
+  },
   { what: 'number', schema: z.number(), json: { type: 'number' } },
   {
     what: 'number with an inclusive floor',

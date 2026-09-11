@@ -163,12 +163,13 @@ describe('M1 read tools — definitions', () => {
     expect(listFilesToolDefinition.inputSchema.required).toBeUndefined();
   });
 
-  it('get_design_context declares optional nodeId / depth / detail / dedupeComponents', () => {
+  it('get_design_context declares optional nodeId / nodeIds / depth / detail / dedupeComponents', () => {
     expect(getDesignContextToolDefinition.name).toBe(GET_DESIGN_CONTEXT_TOOL_NAME);
     expect(getDesignContextToolDefinition.inputSchema).toMatchObject({
       type: 'object',
       properties: {
         nodeId: { type: 'string' },
+        nodeIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
         depth: { type: 'number', minimum: 0 },
         detail: { type: 'string', enum: ['minimal', 'compact', 'full'] },
         dedupeComponents: { type: 'boolean' },

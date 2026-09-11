@@ -628,6 +628,7 @@ export const createGetDesignContextHandler =
   async params => {
     const p = (params ?? {}) as {
       nodeId?: unknown;
+      nodeIds?: unknown;
       depth?: unknown;
       detail?: unknown;
       dedupeComponents?: unknown;
@@ -636,6 +637,17 @@ export const createGetDesignContextHandler =
 
     if (p.nodeId !== undefined && typeof p.nodeId !== 'string') {
       throw new TypeError('get_design_context: nodeId must be a string');
+    }
+    if (
+      p.nodeIds !== undefined &&
+      (!Array.isArray(p.nodeIds) ||
+        p.nodeIds.length === 0 ||
+        p.nodeIds.some(id => typeof id !== 'string'))
+    ) {
+      throw new TypeError('get_design_context: nodeIds must be a non-empty string[]');
+    }
+    if (p.nodeId !== undefined && p.nodeIds !== undefined) {
+      throw new TypeError('get_design_context: provide nodeId or nodeIds, not both');
     }
     if (p.depth !== undefined && (typeof p.depth !== 'number' || p.depth < 0)) {
       throw new TypeError('get_design_context: depth must be a non-negative number');
@@ -656,25 +668,36 @@ export const createGetDesignContextHandler =
     };
 
     let roots: readonly SceneNode[];
-    if (typeof p.nodeId === 'string') {
-      const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-      // A miss used to return { nodes: [] } — indistinguishable from an empty design, so the caller
-      // (an LLM, or component_map/icon_map reusing this handler) walked on with nothing and produced
-      // silently-wrong output. Refuse loudly with the id instead, like the empty-selection case.
-      if (node === null) {
-        throw new Error(
-          `get_design_context: node "${p.nodeId}" not found in this file. Check the id (a pasted ` +
-            'Figma URL works too), or select the target in Figma and call without nodeId.',
-        );
-      }
-      if (!isSceneNode(node)) {
-        throw new Error(
-          `get_design_context: "${p.nodeId}" is a ${node.type}, not a frame/layer. Pass a frame or ` +
-            'layer id, or select nodes on that page and call without nodeId — grounding a whole ' +
-            'page is too large and ambiguous.',
-        );
-      }
-      roots = [node];
+    const requestedRootIds =
+      typeof p.nodeId === 'string'
+        ? [p.nodeId]
+        : Array.isArray(p.nodeIds)
+          ? (p.nodeIds as string[])
+          : null;
+    if (requestedRootIds !== null) {
+      const resolved = await Promise.all(
+        requestedRootIds.map(async id => ({ id, node: await figmaCtx.getNodeByIdAsync(id) })),
+      );
+      roots = resolved.map(({ id, node }) => {
+        // A miss used to return { nodes: [] } — indistinguishable from an empty design, so the
+        // caller (an LLM, or component_map/icon_map reusing this handler) walked on with nothing
+        // and produced silently-wrong output. Refuse loudly with the id instead, like the empty-
+        // selection case.
+        if (node === null) {
+          throw new Error(
+            `get_design_context: node "${id}" not found in this file. Check the id (a pasted ` +
+              'Figma URL works too), or select the target in Figma and call without nodeId.',
+          );
+        }
+        if (!isSceneNode(node)) {
+          throw new Error(
+            `get_design_context: "${id}" is a ${node.type}, not a frame/layer. Pass a frame or ` +
+              'layer id, or select nodes on that page and call without nodeId — grounding a whole ' +
+              'page is too large and ambiguous.',
+          );
+        }
+        return node;
+      });
     } else if (figmaCtx.currentPage.selection.length > 0) {
       roots = figmaCtx.currentPage.selection;
     } else {

@@ -104,5 +104,9 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
 - **Auto-layout for related children**, absolute coordinates only for top-level placement.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from
   the matching components, don't reproduce it from primitives.
+- **Group dependent writes** — use `batch` with `as` aliases and `{"$ref": "alias.nodeId"}` for
+  create-then-style or create-then-nest sequences, so one plugin round trip handles the ordered work
+  while rollback remains available. For a static mockup where editability is not required, prefer one
+  `import_svg` per screen or section.
 - **Match the file's conventions** — naming, structure, and the design system's own patterns, the
   way codegen mirrors the project's existing code style.

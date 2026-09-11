@@ -512,6 +512,7 @@ const sfcPreprocessorStyles = (body: string): string =>
 // far past the point where a convention is established, so raising it could only re-decide a vote
 // that is already lopsided.
 const CLASS_NAMING_FILE_CAP = 400;
+const CLASS_NAMING_READ_CONCURRENCY = 8;
 
 /**
  * Walk the project's preprocessor stylesheets (and the preprocessor <style> blocks of its SFCs) and
@@ -527,20 +528,18 @@ const scanClassNaming = async (root: string): Promise<ClassNamingTally | undefin
     extensions: [...NESTING_STYLESHEET_EXTENSIONS, ...SFC_EXTENSIONS],
     cap: CLASS_NAMING_FILE_CAP,
   });
-  for (const rel of walk.files) {
-    let body: string;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- sequential scan, bounded by the cap above
-      body = await readFile(join(root, rel), 'utf8');
-    } catch {
-      continue;
+  for (let offset = 0; offset < walk.files.length; offset += CLASS_NAMING_READ_CONCURRENCY) {
+    const paths = walk.files.slice(offset, offset + CLASS_NAMING_READ_CONCURRENCY);
+    // eslint-disable-next-line no-await-in-loop -- bound open files and retain canonical order
+    const sources = await Promise.all(paths.map(rel => readText(join(root, rel))));
+    for (const [index, body] of sources.entries()) {
+      if (body === null) continue;
+      const isSfc = SFC_EXTENSIONS.some(ext => paths[index]!.endsWith(ext));
+      const source = isSfc ? sfcPreprocessorStyles(body) : body;
+      // An SFC without preprocessor styles contributes no evidence about class naming.
+      if (source.trim() === '') continue;
+      files.push(readStylesheetNames(source));
     }
-    const isSfc = SFC_EXTENSIONS.some(ext => rel.endsWith(ext));
-    const source = isSfc ? sfcPreprocessorStyles(body) : body;
-    // An SFC with no preprocessor style block is not a stylesheet that voted "no habit" — it is a
-    // file with nothing to say, and counting it would dilute filesScanned into a meaningless number.
-    if (source.trim() === '') continue;
-    files.push(readStylesheetNames(source));
   }
   return files.length === 0
     ? undefined

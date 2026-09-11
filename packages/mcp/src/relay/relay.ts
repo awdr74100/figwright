@@ -34,6 +34,8 @@ export interface RelayOptions {
   heartbeatIntervalMs?: number;
   heartbeatMaxMisses?: number;
   disconnectGraceMs?: number;
+  /** How long an unpinned request may wait for the first plugin connection. */
+  noPluginGraceMs?: number;
 }
 
 interface Pending {
@@ -49,12 +51,15 @@ interface Pending {
   // The session this request was actually dispatched to (set in dispatchPending). Scanned by
   // sessionHasInflight so a busy plugin's heartbeat timeout is deferred rather than closing the socket.
   dispatchedToSessionId: string | undefined;
+  /** Cleared when the request dispatches, resolves, rejects, or reaches its normal timeout. */
+  noPluginTimer: ReturnType<typeof setTimeout> | null;
   // Filled with that session as the response lands, and read by the awaiting caller — per request,
   // so concurrent calls cannot observe each other's. See sendRequest's `onServed`.
   served: { sessionId: string | undefined };
 }
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
+export const DEFAULT_NO_PLUGIN_GRACE_MS = 2_000;
 
 export class Relay {
   readonly sessions = new SessionManager();
@@ -71,6 +76,7 @@ export class Relay {
       heartbeatIntervalMs: opts.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS,
       heartbeatMaxMisses: opts.heartbeatMaxMisses ?? HEARTBEAT_MAX_MISSES,
       disconnectGraceMs: opts.disconnectGraceMs ?? DEFAULT_DISCONNECT_GRACE_MS,
+      noPluginGraceMs: opts.noPluginGraceMs ?? DEFAULT_NO_PLUGIN_GRACE_MS,
     };
     this.wss = new WebSocketServer({
       server: opts.server,
@@ -100,6 +106,7 @@ export class Relay {
   async stop(): Promise<void> {
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
+      if (p.noPluginTimer !== null) clearTimeout(p.noPluginTimer);
       p.reject(new Error(`relay stopping (pending ${p.method})`));
     }
     this.pending.clear();
@@ -144,6 +151,10 @@ export class Relay {
           // this the agent reads a bare timeout and blames the size of the file.
           const pending = this.pending.get(id);
           if (pending !== undefined) served.sessionId = pending.dispatchedToSessionId;
+          if (pending?.noPluginTimer !== null && pending?.noPluginTimer !== undefined) {
+            clearTimeout(pending.noPluginTimer);
+            pending.noPluginTimer = null;
+          }
           this.pending.delete(id);
           reject(new Error(`plugin request timeout (method=${method})`));
         }, timeoutMs);
@@ -156,6 +167,7 @@ export class Relay {
           dispatched: false,
           pinnedSessionId: sessionId,
           dispatchedToSessionId: undefined,
+          noPluginTimer: null,
           served,
         };
         this.pending.set(id, entry);
@@ -187,6 +199,16 @@ export class Relay {
           this.dispatchPending(id, entry, session);
         } else {
           this.opts.log(`[relay] queued ${method} (no plugin connected)`);
+          entry.noPluginTimer = setTimeout(() => {
+            const pending = this.pending.get(id);
+            if (pending !== entry || entry.dispatched || this.pickActiveSession() !== undefined) {
+              return;
+            }
+            clearTimeout(entry.timer);
+            entry.noPluginTimer = null;
+            this.pending.delete(id);
+            reject(new Error(`no plugin connected (method=${method})`));
+          }, this.opts.noPluginGraceMs);
         }
       });
     } finally {
@@ -310,6 +332,10 @@ export class Relay {
 
   private dispatchPending(id: string, entry: Pending, session: Session): void {
     if (session.socket === null) return;
+    if (entry.noPluginTimer !== null) {
+      clearTimeout(entry.noPluginTimer);
+      entry.noPluginTimer = null;
+    }
     entry.dispatched = true;
     entry.dispatchedToSessionId = session.id;
     session.socket.send(
@@ -510,6 +536,10 @@ export class Relay {
       const p = this.pending.get(env.id);
       if (p !== undefined) {
         clearTimeout(p.timer);
+        if (p.noPluginTimer !== null) {
+          clearTimeout(p.noPluginTimer);
+          p.noPluginTimer = null;
+        }
         this.pending.delete(env.id);
         // Recorded, not dispatched: this runs in the socket's async context, where anything the
         // caller scoped to its own tool call is out of reach. sendRequest reports it after the
@@ -523,6 +553,10 @@ export class Relay {
       const p = this.pending.get(env.id);
       if (p !== undefined) {
         clearTimeout(p.timer);
+        if (p.noPluginTimer !== null) {
+          clearTimeout(p.noPluginTimer);
+          p.noPluginTimer = null;
+        }
         this.pending.delete(env.id);
         // Recorded on the error path too: a plugin that answers METHOD_NOT_FOUND for a tool it
         // predates is the most visible thing an out-of-date one does, and the least self-explaining.

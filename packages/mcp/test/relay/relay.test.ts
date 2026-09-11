@@ -46,6 +46,7 @@ const startRelay = async (
     heartbeatIntervalMs?: number;
     heartbeatMaxMisses?: number;
     disconnectGraceMs?: number;
+    noPluginGraceMs?: number;
   } = {},
 ): Promise<Bound> => {
   const server = createServer();
@@ -57,6 +58,7 @@ const startRelay = async (
     heartbeatIntervalMs: overrides.heartbeatIntervalMs ?? 60_000,
     heartbeatMaxMisses: overrides.heartbeatMaxMisses ?? 2,
     disconnectGraceMs: overrides.disconnectGraceMs ?? 30_000,
+    noPluginGraceMs: overrides.noPluginGraceMs ?? 2_000,
   });
   const b: Bound = { relay, server, port };
   bound.push(b);
@@ -367,6 +369,14 @@ describe('Relay hello loop', () => {
 
     expect(attributed).toMatch(/older than this server/i);
     ws.close();
+  });
+
+  it('fails an unpinned request after the reconnect grace period when no plugin connects', async () => {
+    const b = await startRelay({ noPluginGraceMs: 20 });
+
+    await expect(b.relay.sendRequest('get_pages', {}, 5_000)).rejects.toThrow(
+      /^no plugin connected/,
+    );
   });
 
   it('says nothing about skew for a current plugin', async () => {

@@ -253,7 +253,11 @@ describe('M2 write tool definitions', () => {
         ops: {
           type: 'array',
           minItems: 1,
-          items: { type: 'object', required: ['tool'], properties: { tool: { type: 'string' } } },
+          items: {
+            type: 'object',
+            required: ['tool'],
+            properties: { tool: { type: 'string' }, as: { type: 'string' } },
+          },
         },
       },
     });

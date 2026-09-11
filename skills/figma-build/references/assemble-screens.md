@@ -41,19 +41,44 @@ component — that breaks reuse. Recolour a single-colour vector at the usage si
 Append each child into its auto-layout parent **first**, then `set_layout_props` to fill or hug
 (`layoutGrow` / `layoutAlign` — see `write-rules.md`). A child can't fill before it's in a layout.
 
-## 4. Text
+## 4. Group dependent writes
+
+Use one `batch` call when several invertible writes belong to the same build. Give a create operation
+an `as` alias, then reference its returned id in later operations with `{"$ref": "alias.nodeId"}`.
+This keeps creation, styling, and placement in one ordered plugin call while preserving rollback.
+For example:
+
+```json
+{
+  "ops": [
+    { "tool": "create_frame", "as": "card", "params": { "width": 320, "height": 180 } },
+    {
+      "tool": "set_fills",
+      "params": {
+        "nodeId": { "$ref": "card.nodeId" },
+        "fills": [{ "type": "SOLID", "color": { "r": 1, "g": 1, "b": 1 } }]
+      }
+    }
+  ]
+}
+```
+
+Keep operations ordered when one operation depends on a previous result. Use separate calls only when
+a required operation is not invertible or when the result must be reviewed before continuing.
+
+## 5. Text
 
 `create_text` / `set_text` for content, then `set_text_properties` to set the real font (a new TEXT
 node defaults to Inter, not the system font — see `write-rules.md`). Bind `characters` to a `STRING`
 variable when the copy is tokenised.
 
-## 5. Reference tokens for every value
+## 6. Reference tokens for every value
 
 Colour via `bind_variable_to_paint`, scalars (size / padding / gap / radius) via
 `bind_variable_to_node`, shared looks via `apply_style_to_node`. Don't hardcode a hex/px the file has
 a token for (`write-rules.md` has the three paths).
 
-## 6. Verify visually — close the loop
+## 7. Verify visually — close the loop
 
 `get_screenshot` the built node, fix discrepancies, re-screenshot — the render-and-diff discipline
 codegen uses, in reverse. Check it against the source intent **and** against objective design health,
