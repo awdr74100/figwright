@@ -183,7 +183,8 @@ isn't enough. Dropping a frame's animation is a fidelity miss, the same class as
 - **Ground every section — never eyeball a value off the screenshot.** Every px size, colour,
   font-size, radius, and spacing comes from `get_design_context`, for _every_ section. The screenshot
   is visual intent only; guessing "the easy sections" is the cardinal miss. On a page too big to ground
-  at once, scope by section `nodeId` — never depth-cap the whole page, never retry an oversized call.
+  at once, scope by section `nodeId`; when several explicit roots are already known, pass them
+  together as `nodeIds` — never depth-cap the whole page, never retry an oversized call.
 - **Reuse beats regenerate.** A `high`/`medium` `component_map` candidate must be imported and used.
 - **Reference tokens, not literals.** Emit a mapped variable's `ref`; reserve raw values for `unmapped`
   gaps, and surface those gaps rather than burying them.

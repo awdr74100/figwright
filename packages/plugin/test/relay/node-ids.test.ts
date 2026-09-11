@@ -3,6 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { extractNodeIds } from '../../ui/relay/node-ids.js';
 
 describe('extractNodeIds', () => {
+  it('skips binary buffers while retaining adjacent node ids', () => {
+    const bytes = new Uint8Array(1024 * 1024);
+    Object.defineProperty(bytes, 'metadata', {
+      enumerable: true,
+      get() {
+        throw new Error('binary buffers must not be enumerated');
+      },
+    });
+    expect(extractNodeIds({ images: [{ bytes, nodeId: '1:2' }] })).toEqual(['1:2']);
+  });
+
   it('finds the single node a call targets', () => {
     expect(extractNodeIds({ nodeId: '1:23', fills: [] })).toEqual(['1:23']);
   });

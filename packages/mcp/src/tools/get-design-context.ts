@@ -9,8 +9,9 @@ export const getDesignContextTool: ToolSpec = {
   name: GET_DESIGN_CONTEXT_TOOL_NAME,
   description:
     'Get a depth-limited, token-efficient node tree — the main design-grounding read; prefer it ' +
-    'over get_document / get_node for anything large. Starts from nodeId (a pasted Figma URL also ' +
-    'works), else the current selection; errors when neither is available. ' +
+    'over get_document / get_node for anything large. Starts from nodeId or nodeIds (pasted Figma ' +
+    'URLs also work), else the current selection; errors when neither is available. Use nodeIds ' +
+    'to ground several explicit roots in one call. ' +
     'detail: minimal (id/name/type) / compact (+ geometry) / full (+ styling, layout, text and ' +
     'design-system tokens resolved to names plus a deduped globalVars style table). Defaults to ' +
     'full with dedupeComponents true — the code-generation view; pass detail: compact explicitly ' +
@@ -47,6 +48,11 @@ export const getDesignContextTool: ToolSpec = {
     nodeId: z
       .string()
       .describe('Root node id (a pasted Figma URL also works); omit to use the selection')
+      .optional(),
+    nodeIds: z
+      .array(z.string())
+      .min(1)
+      .describe('Explicit root node ids to ground together; mutually exclusive with nodeId')
       .optional(),
     depth: z
       .number()

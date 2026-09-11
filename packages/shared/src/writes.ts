@@ -95,8 +95,30 @@ export const ComponentPropertyResultSchema = z.object({
 export type ComponentPropertyResult = z.infer<typeof ComponentPropertyResultSchema>;
 
 /** One step in an atomic batch: a write tool name + the params it would normally receive. */
+export const BatchAliasSchema = z
+  .string()
+  .regex(
+    /^[A-Za-z][A-Za-z0-9_]*$/,
+    'must start with a letter and contain only letters, numbers, or _',
+  );
+export type BatchAlias = z.infer<typeof BatchAliasSchema>;
+
+/** A reference to a field on the result of an earlier aliased batch operation. */
+export const BatchRefSchema = z
+  .object({
+    $ref: z
+      .string()
+      .regex(
+        /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/,
+        'must use the form alias.field',
+      ),
+  })
+  .strict();
+export type BatchRef = z.infer<typeof BatchRefSchema>;
+
 export const BatchOpSchema = z.object({
   tool: z.string(),
+  as: BatchAliasSchema.optional(),
   params: z.unknown().optional(),
 });
 export type BatchOp = z.infer<typeof BatchOpSchema>;
@@ -108,5 +130,6 @@ export type BatchOp = z.infer<typeof BatchOpSchema>;
 export const BatchResultSchema = z.object({
   ok: z.literal(true),
   results: z.array(z.unknown()),
+  bindings: z.record(z.string(), z.unknown()).optional(),
 });
 export type BatchResult = z.infer<typeof BatchResultSchema>;

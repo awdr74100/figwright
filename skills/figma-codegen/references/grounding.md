@@ -259,7 +259,8 @@ throws away the structure inside each section → empty cards/rows). Scope **hor
 
 1. Get the page's **top-level section node ids** cheaply first — `get_design_context` at
    `detail: minimal` (and/or a small `depth`) just to see the section list, or `get_design_context` on
-   the page and read the direct children.
+   the page and read the direct children. When several explicit roots are already known, pass them
+   together as `nodeIds` to avoid one grounding call per root.
 2. Then `get_design_context` **each section by its `nodeId` at full detail** (`dedupeComponents: true`),
    build that section, and move on. One section in context at a time.
 

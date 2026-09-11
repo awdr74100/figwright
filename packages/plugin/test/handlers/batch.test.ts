@@ -88,6 +88,44 @@ describe('batch handler', () => {
     expect(store.get('1:2')).toMatchObject({ x: 15, y: 15 });
   });
 
+  it('resolves a created node reference inside one batch', async () => {
+    const { figmaCtx, store } = makeFigma({});
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    const result = (await handler({
+      ops: [
+        { tool: 'create_frame', as: 'frame', params: {} },
+        {
+          tool: 'rename_node',
+          params: { nodeId: { $ref: 'frame.nodeId' }, name: 'Renamed in one call' },
+        },
+      ],
+    })) as BatchResult;
+
+    const binding = result.bindings?.frame as { nodeId: string };
+    expect(binding.nodeId).toMatch(/^9:/);
+    expect(store.get(binding.nodeId)).toMatchObject({ name: 'Renamed in one call' });
+  });
+
+  it('rolls back earlier work when a batch reference cannot be resolved', async () => {
+    const { figmaCtx, store } = makeFigma({});
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', as: 'frame', params: {} },
+          {
+            tool: 'rename_node',
+            params: { nodeId: { $ref: 'missing.nodeId' }, name: 'Never set' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect([...store.keys()].filter(key => key.startsWith('9:'))).toHaveLength(0);
+  });
+
   it('rejects a non-invertible op at validate time without mutating anything', async () => {
     const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', name: 'A' } });
     const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));

@@ -1,4 +1,4 @@
-import type { BatchResult } from '@figwright/shared';
+import { BatchAliasSchema, BatchRefSchema, type BatchResult } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 import { assertFigmaEditor, isMotionNode, toPlainJson } from './motion-shared.js';
@@ -419,6 +419,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
 interface ParsedOp {
   tool: string;
   params: unknown;
+  as?: string;
 }
 
 /**
@@ -430,10 +431,47 @@ interface ParsedOp {
  */
 export const BATCHABLE_TOOLS: readonly string[] = Object.keys(INVERSES);
 
+const isBatchRef = (value: unknown): value is { $ref: string } =>
+  BatchRefSchema.safeParse(value).success;
+
+const resolveBatchValue = (value: unknown, bindings: ReadonlyMap<string, unknown>): unknown => {
+  if (isBatchRef(value)) {
+    const parts = value.$ref.split('.');
+    const alias = parts.shift()!;
+    if (!bindings.has(alias)) throw new Error(`batch: unknown reference '${value.$ref}'`);
+
+    let resolved = bindings.get(alias);
+    for (const part of parts) {
+      if (resolved === null || typeof resolved !== 'object' || !Object.hasOwn(resolved, part)) {
+        throw new Error(`batch: reference '${value.$ref}' has no '${part}' field`);
+      }
+      resolved = (resolved as Record<string, unknown>)[part];
+    }
+    return resolved;
+  }
+  if (Array.isArray(value)) return value.map(item => resolveBatchValue(item, bindings));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, resolveBatchValue(child, bindings)]),
+    );
+  }
+  return value;
+};
+
+const hasBatchRef = (value: unknown): boolean => {
+  if (isBatchRef(value)) return true;
+  if (Array.isArray(value)) return value.some(hasBatchRef);
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value).some(hasBatchRef);
+  }
+  return false;
+};
+
 const parseOps = (params: unknown): ParsedOp[] => {
   const ops = (params as { ops?: unknown } | null)?.ops;
   if (!Array.isArray(ops)) throw new TypeError('batch: ops must be an array');
   if (ops.length === 0) throw new TypeError('batch: ops must not be empty');
+  const aliases = new Set<string>();
   return ops.map((op, i) => {
     const o = op as { tool?: unknown; params?: unknown } | null;
     if (typeof o?.tool !== 'string') throw new TypeError(`batch: ops[${i}].tool must be a string`);
@@ -442,7 +480,55 @@ const parseOps = (params: unknown): ParsedOp[] => {
         `batch: op '${o.tool}' (index ${i}) is not batchable — only invertible writes are allowed`,
       );
     }
+    const aliasValue = (op as { as?: unknown } | null)?.as;
+    if (aliasValue !== undefined) {
+      const parsedAlias = BatchAliasSchema.safeParse(aliasValue);
+      if (!parsedAlias.success) {
+        throw new TypeError(`batch: ops[${i}].as must be a valid alias`);
+      }
+      const alias = parsedAlias.data;
+      if (aliases.has(alias)) throw new Error(`batch: duplicate alias '${alias}'`);
+      aliases.add(alias);
+      return { tool: o.tool, params: o.params ?? {}, as: alias };
+    }
     return { tool: o.tool, params: o.params ?? {} };
+  });
+};
+
+const rollbackBatch = async (
+  figmaCtx: typeof figma,
+  ops: readonly ParsedOp[],
+  captured: readonly unknown[],
+  results: readonly unknown[],
+  count: number,
+): Promise<string[]> => {
+  const undoFailures: string[] = [];
+  /* eslint-disable no-await-in-loop -- rollback order is significant and failures must be recorded individually */
+  for (let j = count - 1; j >= 0; j -= 1) {
+    try {
+      await INVERSES[ops[j]!.tool]!.undo(figmaCtx, ops[j]!.params, captured[j], results[j]);
+    } catch (undoErr) {
+      const message = undoErr instanceof Error ? undoErr.message : String(undoErr);
+      undoFailures.push(`op ${j} (${ops[j]!.tool}): ${message}`);
+    }
+  }
+  /* eslint-enable no-await-in-loop */
+  return undoFailures;
+};
+
+const batchFailure = (
+  err: unknown,
+  index: number,
+  op: ParsedOp,
+  undoFailures: readonly string[],
+): Error => {
+  const message = err instanceof Error ? err.message : String(err);
+  const rollback =
+    undoFailures.length === 0
+      ? `rolled back ${index} applied op(s)`
+      : `rolled back ${index - undoFailures.length}/${index} op(s); ${undoFailures.length} undo(s) FAILED [${undoFailures.join('; ')}] — document may be partially changed`;
+  return new Error(`batch: op ${index} (${op.tool}) failed, ${rollback}: ${message}`, {
+    cause: err,
   });
 };
 
@@ -459,42 +545,67 @@ export const createBatchHandler =
       if (apply[op.tool] === undefined) throw new Error(`batch: no handler for op '${op.tool}'`);
     }
 
-    // Phase 1 — capture (read-only). Reads are independent, so resolve them together.
-    const captured = await Promise.all(
-      ops.map(op => INVERSES[op.tool]!.capture(figmaCtx, op.params)),
-    );
+    const dynamic = ops.some(op => op.as !== undefined || hasBatchRef(op.params));
 
-    // Phase 2 — apply in order; roll back already-applied ops on the first failure.
-    const results: unknown[] = [];
-    /* eslint-disable no-await-in-loop -- apply order is significant and rollback needs partial results */
-    for (let i = 0; i < ops.length; i += 1) {
-      const op = ops[i]!;
-      try {
-        results.push(await apply[op.tool]!(op.params));
-      } catch (err) {
-        // Unwind applied ops in reverse. Keep going even if one undo throws, but record which ones
-        // failed so the error never claims a clean rollback that didn't happen.
-        const undoFailures: string[] = [];
-        for (let j = i - 1; j >= 0; j -= 1) {
-          try {
-            await INVERSES[ops[j]!.tool]!.undo(figmaCtx, ops[j]!.params, captured[j], results[j]);
-          } catch (undoErr) {
-            const m = undoErr instanceof Error ? undoErr.message : String(undoErr);
-            undoFailures.push(`op ${j} (${ops[j]!.tool}): ${m}`);
-          }
+    if (!dynamic) {
+      // Phase 1 — capture (read-only). Reads are independent, so resolve them together.
+      const captured = await Promise.all(
+        ops.map(op => INVERSES[op.tool]!.capture(figmaCtx, op.params)),
+      );
+
+      // Phase 2 — apply in order; roll back already-applied ops on the first failure.
+      const results: unknown[] = [];
+      /* eslint-disable no-await-in-loop -- apply order is significant and rollback needs partial results */
+      for (let i = 0; i < ops.length; i += 1) {
+        const op = ops[i]!;
+        try {
+          results.push(await apply[op.tool]!(op.params));
+        } catch (err) {
+          throw batchFailure(err, i, op, await rollbackBatch(figmaCtx, ops, captured, results, i));
         }
-        const message = err instanceof Error ? err.message : String(err);
-        const rollback =
-          undoFailures.length === 0
-            ? `rolled back ${i} applied op(s)`
-            : `rolled back ${i - undoFailures.length}/${i} op(s); ${undoFailures.length} undo(s) FAILED [${undoFailures.join('; ')}] — document may be partially changed`;
-        throw new Error(`batch: op ${i} (${op.tool}) failed, ${rollback}: ${message}`, {
-          cause: err,
-        });
+      }
+      /* eslint-enable no-await-in-loop */
+      const result: BatchResult = { ok: true, results };
+      return result;
+    }
+
+    // Referenced batches must capture and apply one operation at a time: a later operation can
+    // only resolve its node id after an earlier create returns it. Rollback preserves the same
+    // all-or-nothing contract when a dependent operation fails after earlier work was applied.
+    const bindings = new Map<string, unknown>();
+    const captured: unknown[] = [];
+    const resolvedOps: ParsedOp[] = [];
+    const results: unknown[] = [];
+    /* eslint-disable no-await-in-loop -- dependency order is the feature of referenced batches */
+    for (let i = 0; i < ops.length; i += 1) {
+      const source = ops[i]!;
+      let op: ParsedOp = source;
+      try {
+        op = {
+          tool: source.tool,
+          params: resolveBatchValue(source.params, bindings),
+          ...(source.as === undefined ? {} : { as: source.as }),
+        };
+        resolvedOps.push(op);
+        captured.push(await INVERSES[op.tool]!.capture(figmaCtx, op.params));
+        const result = await apply[op.tool]!(op.params);
+        results.push(result);
+        if (op.as !== undefined) bindings.set(op.as, result);
+      } catch (err) {
+        throw batchFailure(
+          err,
+          i,
+          op,
+          await rollbackBatch(figmaCtx, resolvedOps, captured, results, i),
+        );
       }
     }
     /* eslint-enable no-await-in-loop */
 
-    const result: BatchResult = { ok: true, results };
+    const result: BatchResult = {
+      ok: true,
+      results,
+      bindings: Object.fromEntries(bindings),
+    };
     return result;
   };

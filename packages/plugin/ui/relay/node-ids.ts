@@ -18,12 +18,21 @@ const MAX_DEPTH = 6;
 const MAX_IDS = 50;
 
 const collect = (value: unknown, depth: number, out: Set<string>): void => {
-  if (depth > MAX_DEPTH || out.size >= MAX_IDS || value === null || typeof value !== 'object') {
+  if (
+    depth > MAX_DEPTH ||
+    out.size >= MAX_IDS ||
+    value === null ||
+    typeof value !== 'object' ||
+    ArrayBuffer.isView(value)
+  ) {
     return;
   }
 
   if (Array.isArray(value)) {
-    for (const item of value) collect(item, depth + 1, out);
+    for (const item of value) {
+      collect(item, depth + 1, out);
+      if (out.size >= MAX_IDS) break;
+    }
     return;
   }
 
@@ -38,6 +47,7 @@ const collect = (value: unknown, depth: number, out: Set<string>): void => {
       }
     }
     collect(child, depth + 1, out);
+    if (out.size >= MAX_IDS) break;
   }
 };
 

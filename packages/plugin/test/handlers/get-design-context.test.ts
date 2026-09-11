@@ -697,6 +697,27 @@ describe('get_design_context handler', () => {
     await expect(handler({ nodeId: '0:1' })).rejects.toThrow(/is a PAGE/);
   });
 
+  it('resolves explicit nodeIds together in input order', async () => {
+    const first = node({ id: '1:1', name: 'First', width: 1440 });
+    const second = node({ id: '1:2', name: 'Second', width: 375 });
+    const handler = createGetDesignContextHandler(
+      fakeFigma({
+        lookup: {
+          '1:1': first as unknown as BaseNode,
+          '1:2': second as unknown as BaseNode,
+        },
+      }),
+    );
+
+    const result = (await handler({
+      nodeIds: ['1:1', '1:2'],
+      detail: 'minimal',
+    })) as GetDesignContextResult;
+
+    expect(result.nodes.map(n => n.id)).toEqual(['1:1', '1:2']);
+    expect(result.hint).toMatch(/1440 \/ 375/);
+  });
+
   it('attaches a breakpoint hint when the selection spans width buckets — even at compact', async () => {
     const desktop = node({ id: 'd', name: 'W_Home', width: 1440 });
     const mobile = node({ id: 'm', name: 'M_Home', width: 375 });
@@ -759,11 +780,13 @@ describe('get_design_context handler', () => {
     expect(mixedTypes.hint).toBeUndefined();
   });
 
-  it('throws on invalid depth / detail / nodeId / dedupeComponents', async () => {
+  it('throws on invalid depth / detail / nodeId / nodeIds / dedupeComponents', async () => {
     const handler = createGetDesignContextHandler(fakeFigma({}));
     await expect(handler({ depth: -1 })).rejects.toThrow(/depth/);
     await expect(handler({ detail: 'huge' })).rejects.toThrow(/detail/);
     await expect(handler({ nodeId: 5 })).rejects.toThrow(/nodeId/);
+    await expect(handler({ nodeIds: [] })).rejects.toThrow(/nodeIds/);
+    await expect(handler({ nodeIds: ['1:1'], nodeId: '1:1' })).rejects.toThrow(/not both/);
     await expect(handler({ dedupeComponents: 'yes' })).rejects.toThrow(/dedupeComponents/);
   });
 });

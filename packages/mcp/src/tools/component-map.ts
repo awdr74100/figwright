@@ -127,13 +127,14 @@ export const handleComponentMap = async (
   // owning COMPONENT_SET (id + name) on its mainComponent, so collectFigmaComponents can group/name
   // by the set directly. The old scan called findAllWithCriteria over the whole document (68s+ /
   // 30s-timeout on large multi-page files) just to recover those set names.
-  const [context, profile, { overrides, overridesOnDisk }] = await Promise.all([
+  const [context, { profile, scanned }, { overrides, overridesOnDisk }] = await Promise.all([
     dispatch(GET_DESIGN_CONTEXT_TOOL_NAME, contextArgs) as Promise<GetDesignContextResult>,
-    analyzeProject(rootDir),
+    analyzeProject(rootDir).then(async projectProfile => ({
+      profile: projectProfile,
+      scanned: await scanComponents(rootDir, projectProfile.componentExtensions),
+    })),
     readOverrides(rootDir),
   ]);
-
-  const scanned = await scanComponents(rootDir, profile.componentExtensions);
 
   const usages = collectFigmaComponents(context.nodes);
   const mappings = joinComponents(usages, scanned.components, {

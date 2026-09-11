@@ -1,3 +1,4 @@
+import { BatchAliasSchema } from '@figwright/shared';
 import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';
@@ -16,13 +17,16 @@ export const batchTool: ToolSpec = {
   description:
     'Apply multiple invertible write ops atomically (all-or-nothing with rollback). ops is an ordered ' +
     'list of { tool, params } where tool is an invertible write (e.g. set_fills, rename_node, ' +
-    'move_nodes, create_frame). Destructive ops (delete_*, ungroup_nodes, …) are rejected. ' +
-    'Returns { ok, results } with one result per op in order.',
+    'move_nodes, create_frame). Use as to name an operation result and {$ref:"alias.nodeId"} in a ' +
+    'later operation when a created node must be styled or nested. Destructive ops (delete_*, ' +
+    'ungroup_nodes, …) are rejected. Returns { ok, results } with one result per op in order and ' +
+    'optional bindings for named results.',
   inputSchema: z.object({
     ops: z
       .array(
         z.object({
           tool: z.string().describe('An invertible write tool name'),
+          as: BatchAliasSchema.optional().describe('Optional alias for this operation result'),
           // Free-form: each tool validates its own params (and, post-McpServer, the inner tool's spec).
           params: z.record(z.string(), z.unknown()).optional().describe("The tool's parameters"),
         }),

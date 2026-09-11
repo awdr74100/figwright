@@ -1,4 +1,4 @@
-import { ErrorCode } from '@figwright/shared';
+import { BatchRefSchema, ErrorCode } from '@figwright/shared';
 import { z } from 'zod';
 
 import { BATCH_TOOL_NAME } from './batch.js';
@@ -75,6 +75,22 @@ const summarize = (issues: readonly z.core.$ZodIssue[]): string => {
   return `${named}${rest > 0 ? ` (+${rest} more)` : ''}`;
 };
 
+// A batch reference is resolved by the plugin after an earlier operation returns. Validate the
+// surrounding argument shape here without forwarding the placeholder into the tool schema: an
+// alias can stand in for a string-valued id, while numeric and enum fields still fail validation.
+const BATCH_REF_SENTINEL = '__figwright_batch_ref__';
+
+const replaceBatchRefs = (value: unknown): unknown => {
+  if (BatchRefSchema.safeParse(value).success) return BATCH_REF_SENTINEL;
+  if (Array.isArray(value)) return value.map(replaceBatchRefs);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, replaceBatchRefs(child)]),
+    );
+  }
+  return value;
+};
+
 export interface WireRejection {
   code: ErrorCode;
   message: string;
@@ -122,8 +138,9 @@ export const checkBatchOps = (args: unknown): WireRejection | null => {
       };
     }
 
-    // `?? {}` matches what the sandbox's own parseOps does with an omitted params.
-    const parsed = schema.safeParse((op as { params?: unknown }).params ?? {});
+    // `?? {}` matches what the sandbox's own parseOps does with an omitted params. References are
+    // placeholders for string-valued fields and are resolved by the plugin after earlier ops run.
+    const parsed = schema.safeParse(replaceBatchRefs((op as { params?: unknown }).params ?? {}));
     if (!parsed.success) {
       return {
         code: ErrorCode.InvalidParams,

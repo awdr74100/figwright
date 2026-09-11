@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { GetDesignContextResult } from '@figwright/shared';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import * as componentScan from '../../src/scan/scan.js';
 import {
   COMPONENT_MAP_TOOL_NAME,
   handleComponentMap,
@@ -63,6 +64,22 @@ describe('handleComponentMap', () => {
 
   afterAll(async () => {
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it('starts the component scan while the Figma read is pending', async () => {
+    let resolveContext!: (value: GetDesignContextResult) => void;
+    const context = new Promise<GetDesignContextResult>(resolve => {
+      resolveContext = resolve;
+    });
+    const scan = vi.spyOn(componentScan, 'scanComponents');
+    const result = handleComponentMap(() => context, { rootDir: dir });
+    try {
+      await vi.waitFor(() => expect(scan).toHaveBeenCalled());
+    } finally {
+      resolveContext(fakeContext);
+      await result;
+      scan.mockRestore();
+    }
   });
 
   it('maps Button to the scanned component and flags Tooltip unmapped', async () => {
