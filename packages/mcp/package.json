@@ -47,7 +47,7 @@
     "ignore": "^7.0.9",
     "oxc-parser": "^0.149.0",
     "ws": "^8.21.3",
-    "zod": "^4.6.1"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@figwright/shared": "workspace:*",
