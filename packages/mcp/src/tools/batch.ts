@@ -25,7 +25,7 @@ export const batchTool: ToolSpec = {
     ops: z
       .array(
         z.object({
-          tool: z.string().describe('An invertible write tool name'),
+          tool: z.string().describe('The name of the write tool to run'),
           // Free-form: each tool validates its own params (and, post-McpServer, the inner tool's spec).
           params: z.record(z.string(), z.unknown()).optional().describe("The tool's parameters"),
         }),

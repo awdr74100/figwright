@@ -1674,7 +1674,7 @@ const parseOps = (params: unknown): ParsedOp[] => {
     const o = op as { tool?: unknown; params?: unknown } | null;
     if (typeof o?.tool !== 'string') throw new TypeError(`batch: ops[${i}].tool must be a string`);
     if (INVERSES[o.tool] === undefined) {
-      const why = NON_BATCHABLE[o.tool] ?? 'only invertible writes are allowed';
+      const why = NON_BATCHABLE[o.tool] ?? 'only write tools can be batched';
       throw new Error(`batch: op '${o.tool}' (index ${i}) is not batchable — ${why}`);
     }
     return { tool: o.tool, params: o.params ?? {} };
