@@ -360,6 +360,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_blend_mode: nodeProps('set_blend_mode', ['blendMode']),
   set_effects: nodeProps('set_effects', ['effects']),
   set_constraints: nodeProps('set_constraints', ['constraints']),
+  set_position: nodeProps('set_position', ['x', 'y']),
   rename_node: nodeProps('rename_node', ['name']),
   set_text: setTextInverse,
   set_text_properties: setTextPropertiesInverse,

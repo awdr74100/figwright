@@ -16,7 +16,8 @@ export const batchTool: ToolSpec = {
   description:
     'Apply multiple invertible write ops atomically (all-or-nothing with rollback). ops is an ordered ' +
     'list of { tool, params } where tool is an invertible write (e.g. set_fills, rename_node, ' +
-    'move_nodes, create_frame). Destructive ops (delete_*, ungroup_nodes, …) are rejected. ' +
+    'move_nodes, set_position, create_frame). Destructive ops (delete_*, ungroup_nodes, …) are ' +
+    'rejected. ' +
     'Returns { ok, results } with one result per op in order.',
   inputSchema: z.object({
     ops: z

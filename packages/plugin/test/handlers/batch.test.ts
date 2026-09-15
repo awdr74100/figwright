@@ -15,6 +15,7 @@ import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
 import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
 import { createSetOpacityHandler } from '../../src/handlers/set-opacity.js';
+import { createSetPositionHandler } from '../../src/handlers/set-position.js';
 import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
 import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
@@ -59,6 +60,7 @@ const realWrites = (figmaCtx: typeof figma): SandboxHandlers => ({
   set_corner_radius: createSetCornerRadiusHandler(figmaCtx),
   set_text_properties: createSetTextPropertiesHandler(figmaCtx),
   move_nodes: createMoveNodesHandler(figmaCtx),
+  set_position: createSetPositionHandler(figmaCtx),
   create_frame: createCreateFrameHandler(figmaCtx),
   create_component: createCreateComponentHandler(figmaCtx),
   delete_nodes: createDeleteNodesHandler(figmaCtx),
@@ -170,6 +172,71 @@ describe('batch handler', () => {
     // The frame created by op 0 was the only 9:x node; rollback removed it.
     const created = [...store.keys()].filter(k => k.startsWith('9:'));
     expect(created).toHaveLength(0);
+  });
+
+  it('restores the previous x/y on rollback of a set_position op', async () => {
+    // set_position writes absolute coordinates, so its undo has to restore both axes even when the
+    // op only set one of them — a node placed by x alone must not keep the new x on rollback.
+    const { figmaCtx, store } = makeFigma({
+      '1:1': { id: '1:1', x: 10, y: 20 },
+      '1:2': { id: '1:2', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_position', params: { nodeId: '1:1', x: 400 } },
+          { tool: 'set_fills', params: { nodeId: '1:2', fills: [{ type: 'GRADIENT_LINEAR' }] } },
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(store.get('1:1')).toMatchObject({ x: 10, y: 20 });
+  });
+
+  it('rolls back when the set_position op is itself the one that fails', async () => {
+    // Its refusal of an in-flow auto-layout child is the one failure capture cannot pre-empt — that
+    // phase only proves the node has an x — so it lands mid-apply and the earlier op has to come
+    // back. The other direction (set_position applied, a later op failing) is covered above.
+    const { figmaCtx, store } = makeFigma({
+      '1:1': { id: '1:1', name: 'A' },
+      '1:2': {
+        id: '1:2',
+        x: 0,
+        y: 0,
+        layoutPositioning: 'AUTO',
+        parent: { layoutMode: 'VERTICAL' },
+      },
+    });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'renamed' } },
+          { tool: 'set_position', params: { nodeId: '1:2', x: 400 } },
+        ],
+      }),
+    ).rejects.toThrow(/op 1 \(set_position\) failed, rolled back 1/);
+
+    expect(store.get('1:1')).toMatchObject({ name: 'A' }); // rename undone
+    expect(store.get('1:2')).toMatchObject({ x: 0, y: 0 }); // never moved
+  });
+
+  it('applies a set_position op alongside other writes', async () => {
+    const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', name: 'A', x: 0, y: 0 } });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    const result = (await handler({
+      ops: [
+        { tool: 'set_position', params: { nodeId: '1:1', x: 120, y: 40 } },
+        { tool: 'rename_node', params: { nodeId: '1:1', name: 'placed' } },
+      ],
+    })) as BatchResult;
+
+    expect(result.results).toHaveLength(2);
+    expect(store.get('1:1')).toMatchObject({ x: 120, y: 40, name: 'placed' });
   });
 
   it('restores a fill on rollback', async () => {
