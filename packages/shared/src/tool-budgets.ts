@@ -38,6 +38,11 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   'get_nodes_info',
   'scan_text_nodes',
   'scan_nodes_by_types',
+  // A batch runs every op it carries and, when one fails, unwinds every op already applied — and
+  // any step can wait on Figma (a live rollback was measured spending ~49s inside one font load).
+  // Timing out mid-rollback reports a timeout for a call that did finish, and discards the one
+  // answer the caller needs: whether the document was left changed.
+  'batch',
 ]);
 
 /** Base budget `B`: how long the Figma sandbox itself may take. Used by the UI → sandbox bridge. */

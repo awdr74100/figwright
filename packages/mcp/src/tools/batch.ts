@@ -5,20 +5,22 @@ import type { ToolSpec } from './spec.js';
 export const BATCH_TOOL_NAME = 'batch';
 
 /**
- * Apply several invertible write ops atomically. The plugin validates every op's target first, then
- * applies them in order; if any op fails it rolls the already-applied ops back and the call
- * rejects. Only invertible writes are accepted (property mutations + create/clone/import_image) —
- * destructive ops (delete_*, ungroup, …) can't be restored and are rejected, so the all-or-nothing
- * guarantee holds.
+ * Apply several write ops atomically. The plugin snapshots every op's target first, then applies
+ * them in order; if any op fails it rolls the already-applied ops back — values, style links,
+ * variable bindings, text runs, layout and instance overrides — and the call rejects. An op joins
+ * only if it has a faithful inverse: ops that delete something cannot bring its id back and are
+ * refused with the reason, so the all-or-nothing guarantee holds.
  */
 export const batchTool: ToolSpec = {
   name: BATCH_TOOL_NAME,
   description:
-    'Apply multiple invertible write ops atomically (all-or-nothing with rollback). ops is an ordered ' +
-    'list of { tool, params } where tool is an invertible write (e.g. set_fills, rename_node, ' +
-    'move_nodes, set_position, create_frame). Destructive ops (delete_*, ungroup_nodes, …) are ' +
-    'rejected. ' +
-    'Returns { ok, results } with one result per op in order.',
+    'Apply multiple write ops atomically (all-or-nothing with rollback). ops is an ordered list of ' +
+    '{ tool, params } where tool is any write that can be undone exactly — property, text, layout, ' +
+    'style, variable, component, structure and create writes (e.g. set_fills, set_text, ' +
+    'set_auto_layout, reparent_nodes, create_frame). Ops that delete something (delete_*, ' +
+    'ungroup_nodes, detach_instance, remove_animation_style) are refused, since what they delete ' +
+    'cannot come back under its id. Returns { ok, results } with one result per op in order; on ' +
+    'failure the error says what was rolled back.',
   inputSchema: z.object({
     ops: z
       .array(

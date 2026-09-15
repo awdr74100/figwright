@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
 import { WIRE_TOOL_SCHEMAS } from '../packages/mcp/src/tools/wire-schema.js';
 import { toToolDefinition } from '../packages/mcp/test/tool-schema.js';
-import { BATCHABLE_TOOLS } from '../packages/plugin/src/handlers/batch.js';
+import { BATCHABLE_TOOLS, NON_BATCHABLE } from '../packages/plugin/src/handlers/batch.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
@@ -120,5 +120,32 @@ describe('batchable ops', () => {
     const undescribed = BATCHABLE_TOOLS.filter(name => !WIRE_TOOL_SCHEMAS.has(name));
     expect(undescribed).toEqual([]);
     expect(BATCHABLE_TOOLS.length).toBeGreaterThan(0);
+  });
+
+  it('every write tool is decided: batchable, or refused with a reason', () => {
+    // Before this, a write tool nobody thought about was silently non-batchable — set_position sat
+    // that way for months after it shipped, refused with a message that read like a design choice.
+    // Now adding a write tool fails here until someone decides: give it an inverse, or name it in
+    // NON_BATCHABLE with why no faithful inverse exists.
+    const writes = [...WRITE_TOOL_NAMES].filter(name => name !== 'batch');
+    const batchable = new Set(BATCHABLE_TOOLS);
+    const refused = new Set(Object.keys(NON_BATCHABLE));
+    expect({
+      undecided: writes.filter(name => !batchable.has(name) && !refused.has(name)),
+      both: writes.filter(name => batchable.has(name) && refused.has(name)),
+    }).toEqual({ undecided: [], both: [] });
+  });
+
+  it('names only real write tools on either side, and never batch itself', () => {
+    const writes = new Set(WRITE_TOOL_NAMES);
+    expect(BATCHABLE_TOOLS.filter(name => !writes.has(name))).toEqual([]);
+    expect(Object.keys(NON_BATCHABLE).filter(name => !writes.has(name))).toEqual([]);
+    expect(BATCHABLE_TOOLS).not.toContain('batch');
+  });
+
+  it('gives every refusal a reason a caller can act on', () => {
+    // The reason is the rejection message the caller reads, not a code comment.
+    const thin = Object.entries(NON_BATCHABLE).filter(([, why]) => why.trim().length < 30);
+    expect(thin).toEqual([]);
   });
 });

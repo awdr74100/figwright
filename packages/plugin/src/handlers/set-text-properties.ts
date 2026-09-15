@@ -90,8 +90,10 @@ export const createSetTextPropertiesHandler =
     if (willWrite) {
       const fonts: FontNameInput[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
-          ? text.getRangeAllFontNames(0, text.characters.length)
+          ? [...text.getRangeAllFontNames(0, text.characters.length)]
           : [text.fontName as FontName];
+      // Copied above: getRangeAllFontNames hands back a frozen array (measured — see
+      // set-text-range.ts), so pushing onto it threw on every mixed-font node given a fontName.
       if (fontName !== undefined) fonts.push(fontName);
       await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
     }

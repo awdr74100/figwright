@@ -276,3 +276,30 @@ describe('set_text_properties handler', () => {
     ).rejects.toThrow(/textWrapStyle/);
   });
 });
+
+describe('set_text_properties on a mixed-font node', () => {
+  it('loads the target face without mutating the frozen range font list', async () => {
+    // getRangeAllFontNames hands back a frozen array in Figma's runtime (measured); pushing the
+    // target face onto it threw "object is not extensible" for every mixed-font node given a
+    // fontName. The live rollback harness is what caught it.
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'ab',
+      fontName: MIXED as unknown,
+      getRangeAllFontNames: () =>
+        Object.freeze([
+          { family: 'Inter', style: 'Regular' },
+          { family: 'Inter', style: 'Bold' },
+        ]),
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      fontName: { family: 'Inter', style: 'Medium' },
+    });
+    expect(node.fontName).toEqual({ family: 'Inter', style: 'Medium' });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Bold' });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Medium' });
+  });
+});

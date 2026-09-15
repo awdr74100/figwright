@@ -29,6 +29,9 @@ describe('tool budgets', () => {
       'get_nodes_info',
       'scan_text_nodes',
       'scan_nodes_by_types',
+      // Carries N writes and, on a failure, N undos — a timeout mid-rollback would hide whether the
+      // document was left changed.
+      'batch',
     ]) {
       expect(getToolBudget(t)).toBe(HEAVY_TOOL_BUDGET_MS);
     }
