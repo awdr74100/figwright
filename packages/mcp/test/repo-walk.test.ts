@@ -6,14 +6,24 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { walkRepoFiles } from '../src/repo-walk.js';
 
-let dir: string;
+// One root per call, tracked in a list rather than in a single shared variable. A timeout abandons a
+// test but does not abort its body, so a slow fixture keeps writing after the next test has already
+// started — and with the path held in one module-level binding, those late writes landed in the
+// *next* test's root. Windows CI caught it: the serial fixture below blew the 5s default and leaked
+// `pkg49/` into the test after it, which then failed on files it never created.
+const dirs: string[] = [];
 const make = async (files: Record<string, string>): Promise<string> => {
-  dir = await mkdtemp(join(tmpdir(), 'walk-test-'));
-  for (const [rel, body] of Object.entries(files)) {
-    await mkdir(join(dir, rel, '..'), { recursive: true });
-    await writeFile(join(dir, rel), body);
-  }
-  return dir;
+  const root = await mkdtemp(join(tmpdir(), 'walk-test-'));
+  dirs.push(root);
+  // Parallel: fixture order is irrelevant, and a Windows runner pays tens of ms per syscall, which
+  // is what pushed 120 serial writes past the timeout in the first place.
+  await Promise.all(
+    Object.entries(files).map(async ([rel, body]) => {
+      await mkdir(join(root, rel, '..'), { recursive: true });
+      await writeFile(join(root, rel), body);
+    }),
+  );
+  return root;
 };
 const collect = async (
   root: string,
@@ -21,7 +31,7 @@ const collect = async (
 ): Promise<string[]> => (await walkRepoFiles(root, opts)).files.toSorted();
 
 afterEach(async () => {
-  if (dir) await rm(dir, { recursive: true, force: true });
+  await Promise.all(dirs.splice(0).map(d => rm(d, { recursive: true, force: true })));
 });
 
 describe('walkRepoFiles', () => {
@@ -111,24 +121,28 @@ const rawCollect = async (
 ): Promise<string[]> => (await walkRepoFiles(root, opts)).files;
 
 describe('walkRepoFiles ordering', () => {
-  it('returns the same sequence on every run over an unchanged repo', async () => {
-    // fdir crawls concurrently, so without an explicit order the same repo yields the same *set* in
-    // a different sequence each time — measured on Bulma, where consecutive runs disagreed on the
-    // first three files. It reached the output: token_map's note sampled different files each call,
-    // and where several files declare one token name the `from` handed back changed run to run.
-    const files: Record<string, string> = {};
-    for (let i = 0; i < 60; i += 1) {
-      files[`pkg${i}/a.css`] = 'x';
-      files[`pkg${i}/nested/b.css`] = 'x';
-    }
-    const root = await make(files);
-    const runs: string[] = [];
-    for (let i = 0; i < 5; i += 1) {
-      // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
-      runs.push((await rawCollect(root, { extensions: ['.css'] })).join('\n'));
-    }
-    expect(new Set(runs).size).toBe(1);
-  });
+  it(
+    'returns the same sequence on every run over an unchanged repo',
+    { timeout: 30_000 },
+    async () => {
+      // fdir crawls concurrently, so without an explicit order the same repo yields the same *set* in
+      // a different sequence each time — measured on Bulma, where consecutive runs disagreed on the
+      // first three files. It reached the output: token_map's note sampled different files each call,
+      // and where several files declare one token name the `from` handed back changed run to run.
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 60; i += 1) {
+        files[`pkg${i}/a.css`] = 'x';
+        files[`pkg${i}/nested/b.css`] = 'x';
+      }
+      const root = await make(files);
+      const runs: string[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
+        runs.push((await rawCollect(root, { extensions: ['.css'] })).join('\n'));
+      }
+      expect(new Set(runs).size).toBe(1);
+    },
+  );
 
   it('orders shallowest first, then by code unit', async () => {
     // Depth leads as a tie-break preference for the one caller that takes the *first* match rather
@@ -148,25 +162,29 @@ describe('walkRepoFiles ordering', () => {
     ]);
   });
 
-  it('returns the same files on every run when the repo is over the cap', async () => {
-    // The determinism test above stays under the default cap, so it never exercised the truncation
-    // path — and fdir's own `withMaxFiles` truncated a concurrently-built array, making *which*
-    // files survived a race. Same shape as above, but small enough a cap to overflow: this returned
-    // 5 different sets across 10 runs before the cap moved into walkRepoFiles.
-    const files: Record<string, string> = {};
-    for (let i = 0; i < 60; i += 1) {
-      files[`pkg${i}/a.css`] = 'x';
-      files[`pkg${i}/nested/b.css`] = 'x';
-      files[`pkg${i}/nested/deep/c.css`] = 'x';
-    }
-    const root = await make(files);
-    const runs: string[] = [];
-    for (let i = 0; i < 10; i += 1) {
-      // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
-      runs.push((await rawCollect(root, { extensions: ['.css'], cap: 50 })).join('\n'));
-    }
-    expect(new Set(runs).size).toBe(1);
-  });
+  it(
+    'returns the same files on every run when the repo is over the cap',
+    { timeout: 30_000 },
+    async () => {
+      // The determinism test above stays under the default cap, so it never exercised the truncation
+      // path — and fdir's own `withMaxFiles` truncated a concurrently-built array, making *which*
+      // files survived a race. Same shape as above, but small enough a cap to overflow: this returned
+      // 5 different sets across 10 runs before the cap moved into walkRepoFiles.
+      const files: Record<string, string> = {};
+      for (let i = 0; i < 60; i += 1) {
+        files[`pkg${i}/a.css`] = 'x';
+        files[`pkg${i}/nested/b.css`] = 'x';
+        files[`pkg${i}/nested/deep/c.css`] = 'x';
+      }
+      const root = await make(files);
+      const runs: string[] = [];
+      for (let i = 0; i < 10; i += 1) {
+        // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
+        runs.push((await rawCollect(root, { extensions: ['.css'], cap: 50 })).join('\n'));
+      }
+      expect(new Set(runs).size).toBe(1);
+    },
+  );
 
   it('keeps the canonically-first files when it caps, not an arbitrary prefix', async () => {
     // Membership, not just count — the cap test above asserts only the length, which any arbitrary

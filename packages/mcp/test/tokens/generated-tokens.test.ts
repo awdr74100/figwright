@@ -80,38 +80,45 @@ describe('findGeneratedStylesheets', () => {
     }
   });
 
-  it('names the same stylesheets on every run over a dist/ above the crawl cap', async () => {
-    // CRAWL_CAP is 400. Locks the property the doc claims, rather than reproducing a failure: the
-    // old truncation was a race by construction, but it never actually returned two answers here
-    // (see the note on findGeneratedStylesheets for why), so this is a guard against a future
-    // regression, not a red test that went green.
-    const dir = await mkdtemp(join(tmpdir(), 'gen-race-'));
-    try {
-      // One short-named winner per directory, buried under long-named chunks: the eight names this
-      // returns therefore have to come from eight *different* directories, which an arbitrary
-      // truncation across forty of them will not reliably reach.
-      await Promise.all(
-        Array.from({ length: 40 }, async (_unused, d) => {
-          const sub = join(dir, 'dist', `g${String(d).padStart(2, '0')}`);
-          await mkdir(sub, { recursive: true });
-          await writeFile(join(sub, 'a.css'), 'x');
-          await Promise.all(
-            Array.from({ length: 30 }, (_chunk, i) =>
-              writeFile(join(sub, `chunk-with-a-long-name-${String(i).padStart(3, '0')}.css`), 'x'),
-            ),
-          );
-        }),
-      );
-      const runs: string[] = [];
-      for (let i = 0; i < 8; i += 1) {
-        // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
-        runs.push((await findGeneratedStylesheets(dir)).join('\n'));
+  it(
+    'names the same stylesheets on every run over a dist/ above the crawl cap',
+    { timeout: 30_000 },
+    async () => {
+      // CRAWL_CAP is 400. Locks the property the doc claims, rather than reproducing a failure: the
+      // old truncation was a race by construction, but it never actually returned two answers here
+      // (see the note on findGeneratedStylesheets for why), so this is a guard against a future
+      // regression, not a red test that went green.
+      const dir = await mkdtemp(join(tmpdir(), 'gen-race-'));
+      try {
+        // One short-named winner per directory, buried under long-named chunks: the eight names this
+        // returns therefore have to come from eight *different* directories, which an arbitrary
+        // truncation across forty of them will not reliably reach.
+        await Promise.all(
+          Array.from({ length: 40 }, async (_unused, d) => {
+            const sub = join(dir, 'dist', `g${String(d).padStart(2, '0')}`);
+            await mkdir(sub, { recursive: true });
+            await writeFile(join(sub, 'a.css'), 'x');
+            await Promise.all(
+              Array.from({ length: 30 }, (_chunk, i) =>
+                writeFile(
+                  join(sub, `chunk-with-a-long-name-${String(i).padStart(3, '0')}.css`),
+                  'x',
+                ),
+              ),
+            );
+          }),
+        );
+        const runs: string[] = [];
+        for (let i = 0; i < 8; i += 1) {
+          // eslint-disable-next-line no-await-in-loop -- separate crawls on purpose
+          runs.push((await findGeneratedStylesheets(dir)).join('\n'));
+        }
+        expect(new Set(runs).size).toBe(1);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
       }
-      expect(new Set(runs).size).toBe(1);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   it('returns nothing rather than throwing when no output directory exists', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gen-none-'));
