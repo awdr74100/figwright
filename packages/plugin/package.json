@@ -13,18 +13,18 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@lucide/vue": "^1.45.0",
+    "@lucide/vue": "^1.46.0",
     "@vueuse/core": "^14.4.0",
     "vue": "^3.5.42",
-    "zod": "^4.6.2"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.138.0",
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
-    "@vitejs/plugin-vue": "^6.0.8",
+    "@vitejs/plugin-vue": "^6.0.9",
     "@vue/test-utils": "^2.5.0",
-    "happy-dom": "^20.14.3",
+    "happy-dom": "^20.14.5",
     "tailwindcss": "^4.3.3",
     "vite": "^8.3.0",
     "vite-plugin-singlefile": "^2.3.3",
