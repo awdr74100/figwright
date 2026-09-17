@@ -24,6 +24,7 @@ import { createCloneNodeHandler } from './clone-node.js';
 import { createCombineAsVariantsHandler } from './combine-as-variants.js';
 import { createSetComplexStrokeHandler } from './complex-stroke.js';
 import { createCreateComponentHandler } from './create-component.js';
+import { createCreateConnectorHandler } from './create-connector.js';
 import { createCreateEffectStyleHandler } from './create-effect-style.js';
 import { createCreateEllipseHandler } from './create-ellipse.js';
 import { createCreateFrameHandler } from './create-frame.js';
@@ -277,6 +278,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     create_ellipse: createCreateEllipseHandler(figmaCtx),
     create_component: createCreateComponentHandler(figmaCtx),
     create_section: createCreateSectionHandler(figmaCtx),
+    create_connector: createCreateConnectorHandler(figmaCtx),
     create_instance: createCreateInstanceHandler(figmaCtx),
     combine_as_variants: createCombineAsVariantsHandler(figmaCtx),
     set_component_documentation: createSetComponentDocumentationHandler(figmaCtx),

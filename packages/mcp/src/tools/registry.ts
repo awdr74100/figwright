@@ -28,6 +28,7 @@ import { cloneNodeTool } from './clone-node.js';
 import { combineAsVariantsTool } from './combine-as-variants.js';
 import { componentMapTool } from './component-map.js';
 import { createComponentTool } from './create-component.js';
+import { createConnectorTool } from './create-connector.js';
 import { createEffectStyleTool } from './create-effect-style.js';
 import { createEllipseTool } from './create-ellipse.js';
 import { createFrameTool } from './create-frame.js';
@@ -305,6 +306,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createEllipseTool,
   createComponentTool,
   createSectionTool,
+  createConnectorTool,
   createInstanceTool,
   combineAsVariantsTool,
   setComponentDocumentationTool,

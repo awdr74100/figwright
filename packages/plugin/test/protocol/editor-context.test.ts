@@ -19,14 +19,14 @@ describe('editorLimitation', () => {
     );
   });
 
-  // Verified live in FigJam: createFrame / createSection / createRectangle / createText all
-  // succeed. An earlier wording claimed FigJam had no frames, which would have sent an agent
-  // looking for a workaround it never needed.
+  // Verified live in FigJam: createFrame / createSection / createRectangle / createText /
+  // createConnector all succeed. An earlier wording claimed FigJam had no frames, which would have
+  // sent an agent looking for a workaround it never needed.
   it('does not claim FigJam lacks what it actually has', () => {
     const figjam = editorLimitation('figjam') ?? '';
 
     expect(figjam).not.toContain('no frames');
-    expect(figjam).toContain('frames, sections, shapes and text all work');
+    expect(figjam).toContain('frames, sections, shapes, text and connectors all work');
   });
 
   // Verified live in Dev Mode: createFrame, createPage, createVariableCollection and

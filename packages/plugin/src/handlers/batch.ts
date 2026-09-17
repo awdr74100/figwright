@@ -2319,6 +2319,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   create_shape: createInverse('create_shape'),
   create_component: createComponentInverse,
   create_section: createInverse('create_section'),
+  create_connector: createInverse('create_connector'),
   import_image: createInverse('import_image'),
   import_svg: createInverse('import_svg'),
   create_vector: createInverse('create_vector'),
