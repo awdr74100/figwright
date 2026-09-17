@@ -147,7 +147,7 @@ And it follows your Figma theme, light or dark.
   <img alt="The same panel side by side in Figma's light and dark themes" src="./.github/assets/plugin-theme.png" width="616">
 </p>
 
-The window is yours to arrange. Drag the bottom-right corner to resize it. A taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
+The window is yours to arrange. Drag the bottom-right corner to resize it. A taller panel keeps more of the log in view, and the size is remembered next time you open it. Or put it away: **Run in background**, in the panel header right under Figma's own ✕, hides the panel while the connection stays live, so a long-running agent keeps working. Run the plugin again to bring it back. The ✕ above it closes the plugin instead, connection and all.
 
 <p align="center">
   <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="./.github/assets/plugin-window.png" width="602">
@@ -298,7 +298,7 @@ No. Figwright talks to Figma through a plugin, so the free tier is enough. No De
 It runs in both, with less available than in Figma Design, because those editors give plugins less rather than because Figwright holds anything back.
 
 - **Figma Design**: everything.
-- **Dev Mode** (Inspect panel): reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails: nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build.
+- **Dev Mode** (Inspect panel): reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails: nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build. (The panel's own window controls — resize and **Run in background** — aren't there either: Figma owns that frame.)
 - **FigJam**: frames, sections, shapes and text work; components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
 
 `get_metadata` reports the editor (`editorType` / `mode`), and any tool that fails because of the editor says so in its error, so an agent can re-plan rather than retry.
