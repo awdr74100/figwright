@@ -286,6 +286,17 @@ The server is launched by your MCP client, so it only runs while that client is 
 </details>
 
 <details>
+<summary><strong>How do I know the server and plugin are in sync?</strong></summary>
+
+The plugin's **Debug** tab lists both versions side by side, so a mismatch is visible in one place.
+
+Mostly you don't need to look. The two halves update through different channels — the server re-resolves itself on every launch via `npx @latest`, while the plugin is a zip you imported by hand and then stop thinking about — so drifting apart is the normal state here rather than an edge case. It is also a silent one: a handler that predates an argument ignores it without erroring, so a write can report success having done only part of what was asked. When your plugin is old enough for that, the panel says so and tells you how to update, and every tool result tells your agent the result is unverified.
+
+It stays quiet on a difference that cannot bite — a plugin a version behind a server that changed no arguments is fine — so when the warning does appear it is worth acting on.
+
+</details>
+
+<details>
 <summary><strong>Do I need a paid Figma plan or Dev Mode?</strong></summary>
 
 No. Figwright talks to Figma through a plugin, so the free tier is enough. No Dev Mode seat or paid tier required.
