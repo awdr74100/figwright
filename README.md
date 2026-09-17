@@ -47,6 +47,7 @@ Everything runs on your machine: the server, the relay, and the plugin. Your des
 - **Not gated**: the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
 - **Bidirectional**: not read-only. **113 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen**: Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
+- **One agent per file**: several agents can work at once, each claiming its own open Figma file. Switching tabs no longer sends one agent's edits into another's design — see [working across files](#faq).
 - **Open & extensible**: the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
 
 ## Setup
@@ -337,7 +338,7 @@ By default calls follow whichever file you last touched, so switching tabs switc
   → use_file({ fileName: "Marketing Site" })
 ```
 
-The claim belongs to that agent's own server process, so it never affects the other agent, it survives closing and reopening the plugin panel, and calls keep reaching the file even while its tab sits in the background. If two open files share a name (`x` and a second `x`), `use_file` refuses the name and asks for the `sessionId` that `list_files` prints, rather than guessing. Release it with `use_file({ release: true })` to go back to following the foreground file.
+The claim belongs to that agent's own server process, so it never affects the other agent, it survives closing and reopening the plugin panel, and calls keep reaching the file even while its tab sits in the background. That process is also the unit: one per MCP client, so the agents have to be separate clients — two editors, or two terminals. Everything inside one of them, subagents included, shares a server and therefore shares a claim. If two open files share a name (`x` and a second `x`), `use_file` refuses the name and asks for the `sessionId` that `list_files` prints, rather than guessing. Release it with `use_file({ release: true })` to go back to following the foreground file.
 
 </details>
 
