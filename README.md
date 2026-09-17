@@ -51,6 +51,9 @@ Everything runs on your machine: the server, the relay, and the plugin. Your des
 
 ## Setup
 
+> [!NOTE]
+> This README follows `main` and may describe features not yet included in the latest release. For a released install, read the README at the tag matching your plugin zip (choose that tag in GitHub's branch/tag selector) and its [release notes](https://github.com/awdr74100/figwright/releases). Your running MCP server's tool list is the authority for which tools are available.
+
 You need an **MCP client** (Claude Code, Cursor, …), **Node.js 20.19+ or 22.12+**, and **Figma**. The free Figma tier is enough, though the desktop app is needed to import the plugin. The server runs via `npx` as its own process, so its Node version is independent of the one your project builds with; Node 18/21 and 22.0–22.11 are not supported.
 
 ### 1. Add the server to your MCP client
@@ -76,6 +79,8 @@ The plugin isn't on the Figma Community marketplace yet, so install it from the 
 
 1. Download the plugin zip from the [**latest GitHub Release**](https://github.com/awdr74100/figwright/releases/latest) and unzip it.
 2. In the Figma **desktop app**: **Menu → Plugins → Development → Import plugin from manifest…** and pick the unzipped `manifest.json`.
+
+The server and plugin are installed separately. Updating `@figwright/mcp` does not replace the imported plugin files; when upgrading, update both halves and restart them.
 
 ### 3. Connect
 
@@ -147,7 +152,11 @@ And it follows your Figma theme, light or dark.
   <img alt="The same panel side by side in Figma's light and dark themes" src="./.github/assets/plugin-theme.png" width="616">
 </p>
 
-The window is yours to arrange. Drag the bottom-right corner to resize it. A taller panel keeps more of the log in view, and the size is remembered next time you open it. Or send it to the background: the panel gets out of your way while the connection stays live, so a long-running agent keeps working.
+The window is yours to arrange. Drag the bottom-right corner to resize it. A taller panel keeps more of the log in view, and the size is remembered next time you open it.
+
+To keep the agent connected while you use another app, click **Run in background**, the inward-arrow icon in the panel header below Figma's title bar. It hides the panel while keeping the plugin and relay alive. Run **Plugins → Development → Figwright** again to reveal it. Figma's **close (×)** control stops the plugin and disconnects it; it is not the background control.
+
+Keep the target Figma file and the MCP client/server running. Closing the file, quitting Figma, or stopping the plugin ends access to that file. The background control is available in floating plugin windows, not Dev Mode's embedded Inspect panel.
 
 <p align="center">
   <img alt="The same panel at two sizes: a narrow one showing three calls with its resize corner highlighted, and a wider one showing five, with the run-in-background button highlighted in the header" src="./.github/assets/plugin-window.png" width="602">
