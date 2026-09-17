@@ -786,4 +786,94 @@ describe('RelayClient', () => {
     expect(helloReq.sessionId).toBe(sessionId);
     expect(client.getState().sessionResumed).toBe(true);
   });
+  /**
+   * The connect phase and the hello phase are two budgets with two owners, and this is the pair
+   * that keeps them apart.
+   *
+   * Chromium rate-limits repeated failed WebSocket handshakes to one address, so after a cold start
+   * has polled an unbound port for a while it delays each retried handshake by seconds. While both
+   * phases shared the 1s hello budget, the client killed every one of those handshakes before it
+   * could open — and each kill was another failure feeding the throttle, so "open the plugin, then
+   * start the MCP client" never recovered at all. Measured in a real browser: 168 attempts, none
+   * connected, 120s after a server was already listening; the same loop with room to wait got in
+   * 1.7s.
+   */
+  it('connects on a handshake the browser delays past the hello budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const { WS } = buildFakeFactory(sock => {
+        // Opens late, not never — a throttled handshake, not a dead port.
+        setTimeout(() => {
+          sock.fireOpen();
+          const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+          sock.fireReceive(
+            createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+          );
+        }, 3_000);
+      });
+
+      const client = new RelayClient({ ports: [3055], clientVersion: '0.0.0', WS });
+      const connecting = client.connect();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await connecting;
+
+      expect(client.getState().status).toBe('connected');
+      await client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still abandons a socket that opens and never answers hello', async () => {
+    vi.useFakeTimers();
+    try {
+      const logged: string[] = [];
+      // Opens, then says nothing: the port owner mid-handoff the hello budget was written for.
+      const { WS } = buildFakeFactory(sock => sock.fireOpen());
+
+      const client = new RelayClient({
+        ports: [3055],
+        clientVersion: '0.0.0',
+        WS,
+        log: msg => logged.push(msg),
+      });
+      const connecting = client.connect();
+      // The hello budget, an order of magnitude under the connect one: whichever timer fires here
+      // names itself in the log, so this distinguishes them rather than merely observing a failure.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await connecting;
+
+      expect(logged.some(m => m.includes('hello timeout on port 3055'))).toBe(true);
+      await client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a handshake that never opens at all', async () => {
+    vi.useFakeTimers();
+    try {
+      const logged: string[] = [];
+      // Accepts the connection and leaves it hanging — a foreign process on :3055, not a leader.
+      const { WS } = buildFakeFactory(() => {});
+
+      const client = new RelayClient({
+        ports: [3055],
+        clientVersion: '0.0.0',
+        WS,
+        log: msg => logged.push(msg),
+      });
+      const connecting = client.connect();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(logged.some(m => m.includes('timeout'))).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await connecting;
+
+      expect(logged.some(m => m.includes('connect timeout on port 3055'))).toBe(true);
+      await client.disconnect();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

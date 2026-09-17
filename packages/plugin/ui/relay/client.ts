@@ -39,33 +39,61 @@ export interface RelayClientOptions {
   WS?: WebSocketCtor;
   log?: (msg: string) => void;
   helloTimeoutMs?: number;
+  connectTimeoutMs?: number;
   heartbeatIntervalMs?: number;
   heartbeatMaxMisses?: number;
   reconnectInitialDelayMs?: number;
   reconnectMaxDelayMs?: number;
 }
 
-// How long a probe waits for the server's $hello reply before abandoning the socket and retrying. A
-// healthy leader answers in sub-millisecond on localhost, so a probe that stays silent this long isn't
-// a healthy server we're about to reach — it's a port owner mid-handoff (an old leader releasing :3055
-// as a new one takes over) or a momentarily CPU-starved event loop. Waiting the old 2s each such
-// attempt made a handoff feel like many seconds; 1s halves the per-retry waste while keeping a ~1000×
-// margin over a healthy reply, so we never abandon a server that was actually about to answer.
+// How long a probe waits for the server's $hello reply *once the socket is open*. A healthy leader
+// answers in sub-millisecond on localhost, so a socket that stays silent this long isn't a healthy
+// server we're about to reach — it's a port owner mid-handoff (an old leader releasing :3055 as a new
+// one takes over) or a momentarily CPU-starved event loop. Waiting the old 2s each such attempt made
+// a handoff feel like many seconds; 1s halves the per-retry waste while keeping a ~1000× margin over
+// a healthy reply, so we never abandon a server that was actually about to answer.
 const DEFAULT_HELLO_TIMEOUT_MS = 1_000;
+
+/**
+ * The backstop on the _connect_ phase — a different budget with a different owner. The hello budget
+ * above is the server's to spend; this one is the browser's, and it is not ours to hurry.
+ *
+ * Chromium rate-limits repeated failed WebSocket handshakes to one address (RFC 6455 §7.2.3).
+ * Measured against a dead port: the first ~8 attempts fail in ~10ms, then the delay climbs — 68,
+ * 96, 146, 367, 977ms — and plateaus at a random 1–5s. A cold start polling a port nobody has bound
+ * yet walks into that within seconds.
+ *
+ * Spending the 1s hello budget on this phase too is what made "open the plugin, then start the MCP
+ * client" unrecoverable rather than slow. Every handshake was killed at 1s; every kill counted as
+ * another failure; the throttle stayed above the budget indefinitely. Measured, that loop made 168
+ * attempts without once connecting, 120s after a real server was already listening, while the same
+ * loop given room to wait got in 1.7s. Restarting Figma was the only cure, because the throttle
+ * lives in the renderer and a reopened plugin inherits it.
+ *
+ * 15s clears the measured plateau three times over and still bounds the other thing this guards: a
+ * foreign process that accepts the TCP connection and never upgrades it.
+ */
+const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_RECONNECT_INITIAL_DELAY_MS = 250;
 const DEFAULT_RECONNECT_MAX_DELAY_MS = 5_000;
 /**
- * Cold-start (never-yet-connected) polling is capped far tighter than a true reconnect: when the
- * plugin opened before the server, the user just launched their MCP client and the leader appears
- * within a second, so we want to notice almost immediately. This cap IS the residual latency — once
- * the server is up the plugin connects on its next poll, so the wait averages half this value.
- * Probing the single fixed port is a sub-microsecond refused connection while nothing listens, so
- * polling this fast costs nothing (localhost has no push channel to announce the server — polling
- * is the only way to notice an imminent arrival). A dropped live socket (hasConnected) keeps the
- * gentler exponential ceiling instead — that's a real fault, not an imminent arrival, so no reason
- * to hammer.
+ * Cold-start (never-yet-connected) polling is capped tighter than a true reconnect: when the plugin
+ * opened before the server, the user just launched their MCP client and the leader appears within a
+ * second, so we want to notice quickly. This cap IS the residual latency — once the server is up
+ * the plugin connects on its next poll, so the wait averages half this value. A dropped live socket
+ * (hasConnected) keeps the gentler exponential ceiling instead — that's a real fault, not an
+ * imminent arrival, so no reason to hurry.
+ *
+ * It was 150ms, on the premise that probing an unbound port is a sub-microsecond refused connection
+ * and so polling that fast costs nothing. Measured, the premise is false: Chromium throttles the
+ * repeated failures (see {@linkcode DEFAULT_CONNECT_TIMEOUT_MS}), so 60s of polling a dead port
+ * yields ~32 attempts, not the ~400 a 150ms ceiling implies — and every one of them pushes the next
+ * handshake further out. Polling slower than the throttle's own floor keeps us underneath it rather
+ * than feeding it, and costs nothing that shows: `wake()` collapses the wait to immediate whenever
+ * the user touches Figma or the tab returns to the foreground, which is precisely the moment they
+ * come back from launching their MCP client.
  */
-const COLD_START_MAX_DELAY_MS = 150;
+const COLD_START_MAX_DELAY_MS = 1_000;
 
 export class RelayClient {
   readonly sessionId: string;
@@ -111,6 +139,7 @@ export class RelayClient {
       WS: opts.WS ?? (globalThis as { WebSocket?: WebSocketCtor }).WebSocket!,
       log: opts.log ?? ((): void => {}),
       helloTimeoutMs: opts.helloTimeoutMs ?? DEFAULT_HELLO_TIMEOUT_MS,
+      connectTimeoutMs: opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       heartbeatIntervalMs: opts.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS,
       heartbeatMaxMisses: opts.heartbeatMaxMisses ?? HEARTBEAT_MAX_MISSES,
       reconnectInitialDelayMs: opts.reconnectInitialDelayMs ?? DEFAULT_RECONNECT_INITIAL_DELAY_MS,
@@ -267,12 +296,19 @@ export class RelayClient {
         reject(new Error(msg));
       };
 
-      const timer = setTimeout(
-        () => fail(`hello timeout on port ${port}`),
-        this.opts.helloTimeoutMs,
+      // Two phases, two budgets, one at a time. Connecting is the browser's to schedule and it
+      // deliberately delays a retried handshake, so hurrying it is how the client used to talk
+      // itself out of every connection it had (see DEFAULT_CONNECT_TIMEOUT_MS). Answering $hello is
+      // the server's, and a healthy one takes sub-millisecond. Handing the budget over at `onopen`
+      // is what keeps the tight one pointed at the party it was written for.
+      let timer = setTimeout(
+        () => fail(`connect timeout on port ${port}`),
+        this.opts.connectTimeoutMs,
       );
 
       ws.onopen = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fail(`hello timeout on port ${port}`), this.opts.helloTimeoutMs);
         const helloParams: HelloParams = {
           clientType: 'plugin',
           clientVersion: this.opts.clientVersion,
