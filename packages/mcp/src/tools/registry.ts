@@ -3,6 +3,8 @@
 // inputSchema); the write set is derived from `kind`, not maintained by hand. A registry test asserts
 // these stay in sync with the plugin's handler map so a new tool can't be half-wired.
 
+import { z } from 'zod';
+
 import { addComponentPropertyTool } from './add-component-property.js';
 import { addPageTool } from './add-page.js';
 import { addVariableModeTool } from './add-variable-mode.js';
@@ -118,8 +120,13 @@ import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
 import { useFileTool } from './use-file.js';
 
-/** Every tool the MCP server registers, in ListTools order. */
-export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
+/**
+ * Every tool the MCP server registers, in ListTools order.
+ *
+ * Declared here, then handed through {@linkcode strictArgs} so no tool can accept an argument it
+ * does not declare.
+ */
+const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   // Reads
   pingTool,
   getSelectionTool,
@@ -239,6 +246,37 @@ export const ALL_TOOL_SPECS: readonly ToolSpec[] = [
   setTimelineDurationTool,
   batchTool,
 ];
+
+/**
+ * Close a tool's argument object, so an argument it never declared is refused instead of dropped.
+ *
+ * Zod strips unknown keys by default and JSON Schema allows them by default, so both halves of the
+ * contract used to say yes to an argument that does nothing. Measured on the wire:
+ * `create_variable` with an extra `value` — a field it has never had, since a new variable starts
+ * empty and takes its values from `set_variable_value` — passed validation and ran, and the call
+ * reported `ok: true` over eight variables that were all still white. Nothing between the model and
+ * the canvas could see it; only a screenshot could.
+ *
+ * That is the shape this exists for. An argument an agent believes in is a belief about what the
+ * call did, and a write that silently drops one reports success for something else — the same
+ * defect as a stale plugin ignoring a field it predates, which this repo already refuses to let
+ * pass quietly (see `pluginSkewNotice`). Rejection is also only half the fix:
+ * `additionalProperties: false` now reaches the model in the advertised schema, so the better
+ * outcome is the call that is never made.
+ *
+ * Applied here rather than per tool because all three consumers of a spec read from this one list —
+ * the SDK registration, `test/e2e/mcp-wire.test.ts`'s independent derivation, and `wireToolSchema`
+ * — so one edit keeps them agreeing. It reaches only the agent-facing surface: `wireToolSchema`
+ * rebuilds from `.shape`, leaving the plugin-facing schema exactly as it was. That surface carries
+ * server-injected fields it has to declare completely, and closing it has a fail-closed failure
+ * mode of its own that wants its own evidence.
+ */
+const strictArgs = (spec: ToolSpec): ToolSpec => ({
+  ...spec,
+  inputSchema: z.strictObject(spec.inputSchema.shape),
+});
+
+export const ALL_TOOL_SPECS: readonly ToolSpec[] = DECLARED_TOOL_SPECS.map(strictArgs);
 
 /**
  * Write tools get a server-generated requestId (stable across dispatch retries) so the plugin can
