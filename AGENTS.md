@@ -65,6 +65,7 @@ Figwright's moat is **grounding fidelity and generality** — how accurately and
 
 ## Conventions
 
+- **README localization**: when editing user-facing content in root `README.md`, or synchronizing or reviewing its Chinese editions, read [the README localization skill](./.claude/skills/readme-localization/SKILL.md). For edits, keep both translations aligned in the same change; if the user explicitly limits edits to English, report the pending translation updates instead.
 - **Commits / PRs**: [Conventional Commits](https://www.conventionalcommits.org/), `type(scope): subject`. The **scope is required and closed** — nine values (`codegen`, `design`, `grounding`, `tools`, `relay`, `plugin`, `skills`, `deps`, `repo`), chosen by the capability a changelog reader experiences rather than by which package the diff lands in, since one product ships from this repo and `mcp` would be most of every release. The subject starts lowercase (changelogen capitalizes it). [CONTRIBUTING.md](./CONTRIBUTING.md#scope-required) has the table and the two boundaries that are easy to get wrong. `semantic-pr.yml` is the gate: it validates the PR title, and with squash merges that title becomes the commit on `main`.
 - **Tests**: each package has a `test/` mirroring `src/` (no co-located tests). Tests that span packages live in the root `test/`.
 - **Formatting & lint** are enforced by CI (`format:check`, `lint`) — there are no git hooks. Run `pnpm format` before committing, or let your editor format on save.

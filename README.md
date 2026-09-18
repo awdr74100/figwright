@@ -12,6 +12,8 @@
   Pairs with a Figma plugin, not a Dev Mode seat.
 </p>
 
+**English** · [繁體中文](./README.zh-TW.md) · [简体中文](./README.zh-CN.md)
+
 [About](#about) · [Setup](#setup) · [Skills](#skills) · [Tools](#tools) · [Plugin](#plugin) · [FAQ](#faq) · [Contributing](#contributing)
 
 [![npm](https://img.shields.io/npm/v/@figwright/mcp?logo=npm&color=cb3837)](https://www.npmjs.com/package/@figwright/mcp)
@@ -40,11 +42,11 @@ It works in both directions:
   <img alt="Figwright building a design directly on the Figma canvas" src="./.github/assets/code-to-figma.gif" width="820">
 </p>
 
-Everything runs on your machine: the server, the relay, and the plugin. Your designs are never sent anywhere.
+The Figwright server, relay, and plugin run on your machine; there is no Figwright cloud service. Design data is passed to your MCP client, which may send it to its model provider depending on your configuration.
 
 ## Why Figwright
 
-- **Not gated**: the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
+- **Free-tier friendly**: Figwright works with Figma’s free plan and needs no paid Dev Mode seat. The official Figma MCP server has [plan- and seat-dependent access and usage limits](https://developers.figma.com/docs/figma-mcp-server/rate-limits-access/), including limited access on the free plan.
 - **Bidirectional**: not read-only. **113 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen**: Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
 - **One agent per file**: several agents can work at once, each claiming its own open Figma file. Switching tabs no longer sends one agent's edits into another's design — see [working across files](#faq).
@@ -56,7 +58,7 @@ You need an **MCP client** (Claude Code, Cursor, …), **Node.js 20.19+ or 22.12
 
 ### 1. Add the server to your MCP client
 
-For Claude Code, add this to your `.mcp.json` (other clients use the same shape):
+For Claude Code, add this to your `.mcp.json`. For other clients, use the same command and arguments in the client’s own MCP configuration format:
 
 ```json
 {
@@ -203,7 +205,7 @@ By design Figwright is **provider-first**: rather than a fixed compiler pipeline
 
 ## Security
 
-Figwright runs entirely on your machine: your client launches the server over stdio, the server relays to the plugin over a WebSocket on `127.0.0.1:3055`, and nothing is sent anywhere else. The plugin uses only Figma's public Plugin API, so it reaches the file you have open and nothing beyond it.
+Figwright’s own transport is local: your client launches the server and communicates over stdio, and the server relays to the plugin over a WebSocket on `127.0.0.1:3055`. Figwright has no cloud service and sends no telemetry. Your MCP client receives the tool results; whether it sends design data to a remote model provider depends on the client and your configuration. The plugin uses only Figma’s public Plugin API to access the open file.
 
 Loopback is not on its own a boundary, since a web page you visit can still reach a local port, so the relay gates every request on two headers a page cannot forge: **`Host`**, which must name loopback (this is what stops DNS rebinding), and **`Origin`**, which admits the plugin's sandboxed handshake and refuses browsers everywhere else. The leader's HTTP endpoints additionally require a media type that cannot be sent without a CORS preflight. See [MCP Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) for the wider picture, and [SECURITY.md](./SECURITY.md) for Figwright's threat model, what is in and out of scope, and how to report a vulnerability privately.
 
