@@ -188,6 +188,13 @@ export const resolveTextStyleBindings = async (
 /** Fields whose binding changes which font face the style resolves to. */
 const FONT_FIELDS = new Set(['fontFamily', 'fontStyle', 'fontWeight']);
 
+/**
+ * Sort key that orders a style's bindings family → style → the remaining font-affecting fields →
+ * everything else, so each font-affecting swap lands on a face the preload already asked for.
+ */
+const fieldRank = (field: string): number =>
+  field === 'fontFamily' ? 0 : field === 'fontStyle' ? 1 : FONT_FIELDS.has(field) ? 2 : 3;
+
 /** Every string a variable can resolve to, across its modes — the font names a binding may need. */
 const stringValues = (variable: Variable): string[] => {
   const out = new Set<string>();
@@ -260,11 +267,7 @@ export const applyTextStyleBindings = async (
 ): Promise<void> => {
   await preloadFaces(figmaCtx, style.fontName, bindings, table);
 
-  const ordered = Object.entries(bindings).toSorted(([a], [b]) => {
-    const rank = (field: string): number =>
-      field === 'fontFamily' ? 0 : field === 'fontStyle' ? 1 : FONT_FIELDS.has(field) ? 2 : 3;
-    return rank(a) - rank(b);
-  });
+  const ordered = Object.entries(bindings).toSorted(([a], [b]) => fieldRank(a) - fieldRank(b));
   for (const [field, id] of ordered) {
     style.setBoundVariable(
       field as VariableBindableTextField,
