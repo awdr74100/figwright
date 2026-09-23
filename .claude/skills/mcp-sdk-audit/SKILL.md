@@ -108,15 +108,49 @@ npm pack @modelcontextprotocol/server@<installed> @modelcontextprotocol/server@<
 for p in server core; do for v in <installed> <target>; do
   mkdir -p "$p-$v" && tar -xzf "modelcontextprotocol-$p-$v.tgz" -C "$p-$v" --strip-components=1
 done; done
-diff -ru --exclude='*.map' server-<installed>/dist server-<target>/dist > server.diff
-grep '^diff ' server.diff        # the file list — compare against Stage 2
+
+# Partition each tree by CONTENT, not by filename. This one step produces both the
+# coverage proof and the list of files that actually have to be read. Do it for core
+# too — its chunks are content-hashed the same way.
+for p in server core; do for v in <installed> <target>; do
+  (cd "$p-$v/dist" && find . -type f ! -name '*.map' -exec shasum -a 256 {} \; \
+     | sort -k2 > "../../hash-$p-$v.txt")
+done; done
+for p in server core; do
+  echo "== $p =="
+  comm -12 <(sort "hash-$p-<installed>.txt") <(sort "hash-$p-<target>.txt") | wc -l  # identical — the proof
+  comm -3  <(sort "hash-$p-<installed>.txt") <(sort "hash-$p-<target>.txt") \
+    | awk '{print $NF}' | sort -u                                                   # changed — the read list
+done
 ```
 
-v2 emits `.mjs`/`.cjs` siblings in a flat `dist/` with **content-hashed chunk names**
-(`dist/mcp-DXXb3Vv3.mjs`), so a chunk filename changing between versions is noise, not signal — diff
-by content, and expect the whole-file rename churn. `dist/**/*.d.mts` hunks are the type-level
-surface (what `tsc` would catch); `.mjs` hunks with no `.d.mts` counterpart are the dangerous kind —
-**behavior changed, signature didn't**.
+🔴 **Do not stop at `diff -ru`, and do not trust its file list — the gap it leaves is silent.** v2
+emits `.mjs`/`.cjs` siblings in a flat `dist/` with **content-hashed chunk names**, so a chunk whose
+hash moved (`mcp-DXXb3Vv3.mjs` → `mcp-Dw2OlZ1f.mjs`) appears only as two `Only in ...` lines and
+**its contents are never compared** — while `ReadBuffer`, `Protocol` and `registerTool` all live in
+those chunks, not in `stdio.mjs`. The hash partition is what makes the read list complete: pair each
+changed chunk with its counterpart and diff it by name, explicitly.
+
+```bash
+diff -u server-<installed>/dist/<old-chunk>.mjs server-<target>/dist/<new-chunk>.mjs
+```
+
+The identical set is a real result, not bookkeeping: a release where `ajvProvider-*`, `dialects-*`,
+`validators/` and `types-*.d.mts` all hash identically has not touched JSON Schema generation by a
+single byte. That is a **static** statement, so it is stronger than anything the probe can say.
+
+⚠️ Two rename artifacts that read as false alarms:
+
+- A long run of `-` lines in `index.mjs` can be a whole region **relocated into another chunk** — the
+  2.1.0 release moved `bearerAuth` and `oauthMetadata` into the mcp chunk, which looks exactly like
+  deleting them until you find the matching `+` on the other side. Check before calling it a removal.
+- `.cjs` and `.d.cts` entries are siblings of the `.mjs` / `.d.mts` you already read; read one of each
+  pair, not both.
+
+Within what is left, `dist/**/*.d.mts` hunks are the type-level surface (what `tsc` would catch);
+`.mjs` hunks with no `.d.mts` counterpart are the dangerous kind — **behavior changed, signature
+didn't**. Comparing the two versions' `export { … }` lists (names only, aliases stripped) settles
+whether the public surface lost anything, which the prose of a release note routinely omits.
 
 Also diff `package.json` between the two versions: `engines.node`, `dependencies` (the pinned
 `@modelcontextprotocol/core` version and zod's supported range) all move without appearing in the
