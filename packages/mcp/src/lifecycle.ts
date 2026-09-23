@@ -24,11 +24,17 @@ export interface ShutdownWiring {
  *
  * SIGINT / SIGTERM cover a client that politely signals us. But an MCP server is spawned over stdio
  * by its client, and when that client crashes or is force-closed it may send no signal at all — it
- * just closes the pipe. The SDK's stdio transport reacts only to stdin 'data' / 'error', never to
- * EOF, so without this the process lingers, keeps holding the relay port, and becomes a stale
- * "zombie" leader serving an old build. stdin 'end' / 'close' is the reliable "client is gone"
- * signal, so we treat it as a shutdown trigger too. shutdown runs at most once even if several
- * triggers fire together (e.g. 'end' then 'close').
+ * just closes the pipe. stdin 'end' / 'close' is the reliable "client is gone" signal, so we treat
+ * it as a shutdown trigger too. shutdown runs at most once even if several triggers fire together
+ * (e.g. 'end' then 'close').
+ *
+ * Since @modelcontextprotocol/server 2.1.0 the SDK's stdio transport reacts to stdin EOF too,
+ * closing itself so that a server "holding no other keep-alive handles will then exit naturally".
+ * That does not stand in for this path: a leader holds the relay port, which is precisely such a
+ * handle, so the process would linger as a stale "zombie" leader serving an old build. Closing the
+ * relay and exiting is this path's job. The SDK's close reaches the same shutdown anyway, through
+ * the transport reporting its own death (see SelfReportingStdioTransport), so the two share the one
+ * "at most once" guard rather than tearing down twice.
  *
  * Triggering shutdown is not the same as finishing it: if the graceful path stalls (a close that
  * waits on connections that never drain, a leaked timer pinning the event loop), the process still
