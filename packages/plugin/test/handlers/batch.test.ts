@@ -42,6 +42,7 @@ import { createSetVariableValueHandler } from '../../src/handlers/set-variable-v
 import { createSwapComponentHandler } from '../../src/handlers/swap-component.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
+import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
@@ -1283,6 +1284,73 @@ describe('batch inverses for the newly batchable writes', () => {
       valuesByMode: { m1: 8 },
       codeSyntax: { WEB: '--size' },
     });
+  });
+
+  it('restores a collection name and every mode name it renamed', async () => {
+    const { figmaCtx, store, collections } = makeWide();
+    failingFrame(store);
+    const collection: Record<string, unknown> = {
+      id: 'C:1',
+      name: 'Colour',
+      modes: [
+        { modeId: 'm1', name: 'Light' },
+        { modeId: 'm2', name: 'Dark' },
+      ],
+      renameMode(modeId: string, name: string) {
+        const modes = collection.modes as { modeId: string; name: string }[];
+        const mode = modes.find(m => m.modeId === modeId);
+        if (mode !== undefined) mode.name = name;
+      },
+    };
+    collections.set('C:1', collection);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_variable_collection',
+            params: {
+              collectionId: 'C:1',
+              name: 'Color',
+              modes: [
+                { modeId: 'm1', name: 'Day' },
+                { modeId: 'm2', name: 'Night' },
+              ],
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    // Renaming mints no id, so the capture stays addressable and both halves go back exactly.
+    expect(collection).toMatchObject({ name: 'Colour' });
+    expect(collection.modes).toEqual([
+      { modeId: 'm1', name: 'Light' },
+      { modeId: 'm2', name: 'Dark' },
+    ]);
+  });
+
+  // No collection is registered on purpose: the refusal comes from the inverse map, before any
+  // lookup, so a batch naming this tool never reaches the document at all.
+  it('refuses delete_variable_mode, whose mode id cannot be minted again', async () => {
+    const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', name: 'A' } });
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'rename_node', params: { nodeId: '1:1', name: 'renamed' } },
+          { tool: 'delete_variable_mode', params: { collectionId: 'C:1', modeId: 'm1' } },
+        ],
+      }),
+    ).rejects.toThrow(
+      /'delete_variable_mode' \(index 1\) is not batchable — adding a mode back mints/,
+    );
+    expect(store.get('1:1')).toMatchObject({ name: 'A' });
   });
 
   it("refuses a value written to a mode outside the variable's own collection", async () => {

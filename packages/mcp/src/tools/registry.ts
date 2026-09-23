@@ -38,6 +38,7 @@ import { deleteNodesTool } from './delete-nodes.js';
 import { deletePageTool } from './delete-page.js';
 import { deleteStyleTool } from './delete-style.js';
 import { deleteVariableCollectionTool } from './delete-variable-collection.js';
+import { deleteVariableModeTool } from './delete-variable-mode.js';
 import { deleteVariableTool } from './delete-variable.js';
 import { designDiffTool } from './design-diff.js';
 import { detachInstanceTool } from './detach-instance.js';
@@ -118,6 +119,7 @@ import { unlockNodesTool } from './unlock-nodes.js';
 import { updateEffectStyleTool } from './update-effect-style.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
+import { updateVariableCollectionTool } from './update-variable-collection.js';
 import { useFileTool } from './use-file.js';
 
 /**
@@ -203,6 +205,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   applyStyleToNodeTool,
   deleteStyleTool,
   createVariableCollectionTool,
+  updateVariableCollectionTool,
   addVariableModeTool,
   createVariableTool,
   setVariableValueTool,
@@ -211,6 +214,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   renameVariableTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
+  deleteVariableModeTool,
   deleteVariableCollectionTool,
   groupNodesTool,
   ungroupNodesTool,

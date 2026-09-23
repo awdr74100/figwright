@@ -31,6 +31,7 @@ import { createDeleteNodesHandler } from './delete-nodes.js';
 import { createDeletePageHandler } from './delete-page.js';
 import { createDeleteStyleHandler } from './delete-style.js';
 import { createDeleteVariableCollectionHandler } from './delete-variable-collection.js';
+import { createDeleteVariableModeHandler } from './delete-variable-mode.js';
 import { createDeleteVariableHandler } from './delete-variable.js';
 import { createDetachInstanceHandler } from './detach-instance.js';
 import { createEditComponentPropertyHandler } from './edit-component-property.js';
@@ -104,6 +105,7 @@ import { createUngroupNodesHandler } from './ungroup-nodes.js';
 import { createUpdateEffectStyleHandler } from './update-effect-style.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
+import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
 
 /**
  * Build the full sandbox handler map. Read handlers run as-is; write handlers are wrapped with
@@ -157,6 +159,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     delete_style: createDeleteStyleHandler(figmaCtx),
     // Variables
     create_variable_collection: createCreateVariableCollectionHandler(figmaCtx),
+    update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
     add_variable_mode: createAddVariableModeHandler(figmaCtx),
     create_variable: createCreateVariableHandler(figmaCtx),
     set_variable_value: createSetVariableValueHandler(figmaCtx),
@@ -165,6 +168,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     rename_variable: createRenameVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
+    delete_variable_mode: createDeleteVariableModeHandler(figmaCtx),
     delete_variable_collection: createDeleteVariableCollectionHandler(figmaCtx),
     // Structure + bulk text
     group_nodes: createGroupNodesHandler(figmaCtx),
