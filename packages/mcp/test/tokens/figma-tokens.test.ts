@@ -200,6 +200,40 @@ describe('resolveFigmaTokens', () => {
     expect(result.find(t => t.name === 'Overlay/dangling')?.value).toBeNull();
   });
 
+  // The colour half can resolve to an 8-digit hex of its own, which is the case where "the opacity
+  // becomes the alpha" has to mean replace rather than multiply. Measured against a live file:
+  // a base at alpha 0.8 (#FF0000CC) composed with opacity 0.5 reads back as #FF000080, not the
+  // #FF000066 a multiply would give.
+  it('replaces the base colour own alpha rather than multiplying with it', () => {
+    const result = resolveFigmaTokens(
+      defs({
+        variables: [
+          {
+            id: 'base',
+            name: 'palette/translucent',
+            key: 'k',
+            resolvedType: 'COLOR',
+            collectionId: 'col1',
+            valuesByMode: { m1: { r: 1, g: 0, b: 0, a: 0.8 } },
+          },
+          {
+            id: 'over',
+            name: 'Overlay/half',
+            key: 'k',
+            resolvedType: 'COLOR',
+            collectionId: 'col1',
+            valuesByMode: {
+              m1: { color: { type: 'VARIABLE_ALIAS', id: 'base' }, opacity: 0.5 },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(result.find(t => t.name === 'palette/translucent')?.value).toBe('#FF0000CC');
+    expect(result.find(t => t.name === 'Overlay/half')?.value).toBe('#FF000080');
+  });
+
   // The link between the two halves of the scopes work: what get_variable_defs reports has to reach
   // the join, which is the only consumer that can act on it. Nothing else would notice if this
   // spread were dropped — the join would silently fall back to guessing from the collection name.
