@@ -5,6 +5,7 @@ import {
   createToolResult,
   isPluginBridgeMessage,
   type PluginBridgeMessage,
+  PluginToolFailure,
 } from '../../protocol/bridge.js';
 import {
   createToolBridge,
@@ -56,11 +57,16 @@ describe('createToolBridge', () => {
     expect(bridge.pendingCount()).toBe(0);
   });
 
-  it('rejects when sandbox replies with tool-error', async () => {
+  // The code stays a field instead of being folded into the message. It used to reject with
+  // `${code}: ${message}`, which left the relay client unable to recover the code — it sent a
+  // hardcoded Internal alongside a message that already named the real one, and the server prefixed
+  // it a second time. Asserting the concatenation here is what made that shape look intended.
+  it('rejects when sandbox replies with tool-error, keeping the code addressable', async () => {
     const { bridge, sent, emit } = setup();
     const promise = bridge.handler('ping', undefined);
     emit(createToolError({ id: sent[0]!.id, code: 'BOOM', message: 'sandbox failed' }));
-    await expect(promise).rejects.toThrow(/BOOM: sandbox failed/);
+    await expect(promise).rejects.toThrow(PluginToolFailure);
+    await expect(promise).rejects.toMatchObject({ code: 'BOOM', message: 'sandbox failed' });
     expect(bridge.pendingCount()).toBe(0);
   });
 

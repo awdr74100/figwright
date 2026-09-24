@@ -16,6 +16,7 @@ import {
 } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
+import { PluginToolFailure } from '../../protocol/bridge.js';
 import { RelayClient, type WebSocketCtor } from '../../ui/relay/client.js';
 import { ACTIVITY_LIMIT } from '../../ui/relay/state.js';
 
@@ -599,6 +600,42 @@ describe('RelayClient', () => {
       error: {
         code: ErrorCode.Internal,
         message: expect.stringContaining('sandbox blew up'),
+      },
+    });
+  });
+
+  // The sandbox's own code has to survive the trip. It used to be discarded here in favour of a
+  // hardcoded Internal while the message still spelled the real one out, so the server prefixed a
+  // code that was already in the text — and METHOD_NOT_FOUND, the signal an out-of-date plugin
+  // gives for a tool it predates, arrived as Internal.
+  it("carries the sandbox's own error code instead of relabelling it Internal", async () => {
+    let liveSock: FakeSocketControl | undefined;
+    const { WS } = buildFakeFactory(sock => {
+      sock.fireOpen();
+      const req = decodeEnvelope(sock.sent[0]!) as RequestEnvelope;
+      sock.fireReceive(
+        createResponse({ id: req.id, sessionId: req.sessionId, result: helloResult() }),
+      );
+      liveSock = sock;
+    });
+
+    const client = new RelayClient({ ports: [3055], clientVersion: '0.0.0', WS });
+    client.setToolHandler(async () => {
+      throw new PluginToolFailure(ErrorCode.MethodNotFound, 'no sandbox handler (method=ping)');
+    });
+    await client.connect();
+
+    liveSock!.fireReceive(
+      createRequest({ id: 'tool-4', sessionId: client.sessionId, method: 'ping' }),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(decodeEnvelope(liveSock!.sent.at(-1)!)).toMatchObject({
+      kind: 'err',
+      error: {
+        code: ErrorCode.MethodNotFound,
+        // The message carries no code of its own — the server adds exactly one prefix.
+        message: 'no sandbox handler (method=ping)',
       },
     });
   });

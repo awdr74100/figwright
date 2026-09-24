@@ -18,6 +18,7 @@ import {
   SystemMethod,
 } from '@figwright/shared';
 
+import { PluginToolFailure } from '../../protocol/bridge.js';
 import { extractNodeIds } from './node-ids.js';
 import { summarizePayload } from './payload.js';
 import {
@@ -465,9 +466,14 @@ export class RelayClient {
       this.heartbeat?.notifyReceived();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // The sandbox's own code when it answered tool-error (METHOD_NOT_FOUND on a tool an older
+      // plugin predates is the one that matters most); Internal only for a failure from this side,
+      // such as the bridge timing out. Hardcoding Internal here used to discard the real code while
+      // the message still spelled it out, which is how the server ended up prefixing it twice.
+      const code = err instanceof PluginToolFailure ? err.code : ErrorCode.Internal;
       this.opts.log(`[relay-client] tool handler threw for ${method}: ${message}`);
       this.settle(id, 'error', { error: message });
-      ws.send(encodeEnvelope(createError({ id, sessionId, code: ErrorCode.Internal, message })));
+      ws.send(encodeEnvelope(createError({ id, sessionId, code, message })));
       this.heartbeat?.notifyReceived();
     }
   }
