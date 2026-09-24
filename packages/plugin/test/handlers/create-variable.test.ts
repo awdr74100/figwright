@@ -80,4 +80,58 @@ describe('create_variable handler', () => {
       createCreateVariableHandler(withCollection(null))({ collectionId: 'VC:0' }),
     ).rejects.toThrow(/name/);
   });
+
+  it("applies scopes to the new variable, and leaves Figma's default alone when omitted", async () => {
+    const mk = (): {
+      variable: { scopes: string[] };
+      handler: ReturnType<typeof createCreateVariableHandler>;
+    } => {
+      const variable = { id: 'V:0', name: 'radius/md', scopes: ['ALL_SCOPES'] };
+      const f = {
+        variables: {
+          getVariableCollectionByIdAsync: async () => ({ id: 'VC:0' }),
+          createVariable: () => variable,
+        },
+      } as unknown as typeof figma;
+      return { variable, handler: createCreateVariableHandler(f) };
+    };
+
+    const scoped = mk();
+    await scoped.handler({
+      name: 'radius/md',
+      collectionId: 'VC:0',
+      resolvedType: 'FLOAT',
+      scopes: ['CORNER_RADIUS'],
+    });
+    expect(scoped.variable.scopes).toEqual(['CORNER_RADIUS']);
+
+    // Omitted means "no opinion": Figma's own default stays rather than being overwritten with a
+    // guess, which is what makes the field's absence in get_variable_defs meaningful too.
+    const bare = mk();
+    await bare.handler({ name: 'radius/md', collectionId: 'VC:0', resolvedType: 'FLOAT' });
+    expect(bare.variable.scopes).toEqual(['ALL_SCOPES']);
+  });
+
+  // An empty array is the interesting one: Figma reads it as "offered nowhere", so letting it
+  // through would quietly hide the variable from every picker.
+  it('rejects a scopes value that is not a non-empty array of names', async () => {
+    for (const scopes of [[], 'CORNER_RADIUS', [1]]) {
+      const createVariable = vi.fn<() => unknown>();
+      const f = {
+        variables: {
+          getVariableCollectionByIdAsync: async () => ({ id: 'VC:0' }),
+          createVariable,
+        },
+      } as unknown as typeof figma;
+      await expect(
+        createCreateVariableHandler(f)({
+          name: 'x',
+          collectionId: 'VC:0',
+          resolvedType: 'FLOAT',
+          scopes,
+        }),
+      ).rejects.toThrow(/non-empty array/);
+      expect(createVariable).not.toHaveBeenCalled();
+    }
+  });
 });

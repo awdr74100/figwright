@@ -4,6 +4,7 @@ import {
   type SerializedMotionEasing,
   type SerializedVariable,
   type SerializedVariableCollection,
+  type SerializedVariableComposedColor,
   type SerializedVariableValue,
   toHex,
 } from '@figwright/shared';
@@ -40,6 +41,13 @@ export interface FigmaToken {
    */
   modes?: Record<string, FigmaTokenValue>;
   /**
+   * Where Figma offers the variable, carried through from get_variable_defs and present only when
+   * the designer narrowed it (the default ALL_SCOPES is omitted upstream). Authoritative statement
+   * of what the token is _for_, which the join uses where it would otherwise have to guess from a
+   * collection's name. Absent for paint-style pseudo-tokens, which have no such notion.
+   */
+  scopes?: readonly string[];
+  /**
    * Set to 'style' when this token was derived from a shared paint style rather than a variable —
    * the design-token mechanism of pre-variables Figma files. Absent for variables.
    */
@@ -53,6 +61,21 @@ const isRgba = (
   val: SerializedVariableValue,
 ): val is { r: number; g: number; b: number; a: number } =>
   typeof val === 'object' && val !== null && 'r' in val && 'g' in val && 'b' in val;
+
+/** A composed color: a colour and its opacity authored separately, at least one half an alias. */
+const isComposedColor = (val: SerializedVariableValue): val is SerializedVariableComposedColor =>
+  typeof val === 'object' && val !== null && 'color' in val && 'opacity' in val;
+
+/**
+ * `hex` re-rendered at `alpha`. The channels are parsed back out and handed to toHex rather than
+ * having the alpha byte appended here, so the result keeps one spelling of a colour (uppercase,
+ * alpha only when below 1) instead of growing a second one that only nearly matches.
+ */
+const withAlpha = (hex: string, alpha: number): string | null => {
+  if (!/^#[0-9a-f]{6}/i.test(hex)) return null;
+  const channel = (at: number): number => Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+  return toHex({ r: channel(1), g: channel(3), b: channel(5) }, alpha);
+};
 
 /**
  * An EASING variable's curve flattened to a scalar, since a token value is one. A custom bezier
@@ -122,6 +145,39 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
     return Object.values(variable.valuesByMode)[0];
   };
 
+  /** Follow one alias hop, carrying the visited set so a chain that returns to itself stops. */
+  const chase = (id: string, ctx: ModeContext | null, seen: Set<string>): FigmaTokenValue => {
+    const target = byId.get(id);
+    return target === undefined ? null : resolve(target, ctx, seen);
+  };
+
+  /**
+   * A composed colour flattened to one hex, because a token value is one scalar. Each half is
+   * resolved on its own — either may be an alias — and the opacity becomes the colour's alpha:
+   * Figma authors the two separately precisely so the opacity _is_ the resulting alpha, so a base
+   * colour carrying its own alpha has it replaced rather than multiplied.
+   *
+   * Either half failing to resolve to the right kind of value yields null rather than a colour that
+   * is half true — an unresolved token is readable as such, a plausible wrong hex is not.
+   *
+   * This is the one place two chains leave the same value, so each gets its own copy of the visited
+   * set: the guard means "this chain came back to itself", and sharing one set between siblings
+   * would silently widen it to "some other chain has already been here". No pair of halves can
+   * legitimately meet at the same variable today — one must end at a colour and the other at a
+   * number — so this buys exactness rather than fixing a reachable bug.
+   */
+  const resolveComposedColor = (
+    raw: SerializedVariableComposedColor,
+    ctx: ModeContext | null,
+    seen: Set<string>,
+  ): FigmaTokenValue => {
+    const base = isAlias(raw.color) ? chase(raw.color.id, ctx, new Set(seen)) : toHex(raw.color, 1);
+    const alpha =
+      typeof raw.opacity === 'number' ? raw.opacity : chase(raw.opacity.id, ctx, new Set(seen));
+    if (typeof base !== 'string' || typeof alpha !== 'number') return null;
+    return withAlpha(base, alpha);
+  };
+
   const resolve = (
     variable: SerializedVariable,
     ctx: ModeContext | null,
@@ -131,11 +187,9 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
     seen.add(variable.id);
     const raw = valueAt(variable, ctx);
     if (raw === undefined) return null;
-    if (isAlias(raw)) {
-      const target = byId.get(raw.id);
-      return target === undefined ? null : resolve(target, ctx, seen);
-    }
+    if (isAlias(raw)) return chase(raw.id, ctx, seen);
     if (isRgba(raw)) return toHex(raw, raw.a);
+    if (isComposedColor(raw)) return resolveComposedColor(raw, ctx, seen);
     // The only object-shaped value left is an EASING curve — flatten it to a scalar token value.
     if (typeof raw === 'object' && raw !== null) return formatEasing(raw);
     return raw;
@@ -169,6 +223,7 @@ export const resolveFigmaTokens = (defs: GetVariableDefsResult): FigmaToken[] =>
       type: variable.resolvedType,
       ...(name === undefined || name.length === 0 ? {} : { collection: name }),
       ...(modes === undefined ? {} : { modes }),
+      ...(variable.scopes === undefined ? {} : { scopes: variable.scopes }),
     };
   });
 };

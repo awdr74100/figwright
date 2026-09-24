@@ -154,6 +154,9 @@ const STEM_SYNONYMS: readonly ReadonlySet<string>[] = [
 // elsewhere — so aliasing it to Tailwind's --text-* (always font-size) is gated on the variable's
 // collection rather than enabled globally. Carrying the collection through the join is exactly what
 // makes this safe to open without mis-mapping dimensional tokens.
+//
+// The collection name is a guess, though, and `scopes` is the same statement made outright — see
+// isFontSizeVariable below, which prefers it whenever the designer narrowed them.
 const TYPO_STEM_SYNONYM: ReadonlySet<string> = new Set(['size', 'text']);
 const TYPO_COLLECTION_WORDS = new Set([
   'font',
@@ -172,6 +175,27 @@ const isTypographyCollection = (collection: string | undefined): boolean =>
     .toLowerCase()
     .split(/[^a-z]+/)
     .some(word => TYPO_COLLECTION_WORDS.has(word));
+
+/**
+ * Whether the size↔text synonym may open for this variable — that is, whether `size/*` here means a
+ * font size rather than a width/height. The flag gates nothing else, so this is the precise
+ * question, narrower than "is this typography".
+ *
+ * `scopes` answers it outright when the designer narrowed them: Figma offers a variable only where
+ * its scopes allow, so FONT_SIZE in the list _is_ the statement that this is a font size, and its
+ * absence from a narrowed list is the statement that it is not. That settles both directions the
+ * collection name could only guess at — a font size in a collection called "Primitives" stops
+ * reading as a dimension, and a width/height in one called "Type" stops being aliased to
+ * `--text-*`, which is precisely the mis-mapping the synonym table above warns about.
+ *
+ * Absent scopes claim nothing (Figma's default is ALL_SCOPES, which get_variable_defs omits), so
+ * the collection-name heuristic stands unchanged — which is every variable in a file where nobody
+ * touched scopes, i.e. almost all of them.
+ */
+const isFontSizeVariable = (figma: FigmaToken): boolean =>
+  figma.scopes === undefined
+    ? isTypographyCollection(figma.collection)
+    : figma.scopes.includes('FONT_SIZE');
 
 /**
  * True when two stems are the same scale by an exact match, a Tailwind/Figma naming synonym, or —
@@ -453,7 +477,7 @@ const joinTokenScan = (
   opts: TokenJoinOptions,
   base: TokenMapping,
 ): TokenMapping => {
-  const typography = isTypographyCollection(figma.collection);
+  const typography = isFontSizeVariable(figma);
   const nameMatch = bestNameMatch(figma.name, projectTokens, typography);
 
   // Exact color value-match: strong, naming-independent evidence — but only when it's unique.

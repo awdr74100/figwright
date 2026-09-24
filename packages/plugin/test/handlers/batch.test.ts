@@ -1286,6 +1286,48 @@ describe('batch inverses for the newly batchable writes', () => {
     });
   });
 
+  // A composed colour (plugin-typings 1.139) is the first variable value carrying structure
+  // *inside* it, so the write-if-different check has to compare it by content. Measured: replacing
+  // that compare with one that calls any two objects equal makes this test fail, because the
+  // restore is then skipped and the green the op wrote survives the rollback.
+  it('restores a composed colour value with both alias halves intact', async () => {
+    const { figmaCtx, store, variables, collections } = makeWide();
+    failingFrame(store);
+    collections.set('C:1', { id: 'C:1', modes: [{ modeId: 'm1', name: 'Mode 1' }] });
+    const composed = {
+      color: { type: 'VARIABLE_ALIAS', id: 'V:base' },
+      opacity: { type: 'VARIABLE_ALIAS', id: 'V:op' },
+    };
+    const variable: Record<string, unknown> = {
+      id: 'V:1',
+      name: 'overlay',
+      resolvedType: 'COLOR',
+      variableCollectionId: 'C:1',
+      valuesByMode: { m1: composed },
+      setValueForMode(mode: string, value: unknown) {
+        variable.valuesByMode = { ...(variable.valuesByMode as object), [mode]: value };
+      },
+    };
+    variables.set('V:1', variable);
+    const handler = createBatchHandler(figmaCtx, {
+      set_variable_value: createSetVariableValueHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_variable_value',
+            params: { variableId: 'V:1', modeId: 'm1', value: { r: 0, g: 1, b: 0, a: 1 } },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect((variable.valuesByMode as Record<string, unknown>).m1).toEqual(composed);
+  });
+
   it('restores a collection name and every mode name it renamed', async () => {
     const { figmaCtx, store, collections } = makeWide();
     failingFrame(store);

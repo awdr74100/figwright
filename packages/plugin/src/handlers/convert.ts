@@ -5,6 +5,7 @@ import type {
   SerializedLineHeight,
   SerializedReaction,
   SerializedTrigger,
+  SerializedVariableComposedColor,
   SerializedVariableValue,
 } from '@figwright/shared';
 
@@ -100,10 +101,42 @@ export const toFigmaLineHeight = (lh: SerializedLineHeight): LineHeight => {
   return { unit: lh.unit as 'PIXELS' | 'PERCENT', value: lh.value };
 };
 
-/** Wire variable value → Figma VariableValue (alias / color / easing / primitive). */
+/**
+ * Wire composed color → Figma VariableComposedColor (plugin-typings 1.139).
+ *
+ * Figma's type admits the pair only when at least one half is an alias: a concrete colour at a
+ * concrete opacity is just an RGBA and there is nothing to compose. Rejecting that combination here
+ * rather than casting past it means the agent is told what to send instead, at the tool boundary,
+ * rather than meeting an opaque refusal from Figma.
+ */
+const toFigmaComposedColor = (value: SerializedVariableComposedColor): VariableComposedColor => {
+  const opacity =
+    typeof value.opacity === 'number'
+      ? value.opacity
+      : ({ type: 'VARIABLE_ALIAS', id: value.opacity.id } as const);
+  if ('r' in value.color) {
+    if (typeof opacity === 'number') {
+      throw new TypeError(
+        'set_variable_value: a composed color needs an alias on at least one of color / opacity — ' +
+          'a concrete color at a concrete opacity is just { r, g, b, a }',
+      );
+    }
+    const { r, g, b, a } = value.color;
+    return { color: { r, g, b, a }, opacity };
+  }
+  return { color: { type: 'VARIABLE_ALIAS', id: value.color.id }, opacity };
+};
+
+/** Wire variable value → Figma VariableValue (alias / color / composed color / easing / primitive). */
 export const toFigmaVariableValue = (value: SerializedVariableValue): VariableValue => {
   if (typeof value === 'object' && value !== null) {
     if ('r' in value) return { r: value.r, g: value.g, b: value.b, a: value.a };
+    // A composed color nests the keys the other branches look for (`r` inside `color`, `id` inside
+    // either half) rather than carrying them, so it is recognised by carrying both of its own and
+    // neither of theirs. The tool schema's members are loose objects, which keep unknown keys, so a
+    // malformed RGBA that also carried a stray `color` would land here if this were tried first —
+    // and `'r' in value.color` would then throw on a non-object.
+    if ('color' in value && 'opacity' in value) return toFigmaComposedColor(value);
     // Only an alias carries `id`; an EASING value carries its own `type` (EASE_IN / CUSTOM_SPRING /
     // …) instead. Keying on `id` rather than falling through keeps an easing curve from being turned
     // into an alias with `id: undefined`, which Figma would reject.

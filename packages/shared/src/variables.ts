@@ -17,6 +17,26 @@ export type SerializedVariableAlias = z.infer<typeof SerializedVariableAliasSche
 export const SerializedVariableColorSchema = SerializedRGBASchema.extend({
   hex: z.string().optional(),
 });
+export type SerializedVariableColor = z.infer<typeof SerializedVariableColorSchema>;
+
+/**
+ * A composed color — plugin-typings 1.139 widened VariableValue again: a color and its opacity
+ * authored separately, with at least one of the two an alias (a shared colour reused at several
+ * opacities without duplicating the colour itself).
+ *
+ * It carries no `type`, so before this member existed it fell through to the plain-colour branch of
+ * every reader and came out as `r`/`g`/`b`: undefined behind a fabricated `#NANNANNAN` hex
+ * (measured) — the same trap the easing member below was added to close.
+ *
+ * Mirrored as Figma shapes it rather than pre-flattened, so an agent can still see which half is
+ * the alias and hand the value straight back to set_variable_value. token_map flattens it to a
+ * single hex instead (see resolveFigmaTokens), because a token value is one scalar.
+ */
+export const SerializedVariableComposedColorSchema = z.object({
+  color: z.union([SerializedVariableColorSchema, SerializedVariableAliasSchema]),
+  opacity: z.union([z.number(), SerializedVariableAliasSchema]),
+});
+export type SerializedVariableComposedColor = z.infer<typeof SerializedVariableComposedColorSchema>;
 
 /** A cubic-bezier control pair — Figma's EasingFunctionBezier, present only for CUSTOM_CUBIC_BEZIER. */
 export const SerializedEasingBezierSchema = z.object({
@@ -51,13 +71,16 @@ export type SerializedMotionEasing = z.infer<typeof SerializedMotionEasingSchema
  *
  * Order matters: the alias member must be tried before the easing member. Both are objects carrying
  * a `type`, and easing's `type` is a permissive string, so an alias reaching the easing member
- * first would match it and lose its `id`.
+ * first would match it and lose its `id`. The composed-colour member is keyed by `color`/`opacity`
+ * and carries no `type` of its own, so it cannot collide with either and sits beside the plain
+ * colour it is a variant of.
  */
 export const SerializedVariableValueSchema = z.union([
   z.boolean(),
   z.number(),
   z.string(),
   SerializedVariableColorSchema,
+  SerializedVariableComposedColorSchema,
   SerializedVariableAliasSchema,
   SerializedMotionEasingSchema,
 ]);
@@ -86,6 +109,20 @@ export const SerializedVariableSchema = z.object({
    * Omitted when the variable declares none.
    */
   codeSyntax: z.record(z.string(), z.string()).optional(),
+  /**
+   * Where Figma offers this variable in its picker (`ALL_FILLS`, `CORNER_RADIUS`, `GAP`, …) — the
+   * designer's own statement of what the token is _for_, which a name-based join can only guess at
+   * (a `size/4` scoped to CORNER_RADIUS is not the same token as one scoped to GAP).
+   *
+   * Omitted when it is Figma's default `['ALL_SCOPES']`: that is what every untouched variable
+   * carries, so emitting it would cost payload on every variable in the file and mean nothing.
+   * Presence therefore signals a deliberate narrowing.
+   *
+   * Plain strings rather than an enum, for the same reason as the easing `type` above: this file is
+   * a hand-written mirror with no compile-time coupling to the typings (1.139 added COLOR_OPACITY),
+   * and a narrow enum here would silently reject a scope a future release adds.
+   */
+  scopes: z.array(z.string()).optional(),
 });
 export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 

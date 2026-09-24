@@ -7,7 +7,10 @@ const fakeFigma = (collections: unknown[], variables: unknown[]): typeof figma =
   ({
     variables: {
       getLocalVariableCollectionsAsync: async () => collections,
-      getLocalVariablesAsync: async () => variables,
+      // Figma always supplies `scopes`, defaulting to ['ALL_SCOPES']; a fake that omitted it would
+      // be describing a variable shape that cannot occur. Tests that care override it.
+      getLocalVariablesAsync: async () =>
+        variables.map(v => ({ scopes: ['ALL_SCOPES'], ...(v as object) })),
     },
   }) as unknown as typeof figma;
 
@@ -205,5 +208,83 @@ describe('get_variable_defs handler', () => {
     );
     const result = (await handler(undefined)) as GetVariableDefsResult;
     expect(result.variables[0]?.valuesByMode).toEqual({ m1: 16, m2: 'auto', m3: true });
+  });
+
+  it('serializes a composed color as its two halves, not as a fabricated color', async () => {
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [],
+        [
+          {
+            id: 'V:6',
+            name: 'color/overlay',
+            key: 'vk6',
+            resolvedType: 'COLOR',
+            variableCollectionId: 'VC:1',
+            valuesByMode: {
+              // concrete colour, aliased opacity
+              tinted: {
+                color: { r: 0.2, g: 0.4, b: 0.8 },
+                opacity: { type: 'VARIABLE_ALIAS', id: 'V:opacity' },
+              },
+              // aliased colour, concrete opacity
+              faded: { color: { type: 'VARIABLE_ALIAS', id: 'V:brand' }, opacity: 0.5 },
+              // both halves aliased
+              both: {
+                color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+                opacity: { type: 'VARIABLE_ALIAS', id: 'V:opacity' },
+              },
+            },
+          },
+        ],
+      ),
+    );
+    const result = (await handler(undefined)) as GetVariableDefsResult;
+    const values = result.variables[0]?.valuesByMode;
+
+    // Without the composed-color branch every one of these falls through to the colour path and
+    // comes out as { a: 1, hex: '#NANNANNAN' } with undefined channels — measured, and the same
+    // failure the EASING case above was added for.
+    expect(values?.tinted).toEqual({
+      color: { r: 0.2, g: 0.4, b: 0.8, a: 1, hex: '#3366CC' },
+      opacity: { type: 'VARIABLE_ALIAS', id: 'V:opacity' },
+    });
+    expect(values?.faded).toEqual({
+      color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+      opacity: 0.5,
+    });
+    expect(values?.both).toEqual({
+      color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+      opacity: { type: 'VARIABLE_ALIAS', id: 'V:opacity' },
+    });
+    // the alias id on either half survives — that is what the fabricated colour destroyed
+    expect(JSON.stringify(values)).not.toContain('NAN');
+  });
+
+  it('reports scopes only when the designer narrowed them', async () => {
+    const mkVar = (id: string, scopes: string[]): unknown => ({
+      id,
+      name: `v/${id}`,
+      key: `k${id}`,
+      resolvedType: 'FLOAT',
+      variableCollectionId: 'VC:1',
+      valuesByMode: { m1: 4 },
+      scopes,
+    });
+    const handler = createGetVariableDefsHandler(
+      fakeFigma(
+        [],
+        [
+          mkVar('V:1', ['ALL_SCOPES']), // Figma's default → no signal, omitted
+          mkVar('V:2', ['CORNER_RADIUS']),
+          mkVar('V:3', ['FRAME_FILL', 'SHAPE_FILL']),
+        ],
+      ),
+    );
+    const result = (await handler(undefined)) as GetVariableDefsResult;
+
+    expect(result.variables[0]?.scopes).toBeUndefined();
+    expect(result.variables[1]?.scopes).toEqual(['CORNER_RADIUS']);
+    expect(result.variables[2]?.scopes).toEqual(['FRAME_FILL', 'SHAPE_FILL']);
   });
 });

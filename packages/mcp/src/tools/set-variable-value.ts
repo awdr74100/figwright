@@ -17,6 +17,19 @@ const variableValue = z
     z.string(),
     z.looseObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
     z.looseObject({ type: z.literal('VARIABLE_ALIAS'), id: z.string() }),
+    // A composed color (plugin-typings 1.139): a color and its opacity authored separately, with an
+    // alias on at least one half. It nests the keys the members around it are keyed by rather than
+    // carrying them, so it cannot be swallowed by either and its position is not load-bearing.
+    z.looseObject({
+      color: z.union([
+        z.looseObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
+        z.looseObject({ type: z.literal('VARIABLE_ALIAS'), id: z.string() }),
+      ]),
+      opacity: z.union([
+        z.number(),
+        z.looseObject({ type: z.literal('VARIABLE_ALIAS'), id: z.string() }),
+      ]),
+    }),
     // An EASING variable's curve. Figma refuses to edit EASING variables at all today, so this
     // member exists to let such a call through to that explicit error rather than bounce off a
     // schema mismatch. It must stay after the alias member: both are objects keyed by `type`, and
@@ -30,7 +43,8 @@ const variableValue = z
     }),
   ])
   .describe(
-    'boolean | number | string | { r,g,b,a } | { type:"VARIABLE_ALIAS", id } | { type: easing }',
+    'boolean | number | string | { r,g,b,a } | { type:"VARIABLE_ALIAS", id } | ' +
+      '{ color, opacity } composed color | { type: easing }',
   );
 
 export const setVariableValueTool: ToolSpec = {
@@ -38,7 +52,9 @@ export const setVariableValueTool: ToolSpec = {
   description:
     "Set a variable's value for one mode (modeId comes from the variable's collection). value must " +
     'match the variable resolvedType: a boolean, a number (FLOAT), a string, a color { r, g, b, a } ' +
-    '(0–1), or an alias { type: "VARIABLE_ALIAS", id } pointing at another variable. EASING and ' +
+    '(0–1), an alias { type: "VARIABLE_ALIAS", id } pointing at another variable, or a composed ' +
+    'color { color, opacity } that pairs a color with a separate opacity — each half either a ' +
+    'concrete value or an alias, with at least one of the two an alias. EASING and ' +
     'TIMING variables are read-only to plugins — Figma rejects editing them, so read them with ' +
     'get_variable_defs and change them in the Figma UI instead. Create the variable first with ' +
     'create_variable. Returns { ok, variableId, name }.',

@@ -145,4 +145,93 @@ describe('set_variable_value handler', () => {
       createSetVariableValueHandler(fakeFigma(null))({ variableId: 'V:0', modeId: 'M:0' }),
     ).rejects.toThrow(/value is required/);
   });
+
+  // plugin-typings 1.139: a colour and its opacity authored separately, with an alias on at least
+  // one half. Each half keeps the form it was authored in — flattening either one would throw away
+  // the reference the designer made.
+  it('converts a composed color, keeping each half as authored', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'color/overlay', resolvedType: 'COLOR', setValueForMode }),
+    );
+
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      // `hex` is what get_variable_defs adds for the agent's convenience; a value round-tripped
+      // straight back must not carry it on to Figma, which takes RGBA channels only.
+      value: {
+        color: { r: 1, g: 0, b: 0, a: 1, hex: '#FF0000' },
+        opacity: { type: 'VARIABLE_ALIAS', id: 'V:9' },
+      },
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', {
+      color: { r: 1, g: 0, b: 0, a: 1 },
+      opacity: { type: 'VARIABLE_ALIAS', id: 'V:9' },
+    });
+
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:1',
+      value: { color: { type: 'VARIABLE_ALIAS', id: 'V:brand' }, opacity: 0.5 },
+    });
+    expect(setValueForMode).toHaveBeenLastCalledWith('M:1', {
+      color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+      opacity: 0.5,
+    });
+  });
+
+  it('survives a composed color stringified in transit', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'color/overlay', resolvedType: 'COLOR', setValueForMode }),
+    );
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: JSON.stringify({
+        color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+        opacity: 0.5,
+      }),
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', {
+      color: { type: 'VARIABLE_ALIAS', id: 'V:brand' },
+      opacity: 0.5,
+    });
+  });
+
+  // Figma's type admits the pair only when one half is an alias; a concrete colour at a concrete
+  // opacity is just an RGBA. Saying so here names the fix, where Figma would only refuse.
+  it('refuses a composed color with no alias on either half', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'color/overlay', resolvedType: 'COLOR', setValueForMode }),
+    );
+    await expect(
+      handler({
+        variableId: 'V:0',
+        modeId: 'M:0',
+        value: { color: { r: 1, g: 0, b: 0, a: 1 }, opacity: 0.5 },
+      }),
+    ).rejects.toThrow(/at least one of color \/ opacity/);
+    expect(setValueForMode).not.toHaveBeenCalled();
+  });
+
+  // The tool schema's union members are loose objects, so unknown keys survive validation and a
+  // malformed RGBA can reach the converter still carrying them. Two things keep it on the colour
+  // path: the composed branch demands *both* of its keys, and it is tried after the RGBA one. This
+  // covers the second — with both stray keys present, only the ordering is left to decide, and the
+  // composed branch would reach into `color` and throw on a non-object.
+  it('still reads a color carrying stray composed-color keys as a color', async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const handler = createSetVariableValueHandler(
+      fakeFigma({ id: 'V:0', name: 'color/primary', resolvedType: 'COLOR', setValueForMode }),
+    );
+    await handler({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: { r: 1, g: 0, b: 0, a: 1, color: 'not-an-object', opacity: 0.5 },
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', { r: 1, g: 0, b: 0, a: 1 });
+  });
 });
