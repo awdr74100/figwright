@@ -19,7 +19,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@figma/plugin-typings": "^1.138.0",
+    "@figma/plugin-typings": "^1.139.0",
     "@figwright/shared": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.9",
