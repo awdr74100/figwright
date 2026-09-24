@@ -121,11 +121,16 @@ describe('bind_component_property handler', () => {
 
   it('finds a property defined on the variant set above the layer', async () => {
     const set = { id: 'S:1', type: 'COMPONENT_SET', componentPropertyDefinitions: boolDef };
+    // Figma throws when componentPropertyDefinitions is read on a variant, so the fake does too.
     const variant = {
       id: 'C:1',
       type: 'COMPONENT',
       parent: set,
-      componentPropertyDefinitions: {},
+      get componentPropertyDefinitions(): never {
+        throw new Error(
+          'in get_componentPropertyDefinitions: Can only get component property definitions of a component set or non-variant component',
+        );
+      },
     };
     const layer = { id: 'L:1', type: 'FRAME', parent: variant, componentPropertyReferences: null };
     const handler = createBindComponentPropertyHandler(fakeFigma({ 'L:1': layer }));
