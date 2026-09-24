@@ -71,6 +71,33 @@ export const ModeResultSchema = z.object({
 });
 export type ModeResult = z.infer<typeof ModeResultSchema>;
 
+/**
+ * Result of update_variable_collection: the collection as it now stands. The whole mode list comes
+ * back, not just the renamed ones, so a caller that changed some of them can see the result without
+ * reading the collection again. The ids are echoed to make the point the write relies on: renaming
+ * changes no id, so every binding survives.
+ */
+export const UpdateCollectionResultSchema = z.object({
+  ok: z.literal(true),
+  collectionId: z.string(),
+  name: z.string(),
+  modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
+});
+export type UpdateCollectionResult = z.infer<typeof UpdateCollectionResultSchema>;
+
+/**
+ * Result of delete_variable_mode: the removed mode's id and name, plus the collection it left. The
+ * name is echoed because the caller only supplies an id — it is the confirmation that the mode
+ * removed was the intended one, and the id cannot be looked up afterwards.
+ */
+export const DeleteModeResultSchema = z.object({
+  ok: z.literal(true),
+  collectionId: z.string(),
+  modeId: z.string(),
+  name: z.string(),
+});
+export type DeleteModeResult = z.infer<typeof DeleteModeResultSchema>;
+
 /** Result of a variable write (create_variable / set_variable_value / delete_variable / …). */
 export const VariableResultSchema = z.object({
   ok: z.literal(true),

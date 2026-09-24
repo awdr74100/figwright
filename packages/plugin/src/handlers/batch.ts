@@ -1235,6 +1235,47 @@ const renameVariableInverse: BatchInverse = {
   },
 };
 
+interface CollectionNames {
+  id: string;
+  name: string;
+  modes: { modeId: string; name: string }[];
+}
+
+/**
+ * Undo for a collection rename. Both halves are captured whatever this op intends to change: the
+ * arguments say what it means to write, but undo has to put back what was actually there.
+ *
+ * Renaming touches no id, so the capture stays addressable and the restore is exact — unlike the
+ * removals in NON_BATCHABLE, where a new id is minted and the old values have nowhere to go back
+ * to.
+ */
+const updateVariableCollectionInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'collectionId', 'update_variable_collection');
+    const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(id);
+    if (collection === null) {
+      throw new Error(`batch/update_variable_collection: collection ${id} not found`);
+    }
+    return {
+      id,
+      name: collection.name,
+      modes: collection.modes.map(mode => ({ modeId: mode.modeId, name: mode.name })),
+    } satisfies CollectionNames;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const was = captured as CollectionNames;
+    const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(was.id);
+    if (collection === null) return undefined;
+    if (collection.name !== was.name) collection.name = was.name;
+    for (const mode of was.modes) {
+      if (collection.modes.some(m => m.modeId === mode.modeId && m.name !== mode.name)) {
+        collection.renameMode(mode.modeId, mode.name);
+      }
+    }
+    return undefined;
+  },
+};
+
 // ── Component properties ─────────────────────────────────────────────────────
 
 interface EditPropertyState {
@@ -1615,6 +1656,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_variable_value: variableValueInverse,
   set_variable_code_syntax: codeSyntaxInverse,
   rename_variable: renameVariableInverse,
+  update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
   edit_component_property: editPropertyInverse,
   bind_component_property: bindPropertyInverse,
@@ -1641,6 +1683,8 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
     'a deleted style cannot be brought back under its id, and its consumers lose the link',
   delete_variable:
     'a deleted variable cannot be brought back under its id, and its bindings revert',
+  delete_variable_mode:
+    'adding a mode back mints a new mode id, so the value every variable held for the removed one does not return',
   delete_variable_collection:
     'a deleted collection cannot be brought back under its id, nor its variables and modes',
   delete_component_property:

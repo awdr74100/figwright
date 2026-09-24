@@ -391,6 +391,14 @@
     "apply_style_to_node": ["field", "nodeId", "requestId", "styleId"],
     "delete_style": ["requestId", "styleId"],
     "create_variable_collection": ["name", "requestId"],
+    "update_variable_collection": [
+      "collectionId",
+      "modes",
+      "modes[].modeId",
+      "modes[].name",
+      "name",
+      "requestId"
+    ],
     "add_variable_mode": ["collectionId", "name", "requestId"],
     "create_variable": ["collectionId", "name", "requestId", "resolvedType"],
     "set_variable_value": [
@@ -424,6 +432,7 @@
       "variableId"
     ],
     "delete_variable": ["requestId", "variableId"],
+    "delete_variable_mode": ["collectionId", "modeId", "requestId"],
     "delete_variable_collection": ["collectionId", "requestId"],
     "group_nodes": ["name", "nodeIds", "requestId"],
     "ungroup_nodes": ["nodeIds", "requestId"],
