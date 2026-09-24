@@ -163,10 +163,14 @@ describe('import_image — guards before the read', () => {
 
 describe('importImageError', () => {
   const tooLarge = new Error('in createImage: Image is too large');
+  // Built from tmpdir rather than written as a POSIX literal: the message carries resolve(path), so
+  // on Windows a literal '/tmp/shot.png' comes back as 'D:\tmp\shot.png' and the assertion would be
+  // looking for the wrong separator — a difference no local run on macOS or Linux can show.
+  const file = join(tmpdir(), 'shot.png');
 
   it("adds the file and Figma's ceiling to a size rejection", () => {
-    const wrapped = importImageError(tooLarge, '/tmp/shot.png') as Error;
-    expect(wrapped.message).toMatch(/\/tmp\/shot\.png/);
+    const wrapped = importImageError(tooLarge, file) as Error;
+    expect(wrapped.message).toContain(file);
     expect(wrapped.message).toMatch(/4096px/);
     // Figma's own words stay in, so the cause is never replaced by our paraphrase.
     expect(wrapped.message).toMatch(/Image is too large/);
@@ -179,6 +183,6 @@ describe('importImageError', () => {
 
   it('leaves every other failure untouched', () => {
     const other = new Error('relay: plugin not connected');
-    expect(importImageError(other, '/tmp/shot.png')).toBe(other);
+    expect(importImageError(other, file)).toBe(other);
   });
 });
