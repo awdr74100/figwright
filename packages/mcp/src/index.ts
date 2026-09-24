@@ -33,6 +33,7 @@ import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screens
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import {
   IMPORT_IMAGE_TOOL_NAME,
+  importImageError,
   resolveBatchImagePaths,
   resolveImagePath,
 } from './tools/import-image.js';
@@ -210,7 +211,17 @@ const createMcpServer = (): McpServer => {
         if (spec.name === BATCH_TOOL_NAME) args = await resolveBatchImagePaths(rawArgs);
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
-        return textResult(await dispatch(spec.name, dispatchArgs));
+        if (spec.name !== IMPORT_IMAGE_TOOL_NAME) {
+          return textResult(await dispatch(spec.name, dispatchArgs));
+        }
+        // A `path` import is the one case where this side knows something the sandbox's error does
+        // not say: which file the bytes came from. Figma's own ceilings (4096px) surface as a
+        // message naming neither, so the rejection is re-raised with both — see importImageError.
+        try {
+          return textResult(await dispatch(spec.name, dispatchArgs));
+        } catch (err) {
+          throw importImageError(err, (rawArgs as { path?: unknown }).path);
+        }
       });
     // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
     // every tool — generic or special-cased — accepts them without per-handler conversion.

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   IMPORT_IMAGE_TOOL_NAME,
+  importImageError,
   importImageTool,
   resolveBatchImagePaths,
   resolveImagePath,
@@ -24,6 +25,21 @@ const fileWith = async (name: string, bytes: Uint8Array | string): Promise<strin
   dirs.push(dir);
   const path = join(dir, name);
   await writeFile(path, bytes);
+  return path;
+};
+
+/** A sparse file: the header is real, `truncate` makes stat report `size` without writing it. */
+const sparseFileWith = async (name: string, header: Uint8Array, size: number): Promise<string> => {
+  const dir = await mkdtemp(join(tmpdir(), 'import-image-'));
+  dirs.push(dir);
+  const path = join(dir, name);
+  const handle = await open(path, 'w');
+  try {
+    await handle.write(header);
+    await handle.truncate(size);
+  } finally {
+    await handle.close();
+  }
   return path;
 };
 
@@ -111,5 +127,58 @@ describe('resolveBatchImagePaths', () => {
   it('passes a batch without ops through unchanged', async () => {
     const args = { ops: 'not-an-array' };
     await expect(resolveBatchImagePaths(args)).resolves.toBe(args);
+  });
+});
+
+describe('import_image — guards before the read', () => {
+  it('refuses a file too large for one relay message, naming both sizes', async () => {
+    // 80MB of declared size: past the cap, and base64 of it past what the relay's WebSocket takes.
+    const path = await sparseFileWith('huge.png', PNG, 80 * 1024 * 1024);
+    await expect(resolveImagePath({ path })).rejects.toThrow(/80\.0MB, over the 72\.0MB/);
+    // The message has to name the file, the way the wrong-format one does.
+    await expect(resolveImagePath({ path })).rejects.toThrow(path);
+  });
+
+  // No "just under the cap" case on purpose: it would have to be read for real (a 71MB sparse file
+  // becomes 71MB of buffer and 95MB of base64), and the accepting path is already covered by the
+  // small-file cases above — the same code, without the memory.
+
+  // `path: ''` resolves to the working directory, and open()/stat() both succeed on a directory —
+  // only the read would object, with a bare EISDIR naming neither the path nor the problem. A batch
+  // op's params never pass the tool's own schema, so `min(1)` alone would not cover this.
+  it('refuses a directory by name rather than failing as EISDIR', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'import-image-'));
+    dirs.push(dir);
+    await expect(resolveImagePath({ path: dir })).rejects.toThrow(/is a directory, not an image/);
+    await expect(
+      resolveBatchImagePaths({ ops: [{ tool: IMPORT_IMAGE_TOOL_NAME, params: { path: '' } }] }),
+    ).rejects.toThrow(/is a directory, not an image/);
+  });
+
+  it('still refuses a file shorter than the signature it would need', async () => {
+    const path = await fileWith('tiny.png', Uint8Array.from([0x89, 0x50]));
+    await expect(resolveImagePath({ path })).rejects.toThrow(/is not a PNG, JPEG or GIF image/);
+  });
+});
+
+describe('importImageError', () => {
+  const tooLarge = new Error('in createImage: Image is too large');
+
+  it("adds the file and Figma's ceiling to a size rejection", () => {
+    const wrapped = importImageError(tooLarge, '/tmp/shot.png') as Error;
+    expect(wrapped.message).toMatch(/\/tmp\/shot\.png/);
+    expect(wrapped.message).toMatch(/4096px/);
+    // Figma's own words stay in, so the cause is never replaced by our paraphrase.
+    expect(wrapped.message).toMatch(/Image is too large/);
+    expect(wrapped.cause).toBe(tooLarge);
+  });
+
+  it('leaves a call that used data or url untouched', () => {
+    expect(importImageError(tooLarge, undefined)).toBe(tooLarge);
+  });
+
+  it('leaves every other failure untouched', () => {
+    const other = new Error('relay: plugin not connected');
+    expect(importImageError(other, '/tmp/shot.png')).toBe(other);
   });
 });
