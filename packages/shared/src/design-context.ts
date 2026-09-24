@@ -233,6 +233,17 @@ export interface DesignContextNode {
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   /**
+   * For a sublayer inside a COMPONENT or an INSTANCE: which component property drives which field,
+   * as the property name `bind_component_property` and `get_component_api` both use. Tells codegen
+   * that a layer is prop-driven rather than static — without it the text a TEXT property fills in
+   * reads as a hardcoded string and a BOOLEAN-gated layer reads as always-present.
+   */
+  componentPropertyReferences?: {
+    readonly visible?: string;
+    readonly characters?: string;
+    readonly mainComponent?: string;
+  };
+  /**
    * Motion (beta) summary — attached at full detail to nodes that carry animation, so codegen sees
    * that a layer animates (and how) without a separate get_node_motion call. Compact by design: the
    * applied preset names, the animated property fields, and the containing timeline's duration —
@@ -404,6 +415,13 @@ export const DesignContextNodeSchema = z.lazy(() =>
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
+    componentPropertyReferences: z
+      .object({
+        visible: z.string().optional(),
+        characters: z.string().optional(),
+        mainComponent: z.string().optional(),
+      })
+      .optional(),
     motion: z
       .object({
         animationStyles: z.array(z.string()).optional(),
@@ -590,6 +608,11 @@ const CONTENT_FIELDS = [
   'textOverrides',
   // Which variant an instance renders — an INSTANCE without its props is not buildable.
   'componentProperties',
+  // The mirror of the above on the definition side: which property drives a sublayer. A downgrade
+  // still generates component structure, and without this the generated component has no props at
+  // all — a prop-driven string becomes a literal and a BOOLEAN-gated layer becomes unconditional.
+  // That is a structural contract, not appearance, so it rides with layout rather than being shed.
+  'componentPropertyReferences',
   // The designer's Dev Mode notes: explicit instructions that outrank inference, so dropping them
   // while keeping geometry would be backwards.
   'annotations',

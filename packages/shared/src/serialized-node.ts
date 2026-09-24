@@ -461,6 +461,22 @@ export interface SerializedNode {
   // instance variant / props + which component it instantiates
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
+  /**
+   * Which component property drives this layer — present only on a sublayer inside a COMPONENT or
+   * an INSTANCE, keyed by the field the property controls. The value is the property name carrying
+   * Figma's `#id` suffix, exactly as `get_component_api` reports it and as
+   * `bind_component_property` takes it, so a read feeds straight back into a write.
+   *
+   * This is the read half of a binding the write side could already author. Without it a generated
+   * component silently turns a prop-driven layer into a static one: the text a TEXT property fills
+   * in reads as a literal, and a layer whose visibility is a BOOLEAN property reads as
+   * always-present — the structure looks right and the component has no props.
+   */
+  componentPropertyReferences?: {
+    readonly visible?: string;
+    readonly characters?: string;
+    readonly mainComponent?: string;
+  };
   // text typography
   characters?: string;
   fontSize?: number | Mixed;
@@ -566,6 +582,13 @@ export const SerializedNodeSchema = z.lazy(() =>
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
+    componentPropertyReferences: z
+      .object({
+        visible: z.string().optional(),
+        characters: z.string().optional(),
+        mainComponent: z.string().optional(),
+      })
+      .optional(),
     characters: z.string().optional(),
     fontSize: z.union([z.number(), z.literal(MIXED)]).optional(),
     fontName: z.union([SerializedFontNameSchema, z.literal(MIXED)]).optional(),

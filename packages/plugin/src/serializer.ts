@@ -439,6 +439,28 @@ const collectComponentProperties = (node: SceneNode, out: SerializedNode): void 
   if (Object.keys(props).length > 0) out.componentProperties = props;
 };
 
+/**
+ * Which component property drives this layer. Figma sets `componentPropertyReferences` only on a
+ * sublayer inside a COMPONENT or an INSTANCE and leaves it null everywhere else, so the field is
+ * emitted only where it carries meaning.
+ *
+ * Deliberately not folded into {@link collectComponentProperties}: the two sit on different nodes —
+ * an INSTANCE carries the property _values_, its sublayers carry _which_ property drives them — and
+ * that function returns early when a node has no `componentProperties`. A COMPONENT's own sublayer
+ * has none, so folding them would have made this unreadable on exactly the nodes that define the
+ * bindings.
+ */
+const collectPropertyReferences = (node: SceneNode, out: SerializedNode): void => {
+  const raw = (node as { componentPropertyReferences?: unknown }).componentPropertyReferences;
+  if (typeof raw !== 'object' || raw === null) return;
+  const refs: { visible?: string; characters?: string; mainComponent?: string } = {};
+  for (const field of ['visible', 'characters', 'mainComponent'] as const) {
+    const value = (raw as Record<string, unknown>)[field];
+    if (typeof value === 'string' && value !== '') refs[field] = value;
+  }
+  if (Object.keys(refs).length > 0) out.componentPropertyReferences = refs;
+};
+
 const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode => {
   const out: SerializedNode = { ...base };
 
@@ -683,6 +705,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
 
   collectStyleLinks(node, out);
   collectComponentProperties(node, out);
+  collectPropertyReferences(node, out);
 
   if (node.type === 'TEXT') {
     const text = node as TextNode;

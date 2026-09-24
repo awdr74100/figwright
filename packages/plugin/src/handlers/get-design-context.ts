@@ -216,6 +216,8 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
     out.styleIds = cleanStyleIds(flat.styleIds as Record<string, string>);
   if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
   if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
+  if (flat.componentPropertyReferences !== undefined)
+    out.componentPropertyReferences = flat.componentPropertyReferences;
   return out;
 };
 

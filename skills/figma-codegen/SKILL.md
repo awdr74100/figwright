@@ -63,6 +63,12 @@ Run the grounded tools against the selection, then generate — **trust them ove
      `get_component_api` on the component/instance returns the full property API — every VARIANT option
      and each BOOLEAN/TEXT/INSTANCE_SWAP prop with its default — so the prop space is grounded, not
      inferred from the instances you happened to see.
+   - That API names the props; the tree names the **layer each one drives**. A sublayer inside a
+     COMPONENT or an INSTANCE carries `componentPropertyReferences`
+     (`{ characters | visible | mainComponent: "PropName#1:2" }`). Wire that layer to the prop, not to
+     what it happens to render: `characters: "Label#1:2"` is `{props.label}`, not the literal string in
+     the design, and `visible: "Show Badge#3:4"` renders conditionally. Without it you emit the right
+     markup with **no props at all** — every instance frozen to whatever the one you looked at said.
 
 3. **`token_map`** → every Figma variable joined to a project token with `status` + `ref` + `matchedBy`.
    A document's shared paint styles (single solid color styles — the token mechanism of

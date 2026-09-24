@@ -856,6 +856,35 @@ describe('serializeFlat — style links / component properties', () => {
       Icon: { type: 'INSTANCE_SWAP', value: '123:456' },
     });
   });
+
+  it('serializes which property drives a sublayer, and only the fields that name one', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'TEXT',
+        characters: 'Hello',
+        componentPropertyReferences: { characters: 'Caption#79:0', visible: 'Show#79:1' },
+      }),
+    );
+    expect(out.componentPropertyReferences).toEqual({
+      characters: 'Caption#79:0',
+      visible: 'Show#79:1',
+    });
+  });
+
+  // A node outside any component carries null here, and Figma leaves the empty fields off rather
+  // than setting them to '' — emitting either as a present-but-meaningless field would tell codegen
+  // a layer is prop-driven when it is not.
+  it('omits property references for a node that has none', () => {
+    expect(serializeFlatSync(fake({ type: 'FRAME' })).componentPropertyReferences).toBeUndefined();
+    expect(
+      serializeFlatSync(fake({ type: 'FRAME', componentPropertyReferences: null }))
+        .componentPropertyReferences,
+    ).toBeUndefined();
+    expect(
+      serializeFlatSync(fake({ type: 'FRAME', componentPropertyReferences: { visible: '' } }))
+        .componentPropertyReferences,
+    ).toBeUndefined();
+  });
 });
 
 describe('serializeFlat — typography', () => {
