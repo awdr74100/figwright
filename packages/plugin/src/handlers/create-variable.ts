@@ -21,6 +21,7 @@ export const createCreateVariableHandler =
       name?: unknown;
       collectionId?: unknown;
       resolvedType?: unknown;
+      scopes?: unknown;
     };
     if (typeof p.name !== 'string') throw new TypeError('create_variable: name must be a string');
     if (typeof p.collectionId !== 'string') {
@@ -30,6 +31,18 @@ export const createCreateVariableHandler =
       throw new TypeError(
         `create_variable: resolvedType must be one of ${RESOLVED_TYPES.join(' / ')}`,
       );
+    }
+    // The member names are checked against Figma's enum by the MCP tool schema, so this only has to
+    // reject the wrong *shape* — an empty array would clear every scope, which Figma treats as a
+    // variable offered nowhere rather than everywhere.
+    if (p.scopes !== undefined) {
+      if (
+        !Array.isArray(p.scopes) ||
+        p.scopes.length === 0 ||
+        p.scopes.some(scope => typeof scope !== 'string')
+      ) {
+        throw new TypeError('create_variable: scopes must be a non-empty array of scope names');
+      }
     }
 
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(p.collectionId);
@@ -41,6 +54,10 @@ export const createCreateVariableHandler =
       collection,
       p.resolvedType as ResolvedType,
     );
+
+    // Scopes are set after creation: createVariable takes no scope argument, and assigning the
+    // property is how Figma exposes it.
+    if (p.scopes !== undefined) variable.scopes = p.scopes as VariableScope[];
 
     const result: VariableResult = { ok: true, variableId: variable.id, name: variable.name };
     return result;

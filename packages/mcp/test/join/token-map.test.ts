@@ -9,11 +9,13 @@ const fig = (
   value: FigmaToken['value'],
   type = 'COLOR',
   collection?: string,
+  scopes?: readonly string[],
 ): FigmaToken => ({
   name,
   value,
   type,
   ...(collection === undefined ? {} : { collection }),
+  ...(scopes === undefined ? {} : { scopes }),
 });
 
 // A token as a Tailwind v4 `@theme` block produces it: a custom property whose namespace-derived
@@ -267,6 +269,56 @@ describe('joinTokens', () => {
       const [m] = joinTokens([fig('size/base', 16, 'FLOAT', 'font')], text, { threshold: 0.7 });
       expect(m?.candidate?.token).toBe('text-base');
       expect(m?.status).toBe('high');
+    });
+
+    // `scopes` is the designer stating outright what the collection name could only hint at, so it
+    // decides the size↔text gate whenever it is present. Both directions matter, and each one below
+    // is a case the collection name gets wrong on its own.
+    it('opens size→text on FONT_SIZE scope even when the collection name says nothing', () => {
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      const [m] = joinTokens([fig('size/base', 16, 'FLOAT', 'Primitives', ['FONT_SIZE'])], text, {
+        threshold: 0.7,
+      });
+      expect(m?.candidate?.token).toBe('text-base');
+      expect(m?.status).toBe('high');
+    });
+
+    it('closes size→text on a non-font scope even inside a typography collection', () => {
+      // The mis-mapping the synonym table's own note warns about: a width/height grouped under a
+      // collection called "font" would otherwise snap to --text-base, a font size.
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      const [m] = joinTokens([fig('size/base', 16, 'FLOAT', 'font', ['WIDTH_HEIGHT'])], text, {
+        threshold: 0.7,
+      });
+      expect(m?.status).toBe('unmapped');
+      expect(m?.candidate).toBeUndefined();
+    });
+
+    it('reads FONT_SIZE among several scopes as a font size', () => {
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      const [m] = joinTokens(
+        [fig('size/base', 16, 'FLOAT', 'Primitives', ['FONT_SIZE', 'LINE_HEIGHT'])],
+        text,
+        { threshold: 0.7 },
+      );
+      expect(m?.candidate?.token).toBe('text-base');
+    });
+
+    // Figma defaults every variable to ALL_SCOPES, which get_variable_defs omits — so absent scopes
+    // are the overwhelmingly common case and must leave the old heuristic untouched in both
+    // directions. Measured over a 3,696-case corpus against the pre-scopes join: every no-scopes
+    // case was byte-identical, and every difference was a size/* whose scope contradicted or
+    // confirmed its collection name.
+    it('falls back to the collection heuristic when no scopes are declared', () => {
+      const text = [proj('text-base', '1rem', 'base', 'font-size')];
+      expect(
+        joinTokens([fig('size/base', 16, 'FLOAT', 'font')], text, { threshold: 0.7 })[0]?.candidate
+          ?.token,
+      ).toBe('text-base');
+      expect(
+        joinTokens([fig('size/base', 16, 'FLOAT', 'Primitives')], text, { threshold: 0.7 })[0]
+          ?.status,
+      ).toBe('unmapped');
     });
 
     it('still gates on the step: rounded/md does not match radius-lg', () => {

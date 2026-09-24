@@ -125,6 +125,113 @@ describe('resolveFigmaTokens', () => {
     expect(result.find(t => t.name === 'Primary/500')?.value).toBe('#6266F0');
   });
 
+  // plugin-typings 1.139: a colour paired with a separate opacity, either half possibly an alias.
+  // A token value is one scalar, so it flattens here — but only after both halves are resolved.
+  it('flattens a composed color to one hex, resolving each half independently', () => {
+    const base = {
+      id: 'base',
+      name: 'palette/indigo',
+      key: 'k',
+      resolvedType: 'COLOR',
+      collectionId: 'col1',
+      valuesByMode: { m1: { r: 0.384, g: 0.4, b: 0.941, a: 1 } },
+    };
+    const half = {
+      id: 'half',
+      name: 'opacity/half',
+      key: 'k',
+      resolvedType: 'FLOAT',
+      collectionId: 'col1',
+      valuesByMode: { m1: 0.5 },
+    };
+    const result = resolveFigmaTokens(
+      defs({
+        variables: [
+          base,
+          half,
+          {
+            id: 'both',
+            name: 'Overlay/both',
+            key: 'k',
+            resolvedType: 'COLOR',
+            collectionId: 'col1',
+            // Both halves alias, so both chains have to be followed before anything is emitted.
+            valuesByMode: {
+              m1: {
+                color: { type: 'VARIABLE_ALIAS', id: 'base' },
+                opacity: { type: 'VARIABLE_ALIAS', id: 'half' },
+              },
+            },
+          },
+          {
+            id: 'literal',
+            name: 'Overlay/literal',
+            key: 'k',
+            resolvedType: 'COLOR',
+            collectionId: 'col1',
+            // A concrete colour's own alpha is replaced by the opacity, not multiplied with it:
+            // Figma authors the two separately so the opacity *is* the resulting alpha.
+            valuesByMode: {
+              m1: {
+                color: { r: 1, g: 1, b: 1, a: 1 },
+                opacity: { type: 'VARIABLE_ALIAS', id: 'half' },
+              },
+            },
+          },
+          {
+            id: 'dangling',
+            name: 'Overlay/dangling',
+            key: 'k',
+            resolvedType: 'COLOR',
+            collectionId: 'col1',
+            valuesByMode: {
+              m1: { color: { type: 'VARIABLE_ALIAS', id: 'gone' }, opacity: 0.5 },
+            },
+          },
+        ],
+      }),
+    );
+
+    // 0.5 × 255 = 127.5 → 0x80; before the composed-color branch these resolved to the easing
+    // formatter's output instead, since every remaining object-shaped value was assumed to be one.
+    expect(result.find(t => t.name === 'Overlay/both')?.value).toBe('#6266F080');
+    expect(result.find(t => t.name === 'Overlay/literal')?.value).toBe('#FFFFFF80');
+    // An unresolvable half yields null rather than a colour that is half true.
+    expect(result.find(t => t.name === 'Overlay/dangling')?.value).toBeNull();
+  });
+
+  // The link between the two halves of the scopes work: what get_variable_defs reports has to reach
+  // the join, which is the only consumer that can act on it. Nothing else would notice if this
+  // spread were dropped — the join would silently fall back to guessing from the collection name.
+  it('carries scopes through onto the resolved token, and omits them when absent', () => {
+    const result = resolveFigmaTokens(
+      defs({
+        variables: [
+          {
+            id: 'scoped',
+            name: 'size/lg',
+            key: 'k',
+            resolvedType: 'FLOAT',
+            collectionId: 'col1',
+            valuesByMode: { m1: 18 },
+            scopes: ['FONT_SIZE'],
+          },
+          {
+            id: 'bare',
+            name: 'size/md',
+            key: 'k',
+            resolvedType: 'FLOAT',
+            collectionId: 'col1',
+            valuesByMode: { m1: 16 },
+          },
+        ],
+      }),
+    );
+
+    expect(result.find(t => t.name === 'size/lg')?.scopes).toEqual(['FONT_SIZE']);
+    expect(result.find(t => t.name === 'size/md')).not.toHaveProperty('scopes');
+  });
+
   it('carries per-mode values keyed by mode name when a multi-mode value differs', () => {
     const result = resolveFigmaTokens(
       defs({
