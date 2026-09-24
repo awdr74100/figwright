@@ -54,6 +54,27 @@ export type PluginToolResult = z.infer<typeof PluginToolResultSchema>;
 export type PluginToolError = z.infer<typeof PluginToolErrorSchema>;
 export type PluginBridgeMessage = z.infer<typeof PluginBridgeMessageSchema>;
 
+/**
+ * A `tool-error` reply carried across the iframe boundary as an Error, with its `code` still a
+ * field.
+ *
+ * A rejected promise can only carry one value, so the UI used to fold the code into the message
+ * (`${code}: ${message}`). The relay client then could not tell the two apart again: it read
+ * `err.message` — which already named the code — and sent it alongside a hardcoded
+ * `INTERNAL_ERROR`, so the real code never reached the server and the server's own `${code}:
+ * ${message}` produced a second prefix. Keeping the code addressable is what makes both of those go
+ * away.
+ */
+export class PluginToolFailure extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'PluginToolFailure';
+  }
+}
+
 export const createToolCall = (input: {
   id: string;
   method: string;

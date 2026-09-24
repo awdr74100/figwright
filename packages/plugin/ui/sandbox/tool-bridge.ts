@@ -9,6 +9,7 @@ import {
   createToolCall,
   isPluginBridgeMessage,
   type PluginBridgeMessage,
+  PluginToolFailure,
 } from '../../protocol/bridge.js';
 import type { ToolHandler } from '../relay/state.js';
 import { onSandboxMessage, postToSandbox } from './messaging.js';
@@ -56,7 +57,7 @@ export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
     if (raw.kind === 'tool-result') {
       entry.resolve(raw.result);
     } else {
-      entry.reject(new Error(`${raw.code}: ${raw.message}`));
+      entry.reject(new PluginToolFailure(raw.code, raw.message));
     }
   });
 
