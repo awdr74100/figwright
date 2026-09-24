@@ -31,6 +31,11 @@ import { EXPORT_VIDEO_TOOL_NAME, handleExportVideo } from './tools/export-video.
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
+import {
+  IMPORT_IMAGE_TOOL_NAME,
+  resolveBatchImagePaths,
+  resolveImagePath,
+} from './tools/import-image.js';
 import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
 import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
@@ -189,15 +194,20 @@ const createMcpServer = (): McpServer => {
   for (const spec of ALL_TOOL_SPECS) {
     const run: ToolHandler =
       SPECIAL_HANDLERS[spec.name] ??
-      (async args => {
+      (async rawArgs => {
         // batch is the one tool the SDK cannot fully check for us: `ops[].params` is a free-form
         // record, so what each op actually asks for is never matched against the schema of the tool
         // it names. Every other tool's arguments were validated against that same schema on the way
         // in, which is why this runs for batch alone rather than for the whole loop.
         if (spec.name === BATCH_TOOL_NAME) {
-          const rejection = checkBatchOps(args);
+          const rejection = checkBatchOps(rawArgs);
           if (rejection !== null) throw new Error(rejection.message);
         }
+        // Server-only arguments are resolved here, before dispatch, so the sandbox never sees them —
+        // including inside a batch, whose ops go to the sandbox without passing their own tool.
+        let args = rawArgs;
+        if (spec.name === IMPORT_IMAGE_TOOL_NAME) args = await resolveImagePath(rawArgs);
+        if (spec.name === BATCH_TOOL_NAME) args = await resolveBatchImagePaths(rawArgs);
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
         return textResult(await dispatch(spec.name, dispatchArgs));

@@ -28,14 +28,14 @@ import type { ToolSpec } from './spec.js';
  * exactly the mirror the derivation exists to avoid.
  */
 export const wireToolSchema = (spec: ToolSpec): z.ZodObject | null => {
-  let serverOnly: readonly string[] = [];
-  if (spec.kind === 'local') {
-    // `null` (or a missing declaration) says this tool has no sandbox handler of its own and
-    // borrows another tool's, so it puts nothing on the wire under its own name — the tool it
-    // borrows records and validates those arguments.
-    if (spec.serverOnlyArgs === null || spec.serverOnlyArgs === undefined) return null;
-    serverOnly = spec.serverOnlyArgs;
-  }
+  // On a local tool, `null` (or a missing declaration) says it has no sandbox handler of its own and
+  // borrows another tool's, so it puts nothing on the wire under its own name — the tool it borrows
+  // records and validates those arguments. A read/write tool always dispatches under its own name;
+  // its `serverOnlyArgs` (if any) are resolved by the server before dispatch (`import_image`'s
+  // `path` becomes `data`), so they are removed here exactly as a local tool's are.
+  if (spec.kind === 'local' && (spec.serverOnlyArgs === null || spec.serverOnlyArgs === undefined))
+    return null;
+  const serverOnly: readonly string[] = spec.serverOnlyArgs ?? [];
 
   // Edit the shape and build once rather than chaining `.omit`/`.extend`: those take a key mask
   // typed against the schema's literal keys, which a generic ToolSpec does not carry. The cost the

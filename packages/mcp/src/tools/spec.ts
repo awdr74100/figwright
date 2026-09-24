@@ -55,6 +55,10 @@ export interface ToolSpec {
    * relearning. The exclusions are few and change far less often, and forgetting one fails loud: an
    * unlisted server-only field shows up as a new plugin argument in the contract diff, which is
    * noisy and wrong rather than quiet and wrong.
+   *
+   * A read/write tool may declare it too, for an argument the server resolves before dispatch —
+   * `import_image`'s `path` is read from disk and sent as `data`, so the sandbox handler (and every
+   * plugin already installed) never sees it. `null` means the same as omitting it there.
    */
   serverOnlyArgs?: readonly string[] | null;
 }
