@@ -164,6 +164,9 @@ const richText = base({
   id: 'c',
   type: 'TEXT',
   characters: 'Link text',
+  // A TEXT sublayer whose content comes from a TEXT component property — the case codegen gets
+  // wrong by emitting the rendered string as a literal instead of a prop.
+  componentPropertyReferences: { characters: 'Caption#79:0' },
   fontSize: Symbol('mixed'),
   fontName: { family: 'Inter', style: 'Bold' },
   textAlignHorizontal: 'CENTER',
