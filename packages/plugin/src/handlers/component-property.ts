@@ -41,10 +41,8 @@ export const resolveComponentOwner = (
 };
 
 /**
- * The components that could define a property referenced by `node` (a sublayer): the nearest
- * COMPONENT / COMPONENT_SET ancestor, plus that component's own COMPONENT_SET parent when it's a
- * variant — because a shared BOOLEAN/TEXT/SWAP prop lives on the set, not the variant. Empty when
- * the node isn't inside a component at all.
+ * Figma keeps shared BOOLEAN/TEXT/INSTANCE_SWAP properties on a variant's set and throws when a
+ * variant's definitions are read.
  */
 export const owningComponents = (node: BaseNode): (ComponentNode | ComponentSetNode)[] => {
   let cur: BaseNode | null = node;
@@ -53,11 +51,10 @@ export const owningComponents = (node: BaseNode): (ComponentNode | ComponentSetN
     cur = cur.parent;
   }
   if (cur === null) return [];
-  const owners: (ComponentNode | ComponentSetNode)[] = [cur];
   if (cur.type === 'COMPONENT' && cur.parent !== null && cur.parent.type === 'COMPONENT_SET') {
-    owners.push(cur.parent);
+    return [cur.parent];
   }
-  return owners;
+  return [cur];
 };
 
 /** Strip Figma's unique "#id" suffix off a property id to recover its display name. */
