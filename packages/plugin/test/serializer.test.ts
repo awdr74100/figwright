@@ -2769,6 +2769,16 @@ describe('serializer — variable bindings on paints / effects / grids', () => {
       },
     ]);
   });
+
+  it('surfaces a SHAPE_WITH_TEXT node’s caption via its text sublayer', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'SHAPE_WITH_TEXT',
+        text: { characters: 'Deliver quote' },
+      }),
+    );
+    expect(out.characters).toBe('Deliver quote');
+  });
 });
 
 describe('orientation', () => {

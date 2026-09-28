@@ -196,6 +196,21 @@ describe('set_text handler', () => {
     await expect(handler({ nodeId: '1:1', characters: 'x' })).rejects.toThrow(/TEXT/);
     await expect(handler({ nodeId: '1:1' })).rejects.toThrow(/characters/);
   });
+
+  it('writes through the text sublayer of a SHAPE_WITH_TEXT node, keyed by the container id', async () => {
+    const sublayer = {
+      fontName: { family: 'Inter', style: 'Regular' },
+      characters: 'old',
+    };
+    const node = { id: '1:9', type: 'SHAPE_WITH_TEXT', text: sublayer };
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const handler = createSetTextHandler(fakeFigma({ '1:9': node }, loadFontAsync));
+    const result = (await handler({ nodeId: '1:9', characters: 'new' })) as MutateResult;
+
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+    expect(sublayer.characters).toBe('new');
+    expect(result).toEqual({ ok: true, nodeId: '1:9' });
+  });
 });
 
 describe('set_text on text set along a path', () => {

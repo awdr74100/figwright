@@ -3,6 +3,7 @@ import type { MutateResult } from '@figwright/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { keptEdges, replaceRange } from './text-edit.js';
 import { isTextLike } from './text-like.js';
+import { getTextHost } from './text-sublayer.js';
 
 export const createSetTextHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -13,10 +14,13 @@ export const createSetTextHandler =
       throw new TypeError('set_text: characters must be a string');
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-    if (!isTextLike(node)) {
-      throw new Error(`set_text: node ${p.nodeId} is not a TEXT node or text on a path`);
+    const text = node === null ? null : isTextLike(node) ? node : getTextHost(node);
+    if (node === null || text === null) {
+      throw new Error(
+        `set_text: node ${p.nodeId} is not a TEXT node, text on a path or a text-carrying ` +
+          'container (STICKY, SHAPE_WITH_TEXT, TABLE_CELL, CONNECTOR)',
+      );
     }
-    const text = node;
 
     // Figma requires every font in the node to be loaded before mutating characters.
     const fonts =
@@ -41,6 +45,6 @@ export const createSetTextHandler =
       );
     }
 
-    const result: MutateResult = { ok: true, nodeId: text.id };
+    const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
   };
