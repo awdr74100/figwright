@@ -38,6 +38,26 @@ export const BatchNodeResultSchema = z.object({
 });
 export type BatchNodeResult = z.infer<typeof BatchNodeResultSchema>;
 
+/**
+ * Result of resize_nodes. `affected` lists only the nodes that ended at exactly the requested size;
+ * a node Figma sized differently — a min/max bound held it, or it sits inside an instance and kept
+ * the size its main component gives it — is listed in `adjusted` with the size it actually has and
+ * why, since `resize()` reports neither on its own.
+ */
+export const ResizeNodesResultSchema = BatchNodeResultSchema.extend({
+  adjusted: z
+    .array(
+      z.object({
+        nodeId: z.string(),
+        width: z.number(),
+        height: z.number(),
+        reason: z.string(),
+      }),
+    )
+    .optional(),
+});
+export type ResizeNodesResult = z.infer<typeof ResizeNodesResultSchema>;
+
 /** Result of a style write (create_paint_style / update_paint_style / delete_style / …). */
 export const StyleResultSchema = z.object({
   ok: z.literal(true),
