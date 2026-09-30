@@ -17,7 +17,9 @@ export const setReactionsTool: ToolSpec = {
     "applies only when the destination frame's overlay position is set to Manual — that setting " +
     'lives on the frame and is read-only to plugins, so it must be chosen in Figma first. ' +
     'get_reactions output round-trips through here unchanged; to clear all reactions instead use ' +
-    'remove_reactions. Returns { ok, nodeId }.',
+    'remove_reactions. On a page with no prototype flows, Figma may make the top-level frame ' +
+    'holding a new connection a flow named "Flow 1" on its own; get_pages lists it and ' +
+    'update_flows renames or removes it. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node to set reactions on'),
     // Derived from the wire format rather than restated: get_reactions emits exactly this shape and

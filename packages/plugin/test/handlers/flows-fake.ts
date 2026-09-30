@@ -8,7 +8,11 @@
  *   back when the frame qualifies again — but a write made meanwhile loses its place, so it comes
  *   back at the end (in Figma it lands somewhere a plugin cannot choose; the end stands in for
  *   that);
- * - An entry removed by a write while its frame qualifies is gone for good.
+ * - An entry removed by a write while its frame qualifies is gone for good;
+ * - A connection landing on a page with no flows makes the connection's top-level frame a flow named
+ *   "Flow 1", which taking the connection away again does not undo. (Figma's rule for when it does
+ *   this also depends on the page's history; this models the case it was seen to fire in, a page
+ *   that never had a flow.)
  */
 
 export interface FakeNode {
@@ -26,6 +30,8 @@ export interface FakeFlow {
 }
 
 interface FlowsPage extends FakeNode {
+  /** Figma's own "Flow 1", added behind the list's back — not a write, so `writes` stays put. */
+  autoFlow(nodeId: string): void;
   flowStartingPoints: FakeFlow[];
   /** Every stored entry, visible or not — the tests' view of what Figma keeps out of sight. */
   stored: FakeFlow[];
@@ -43,6 +49,7 @@ const pageOf = (node: FakeNode): FakeNode | null => {
 
 export const makeFlowsFigma = () => {
   const nodes = new Map<string, FakeNode>();
+  const pages: FakeNode[] = [];
   const add = (init: {
     id: string;
     type: string;
@@ -52,6 +59,17 @@ export const makeFlowsFigma = () => {
     fills?: unknown[];
   }): FakeNode => {
     const full: FakeNode = { ...init, name: init.name ?? init.id, visible: init.visible ?? true };
+    full.reactions = [];
+    full.setReactionsAsync = async (reactions: unknown[]) => {
+      full.reactions = reactions;
+      const page = pageOf(full) as FlowsPage | null;
+      if (reactions.length === 0 || page === null || page.flowStartingPoints.length > 0) return;
+      let top: FakeNode = full;
+      while (top.parent !== null && top.parent.type !== 'PAGE' && top.parent.type !== 'SECTION') {
+        top = top.parent;
+      }
+      page.autoFlow(top.id);
+    };
     nodes.set(full.id, full);
     return full;
   };
@@ -59,6 +77,7 @@ export const makeFlowsFigma = () => {
   const makePage = (id: string, name: string): FlowsPage => {
     let stored: FakeFlow[] = [];
     const page = add({ id, type: 'PAGE', name, parent: null }) as FlowsPage;
+    pages.push(page);
     const qualifies = (nodeId: string): boolean => {
       const node = nodes.get(nodeId);
       return (
@@ -70,6 +89,9 @@ export const makeFlowsFigma = () => {
       );
     };
     Object.defineProperty(page, 'stored', { get: () => stored });
+    page.autoFlow = (nodeId: string) => {
+      stored = [...stored, { nodeId, name: 'Flow 1' }];
+    };
     page.writes = 0;
     Object.defineProperty(page, 'flowStartingPoints', {
       configurable: true,
@@ -116,6 +138,7 @@ export const makeFlowsFigma = () => {
   };
 
   const figmaCtx = {
+    root: { children: pages },
     getNodeByIdAsync: async (id: string) => nodes.get(id) ?? null,
   } as unknown as typeof figma;
 

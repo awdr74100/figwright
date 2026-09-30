@@ -75,13 +75,6 @@ interface BatchInverse {
     captured: unknown,
     result: unknown,
   ): Promise<unknown>;
-  /**
-   * Restore what can only be put back once every applied op has been undone — run after the whole
-   * reverse unwind, oldest op first. For state an earlier op's undo is still in the way of: a flow
-   * list, say, can only be written back exactly once every frame it names is eligible again.
-   * Resolves like `undo`.
-   */
-  settle?(figmaCtx: typeof figma, params: unknown, captured: unknown): Promise<unknown>;
   /** Nodes the op writes: any instance containing one has its override list guarded. */
   touches?(params: unknown, captured: unknown): readonly string[];
   /** Nodes whose box the op can change: the layout region around each is guarded against drift. */
@@ -1286,47 +1279,69 @@ const updateVariableCollectionInverse: BatchInverse = {
 
 // ── Prototype flows ──────────────────────────────────────────────────────────
 
-interface FlowsState {
-  pageId: string;
-  flows: FlowStartingPoint[];
-}
+/** Every page's flow list, keyed by page id, as the batch found it. */
+type FlowsSnapshot = ReadonlyMap<string, readonly FlowStartingPoint[]>;
 
 /**
- * Undo for update_flows: write back the list the batch found. A flow is a name and a place in the
- * page's list, both of which a write can set, so nothing is minted and the restore is exact — but
- * only once the rest of the batch is undone, which is why it happens in `settle` and not `undo`.
+ * Snapshot every page's flows before the first op runs. A rolled-back batch hands each list back as
+ * it was ({@link restoreFlows}), whichever op changed it — and more ops than update_flows do.
  *
- * Two things measured 2026-10-01 rule out restoring at this op's own turn in the unwind. An earlier
- * op may have hidden, grouped or nested a frame the list names; Figma then keeps that flow out of
- * `flowStartingPoints`, and assigning a list that names a nested frame is refused whole. Worse,
- * leaving such a flow out does not keep its place: any write while it is out of sight moves where
- * it comes back, so restoring the visible part now and letting the earlier undo bring the rest back
- * returned two flows swapped. By `settle` every earlier op is undone, every frame the capture names
- * is eligible again, and the captured list can be assigned whole.
+ * Figma makes a frame a flow named "Flow 1" on its own when a connection lands on a page with no
+ * flows, and putting the reactions back does not take it away: a batch whose set_reactions was
+ * rolled back reported a clean rollback and left the flow behind (measured 2026-10-01). When Figma
+ * does this depends on the page's history in ways three hypotheses failed to pin down, and the flow
+ * lands on the connection's top-level frame rather than the node written — so no op's inverse could
+ * predict it, and any that tried would miss the cases it guessed wrong. Guarding the lists needs no
+ * prediction.
+ *
+ * Every page rather than the ones the ops name, for the same reason: which page gains a flow is
+ * Figma's choice. It is cheap — reading a page's flows does not load it, and costs a few
+ * microseconds (measured) — and a list the batch left alone is never written. The cost is that a
+ * flow the user edits by hand on another page, inside the moment a failing batch unwinds, is put
+ * back too.
  */
+const captureFlows = (figmaCtx: typeof figma): FlowsSnapshot =>
+  new Map(figmaCtx.root.children.map(page => [page.id, readFlows(page)]));
+
+/**
+ * Write back every flow list that differs from the snapshot. Runs after the whole unwind, which is
+ * the only point it can be exact: until an op that hid, grouped or nested a flow's frame is undone,
+ * Figma keeps that flow out of sight and refuses a list naming a nested frame, and a write made
+ * while a flow is out of sight moves where it comes back — restoring at update_flows' own turn in
+ * the unwind returned two flows swapped (measured). Resolves to a note per list not put back.
+ */
+const restoreFlows = (figmaCtx: typeof figma, before: FlowsSnapshot): string[] => {
+  const notes: string[] = [];
+  for (const page of figmaCtx.root.children) {
+    const was = before.get(page.id);
+    // A page the batch added is gone once its add_page is undone; one still here was not undone,
+    // and that failure is reported where it happened.
+    if (was === undefined || sameFlows(readFlows(page), was)) continue;
+    try {
+      page.flowStartingPoints = was;
+    } catch (e) {
+      notes.push(
+        `page ${page.id} flows not restored: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      continue;
+    }
+    const landed = readFlows(page);
+    if (!sameFlows(landed, was)) {
+      notes.push(`page ${page.id} flows read back as ${JSON.stringify(landed)}`);
+    }
+  }
+  return notes;
+};
+
+/** Update_flows has no undo of its own: the flows it changes come back with every page's. */
 const updateFlowsInverse: BatchInverse = {
   async capture(figmaCtx, params) {
     const pageId = stringParam(params, 'pageId', 'update_flows');
     const page = await nodeOf(figmaCtx, pageId, 'update_flows');
     if (page.type !== 'PAGE') throw new Error(`batch/update_flows: ${pageId} is not a page`);
-    return { pageId, flows: readFlows(page) } satisfies FlowsState;
+    return null;
   },
   undo: async () => undefined,
-  async settle(figmaCtx, _params, captured) {
-    const was = captured as FlowsState;
-    const page = await live(figmaCtx, was.pageId);
-    if (page === null || page.type !== 'PAGE') return undefined;
-    if (sameFlows(readFlows(page), was.flows)) return undefined;
-    try {
-      page.flowStartingPoints = was.flows;
-    } catch (e) {
-      return `page ${page.id} flows not restored: ${e instanceof Error ? e.message : String(e)}`;
-    }
-    const landed = readFlows(page);
-    return sameFlows(landed, was.flows)
-      ? undefined
-      : `page ${page.id} flows read back as ${JSON.stringify(landed)}`;
-  },
 };
 
 // ── Component properties ─────────────────────────────────────────────────────
@@ -1888,6 +1903,7 @@ export const createBatchHandler =
         cause: err,
       });
     }
+    const flowsBefore = captureFlows(figmaCtx);
 
     // Phase 2 — apply in order; roll back already-applied ops on the first failure.
     const results: unknown[] = [];
@@ -1911,18 +1927,7 @@ export const createBatchHandler =
             undoFailures.push(`op ${j} (${ops[j]!.tool}): ${m}`);
           }
         }
-        for (let j = 0; j < i; j += 1) {
-          const settle = INVERSES[ops[j]!.tool]!.settle;
-          if (settle === undefined) continue;
-          try {
-            const note = await settle(figmaCtx, ops[j]!.params, captured[j]!.state);
-            if (typeof note === 'string') residue.push(`op ${j} (${ops[j]!.tool}): ${note}`);
-          } catch (settleErr) {
-            // Residue, not an undo failure: the op's own undo already ran and was counted.
-            const m = settleErr instanceof Error ? settleErr.message : String(settleErr);
-            residue.push(`op ${j} (${ops[j]!.tool}): not settled: ${m}`);
-          }
-        }
+        for (const note of restoreFlows(figmaCtx, flowsBefore)) residue.push(`flows: ${note}`);
         const message = err instanceof Error ? err.message : String(err);
         const rollback =
           undoFailures.length === 0

@@ -58,6 +58,7 @@ const makeFigma = (initial: Record<string, Record<string, unknown>>) => {
   const loadFontAsync = vi.fn<(font: unknown) => Promise<void>>(async () => {});
   const figmaCtx = {
     mixed: MIXED,
+    root: { children: [] },
     currentPage,
     loadFontAsync,
     variables: { getVariableByIdAsync: async (id: string) => ({ id }) },
@@ -498,6 +499,7 @@ describe('batch handler', () => {
     // op 0 creates a frame whose remove() throws → its rollback fails; op 1 throws to trigger rollback.
     const store = new Map<string, Record<string, unknown>>([['1:2', { id: '1:2', fills: [] }]]);
     const figmaCtx = {
+      root: { children: [] },
       currentPage: { appendChild: vi.fn<(n: unknown) => void>() },
       getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
       createFrame: () => {
@@ -991,6 +993,7 @@ const makeMotionFigma = (editorType = 'figma') => {
 
   const figmaCtx = {
     editorType,
+    root: { children: [] },
     getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
   } as unknown as typeof figma;
 
@@ -1154,6 +1157,7 @@ const makeWide = () => {
   let seq = 0;
   const figmaCtx = {
     mixed: MIXED,
+    root: { children: [] },
     get currentPage() {
       return store.get(pages.current);
     },
@@ -1681,6 +1685,7 @@ const makeTree = () => {
   };
   const figmaCtx = {
     mixed: MIXED,
+    root: { children: [] },
     getNodeByIdAsync: async (id: string) => store.get(id) ?? null,
     variables: { getVariableByIdAsync: async (id: string) => ({ id }) },
     group: (nodes: TreeNode[], parent: TreeNode) => {
@@ -2109,8 +2114,73 @@ describe('batch inverse for update_flows', () => {
         ops: [{ tool: 'update_flows', params: { pageId: 'P', remove: ['A'] } }, FAIL],
       }),
     ).rejects.toThrow(
-      /rolled back 1 applied op\(s\) \(restored with residue: op 0 \(update_flows\): page P flows not restored: in set_flowStartingPoints: refused\)/,
+      /rolled back 1 applied op\(s\) \(restored with residue: flows: page P flows not restored: in set_flowStartingPoints: refused\)/,
     );
+  });
+
+  // Measured: through set_reactions, Figma made the connection's top-level frame "Flow 1" on a page
+  // that had none, and a rolled-back batch put the reactions back yet left the flow — reporting a
+  // clean rollback. No op in the batch named the flow or the frame it landed on.
+  it('takes back a flow Figma added on its own when the connection that caused it is rolled back', async () => {
+    const fake = makeFlowsFigma();
+    const page = fake.makePage('P', 'Screens');
+    const card = fake.add({ id: 'CARD', type: 'FRAME', parent: page });
+    fake.add({ id: 'BUTTON', type: 'FRAME', parent: card });
+    fake.add({ id: 'NEXT', type: 'FRAME', parent: page });
+    fake.add({ id: 'F', type: 'FRAME', parent: page, fills: [] });
+    const handler = createBatchHandler(fake.figmaCtx, {
+      set_reactions: createSetReactionsHandler(fake.figmaCtx),
+      set_fills: createSetFillsHandler(fake.figmaCtx),
+    });
+    const reaction = {
+      trigger: { type: 'ON_CLICK' },
+      actions: [{ type: 'NODE', destinationId: 'NEXT', navigation: 'NAVIGATE', transition: null }],
+    };
+
+    const error = await Promise.resolve(
+      handler({
+        ops: [{ tool: 'set_reactions', params: { nodeId: 'BUTTON', reactions: [reaction] } }, FAIL],
+      }),
+    ).then(
+      () => 'resolved',
+      (e: unknown) => (e as Error).message,
+    );
+
+    expect(error).toMatch(/rolled back 1 applied op\(s\): /);
+    expect(error).not.toMatch(/residue/);
+    expect(fake.nodes.get('BUTTON')!.reactions).toEqual([]);
+    expect(page.flowStartingPoints).toEqual([]);
+    expect(page.stored).toEqual([]);
+  });
+
+  it('leaves a flow Figma added on its own when the batch succeeds', async () => {
+    const fake = makeFlowsFigma();
+    const page = fake.makePage('P', 'Screens');
+    fake.add({ id: 'CARD', type: 'FRAME', parent: page });
+    fake.add({ id: 'NEXT', type: 'FRAME', parent: page });
+    const handler = createBatchHandler(fake.figmaCtx, {
+      set_reactions: createSetReactionsHandler(fake.figmaCtx),
+    });
+    await handler({
+      ops: [
+        {
+          tool: 'set_reactions',
+          params: {
+            nodeId: 'CARD',
+            reactions: [
+              {
+                trigger: { type: 'ON_CLICK' },
+                actions: [
+                  { type: 'NODE', destinationId: 'NEXT', navigation: 'NAVIGATE', transition: null },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    });
+    // Figma's own behaviour for a new connection, as in the editor; the batch only undoes on failure.
+    expect(page.flowStartingPoints).toEqual([{ nodeId: 'CARD', name: 'Flow 1' }]);
   });
 
   it('refuses at capture a pageId that is not a page, before anything runs', async () => {
