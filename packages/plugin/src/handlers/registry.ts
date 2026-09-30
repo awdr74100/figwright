@@ -103,6 +103,7 @@ import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
 import { createUngroupNodesHandler } from './ungroup-nodes.js';
 import { createUpdateEffectStyleHandler } from './update-effect-style.js';
+import { createUpdateFlowsHandler } from './update-flows.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
 import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
@@ -185,6 +186,7 @@ export const createSandboxHandlers = (figmaCtx: typeof figma): SandboxHandlers =
     // Prototype + components
     set_reactions: createSetReactionsHandler(figmaCtx),
     remove_reactions: createRemoveReactionsHandler(figmaCtx),
+    update_flows: createUpdateFlowsHandler(figmaCtx),
     swap_component: createSwapComponentHandler(figmaCtx),
     set_instance_properties: createSetInstancePropertiesHandler(figmaCtx),
     add_component_property: createAddComponentPropertyHandler(figmaCtx),

@@ -9,7 +9,7 @@ export const renamePageTool: ToolSpec = {
   description:
     'Rename a Figma page (a top-level page/tab in the document) by id. Affects only the page name; ' +
     'its node id and contents are unchanged. To rename a layer/node on the canvas use rename_node ' +
-    'instead. Returns { ok, nodeId }.',
+    'instead, and a prototype flow with update_flows. Returns { ok, nodeId }.',
   inputSchema: z.object({
     pageId: z.string().describe('Page id to rename'),
     name: z.string().describe('New page name'),

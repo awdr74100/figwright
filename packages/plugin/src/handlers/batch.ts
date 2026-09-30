@@ -1,4 +1,4 @@
-import type { BatchResult } from '@figwright/shared';
+import type { BatchResult, FlowStartingPoint } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 import {
@@ -39,6 +39,7 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import { readFlows, sameFlows } from './update-flows.js';
 
 /**
  * Atomic batch: apply several invertible write ops as a unit. Two phases —
@@ -74,6 +75,13 @@ interface BatchInverse {
     captured: unknown,
     result: unknown,
   ): Promise<unknown>;
+  /**
+   * Restore what can only be put back once every applied op has been undone — run after the whole
+   * reverse unwind, oldest op first. For state an earlier op's undo is still in the way of: a flow
+   * list, say, can only be written back exactly once every frame it names is eligible again.
+   * Resolves like `undo`.
+   */
+  settle?(figmaCtx: typeof figma, params: unknown, captured: unknown): Promise<unknown>;
   /** Nodes the op writes: any instance containing one has its override list guarded. */
   touches?(params: unknown, captured: unknown): readonly string[];
   /** Nodes whose box the op can change: the layout region around each is guarded against drift. */
@@ -1276,6 +1284,51 @@ const updateVariableCollectionInverse: BatchInverse = {
   },
 };
 
+// ── Prototype flows ──────────────────────────────────────────────────────────
+
+interface FlowsState {
+  pageId: string;
+  flows: FlowStartingPoint[];
+}
+
+/**
+ * Undo for update_flows: write back the list the batch found. A flow is a name and a place in the
+ * page's list, both of which a write can set, so nothing is minted and the restore is exact — but
+ * only once the rest of the batch is undone, which is why it happens in `settle` and not `undo`.
+ *
+ * Two things measured 2026-10-01 rule out restoring at this op's own turn in the unwind. An earlier
+ * op may have hidden, grouped or nested a frame the list names; Figma then keeps that flow out of
+ * `flowStartingPoints`, and assigning a list that names a nested frame is refused whole. Worse,
+ * leaving such a flow out does not keep its place: any write while it is out of sight moves where
+ * it comes back, so restoring the visible part now and letting the earlier undo bring the rest back
+ * returned two flows swapped. By `settle` every earlier op is undone, every frame the capture names
+ * is eligible again, and the captured list can be assigned whole.
+ */
+const updateFlowsInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const pageId = stringParam(params, 'pageId', 'update_flows');
+    const page = await nodeOf(figmaCtx, pageId, 'update_flows');
+    if (page.type !== 'PAGE') throw new Error(`batch/update_flows: ${pageId} is not a page`);
+    return { pageId, flows: readFlows(page) } satisfies FlowsState;
+  },
+  undo: async () => undefined,
+  async settle(figmaCtx, _params, captured) {
+    const was = captured as FlowsState;
+    const page = await live(figmaCtx, was.pageId);
+    if (page === null || page.type !== 'PAGE') return undefined;
+    if (sameFlows(readFlows(page), was.flows)) return undefined;
+    try {
+      page.flowStartingPoints = was.flows;
+    } catch (e) {
+      return `page ${page.id} flows not restored: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    const landed = readFlows(page);
+    return sameFlows(landed, was.flows)
+      ? undefined
+      : `page ${page.id} flows read back as ${JSON.stringify(landed)}`;
+  },
+};
+
 // ── Component properties ─────────────────────────────────────────────────────
 
 interface EditPropertyState {
@@ -1663,6 +1716,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Prototype and pages.
   set_reactions: reactionsInverse('set_reactions'),
   remove_reactions: reactionsInverse('remove_reactions'),
+  update_flows: updateFlowsInverse,
   rename_page: propsInverse('rename_page', ['name'], { idKey: 'pageId' }),
   navigate_to_page: navigateInverse,
   // Motion (beta) — staggered authoring in one atomic, undoable call.
@@ -1855,6 +1909,18 @@ export const createBatchHandler =
           } catch (undoErr) {
             const m = undoErr instanceof Error ? undoErr.message : String(undoErr);
             undoFailures.push(`op ${j} (${ops[j]!.tool}): ${m}`);
+          }
+        }
+        for (let j = 0; j < i; j += 1) {
+          const settle = INVERSES[ops[j]!.tool]!.settle;
+          if (settle === undefined) continue;
+          try {
+            const note = await settle(figmaCtx, ops[j]!.params, captured[j]!.state);
+            if (typeof note === 'string') residue.push(`op ${j} (${ops[j]!.tool}): ${note}`);
+          } catch (settleErr) {
+            // Residue, not an undo failure: the op's own undo already ran and was counted.
+            const m = settleErr instanceof Error ? settleErr.message : String(settleErr);
+            residue.push(`op ${j} (${ops[j]!.tool}): not settled: ${m}`);
           }
         }
         const message = err instanceof Error ? err.message : String(err);

@@ -208,14 +208,19 @@ describe('GetNode / GetNodesInfo / GetMetadata / GetPages schemas', () => {
     expect(GetMetadataResultSchema.parse(payload)).toEqual(payload);
   });
 
-  it('GetPagesResult validates pages array of {id, name}', async () => {
+  it('GetPagesResult validates pages array of {id, name, flows}', async () => {
     const { GetPagesResultSchema } = await import('../src/serialized-node.js');
     const payload = {
       pages: [
-        { id: 'p-1', name: 'Cover' },
-        { id: 'p-2', name: 'Details' },
+        { id: 'p-1', name: 'Cover', flows: [] },
+        { id: 'p-2', name: 'Details', flows: [{ nodeId: '2:1', name: 'Checkout' }] },
       ],
     };
     expect(GetPagesResultSchema.parse(payload)).toEqual(payload);
+    // A page without the field is what a plugin that predates flows sends; the schema says it is
+    // not this shape rather than letting "no flows" and "flows unknown" read the same.
+    expect(() => GetPagesResultSchema.parse({ pages: [{ id: 'p-1', name: 'Cover' }] })).toThrow(
+      /flows/,
+    );
   });
 });

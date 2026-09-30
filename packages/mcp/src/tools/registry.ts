@@ -117,6 +117,7 @@ import { tokenMapTool } from './token-map.js';
 import { ungroupNodesTool } from './ungroup-nodes.js';
 import { unlockNodesTool } from './unlock-nodes.js';
 import { updateEffectStyleTool } from './update-effect-style.js';
+import { updateFlowsTool } from './update-flows.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
 import { updateVariableCollectionTool } from './update-variable-collection.js';
@@ -228,6 +229,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   navigateToPageTool,
   setReactionsTool,
   removeReactionsTool,
+  updateFlowsTool,
   swapComponentTool,
   setInstancePropertiesTool,
   addComponentPropertyTool,

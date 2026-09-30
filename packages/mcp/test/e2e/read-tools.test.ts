@@ -169,13 +169,20 @@ describe('e2e get_metadata', () => {
 });
 
 describe('e2e get_pages', () => {
-  it('returns page list', async () => {
+  it("returns page list with each page's flows", async () => {
     const h = await startLeader();
     harnesses.push(h);
     const response: GetPagesResult = {
       pages: [
-        { id: 'p-1', name: 'Cover' },
-        { id: 'p-2', name: 'Details' },
+        { id: 'p-1', name: 'Cover', flows: [] },
+        {
+          id: 'p-2',
+          name: 'Details',
+          flows: [
+            { nodeId: '2:1', name: '新使用者註冊' },
+            { nodeId: '2:9', name: '新使用者註冊' },
+          ],
+        },
       ],
     };
     sockets.push(
@@ -189,7 +196,7 @@ describe('e2e get_pages', () => {
       GET_PAGES_TOOL_NAME,
       {},
     )) as GetPagesResult;
-    expect(result.pages).toHaveLength(2);
+    expect(result).toEqual(response);
   });
 });
 

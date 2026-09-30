@@ -683,8 +683,27 @@ export const GetMetadataResultSchema = z.object({
 });
 export type GetMetadataResult = z.infer<typeof GetMetadataResultSchema>;
 
+/**
+ * One prototype flow: a starting frame and the name Presentation view lists it under. Keyed by the
+ * frame's id, never the name — Figma lets several flows share a name.
+ */
+export const FlowStartingPointSchema = z.object({
+  nodeId: z.string(),
+  name: z.string(),
+});
+export type FlowStartingPoint = z.infer<typeof FlowStartingPointSchema>;
+
 export const GetPagesResultSchema = z.object({
-  pages: z.array(PageRefSchema),
+  pages: z.array(
+    PageRefSchema.extend({
+      /**
+       * `PageNode.flowStartingPoints`, in Figma's order; the first is the flow Presentation view
+       * opens by default. Readable without loading the page, so listing it costs get_pages nothing
+       * under `documentAccess: "dynamic-page"`.
+       */
+      flows: z.array(FlowStartingPointSchema),
+    }),
+  ),
 });
 export type GetPagesResult = z.infer<typeof GetPagesResultSchema>;
 

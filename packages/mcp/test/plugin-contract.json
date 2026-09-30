@@ -515,6 +515,15 @@
       "requestId"
     ],
     "remove_reactions": ["nodeId", "requestId"],
+    "update_flows": [
+      "flows",
+      "flows[].name",
+      "flows[].nodeId",
+      "order",
+      "pageId",
+      "remove",
+      "requestId"
+    ],
     "swap_component": ["componentId", "componentKey", "instanceId", "requestId"],
     "set_instance_properties": [
       "instanceId",

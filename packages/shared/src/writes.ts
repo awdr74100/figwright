@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { FlowStartingPointSchema } from './serialized-node.js';
+
 // Write tools carry a server-generated requestId so the plugin can dedupe retries (idempotency).
 // Inputs are validated per-tool in the plugin handlers; this module holds the shared result shapes.
 
@@ -117,6 +119,18 @@ export const DeleteModeResultSchema = z.object({
   name: z.string(),
 });
 export type DeleteModeResult = z.infer<typeof DeleteModeResultSchema>;
+
+/**
+ * Result of update_flows: the page's flow list as Figma reads it back after the write, in order —
+ * the whole list, not just the entries this call touched, so the caller sees which flow is now the
+ * default (the first) without reading the page again.
+ */
+export const UpdateFlowsResultSchema = z.object({
+  ok: z.literal(true),
+  pageId: z.string(),
+  flows: z.array(FlowStartingPointSchema),
+});
+export type UpdateFlowsResult = z.infer<typeof UpdateFlowsResultSchema>;
 
 /** Result of a variable write (create_variable / set_variable_value / delete_variable / …). */
 export const VariableResultSchema = z.object({

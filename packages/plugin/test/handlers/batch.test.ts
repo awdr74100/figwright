@@ -39,11 +39,14 @@ import { createSetTextHandler } from '../../src/handlers/set-text.js';
 import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
 import { createSetVariableCodeSyntaxHandler } from '../../src/handlers/set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';
+import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
 import { createSwapComponentHandler } from '../../src/handlers/swap-component.js';
+import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
 import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
+import { makeFlowsFigma } from './flows-fake.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
 const MIXED = Symbol('mixed');
@@ -1999,5 +2002,127 @@ describe('batch inverses for instances and text styles', () => {
     expect(bound).toEqual({});
     expect(log.at(-1)).toBe('bind fontSize=null');
     expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+  });
+});
+
+describe('batch inverse for update_flows', () => {
+  /** A page with flows on A, B and C, a frame D that is not a flow, and the batch's failing op. */
+  const setup = () => {
+    const fake = makeFlowsFigma();
+    const page = fake.makePage('P', 'Screens');
+    for (const id of ['A', 'B', 'C', 'D']) fake.add({ id, type: 'FRAME', parent: page });
+    fake.add({ id: 'F', type: 'FRAME', parent: page, fills: [] });
+    page.flowStartingPoints = [
+      { nodeId: 'A', name: 'Sign up' },
+      { nodeId: 'B', name: 'Checkout' },
+      { nodeId: 'C', name: 'Checkout' },
+    ];
+    const before = page.flowStartingPoints;
+    const handler = createBatchHandler(fake.figmaCtx, {
+      update_flows: createUpdateFlowsHandler(fake.figmaCtx),
+      set_visible: createSetVisibleHandler(fake.figmaCtx),
+      set_fills: createSetFillsHandler(fake.figmaCtx),
+    });
+    return { ...fake, page, before, handler };
+  };
+
+  it('puts back every rename, addition, removal and move', async () => {
+    const { page, before, handler } = setup();
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_flows',
+            params: {
+              pageId: 'P',
+              flows: [
+                { nodeId: 'A', name: 'Onboarding' },
+                { nodeId: 'D', name: 'Settings' },
+              ],
+              remove: ['B'],
+              order: ['D', 'C'],
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): /);
+    expect(page.flowStartingPoints).toEqual(before);
+    // D was added and taken back while visible, so nothing of it is kept out of sight either.
+    expect(page.stored).toEqual(before);
+  });
+
+  it('restores two update_flows ops on the same page to the list the batch found', async () => {
+    const { page, before, handler } = setup();
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_flows', params: { pageId: 'P', flows: [{ nodeId: 'D', name: 'x' }] } },
+          {
+            tool: 'update_flows',
+            params: { pageId: 'P', flows: [{ nodeId: 'D', name: 'y' }], order: ['D'] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2 applied op\(s\): /);
+    expect(page.flowStartingPoints).toEqual(before);
+  });
+
+  // Measured live: with a flow's frame hidden by an earlier op, restoring the visible list at this
+  // op's turn and letting the earlier undo show the frame again brought two flows back swapped — a
+  // flow out of sight loses its place to any write made meanwhile. The restore has to wait for the
+  // whole unwind, when every frame the capture names is back.
+  it('restores the order when an earlier op hid one of the flows', async () => {
+    const { page, before, handler } = setup();
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_visible', params: { nodeId: 'B', visible: false } },
+          {
+            tool: 'update_flows',
+            params: { pageId: 'P', flows: [{ nodeId: 'C', name: 'Guest' }], order: ['C'] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2 applied op\(s\): /);
+    expect(page.flowStartingPoints).toEqual(before);
+  });
+
+  it('reports a restore Figma refuses as residue instead of a clean rollback', async () => {
+    const { page, nodes, handler } = setup();
+    const store = Object.getOwnPropertyDescriptor(page, 'flowStartingPoints')!;
+    let writes = 0;
+    Object.defineProperty(page, 'flowStartingPoints', {
+      get: store.get!,
+      set: (next: unknown) => {
+        writes += 1;
+        if (writes > 1) throw new Error('in set_flowStartingPoints: refused');
+        store.set!(next);
+      },
+    });
+    nodes.get('D')!.visible = true;
+
+    await expect(
+      handler({
+        ops: [{ tool: 'update_flows', params: { pageId: 'P', remove: ['A'] } }, FAIL],
+      }),
+    ).rejects.toThrow(
+      /rolled back 1 applied op\(s\) \(restored with residue: op 0 \(update_flows\): page P flows not restored: in set_flowStartingPoints: refused\)/,
+    );
+  });
+
+  it('refuses at capture a pageId that is not a page, before anything runs', async () => {
+    const { page, before, handler } = setup();
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_flows', params: { pageId: 'P', remove: ['A'] } },
+          { tool: 'update_flows', params: { pageId: 'A' } },
+        ],
+      }),
+    ).rejects.toThrow(/batch\/update_flows: A is not a page/);
+    expect(page.flowStartingPoints).toEqual(before);
   });
 });
