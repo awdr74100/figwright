@@ -263,6 +263,32 @@ describe('update_flows handler', () => {
     expect((await run({})).flows).toContainEqual({ nodeId: 'B', name: 'Checkout' });
   });
 
+  // The handler awaits node lookups before it writes, and the editor keeps running meanwhile: a flow
+  // the user adds in Figma during those awaits must survive the write, not be overwritten by a list
+  // computed from what the page held before.
+  it('keeps a flow added in the editor while the call was looking nodes up', async () => {
+    const { page, figmaCtx } = setup();
+    const lookup = figmaCtx.getNodeByIdAsync.bind(figmaCtx);
+    let interleaved = false;
+    (figmaCtx as { getNodeByIdAsync: unknown }).getNodeByIdAsync = async (id: string) => {
+      if (id === 'D' && !interleaved) {
+        interleaved = true;
+        page.flowStartingPoints = [
+          ...page.flowStartingPoints,
+          { nodeId: 'IN_SECTION', name: 'Help' },
+        ];
+      }
+      return lookup(id);
+    };
+    const result = (await createUpdateFlowsHandler(figmaCtx)({
+      pageId: 'P',
+      flows: [{ nodeId: 'D', name: 'Settings' }],
+    })) as UpdateFlowsResult;
+
+    expect(interleaved).toBe(true);
+    expect(result.flows.map(f => f.nodeId)).toEqual(['A', 'B', 'C', 'IN_SECTION', 'D']);
+  });
+
   // The safety net for whatever else Figma might take without taking: read back, put the visible
   // list back, and never claim success.
   it('puts the list back and says so when Figma reads back something other than was written', async () => {

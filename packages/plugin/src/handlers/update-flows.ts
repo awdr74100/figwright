@@ -232,10 +232,20 @@ export const createUpdateFlowsHandler =
   async params => {
     const args = await parse(figmaCtx, params);
     const { page } = args;
+    // Every await comes before the list is read. The editor keeps running while this handler
+    // waits, so a list read before an await can be stale by the write — and writing it would
+    // silently drop a flow the user added meanwhile. Checking every frame named, not just the
+    // ones that turn out to be new, is what lets this happen first: a frame already a flow is
+    // visible by definition, so the wider check refuses nothing more.
+    await refuseHidden(
+      figmaCtx,
+      page,
+      args.flows.map(f => f.nodeId),
+    );
+
     const current = readFlows(page);
     const next = plan(current, args);
     const added = next.filter(f => !current.some(c => c.nodeId === f.nodeId)).map(f => f.nodeId);
-    await refuseHidden(figmaCtx, page, added);
 
     if (!sameFlows(current, next)) {
       try {
@@ -252,18 +262,19 @@ export const createUpdateFlowsHandler =
 
       const landed = readFlows(page);
       if (!sameFlows(landed, next)) {
-        const dropped = next.filter(f => !landed.some(l => l.nodeId === f.nodeId));
-        const reasons = await diagnose(
-          figmaCtx,
-          page,
-          dropped.map(f => f.nodeId),
-        );
+        // Put back first, in the same tick as the write; only then look into why.
         let restored = true;
         try {
           page.flowStartingPoints = current;
         } catch {
           restored = false;
         }
+        const dropped = next.filter(f => !landed.some(l => l.nodeId === f.nodeId));
+        const reasons = await diagnose(
+          figmaCtx,
+          page,
+          dropped.map(f => f.nodeId),
+        );
         const what =
           dropped.length > 0
             ? `Figma accepted the list but dropped ${dropped.map(f => f.nodeId).join(', ')}` +
