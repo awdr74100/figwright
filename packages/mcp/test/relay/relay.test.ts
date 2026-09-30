@@ -926,6 +926,148 @@ describe('Relay hello loop', () => {
   });
 });
 
+// Which way a socket closed decides whether its session waits out the grace window. A plugin run
+// that is over never reconnects under its id — the next run mints a new one — so holding its
+// session only makes a pinned call wait for a reconnect that cannot come. A socket that merely
+// dropped does come back under the same id, and must keep the grace window it always had.
+describe('Relay session end', () => {
+  const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
+  const open = async (port: number, sessionId: string): Promise<WebSocket> => {
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: newId(),
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+    return ws;
+  };
+
+  const closeWith = (ws: WebSocket, code: number): Promise<void> =>
+    new Promise(resolve => {
+      ws.once('close', () => resolve());
+      ws.close(code);
+    });
+
+  it.each([
+    [1001, 'the panel unloading (plugin closed or reloaded)'],
+    [1000, "the plugin's own disconnect()"],
+  ])('forgets a session at once when the plugin closes with %i — %s', async code => {
+    const { port, relay } = await startRelay({ disconnectGraceMs: 30_000 });
+    const sessionId = newId();
+    const ws = await open(port, sessionId);
+
+    await closeWith(ws, code);
+    await delay(20);
+
+    expect(relay.sessions.get(sessionId)).toBeUndefined();
+    const started = Date.now();
+    await expect(relay.sendRequest('get_pages', {}, 5_000, sessionId)).rejects.toThrow(
+      /pinned session not connected/,
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it('keeps the grace window when the plugin drops its socket to reconnect (4000, its heartbeat)', async () => {
+    const { port, relay } = await startRelay({ disconnectGraceMs: 30_000 });
+    const sessionId = newId();
+    const ws = await open(port, sessionId);
+
+    await closeWith(ws, 4000);
+    await delay(20);
+    expect(relay.sessions.get(sessionId)?.state).toBe('disconnected');
+
+    // A request pinned meanwhile waits, and reaches the plugin once it is back under its id. The
+    // relay flushes it right after the hello reply, so the handler is in place before the hello.
+    const pending = relay.sendRequest('get_pages', {}, 5_000, sessionId);
+    const back = await connect(port);
+    back.on('message', raw => {
+      const env = decodeEnvelope(raw as ArrayBuffer);
+      if (env.kind === 'req' && env.method === 'get_pages') {
+        back.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: 1 } })));
+      }
+    });
+    back.send(
+      encodeEnvelope(
+        createRequest({
+          id: newId(),
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams(),
+        }),
+      ),
+    );
+    await expect(pending).resolves.toEqual({ ok: 1 });
+    back.close();
+  });
+
+  // The relay closes a silent socket with 1001 itself. The code is the one an unloading page sends,
+  // but the plugin behind it is alive and will resume, so it must not be read as the plugin ending.
+  it('keeps the grace window when the relay closed the socket for a missed heartbeat', async () => {
+    const { port, relay } = await startRelay({
+      heartbeatIntervalMs: 20,
+      heartbeatMaxMisses: 1,
+      disconnectGraceMs: 30_000,
+    });
+    const sessionId = newId();
+    const ws = await connect(port);
+    ws.send(
+      encodeEnvelope(
+        createRequest({ id: 'h', sessionId, method: SystemMethod.Hello, params: helloParams() }),
+      ),
+    );
+    await nextMessage(ws);
+    const code = await new Promise<number>(resolve => ws.once('close', c => resolve(c)));
+
+    expect(code).toBe(1001);
+    await delay(20);
+    expect(relay.sessions.get(sessionId)?.state).toBe('disconnected');
+  });
+
+  it('answers a request the plugin was still working on when it closed, instead of timing out', async () => {
+    const { port, relay } = await startRelay({ disconnectGraceMs: 30_000 });
+    const sessionId = newId();
+    const ws = await open(port, sessionId);
+    const received = new Promise<void>(resolve => {
+      ws.on('message', raw => {
+        const env = decodeEnvelope(raw as ArrayBuffer);
+        if (env.kind === 'req' && env.method === 'set_fills') resolve();
+      });
+    });
+    let servedBy: string | undefined;
+    const pending = relay.sendRequest('set_fills', {}, 30_000, sessionId, s => {
+      servedBy = s;
+    });
+    await received;
+
+    const started = Date.now();
+    await closeWith(ws, 1001);
+    await expect(pending).rejects.toThrow(
+      /plugin closed before answering \(method=set_fills\).*check whether it was applied/,
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(servedBy).toBe(sessionId);
+    expect(relay.pendingCount()).toBe(0);
+  });
+
+  it('leaves a request in flight alone when the socket only dropped (the plugin may resume)', async () => {
+    const { port, relay } = await startRelay({ disconnectGraceMs: 30_000 });
+    const sessionId = newId();
+    const ws = await open(port, sessionId);
+    const pending = relay.sendRequest('get_pages', {}, 200, sessionId);
+    await delay(20);
+
+    await closeWith(ws, 4000);
+    await expect(pending).rejects.toThrow(/plugin request timeout/);
+  });
+});
+
 describe('Relay session pinning', () => {
   const delay = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 

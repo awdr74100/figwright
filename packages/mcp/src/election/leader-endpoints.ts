@@ -288,7 +288,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         } catch (err) {
           const message = (err as Error).message;
           const code =
-            message.startsWith('no plugin connected') || message.startsWith('pinned session')
+            message.startsWith('no plugin connected') ||
+            message.startsWith('pinned session') ||
+            message.startsWith('plugin closed before answering')
               ? ErrorCode.PluginDisconnected
               : message.includes('timeout')
                 ? ErrorCode.Timeout

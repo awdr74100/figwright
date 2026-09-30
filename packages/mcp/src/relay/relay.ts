@@ -56,11 +56,22 @@ interface Pending {
 
 export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * Close codes that mean the plugin's run is over rather than its socket dropping: 1001 is what the
+ * panel's page sends as Figma unloads it — closing the plugin, or reloading it — and 1000 is the
+ * plugin's own disconnect(), after which it never reconnects. Either way no reconnect will carry
+ * this session id again, because a new run mints a new one. Only when the plugin sent it: the relay
+ * closes a silent socket with 1001 as well, and that plugin is alive and will resume.
+ */
+const PLUGIN_ENDED_CODES: ReadonlySet<number> = new Set([1000, 1001]);
+
 export class Relay {
   readonly sessions = new SessionManager();
   private readonly wss: WebSocketServer;
   private readonly opts: Required<Omit<RelayOptions, 'server'>>;
   private readonly pending = new Map<string, Pending>();
+  /** Sockets this relay closed itself — their close code says nothing about the plugin's run. */
+  private readonly closedByServer = new WeakSet<WebSocket>();
   private heartbeatDeferrals = 0;
   private lastRequestAtMs = 0;
 
@@ -164,7 +175,8 @@ export class Relay {
           // Pinned: route only to this session. If it's fully gone (not even within the disconnect
           // grace window) fail fast — silently re-routing to another plugin is the drift bug we're
           // fixing. If it exists but is momentarily socket-less, queue and flushQueue will deliver it
-          // when that same session reconnects (session ids survive resume).
+          // when that same session reconnects (session ids survive resume). A plugin that closed
+          // itself gets no grace window at all (endSession), so it lands in the first case.
           const target = this.sessions.get(sessionId);
           if (target === undefined) {
             clearTimeout(timer);
@@ -308,6 +320,36 @@ export class Relay {
     return this.pickActiveSession()?.id;
   }
 
+  /**
+   * A plugin run is over: forget its session now, and answer everything still waiting on it.
+   *
+   * Waiting is what a disconnect otherwise buys. A session keeps its id through a socket drop, so a
+   * request pinned to it is held for the grace window and flushed when that same id reconnects. A
+   * plugin that closed itself never reconnects under that id — the next run mints a new one — so
+   * holding its requests only runs out their timeout (measured: a call pinned across a plugin
+   * reload failed after 35s while the reloaded plugin had been connected for 15). With the session
+   * gone, the next request pinned to it is refused at once — in the words dispatchTargeted recovers
+   * the claim from — and a request already sent to it is told now that no reply is coming.
+   */
+  private endSession(session: Session): boolean {
+    if (!this.sessions.end(session)) return false;
+    // Nothing pinned to this session can still be queued: a request is only held while its session
+    // has no socket, and every reconnect flushes the queue before this socket could close.
+    for (const [id, entry] of this.pending) {
+      if (!entry.dispatched || entry.dispatchedToSessionId !== session.id) continue;
+      clearTimeout(entry.timer);
+      this.pending.delete(id);
+      entry.served.sessionId = session.id;
+      entry.reject(
+        new Error(
+          `plugin closed before answering (method=${entry.method}) — it was closed or reloaded ` +
+            'in Figma; if this call writes, check whether it was applied before retrying',
+        ),
+      );
+    }
+    return true;
+  }
+
   private dispatchPending(id: string, entry: Pending, session: Session): void {
     if (session.socket === null) return;
     entry.dispatched = true;
@@ -366,14 +408,20 @@ export class Relay {
       this.handleEnvelope(session, envelope);
     });
 
-    socket.on('close', () => {
+    socket.on('close', (code: number) => {
       clearTimeout(helloTimeout);
-      if (session !== undefined) {
-        this.opts.log(
-          `[relay] session ${session.id} disconnected (grace ${this.opts.disconnectGraceMs}ms)`,
-        );
-        this.sessions.markDisconnected(session, this.opts.disconnectGraceMs);
+      if (session === undefined) return;
+      if (!this.closedByServer.has(socket) && PLUGIN_ENDED_CODES.has(code)) {
+        // False when this is the old socket of a session that has already resumed on a new one.
+        if (this.endSession(session)) {
+          this.opts.log(`[relay] session ${session.id} ended (plugin closed, code ${code})`);
+        }
+        return;
       }
+      this.opts.log(
+        `[relay] session ${session.id} disconnected (code ${code}, grace ${this.opts.disconnectGraceMs}ms)`,
+      );
+      this.sessions.markDisconnected(session, this.opts.disconnectGraceMs);
     });
 
     socket.on('error', err => {
@@ -458,6 +506,9 @@ export class Relay {
           return;
         }
         this.opts.log(`[relay] session ${session.id} heartbeat timeout`);
+        // Marked first: this close carries 1001 too, but the plugin on the other end is still
+        // running and will resume under the same id, so it must get the grace window.
+        this.closedByServer.add(socket);
         socket.close(1001, 'heartbeat timeout');
       },
     });

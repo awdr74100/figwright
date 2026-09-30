@@ -190,6 +190,22 @@ describe('leader endpoints', () => {
     expect(bad).toMatchObject({ kind: 'err', code: ErrorCode.PluginDisconnected });
   });
 
+  it('POST /rpc reports a plugin that closed mid-call as disconnected, not as a timeout', async () => {
+    const b = await startLeader();
+    let plugin: WebSocket | undefined;
+    plugin = await attachFakePlugin(b, async () => {
+      // The panel closing (or reloading) while the call is in its hands.
+      plugin?.close(1001);
+      return new Promise(() => {});
+    });
+
+    const started = Date.now();
+    const res = await callRpc(b.port, { requestId: 'r3', toolName: 'get_design_context' });
+    expect(res).toMatchObject({ kind: 'err', code: ErrorCode.PluginDisconnected });
+    expect((res as { message: string }).message).toMatch(/plugin closed before answering/);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
   it('POST /rpc forwards to plugin and returns its result', async () => {
     const b = await startLeader();
     await attachFakePlugin(b, async (method, params) => {

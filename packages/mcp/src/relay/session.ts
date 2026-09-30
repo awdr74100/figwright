@@ -96,6 +96,24 @@ export class SessionManager {
     }, graceMs);
   }
 
+  /**
+   * Drop a session whose plugin run is over, with no grace window. Returns false — and leaves the
+   * map alone — when this session object has already been replaced under its id, the same guard
+   * markDisconnected applies: the socket closing is then the old half of a resume, and the session
+   * now registered is the one that resumed.
+   */
+  end(session: Session): boolean {
+    if (this.sessions.get(session.id) !== session) return false;
+    if (session.disconnectTimer !== null) clearTimeout(session.disconnectTimer);
+    session.disconnectTimer = null;
+    session.state = 'disconnected';
+    session.socket = null;
+    session.heartbeat?.stop();
+    session.heartbeat = null;
+    this.sessions.delete(session.id);
+    return true;
+  }
+
   get(id: string): Session | undefined {
     return this.sessions.get(id);
   }
