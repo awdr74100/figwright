@@ -1046,9 +1046,15 @@ describe('Relay session end', () => {
     });
     await received;
 
+    // The relay rejects the call inside the close itself, so something has to be listening before
+    // the socket closes — attached afterwards, the rejection lands with nobody to take it.
+    const settled = pending.then(
+      () => 'resolved',
+      (e: unknown) => (e as Error).message,
+    );
     const started = Date.now();
     await closeWith(ws, 1001);
-    await expect(pending).rejects.toThrow(
+    expect(await settled).toMatch(
       /plugin closed before answering \(method=set_fills\).*check whether it was applied/,
     );
     expect(Date.now() - started).toBeLessThan(500);
@@ -1063,8 +1069,12 @@ describe('Relay session end', () => {
     const pending = relay.sendRequest('get_pages', {}, 200, sessionId);
     await delay(20);
 
+    const settled = pending.then(
+      () => 'resolved',
+      (e: unknown) => (e as Error).message,
+    );
     await closeWith(ws, 4000);
-    await expect(pending).rejects.toThrow(/plugin request timeout/);
+    expect(await settled).toMatch(/plugin request timeout/);
   });
 });
 
