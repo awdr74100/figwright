@@ -1,6 +1,7 @@
 import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { keptEdges, replaceRange } from './text-edit.js';
 
 export const createSetTextHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -23,7 +24,21 @@ export const createSetTextHandler =
         : [text.fontName as FontName];
     await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
 
-    text.characters = p.characters;
+    // Only what differs is rewritten: whole runs the old and new strings share at either end are
+    // kept, so fixing a typo leaves a bold word or a coloured price suffix as it was. An empty node
+    // has no style to keep and nothing to copy one from, so it takes the plain assignment.
+    const before = text.characters;
+    if (before.length === 0) {
+      text.characters = p.characters;
+    } else {
+      const { prefix, suffix } = keptEdges(text, p.characters);
+      replaceRange(
+        text,
+        prefix,
+        before.length - suffix,
+        p.characters.slice(prefix, p.characters.length - suffix),
+      );
+    }
 
     const result: MutateResult = { ok: true, nodeId: text.id };
     return result;

@@ -145,9 +145,11 @@ const capital = (s: string): string => s[0]!.toUpperCase() + s.slice(1);
 
 /**
  * A TEXT node that behaves like Figma's wherever the text inverse depends on it — each rule was
- * measured against a live file: rewriting `characters` gives every run the first run's style; a raw
- * run write detaches the run's text style (or fill style) and drops the binding on that field; a
- * node-level getter reads figma.mixed when the runs differ; resizing turns auto-resize off.
+ * measured against a live file: rewriting `characters` gives every run the first run's style, while
+ * insertCharacters / deleteCharacters leave the other runs alone (both drop a `characters`
+ * binding); a raw run write detaches the run's text style (or fill style) and drops the binding on
+ * that field; a node-level getter reads figma.mixed when the runs differ; resizing turns
+ * auto-resize off.
  */
 const fakeText = (id: string, characters: string, base: Run = {}): Record<string, unknown> => {
   let chars = characters;
@@ -283,6 +285,22 @@ const fakeText = (id: string, characters: string, base: Run = {}): Record<string
       runs = [...value].map(() => Object.assign({}, first));
     },
   });
+  // In-place edits keep every other run's style, but drop a `characters` binding just as
+  // assignment does (both measured).
+  node.insertCharacters = (start: number, inserted: string, useStyle = 'BEFORE') => {
+    const { characters: _dropped, ...rest } = nodeBound;
+    nodeBound = rest;
+    const from = useStyle === 'BEFORE' ? start - 1 : start;
+    const style = runs[from] ?? runs[start] ?? runs[start - 1] ?? { ...RUN_DEFAULTS, ...base };
+    chars = chars.slice(0, start) + inserted + chars.slice(start);
+    runs.splice(start, 0, ...[...inserted].map(() => Object.assign({}, style)));
+  };
+  node.deleteCharacters = (start: number, end: number) => {
+    const { characters: _dropped, ...rest } = nodeBound;
+    nodeBound = rest;
+    chars = chars.slice(0, start) + chars.slice(end);
+    runs.splice(start, end - start);
+  };
   Object.defineProperty(node, 'boundVariables', { enumerable: true, get: () => nodeBound });
   for (const field of Object.keys(RUN_DEFAULTS).filter(f => f !== 'boundVariables')) {
     if (!NO_RAW_SETTER.has(field)) {
@@ -640,9 +658,10 @@ describe('batch handler', () => {
     expect(loadFontAsync).toHaveBeenCalledWith(INTER_BOLD);
   });
 
-  it('brings back the runs a set_text flattened', async () => {
-    // Rewriting characters gives every run the first run's style; putting the old string back alone
-    // would leave the text one style. The runs are replayed from the snapshot.
+  it('brings back the runs a set_text restyled', async () => {
+    // Only the shared trailing "d" keeps its run; everything set_text rewrote takes the first run's
+    // style, so putting the old string back alone would not bring the bold "World" or the coloured
+    // "Hello" back. The runs are replayed from the snapshot.
     const text = fakeText('1:1', 'Hello World');
     (text.setRangeFontName as (s: number, e: number, v: unknown) => void)(6, 11, INTER_BOLD);
     (text.setRangeFills as (s: number, e: number, v: unknown) => void)(0, 5, [SOLID(0.9)]);

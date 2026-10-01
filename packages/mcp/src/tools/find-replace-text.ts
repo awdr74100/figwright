@@ -8,8 +8,10 @@ export const findReplaceTextTool: ToolSpec = {
   name: FIND_REPLACE_TEXT_TOOL_NAME,
   description:
     'Replace a substring across all TEXT nodes under a scope. Without root the whole current ' +
-    'page is searched; matching is case-insensitive unless caseSensitive is true. Fonts are loaded ' +
-    'before each edit. Returns { ok, affected } — the text node ids changed.',
+    'page is searched; matching is case-insensitive unless caseSensitive is true. Only the matched ' +
+    'text changes: every other run keeps its styling, and each replacement takes the style of the ' +
+    'text it replaces. Fonts are loaded before each edit. Returns { ok, affected } — the text node ' +
+    'ids changed.',
   inputSchema: z.object({
     find: z.string().describe('Substring to find (non-empty)'),
     replace: z.string().describe('Replacement string'),

@@ -1,6 +1,7 @@
 import type { BatchNodeResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { replaceRange } from './text-edit.js';
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -77,11 +78,17 @@ export const createFindReplaceTextHandler =
     // Load every match's fonts up front so the mutation pass stays synchronous.
     await Promise.all(matches.map(text => loadAllFonts(figmaCtx, text)));
 
+    // Each occurrence is replaced in place rather than the whole string reassigned, which would
+    // restyle every run in the node. Offsets are taken from the text as it reads now, after the
+    // font await, and applied last to first so the earlier ones stay valid.
+    const pattern = new RegExp(escapeRegExp(find), caseSensitive ? 'g' : 'gi');
     const affected: string[] = [];
     for (const text of matches) {
-      text.characters = caseSensitive
-        ? text.characters.split(find).join(replace)
-        : text.characters.replace(new RegExp(escapeRegExp(find), 'gi'), replace);
+      const hits = [...text.characters.matchAll(pattern)];
+      if (hits.length === 0) continue;
+      for (const hit of hits.toReversed()) {
+        replaceRange(text, hit.index, hit.index + hit[0].length, replace);
+      }
       affected.push(text.id);
     }
 
