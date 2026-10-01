@@ -616,17 +616,34 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
     expect(wrapped.layout?.counterAxisSpacing).toBe(16);
     expect(wrapped.layout?.counterAxisAlignContent).toBeUndefined();
 
-    // SPACE_BETWEEN distributes the rows → Figma reports counterAxisSpacing null; alignment surfaces.
+    // SPACE_BETWEEN distributes the tracks. Figma still reports the spacing — it never returns null
+    // (typings, and measured: 30 read back) — but ignores it, so only the alignment surfaces.
     const distributed = serializeFlatSync(
       fake({
         ...base,
         layoutWrap: 'WRAP',
-        counterAxisSpacing: null,
+        counterAxisSpacing: 30,
         counterAxisAlignContent: 'SPACE_BETWEEN',
       }),
     );
     expect(distributed.layout?.counterAxisSpacing).toBeUndefined();
     expect(distributed.layout?.counterAxisAlignContent).toBe('SPACE_BETWEEN');
+
+    // A vertical wrap carries the same fields: its tracks are columns, so the spacing is a column gap.
+    const column = serializeFlatSync(
+      fake({
+        ...base,
+        layoutMode: 'VERTICAL',
+        layoutWrap: 'WRAP',
+        counterAxisSpacing: 30,
+        counterAxisAlignContent: 'AUTO',
+      }),
+    );
+    expect(column.layout).toMatchObject({
+      mode: 'VERTICAL',
+      layoutWrap: 'WRAP',
+      counterAxisSpacing: 30,
+    });
 
     // A non-wrapping flex never carries them, even if the underlying props are set.
     const noWrap = serializeFlatSync(

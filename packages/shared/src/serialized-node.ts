@@ -213,10 +213,11 @@ export const SerializedAutoLayoutSchema = z.object({
   primaryAxisAlignItems: z.string().optional(),
   counterAxisAlignItems: z.string().optional(),
   layoutWrap: z.string().optional(),
-  // WRAP only: gap between wrapped lines (cross-axis) + how those lines distribute. Without these a
-  // wrapping flex (tag cloud / chip group / gallery) keeps its primary `itemSpacing` but loses the
-  // row gap entirely → codegen guesses the vertical spacing. Omitted unless layoutWrap is WRAP and
-  // the value is non-default.
+  // WRAP only: gap between wrapped tracks (cross-axis: rows of a horizontal wrap, columns of a
+  // vertical one) + how those tracks distribute. Without these a wrapping flex (tag cloud / chip
+  // group / gallery) keeps its primary `itemSpacing` but loses the track gap entirely → codegen
+  // guesses it. Omitted unless layoutWrap is WRAP and the value is non-default; the spacing is also
+  // omitted under SPACE_BETWEEN, where Figma ignores it.
   counterAxisSpacing: z.number().optional(),
   counterAxisAlignContent: z.string().optional(),
   /**

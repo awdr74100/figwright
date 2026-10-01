@@ -9,7 +9,8 @@ export const setAutoLayoutTool: ToolSpec = {
   description:
     "Configure a frame's auto layout. layoutMode NONE disables it; HORIZONTAL/VERTICAL enable flex " +
     '(padding / itemSpacing / alignment / wrap, plus counterAxisSpacing / counterAxisAlignContent ' +
-    'for the wrapped cross axis — the CSS row-gap / align-content — and itemReverseZIndex / ' +
+    'for the wrapped cross axis — the CSS row-gap (column-gap when VERTICAL) / align-content — and ' +
+    'itemReverseZIndex / ' +
     'strokesIncludedInLayout for paint order and stroke-in-layout); GRID enables CSS-Grid-style ' +
     'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). ' +
     'Returns { ok, nodeId }.',
@@ -39,15 +40,16 @@ export const setAutoLayoutTool: ToolSpec = {
       .min(0)
       .optional()
       .describe(
-        'Cross-axis gap between wrapped rows (px) — the CSS row-gap when it differs from ' +
-          'itemSpacing (gap: 16px 8px). Requires layoutWrap WRAP (settable in the same call)',
+        'Cross-axis gap between wrapped tracks (px): rows of a HORIZONTAL wrap (CSS row-gap), ' +
+          'columns of a VERTICAL one (CSS column-gap). Requires layoutWrap WRAP (settable in the ' +
+          'same call); ignored under counterAxisAlignContent SPACE_BETWEEN',
       ),
     counterAxisAlignContent: z
       .enum(['AUTO', 'SPACE_BETWEEN'])
       .optional()
       .describe(
-        'How wrapped rows distribute along the cross axis: AUTO packs them at counterAxisSpacing, ' +
-          'SPACE_BETWEEN spreads them (align-content). Requires layoutWrap WRAP',
+        'How wrapped tracks distribute along the cross axis: AUTO packs them at ' +
+          'counterAxisSpacing, SPACE_BETWEEN spreads them (align-content). Requires layoutWrap WRAP',
       ),
     itemReverseZIndex: z
       .boolean()

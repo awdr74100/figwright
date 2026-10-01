@@ -230,11 +230,14 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     counterAxisAlignItems: n.counterAxisAlignItems,
   };
   if (typeof n.layoutWrap === 'string') out.layoutWrap = n.layoutWrap;
-  // WRAP cross-axis: the row gap (counterAxisSpacing, null when content-distributed) and the line
-  // distribution (counterAxisAlignContent). Only meaningful when wrapping; emit non-default values so
-  // a non-wrapping flex stays clean. Figma sets counterAxisSpacing to null under SPACE_BETWEEN.
+  // WRAP cross-axis: the gap between wrapped tracks (counterAxisSpacing — rows of a horizontal wrap,
+  // columns of a vertical one) and how the tracks distribute (counterAxisAlignContent). Only
+  // meaningful when wrapping; emit non-default values so a non-wrapping flex stays clean. Under
+  // SPACE_BETWEEN Figma still reports the spacing but ignores it (measured: 30 → 100 moved no track),
+  // so it is left out there rather than handed to codegen as a gap that does not render.
   if (n.layoutWrap === 'WRAP') {
-    if (typeof n.counterAxisSpacing === 'number' && n.counterAxisSpacing !== 0) {
+    const distributed = n.counterAxisAlignContent === 'SPACE_BETWEEN';
+    if (!distributed && typeof n.counterAxisSpacing === 'number' && n.counterAxisSpacing !== 0) {
       out.counterAxisSpacing = n.counterAxisSpacing;
     }
     if (typeof n.counterAxisAlignContent === 'string' && n.counterAxisAlignContent !== 'AUTO') {

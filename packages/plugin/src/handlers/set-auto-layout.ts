@@ -41,9 +41,9 @@ export const createSetAutoLayoutHandler =
     }
     const target = node as unknown as AutoLayoutTarget;
 
-    // Wrap cross-axis (counterAxisSpacing / counterAxisAlignContent → CSS row-gap /
-    // align-content) is only meaningful on a wrapping flex. Validate BEFORE any mutation —
-    // this is a contradiction in the inputs, and rejecting it after layoutWrap was already
+    // Wrap cross-axis (counterAxisSpacing / counterAxisAlignContent → CSS row-gap, column-gap on a
+    // vertical wrap / align-content) is only meaningful on a wrapping flex. Validate BEFORE any
+    // mutation — this is a contradiction in the inputs, and rejecting it after layoutWrap was already
     // applied would leave a partial change behind (caught live). Rejected loudly rather than
     // deferred to Figma, whose silent ignore is the worst failure mode for an authoring tool.
     const wantsCrossAxis =
@@ -83,7 +83,7 @@ export const createSetAutoLayoutHandler =
           target.counterAxisAlignItems = p.counterAxisAlignItems;
         if (typeof p.layoutWrap === 'string') target.layoutWrap = p.layoutWrap;
         // Wrap cross-axis, validated up front; applied after layoutWrap so enabling wrap and
-        // setting its row gap works in one call.
+        // setting its track gap works in one call.
         if (typeof p.counterAxisSpacing === 'number')
           target.counterAxisSpacing = p.counterAxisSpacing;
         if (typeof p.counterAxisAlignContent === 'string')

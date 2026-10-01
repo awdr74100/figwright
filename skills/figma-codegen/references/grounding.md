@@ -165,11 +165,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `itemSpacing` → `gap`, `primaryAxisAlignItems`/`counterAxisAlignItems` → `justify-*`/`items-*`
   (`SPACE_BETWEEN` → `justify-between`, `SPACE_EVENLY` → `justify-evenly`, `SPACE_AROUND` →
   `justify-around` — three distinct distributions, not synonyms). When `layoutWrap: 'WRAP'` (a tag cloud / chip group /
-  gallery) the frame also carries the cross-axis row spacing: `counterAxisSpacing` is the gap
-  **between wrapped rows** (→ `flex-wrap` + the row part of `gap-x/gap-y`; with a single `gap` only
-  when it equals `itemSpacing`), and `counterAxisAlignContent: 'SPACE_BETWEEN'` distributes the rows
-  (`align-content: space-between`, and `counterAxisSpacing` is then absent). Don't collapse a wrapping
-  flex to a single-axis `gap` — the row gap is its own value. `mode: 'GRID'` → `display:grid` with
+  gallery) the frame also carries the cross-axis spacing: `counterAxisSpacing` is the gap **between
+  wrapped tracks** — rows of a `HORIZONTAL` wrap (→ `flex-wrap` + the row part of `gap-x/gap-y`),
+  columns of a `VERTICAL` one (`flex-col flex-wrap` + the column part) — with a single `gap` only when
+  it equals `itemSpacing`. `counterAxisAlignContent: 'SPACE_BETWEEN'` distributes the tracks
+  (`align-content: space-between`, and `counterAxisSpacing` is then absent: Figma ignores it there).
+  Don't collapse a wrapping flex to a single-axis `gap` — the track gap is its own value. `mode: 'GRID'` → `display:grid` with
   `gridRowCount`/`gridColumnCount` → `grid-template-rows`/`grid-template-columns: repeat(N, 1fr)`,
   `gridRowGap`/`gridColumnGap` → `gap`, and optional `gridRowSizes`/`gridColumnSizes` tracks
   (`FIXED`→px, `FLEX`→fr) — **emit a real CSS grid, don't flatten it to stacked flex**. A grid child
