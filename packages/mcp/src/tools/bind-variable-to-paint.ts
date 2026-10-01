@@ -11,7 +11,9 @@ export const bindVariableToPaintTool: ToolSpec = {
     '— or unbind by passing variableId: null. Figma stores fill/stroke colour bindings on the paint, ' +
     'not the node, so this is separate from bind_variable_to_node (which covers scalar fields like ' +
     'width / padding / radius). target is fills (default) or strokes; index selects which paint ' +
-    '(default 0). The paint at that index must be SOLID. Returns { ok, nodeId }.',
+    "(default 0). The paint at that index must be SOLID. Binding replaces the paint's opacity " +
+    "with the variable's alpha, so a 50% fill bound to an opaque variable ends up opaque; for a " +
+    'translucent token, bind a variable whose value carries that alpha. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node whose fill/stroke paint to bind'),
     target: z

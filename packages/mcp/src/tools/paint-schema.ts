@@ -43,8 +43,14 @@ export const paintItemSchema = z
       .optional(),
     opacity: z.number().optional(),
     visible: z.boolean().optional(),
+    // The opacity rule is Figma's, measured on every tool that takes this schema (set_fills,
+    // set_strokes, set_text_range, create_paint_style, update_paint_style): a bound paint's opacity
+    // is replaced by the variable's alpha when written, even when given explicitly.
     boundVariables: boundVariablesSchema
-      .describe('SOLID only: { "color": variableId } binds the paint colour to a COLOR variable.')
+      .describe(
+        'SOLID only: { "color": variableId } binds the paint colour to a COLOR variable, whose ' +
+          'alpha then replaces opacity.',
+      )
       .optional(),
   })
   .loose();
