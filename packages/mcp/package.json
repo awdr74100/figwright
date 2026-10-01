@@ -44,14 +44,14 @@
     "@modelcontextprotocol/server": "^2.2.0",
     "@msgpack/msgpack": "^3.1.3",
     "fdir": "^6.5.0",
-    "ignore": "^7.0.10",
+    "ignore": "^7.0.11",
     "oxc-parser": "^0.152.0",
     "ws": "^8.22.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@figwright/shared": "workspace:*",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "publint": "^0.3.24",
     "tsdown": "^0.23.0"
   },

@@ -33,16 +33,16 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
-    "@vitest/coverage-v8": "^5.0.2",
+    "@vitest/coverage-v8": "^5.0.3",
     "changelogen": "^0.6.2",
-    "knip": "^6.38.0",
+    "knip": "^6.39.0",
     "oxfmt": "^0.71.0",
     "oxlint": "^1.86.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.3"
   },
   "engines": {
     "node": "^24.11.0 || >=26.0.0"
   },
-  "packageManager": "pnpm@12.8.0"
+  "packageManager": "pnpm@12.8.1"
 }
