@@ -43,6 +43,30 @@ describe('bind_variable_to_paint handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  // The variable lookup is awaited, and the editor keeps running meanwhile. A fill the user adds in
+  // that moment must survive the write — the array written back has to be read after the await,
+  // not copied from what the node held before it.
+  it('keeps a fill added in the editor while the variable was being looked up', async () => {
+    const userFill = { type: 'GRADIENT_LINEAR', gradientStops: [] };
+    const node: { id: string; fills: unknown[] } = { id: '3:3', fills: [solid()] };
+    const variable = { id: 'V:white' };
+    const bound = { type: 'SOLID', color: { r: 1, g: 1, b: 1 }, boundVariables: {} };
+    const ctx = {
+      getNodeByIdAsync: async () => node,
+      variables: {
+        getVariableByIdAsync: async () => {
+          node.fills = [...node.fills, userFill];
+          return variable;
+        },
+        setBoundVariableForPaint: vi.fn<() => unknown>(() => bound),
+      },
+    } as unknown as typeof figma;
+
+    await createBindVariableToPaintHandler(ctx)({ nodeId: '3:3', variableId: 'V:white' });
+
+    expect(node.fills).toEqual([bound, userFill]);
+  });
+
   it('targets strokes and the given index', async () => {
     const node = { id: '2:2', strokes: [solid(), solid()] };
     const variable = { id: 'V:grey' };

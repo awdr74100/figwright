@@ -29,6 +29,17 @@ export const createBindVariableToPaintHandler =
     if (node === null || !(target in node)) {
       throw new Error(`bind_variable_to_paint: node ${p.nodeId} not found or has no ${target}`);
     }
+
+    // Looked up before the paints are read: the editor keeps running while this awaits, so an
+    // array read first could be stale by the write, and writing it back would drop whatever the
+    // user changed in the meantime. From here to the write nothing awaits.
+    let variable: Variable | null = null;
+    if (typeof p.variableId === 'string') {
+      variable = await figmaCtx.variables.getVariableByIdAsync(p.variableId);
+      if (variable === null)
+        throw new Error(`bind_variable_to_paint: variable ${p.variableId} not found`);
+    }
+
     const paints = (node as unknown as Record<string, unknown>)[target];
     if (!Array.isArray(paints)) {
       throw new Error(`bind_variable_to_paint: ${target} on ${p.nodeId} is mixed or unreadable`);
@@ -41,13 +52,6 @@ export const createBindVariableToPaintHandler =
       throw new Error(
         `bind_variable_to_paint: ${target}[${index}] is ${paint.type}; only SOLID paints bind a colour variable`,
       );
-    }
-
-    let variable: Variable | null = null;
-    if (typeof p.variableId === 'string') {
-      variable = await figmaCtx.variables.getVariableByIdAsync(p.variableId);
-      if (variable === null)
-        throw new Error(`bind_variable_to_paint: variable ${p.variableId} not found`);
     }
 
     const bound = figmaCtx.variables.setBoundVariableForPaint(paint, 'color', variable);
