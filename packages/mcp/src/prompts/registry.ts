@@ -25,13 +25,17 @@ export type PromptArgsSchema = z.ZodObject<
   Record<string, ZodType<string | undefined, string | undefined>>
 >;
 
-/** Arguments as they reach a prompt's builder: strings, with omitted optional ones absent. */
+/**
+ * Arguments as they reach a prompt's builder: strings, with omitted optional ones absent. Always an
+ * object — a `prompts/get` that omits `arguments` is validated as `{}` (SDK ≥ 2.3.0; before that it
+ * failed argsSchema outright), and mcp-wire.test.ts holds the SDK to it.
+ */
 export type PromptArgs = Record<string, string | undefined>;
 
 interface PromptEntry {
   definition: Prompt;
   argsSchema: PromptArgsSchema;
-  build: (args: PromptArgs | undefined) => GetPromptResult;
+  build: (args: PromptArgs) => GetPromptResult;
 }
 
 export const PROMPTS: readonly PromptEntry[] = [figmaToCodePrompt, codeToFigmaPrompt];
@@ -40,5 +44,5 @@ export const PROMPTS: readonly PromptEntry[] = [figmaToCodePrompt, codeToFigmaPr
 export const PROMPT_DEFINITIONS: readonly Prompt[] = PROMPTS.map(p => p.definition);
 
 /** Build a prompt's messages by name, or null when no such prompt is registered. */
-export const buildPrompt = (name: string, args: PromptArgs | undefined): GetPromptResult | null =>
+export const buildPrompt = (name: string, args: PromptArgs): GetPromptResult | null =>
   PROMPTS.find(p => p.definition.name === name)?.build(args) ?? null;

@@ -45,7 +45,7 @@ Emit code in the detected stack (the profile is returned on component_map / toke
 export const figmaToCodePrompt: {
   definition: Prompt;
   argsSchema: z.ZodObject<{ nodeId: z.ZodOptional<z.ZodString> }>;
-  build: (args: PromptArgs | undefined) => GetPromptResult;
+  build: (args: PromptArgs) => GetPromptResult;
 } = {
   definition: {
     name: FIGMA_TO_CODE_PROMPT_NAME,
@@ -74,7 +74,7 @@ export const figmaToCodePrompt: {
     messages: [
       {
         role: 'user',
-        content: { type: 'text', text: promptText(args?.nodeId) },
+        content: { type: 'text', text: promptText(args.nodeId) },
       },
     ],
   }),
