@@ -297,6 +297,19 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     expect(prompts).toEqual(PROMPT_DEFINITIONS.map(p => expect.objectContaining({ ...p })));
   });
 
+  it('serves every prompt to a prompts/get that omits arguments', async () => {
+    // `arguments` is optional in prompts/get and clients do omit it — the natural call for a prompt
+    // with no required argument. Through SDK 2.2.0 that reached argsSchema as undefined and every
+    // prompt here, code_to_figma's empty object included, answered "Invalid arguments".
+    const refused: string[] = [];
+    for (const { name } of PROMPT_DEFINITIONS) {
+      const res = await client.send('prompts/get', { name });
+      const messages = res.result?.messages as unknown[] | undefined;
+      if (res.error !== undefined || !messages?.length) refused.push(name);
+    }
+    expect(refused).toEqual([]);
+  });
+
   it('answers a real tools/call without a plugin connected', async () => {
     const res = await client.send('tools/call', { name: 'ping', arguments: {} });
     const content = res.result?.content as { type: string; text: string }[];

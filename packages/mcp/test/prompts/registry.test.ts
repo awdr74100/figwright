@@ -4,7 +4,7 @@ import { CODE_TO_FIGMA_PROMPT_NAME } from '../../src/prompts/code-to-figma.js';
 import { FIGMA_TO_CODE_PROMPT_NAME } from '../../src/prompts/figma-to-code.js';
 import { buildPrompt, PROMPT_DEFINITIONS } from '../../src/prompts/registry.js';
 
-const textOf = (name: string, args?: Record<string, string>): string => {
+const textOf = (name: string, args: Record<string, string> = {}): string => {
   const result = buildPrompt(name, args);
   const content = result?.messages[0]?.content;
   return content !== undefined && content.type === 'text' ? content.text : '';
@@ -56,6 +56,6 @@ describe('prompts registry', () => {
   });
 
   it('returns null for an unknown prompt name', () => {
-    expect(buildPrompt('does_not_exist', undefined)).toBeNull();
+    expect(buildPrompt('does_not_exist', {})).toBeNull();
   });
 });

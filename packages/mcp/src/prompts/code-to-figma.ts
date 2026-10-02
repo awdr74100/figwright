@@ -31,7 +31,7 @@ Rules: reuse beats regenerate (instance existing components, bind existing varia
 export const codeToFigmaPrompt: {
   definition: Prompt;
   argsSchema: z.ZodObject<Record<string, never>>;
-  build: (args: PromptArgs | undefined) => GetPromptResult;
+  build: (args: PromptArgs) => GetPromptResult;
 } = {
   definition: {
     name: CODE_TO_FIGMA_PROMPT_NAME,
