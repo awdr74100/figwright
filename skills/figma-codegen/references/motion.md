@@ -30,7 +30,7 @@ If the inventory is complete and empty, there's no animation to carry — don't 
   `get_motion_context` leaves out of **`manualKeyframeTracks`** each manual track `animations`
   already plays as stored, keeping only those whose easing is bound to a variable.
 - A binding is `{ baseValue, timelineDuration, tracks[] }`; a track is `{ keyframeOperation,
-keyframes[] }`, each keyframe `{ timelinePosition (s), value, easing }`.
+  keyframes[] }`, each keyframe `{ timelinePosition (s), value, easing }`.
 - **`animationStyles`** are the applied presets with their `duration`, `timelineOffset` and `props`.
   A preset's `name` can read as a localization key (`motion.preset_name.opacity`) and its `styleId`
   as a `CodeComponentId:…` — identify it by its props, not those.

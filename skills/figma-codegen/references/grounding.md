@@ -194,7 +194,7 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Min/max size bounds — explicit responsive constraints, never infer when present.** A node may
   carry `minWidth` / `maxWidth` / `minHeight` / `maxHeight` (auto-layout frames and their direct
   children; only set bounds appear). These are the designer's literal `min-w-* / max-w-* / min-h-* /
-max-h-*` — map them directly and let the corresponding `w`/`h` stay fluid. When a node carries
+  max-h-*` — map them directly and let the corresponding `w`/`h` stay fluid. When a node carries
   no bounds, fall back to the heuristic: **on a control that would otherwise hug its content — a
   button/badge/chip/tag (auto-layout + a `FILL`/`layoutGrow` text child) whose `FIXED` width
   exceeds its content — prefer `min-w-*` over a hard `w-*`** (designers often express "at least
@@ -205,7 +205,7 @@ max-h-*` — map them directly and let the corresponding `w`/`h` stay fluid. Whe
   `alignment`, and `offset` (the page margin from the frame edge → container horizontal padding), or
   a uniform `GRID` with `sectionSize` (an 8px baseline). This is the designer's **explicit**
   responsive scaffold — map a `COLUMNS` grid straight to your CSS grid / container (`grid-cols-12
-gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering column widths and
+  gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering column widths and
   margins from child geometry. When several breakpoint frames each carry a
   `count: 12` columns grid, that's the shared track system across breakpoints — keep the columns
   fixed and let the gutters/margins flex. A uniform `GRID` is the spacing baseline: round paddings/
@@ -251,7 +251,7 @@ gap-[gutter]`, the page `max-w` + `px-[offset]`) instead of reverse-engineering 
   - **A frame with no `layout` is not automatically an absolute canvas.** `constraints` tells you how
     a child was _anchored_ in Figma; it does not mean the right CSS is a stack of absolutely
     positioned boxes. Many files are simply drawn without auto-layout, and emitting one `position:
-absolute` per child there reproduces the artboard rather than the design: it breaks at every
+    absolute` per child there reproduces the artboard rather than the design: it breaks at every
     other width and is the single biggest source of unmaintainable generated markup. So read the
     geometry for **intent** before reaching for `absolute`: children in a single column at a shared
     `x` with a repeating `y` delta are a `flex-col` with that delta as `gap`; children on a shared
