@@ -11,7 +11,7 @@ pixel asset grounding can't encode.
 - A node with an **`IMAGE` fill** (a photo / product-shot rectangle) → **`save_image_fills`**. It
   writes the **original** uploaded asset (no clip, crop, scale, gradient, or mask baked in) and reports
   each fill's `scaleMode` + intrinsic size, so you reproduce the display in CSS (`FILL`→`object-fit:
-cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render. It dedupes a reused
+  cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render. It dedupes a reused
   asset to one file (named by hash) and handles a node carrying several image fills. Reach for
   `save_screenshots` / `get_screenshot` `PNG` at **`scale: 2`** (the tool defaults to 1, which
   rasterizes at display size and ships blurry on dense screens) **only** when you specifically need
@@ -25,7 +25,7 @@ cover`, `FIT`→`contain`) instead of shipping a pre-scaled, pre-clipped render.
 - **Logos / brand marks are always exported**, never typed by hand.
 - Because `save_image_fills` reads the source bytes, a **clipped / off-canvas** node still yields its
   full asset — the empty/recovered dance below only applies to the screenshot fallback. A **`path:
-null`** (or `images: []`) means the fill's image couldn't be resolved / the node has no image fill;
+  null`** (or `images: []`) means the fill's image couldn't be resolved / the node has no image fill;
   don't invent a file, fall back to a screenshot or skip.
 - An **`empty: true` export rendered nothing** (node hidden / fully clipped / off-canvas — e.g. a
   marquee's off-screen edge logos) — a **screenshot-fallback** concern only. Don't ship the blank
