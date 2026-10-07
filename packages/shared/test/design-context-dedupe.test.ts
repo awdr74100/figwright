@@ -179,6 +179,96 @@ describe('dedupeStyles', () => {
     ]);
   });
 
+  it('carries a SHADER fill by name, with every colour in its values as hex', () => {
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [
+          {
+            type: 'SHADER',
+            visible: true,
+            opacity: 1,
+            shaderId: 'shader:mesh',
+            shaderProperties: [
+              { id: 'd1', name: 'Tint', type: 'COLOR', value: { r: 1, g: 0, b: 0, a: 0.5 } },
+              {
+                id: 'd2',
+                name: 'Spot',
+                type: 'COLOR_POINT',
+                value: { x: 0.5, y: 0.5, color: { r: 0, g: 0, b: 1 } },
+              },
+              {
+                id: 'd3',
+                name: 'Ramp',
+                type: 'GRADIENT',
+                value: {
+                  stops: [
+                    { position: 0, color: { r: 1, g: 1, b: 1, a: 1 } },
+                    { position: 1, color: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:2' } },
+                  ],
+                },
+              },
+              { id: 'd4', value: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:3' } },
+              { id: 'd5', name: 'Speed', type: 'NUMBER', value: 2, description: 'Loops/s' },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      {
+        type: 'SHADER',
+        shaderId: 'shader:mesh',
+        shaderProperties: [
+          { name: 'Tint', type: 'COLOR', value: '#FF000080' },
+          { name: 'Spot', type: 'COLOR_POINT', value: { x: 0.5, y: 0.5, color: '#0000FF' } },
+          {
+            name: 'Ramp',
+            type: 'GRADIENT',
+            value: {
+              stops: [
+                { position: 0, color: '#FFFFFF' },
+                { position: 1, color: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:2' } },
+              ],
+            },
+          },
+          // No metadata → nothing to name it by but its definition id.
+          { id: 'd4', value: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:3' } },
+          { name: 'Speed', type: 'NUMBER', value: 2, description: 'Loops/s' },
+        ],
+      },
+    ]);
+  });
+
+  it('carries a SHADER effect through the effect ref', () => {
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        effects: [
+          {
+            type: 'SHADER',
+            visible: true,
+            shaderId: 'shader:glow',
+            shaderProperties: [
+              { id: 'd1', name: 'Glow', type: 'COLOR', value: { r: 0, g: 1, b: 0 } },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.effect!]).toEqual([
+      {
+        type: 'SHADER',
+        shaderId: 'shader:glow',
+        shaderProperties: [{ name: 'Glow', type: 'COLOR', value: '#00FF00' }],
+      },
+    ]);
+  });
+
   it('hoists effects (drop-shadow) and strokes into refs, converting colors to hex', () => {
     const n: DesignContextNode = {
       id: 'card',

@@ -128,6 +128,33 @@ describe('SerializedPaint variant', () => {
     expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
   });
 
+  it('accepts a SHADER paint and keeps every value shape intact', () => {
+    // The value members share keys ({x,y} ⊂ {x,y,x2,y2} ⊂ …). Were they loose, the first member
+    // would win and strip the rest — a LINE would come back as a POINT.
+    const values = [
+      true,
+      'label',
+      0.5,
+      { r: 1, g: 0, b: 0 },
+      { r: 1, g: 0, b: 0, a: 0.5 },
+      { x: 0.1, y: 0.2 },
+      { x: 0.1, y: 0.2, x2: 0.3, y2: 0.4 },
+      { x: 0.1, y: 0.2, radius: 0.3 },
+      { x: 0.1, y: 0.2, radius: 0.3, angle: 45 },
+      { x: 0.1, y: 0.2, color: { type: 'VARIABLE_ALIAS', id: 'VariableID:1:1' } },
+      { stops: [{ position: 0, color: { r: 0, g: 0, b: 0, a: 1 } }] },
+      { type: 'VARIABLE_ALIAS', id: 'VariableID:1:2' },
+    ];
+    const paint = {
+      type: 'SHADER',
+      visible: true,
+      opacity: 1,
+      shaderId: 'shader:1',
+      shaderProperties: values.map((value, i) => ({ id: `d${i}`, value })),
+    };
+    expect(SerializedPaintSchema.parse(paint)).toEqual(paint);
+  });
+
   it('rejects a PATTERN paint missing its source node', () => {
     expect(() =>
       SerializedPaintSchema.parse({

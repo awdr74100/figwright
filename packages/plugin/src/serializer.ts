@@ -14,6 +14,8 @@ import {
   type SerializedLineHeight,
   type SerializedNode,
   type SerializedPaint,
+  type SerializedShaderProperty,
+  type SerializedShaderValue,
   type SerializedStyleIds,
   type SerializedTextSegment,
   serializeNode as serializeBase,
@@ -64,6 +66,36 @@ export const collectBindings = (raw: unknown): SerializedBindings | undefined =>
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+};
+
+/**
+ * A SHADER paint's or effect's identity and parameters. Figma keys the values by
+ * property-definition id; `propertyMetadata` (plugin-typings 1.141) is what names and types those
+ * ids. The metadata is optional, so a value that arrives without it still ships under its bare id
+ * rather than being dropped. Values are copied as plain data — a variable-driven one stays Figma's
+ * own alias form.
+ */
+const serializeShader = (
+  shader: ShaderPaint | ShaderEffect,
+): { shaderId: string; shaderProperties?: SerializedShaderProperty[] } => {
+  const metadata = shader.propertyMetadata ?? {};
+  const properties: SerializedShaderProperty[] = [];
+  for (const [id, value] of Object.entries(shader.properties ?? {})) {
+    const def = metadata[id];
+    const property: SerializedShaderProperty = {
+      id,
+      ...(def === undefined ? {} : { name: def.name, type: def.type }),
+      value: JSON.parse(JSON.stringify(value)) as SerializedShaderValue,
+    };
+    if (def?.description !== undefined && def.description !== '') {
+      property.description = def.description;
+    }
+    properties.push(property);
+  }
+  return {
+    shaderId: shader.id,
+    ...(properties.length > 0 ? { shaderProperties: properties } : {}),
+  };
 };
 
 /**
@@ -151,8 +183,11 @@ export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): 
       ...alignment,
     };
   }
+  if (paint.type === 'SHADER') {
+    return { type: 'SHADER', visible, opacity, ...serializeShader(paint) };
+  }
   // IMAGE / VIDEO paints carry a scaleMode (FILL/FIT/CROP/TILE) — the object-fit equivalent, needed
-  // so exported images get the right fit instead of being stretched. SHADER has none. filtersApplied
+  // so exported images get the right fit instead of being stretched. filtersApplied
   // flags in-fill colour grading, which the original bytes (save_image_fills) do NOT include — the
   // signal to export the composited render instead.
   const scaleMode = 'scaleMode' in paint ? (paint as { scaleMode?: string }).scaleMode : undefined;
@@ -868,9 +903,11 @@ export const serializeEffect = (effect: Effect): SerializedEffect => {
       ...(bound === undefined ? {} : { boundVariables: bound }),
     };
   }
-  // Blurs / textures carry radius; noise / glass carry only type + visible.
+  // Blurs / textures carry radius; a shader carries its id + values; noise / glass carry only type +
+  // visible.
   const out: SerializedEffect = { type: effect.type, visible: effect.visible };
   if ('radius' in effect && typeof effect.radius === 'number') out.radius = effect.radius;
+  if (effect.type === 'SHADER') Object.assign(out, serializeShader(effect));
   if (bound !== undefined) out.boundVariables = bound;
   return out;
 };
