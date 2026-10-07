@@ -35,6 +35,69 @@ export type SerializedRGBA = z.infer<typeof SerializedRGBASchema>;
 export const SerializedBindingsSchema = z.record(z.string(), z.string());
 export type SerializedBindings = z.infer<typeof SerializedBindingsSchema>;
 
+/** A value that stands in for a variable — Figma's own `{ type: 'VARIABLE_ALIAS', id }` form. */
+export const SerializedVariableAliasSchema = z.object({
+  type: z.literal('VARIABLE_ALIAS'),
+  id: z.string(),
+});
+export type SerializedVariableAlias = z.infer<typeof SerializedVariableAliasSchema>;
+
+/** A shader colour: RGB or RGBA (0–1), or a variable alias. */
+const ShaderColorSchema = z.union([
+  z.strictObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
+  SerializedVariableAliasSchema,
+]);
+
+/**
+ * One shader property value. Which shape is valid follows the property's declared `type`: BOOLEAN /
+ * TEXT / NUMBER are primitives, COLOR an RGB(A), POINT `{x,y}`, LINE `{x,y,x2,y2}`, CIRCLE
+ * `{x,y,radius}`, CIRCLE_POINT `{x,y,radius,angle}`, COLOR_POINT `{x,y,color}`, GRADIENT `{stops}`.
+ * Any value — or a colour nested inside one — can instead be a variable alias. The object members
+ * are strict because they share keys: a loose `{x,y}` would accept a LINE and strip its `x2/y2`.
+ */
+export const SerializedShaderValueSchema = z.union([
+  z.boolean(),
+  z.string(),
+  z.number(),
+  SerializedVariableAliasSchema,
+  z.strictObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
+  z.strictObject({ x: z.number(), y: z.number() }),
+  z.strictObject({ x: z.number(), y: z.number(), x2: z.number(), y2: z.number() }),
+  z.strictObject({ x: z.number(), y: z.number(), radius: z.number() }),
+  z.strictObject({ x: z.number(), y: z.number(), radius: z.number(), angle: z.number() }),
+  z.strictObject({ x: z.number(), y: z.number(), color: ShaderColorSchema }),
+  z.strictObject({
+    stops: z.array(z.strictObject({ position: z.number(), color: ShaderColorSchema })),
+  }),
+]);
+export type SerializedShaderValue = z.infer<typeof SerializedShaderValueSchema>;
+
+/**
+ * One property of an applied shader: its current value, plus — when Figma supplies the shader's
+ * property metadata (plugin-typings 1.141) — its name, declared type and description, which is what
+ * turns an opaque definition id into something a reader can act on. `id` is the property-definition
+ * id Figma keys the values by. A value bound to a variable arrives as an alias, and Figma lists
+ * that variable in the owning node's own `boundVariables` too (measured, nested gradient stops
+ * included).
+ */
+export const SerializedShaderPropertySchema = z.object({
+  id: z.string(),
+  /**
+   * The parameter's identifier as the shader declares it — not necessarily the label Figma's panel
+   * shows (measured: `warp` is shown as "Flow", `rotationSpeed` as "Speed"). A dropdown parameter
+   * arrives as its NUMBER index, with no option labels.
+   */
+  name: z.string().optional(),
+  /**
+   * BOOLEAN / TEXT / NUMBER / COLOR / POINT / LINE / CIRCLE / … — passed through as Figma reports
+   * it.
+   */
+  type: z.string().optional(),
+  value: SerializedShaderValueSchema,
+  description: z.string().optional(),
+});
+export type SerializedShaderProperty = z.infer<typeof SerializedShaderPropertySchema>;
+
 const SolidPaintSchema = z.object({
   type: z.literal('SOLID'),
   visible: z.boolean(),
@@ -78,14 +141,12 @@ const GradientPaintSchema = z.object({
 });
 
 /**
- * IMAGE / VIDEO / SHADER. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain, CROP,
- * TILE=repeat) is carried for IMAGE/VIDEO so an exported image gets the right fit; the raster bytes
- * themselves stay out of scope (exported separately via get_screenshot). SHADER is a procedural
- * fill with no scaleMode and no meaningful CSS translation — we emit only the type marker so it
- * isn't silently dropped. (PATTERN has its own schema below; it carries the tiling geometry.)
+ * IMAGE / VIDEO. scaleMode (the object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat)
+ * is carried so an exported image gets the right fit; the raster bytes themselves stay out of scope
+ * (exported separately via get_screenshot). (PATTERN and SHADER have their own schemas below.)
  */
 const OtherPaintSchema = z.object({
-  type: z.enum(['IMAGE', 'VIDEO', 'SHADER']),
+  type: z.enum(['IMAGE', 'VIDEO']),
   visible: z.boolean(),
   opacity: z.number(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
@@ -115,11 +176,27 @@ const PatternPaintSchema = z.object({
   horizontalAlignment: z.enum(['START', 'CENTER', 'END']).optional(),
 });
 
+/**
+ * SHADER — a procedural fill with no CSS translation; its pixels ship as the composited render
+ * (get_screenshot). What is carried is its identity and parameters, so a reader can tell which
+ * shader it is, what it is set to, and which of those settings are driven by variables.
+ */
+const ShaderPaintSchema = z.object({
+  type: z.literal('SHADER'),
+  visible: z.boolean(),
+  opacity: z.number(),
+  /** The shader's id — the same one `listAvailableShaders` / `importShaderById` use. */
+  shaderId: z.string(),
+  /** Its property values, in the order Figma reports them; omitted when there are none. */
+  shaderProperties: z.array(SerializedShaderPropertySchema).optional(),
+});
+
 export const SerializedPaintSchema = z.discriminatedUnion('type', [
   SolidPaintSchema,
   GradientPaintSchema,
   OtherPaintSchema,
   PatternPaintSchema,
+  ShaderPaintSchema,
 ]);
 export type SerializedPaint = z.infer<typeof SerializedPaintSchema>;
 
@@ -139,8 +216,9 @@ export type SerializedFontName = z.infer<typeof SerializedFontNameSchema>;
 
 /**
  * Bounded effect wire-format: shadows carry color / offset / spread; blurs & textures carry radius;
- * noise / glass carry only type + visible. `type` is the Figma effect type literal. (Lives here,
- * not in styles.ts, so both node serialization and style serialization can share it.)
+ * a shader carries its id + property values; noise / glass carry only type + visible. `type` is the
+ * Figma effect type literal. (Lives here, not in styles.ts, so both node serialization and style
+ * serialization can share it.)
  */
 export const SerializedEffectSchema = z.object({
   type: z.string(),
@@ -154,6 +232,9 @@ export const SerializedEffectSchema = z.object({
    * `offsetY`. Present only when at least one is bound.
    */
   boundVariables: SerializedBindingsSchema.optional(),
+  /** SHADER effects only — see the SHADER paint; the same two fields, with the same meaning. */
+  shaderId: z.string().optional(),
+  shaderProperties: z.array(SerializedShaderPropertySchema).optional(),
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 

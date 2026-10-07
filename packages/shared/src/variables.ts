@@ -1,12 +1,6 @@
 import { z } from 'zod';
 
-import { SerializedRGBASchema } from './serialized-node.js';
-
-export const SerializedVariableAliasSchema = z.object({
-  type: z.literal('VARIABLE_ALIAS'),
-  id: z.string(),
-});
-export type SerializedVariableAlias = z.infer<typeof SerializedVariableAliasSchema>;
+import { SerializedRGBASchema, SerializedVariableAliasSchema } from './serialized-node.js';
 
 /**
  * A COLOR variable value: RGBA plus a convenience `hex` (#RRGGBB / #RRGGBBAA, alpha only when < 1)

@@ -12,6 +12,8 @@ import type {
   SerializedLetterSpacing,
   SerializedLineHeight,
   SerializedPaint,
+  SerializedShaderProperty,
+  SerializedShaderValue,
 } from './serialized-node.js';
 
 /** JSON with sorted object keys, so equal-but-differently-ordered values hash identically. */
@@ -53,6 +55,53 @@ export const toHex = (c: SerializedColor, alpha?: number): string => {
   return withAlpha.toUpperCase();
 };
 
+/**
+ * A shader value as the codegen view shows it: every colour in it — top-level, on a colour point,
+ * on a gradient stop — becomes hex like the rest of this view; a variable alias stays an alias.
+ */
+type SimplifiedShaderValue = boolean | string | number | Record<string, unknown>;
+
+/**
+ * One shader property in the codegen view: named by its declared identifier when Figma supplied the
+ * metadata, else by its bare definition id (the id is noise once a name exists; get_node keeps
+ * both).
+ */
+export interface SimplifiedShaderProperty {
+  name?: string;
+  id?: string;
+  type?: string;
+  value: SimplifiedShaderValue;
+  description?: string;
+}
+
+const isRgb = (v: object): v is SerializedColor & { a?: number } =>
+  'r' in v && 'g' in v && 'b' in v;
+
+const shaderColor = (c: object): object | string => (isRgb(c) ? toHex(c, c.a) : c);
+
+const simplifyShaderValue = (v: SerializedShaderValue): SimplifiedShaderValue => {
+  if (typeof v !== 'object') return v;
+  if (isRgb(v)) return toHex(v, v.a);
+  if ('color' in v) return { ...v, color: shaderColor(v.color) };
+  if ('stops' in v) {
+    return { stops: v.stops.map(s => ({ position: s.position, color: shaderColor(s.color) })) };
+  }
+  return { ...v };
+};
+
+const simplifyShaderProperties = (
+  props: readonly SerializedShaderProperty[],
+): SimplifiedShaderProperty[] =>
+  props.map(p => {
+    const out: SimplifiedShaderProperty = {
+      ...(p.name === undefined ? { id: p.id } : { name: p.name }),
+      ...(p.type === undefined ? {} : { type: p.type }),
+      value: simplifyShaderValue(p.value),
+    };
+    if (p.description !== undefined) out.description = p.description;
+    return out;
+  });
+
 export interface SimplifiedPaint {
   type: string;
   color?: string;
@@ -71,6 +120,9 @@ export interface SimplifiedPaint {
   scalingFactor?: number;
   spacing?: { x: number; y: number };
   horizontalAlignment?: string;
+  /** SHADER: which shader, and what it is set to. Its pixels ship as the render (get_screenshot). */
+  shaderId?: string;
+  shaderProperties?: SimplifiedShaderProperty[];
   visible?: false;
 }
 
@@ -102,6 +154,11 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     if (paint.spacing !== undefined) out.spacing = paint.spacing;
     if (paint.horizontalAlignment !== undefined)
       out.horizontalAlignment = paint.horizontalAlignment;
+  } else if (paint.type === 'SHADER') {
+    out.shaderId = paint.shaderId;
+    if (paint.shaderProperties !== undefined) {
+      out.shaderProperties = simplifyShaderProperties(paint.shaderProperties);
+    }
   }
   if (paint.visible === false) out.visible = false;
   return out;
@@ -113,6 +170,8 @@ interface SimplifiedEffect {
   offset?: { x: number; y: number };
   radius?: number;
   spread?: number;
+  shaderId?: string;
+  shaderProperties?: SimplifiedShaderProperty[];
   visible?: false;
 }
 
@@ -123,6 +182,10 @@ const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
   if (e.offset !== undefined) out.offset = e.offset;
   if (e.radius !== undefined) out.radius = e.radius;
   if (e.spread !== undefined) out.spread = e.spread;
+  if (e.shaderId !== undefined) out.shaderId = e.shaderId;
+  if (e.shaderProperties !== undefined) {
+    out.shaderProperties = simplifyShaderProperties(e.shaderProperties);
+  }
   if (e.visible === false) out.visible = false;
   return out;
 };

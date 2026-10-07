@@ -146,6 +146,15 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `background-size` derived from `scalingFactor` (and gaps from `spacing`); for the hexagonal tile
   types (`HORIZONTAL_HEXAGONAL` / `VERTICAL_HEXAGONAL`), use an SVG `<pattern>` with offset rows.
   Don't flatten it to a solid colour.
+- **Shader fills & effects.** A `SHADER` fill, stroke or effect is procedural — there is no CSS for it,
+  so its pixels ship as the composited render (`get_screenshot` on the node), never as a guessed
+  gradient or colour. It carries `shaderId` and `shaderProperties` (`{ name, type, value }`, colours
+  as hex; a value that is a `VARIABLE_ALIAS` names its token in the `variables` table). Use them to
+  say which shader it is and what it is set to — e.g. when the codebase already has a component or
+  canvas effect that takes the same parameters — not to re-implement the shader. `name` is the
+  shader's own parameter identifier, which can differ from the label in Figma's panel (`warp` shows
+  as "Flow"), and a dropdown parameter is only its NUMBER index — don't present either as what the
+  designer sees.
 - **Containers first — the tree's nesting is the markup's nesting.** Emit **one container element per
   frame** and keep the parent/child relationships the payload gives you. Never flatten a section's
   frames into a flat run of siblings: the frame that disappears is the one that owned the `padding`

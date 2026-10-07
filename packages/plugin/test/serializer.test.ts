@@ -342,6 +342,87 @@ describe('serializeFlat', () => {
     ]);
   });
 
+  it('serializes a SHADER paint with its id and each value named by its metadata', () => {
+    const out = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'SHADER',
+            id: 'shader:grain',
+            visible: true,
+            opacity: 0.9,
+            properties: {
+              'def:1': 0.35,
+              'def:2': { r: 1, g: 0.5, b: 0, a: 1 },
+              'def:3': { type: 'VARIABLE_ALIAS', id: 'VariableID:7:1' },
+            },
+            propertyMetadata: {
+              'def:1': {
+                name: 'Intensity',
+                type: 'NUMBER',
+                defaultValue: 0.5,
+                description: 'Grain',
+              },
+              'def:2': { name: 'Tint', type: 'COLOR', description: '' },
+              'def:3': { name: 'Glow', type: 'COLOR' },
+            },
+          },
+        ],
+      }),
+    );
+    expect(out.fills).toEqual([
+      {
+        type: 'SHADER',
+        visible: true,
+        opacity: 0.9,
+        shaderId: 'shader:grain',
+        shaderProperties: [
+          // The author's default is not what renders, so it stays out; an empty description too.
+          { id: 'def:1', name: 'Intensity', type: 'NUMBER', value: 0.35, description: 'Grain' },
+          { id: 'def:2', name: 'Tint', type: 'COLOR', value: { r: 1, g: 0.5, b: 0, a: 1 } },
+          {
+            id: 'def:3',
+            name: 'Glow',
+            type: 'COLOR',
+            value: { type: 'VARIABLE_ALIAS', id: 'VariableID:7:1' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a SHADER value under its bare id when Figma supplies no metadata for it', () => {
+    const out = serializeFlatSync(
+      fake({
+        fills: [
+          {
+            type: 'SHADER',
+            id: 'shader:wave',
+            properties: { 'def:1': { x: 0.2, y: 0.4, x2: 0.8, y2: 0.6 } },
+          },
+        ],
+      }),
+    );
+    expect(out.fills).toEqual([
+      {
+        type: 'SHADER',
+        visible: true,
+        opacity: 1,
+        shaderId: 'shader:wave',
+        shaderProperties: [{ id: 'def:1', value: { x: 0.2, y: 0.4, x2: 0.8, y2: 0.6 } }],
+      },
+    ]);
+  });
+
+  it('omits shaderProperties for a shader that has none', () => {
+    const out = serializeFlatSync(
+      fake({ fills: [{ type: 'SHADER', id: 'shader:flat', visible: true, opacity: 1 }] }),
+    );
+    expect(out.fills).toEqual([
+      { type: 'SHADER', visible: true, opacity: 1, shaderId: 'shader:flat' },
+    ]);
+  });
+
   it('falls back paint.visible/opacity to defaults when undefined', () => {
     const out = serializeFlatSync(
       fake({ fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }] }),
@@ -1508,6 +1589,22 @@ describe('serializeEffect', () => {
       radius: 8,
     } as unknown as Effect);
     expect(out).toEqual({ type: 'LAYER_BLUR', visible: false, radius: 8 });
+  });
+
+  it('serializes a SHADER effect with its id and named values', () => {
+    const out = serializeEffect({
+      type: 'SHADER',
+      visible: true,
+      id: 'shader:glow',
+      properties: { 'def:1': true },
+      propertyMetadata: { 'def:1': { name: 'Animate', type: 'BOOLEAN' } },
+    } as unknown as Effect);
+    expect(out).toEqual({
+      type: 'SHADER',
+      visible: true,
+      shaderId: 'shader:glow',
+      shaderProperties: [{ id: 'def:1', name: 'Animate', type: 'BOOLEAN', value: true }],
+    });
   });
 });
 
