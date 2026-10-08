@@ -879,14 +879,39 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
-export const serializeTree = async (node: SceneNode): Promise<SerializedNode> => {
-  const out = await serializeFlat(node);
-  if ('children' in node && Array.isArray(node.children)) {
-    const children = await Promise.all((node.children as readonly SceneNode[]).map(serializeTree));
-    return { ...out, children };
+export const serializeTrees = async (nodes: readonly SceneNode[]): Promise<SerializedNode[]> => {
+  const result: SerializedNode[] = [];
+  const pending = nodes.map((node, index) => ({ node, target: result, index })).toReversed();
+  while (pending.length > 0) {
+    // Bound both the synchronous work and outstanding main-component lookups.
+    // Promise.all over the entire forest otherwise drains microtasks without ever
+    // giving Figma's message / timer loop a chance to run on a large library page.
+    const batch = pending.splice(-64).toReversed();
+    // eslint-disable-next-line no-await-in-loop -- serialize bounded batches, preserving output order
+    const serialized = await Promise.all(batch.map(entry => serializeFlat(entry.node)));
+    for (let i = 0; i < batch.length; i += 1) {
+      const { node, target, index } = batch[i]!;
+      const out = serialized[i]!;
+      target[index] = out;
+      if ('children' in node && Array.isArray(node.children)) {
+        const children: SerializedNode[] = [];
+        out.children = children;
+        for (let j = node.children.length - 1; j >= 0; j -= 1) {
+          pending.push({ node: node.children[j]!, target: children, index: j });
+        }
+      }
+    }
+    if (pending.length > 0) {
+      // A resolved promise only yields to microtasks; a timer yields to the host.
+      // eslint-disable-next-line no-await-in-loop -- let Figma process messages between batches
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
   }
-  return out;
+  return result;
 };
+
+export const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
+  (await serializeTrees([node]))[0]!;
 
 export const serializeEffect = (effect: Effect): SerializedEffect => {
   // Shadow bindings (colour / radius / spread / offsetX / offsetY) live on the effect itself; a

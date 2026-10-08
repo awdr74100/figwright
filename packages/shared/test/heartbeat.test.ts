@@ -69,4 +69,31 @@ describe('HeartbeatMonitor', () => {
     vi.advanceTimersByTime(1_000);
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
+
+  it('probes before timing out after the local timer was suspended', () => {
+    const { hb, sendPing, onTimeout } = makeMonitor();
+    hb.start();
+    // A background renderer / sleeping computer resumes with a large wall-clock jump,
+    // but no interval callbacks ran while it was suspended.
+    vi.setSystemTime(Date.now() + 60_000);
+    vi.advanceTimersByTime(1_000);
+    expect(sendPing).toHaveBeenCalledTimes(1);
+    expect(onTimeout).not.toHaveBeenCalled();
+    hb.notifyReceived();
+    vi.advanceTimersByTime(1_000);
+    expect(onTimeout).not.toHaveBeenCalled();
+    hb.stop();
+  });
+
+  it('still times out an unresponsive peer after a suspended timer resumes', () => {
+    const { hb, sendPing, onTimeout } = makeMonitor();
+    hb.start();
+    vi.advanceTimersByTime(1_000);
+    vi.setSystemTime(Date.now() + 60_000);
+    vi.advanceTimersByTime(1_000);
+    expect(sendPing).toHaveBeenCalledTimes(2);
+    expect(onTimeout).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1_000);
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
 });

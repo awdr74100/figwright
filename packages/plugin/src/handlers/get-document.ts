@@ -1,7 +1,7 @@
 import type { GetDocumentResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeTree } from '../serializer.js';
+import { serializeTrees } from '../serializer.js';
 
 export const createGetDocumentHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -10,7 +10,7 @@ export const createGetDocumentHandler =
     const result: GetDocumentResult = {
       pageId: page.id,
       pageName: page.name,
-      children: await Promise.all(page.children.map(serializeTree)),
+      children: await serializeTrees(page.children),
     };
     return result;
   };
