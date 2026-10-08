@@ -63,6 +63,58 @@ describe('search_nodes handler', () => {
     expect(result.nodes.map(n => n.id)).toEqual(['1:2']);
   });
 
+  it('bounds main-component lookups on a large page without dropping or reordering matches', async () => {
+    let pending = 0;
+    let peak = 0;
+    const instances = Array.from({ length: 1025 }, (_, index) => {
+      const node = fake(`2:${index}`, 'INSTANCE', `Instance ${index}`);
+      return Object.assign(node, {
+        getMainComponentAsync: async () => {
+          pending += 1;
+          peak = Math.max(peak, pending);
+          await Promise.resolve();
+          if (index % 2 === 0) await Promise.resolve();
+          pending -= 1;
+          return { id: `3:${index}`, name: `Component ${index}`, key: `key-${index}` };
+        },
+      });
+    });
+    const page = { type: 'PAGE', children: instances } as unknown as PageNode;
+    const handler = createSearchNodesHandler(fakeFigma([], { '1:1': page }));
+
+    const result = (await handler({ root: '1:1', type: 'INSTANCE' })) as SearchNodesResult;
+
+    expect(peak).toBeLessThanOrEqual(512);
+    expect(result.nodes.map(node => node.id)).toEqual(instances.map(node => node.id));
+    expect(result.nodes.map(node => node.mainComponent)).toEqual(
+      instances.map((_, index) => ({
+        id: `3:${index}`,
+        name: `Component ${index}`,
+        key: `key-${index}`,
+      })),
+    );
+    expect(result.nodes.every(node => node.children === undefined)).toBe(true);
+  });
+
+  it('lets host timers run before all large-search matches are serialized', async () => {
+    let lookups = 0;
+    const instances = Array.from({ length: 1025 }, (_, index) =>
+      Object.assign(fake(`2:${index}`, 'INSTANCE', `Instance ${index}`), {
+        getMainComponentAsync: async () => {
+          lookups += 1;
+          return null;
+        },
+      }),
+    );
+    const handler = createSearchNodesHandler(fakeFigma(instances));
+    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(lookups), 0));
+
+    const result = (await handler({ type: 'INSTANCE' })) as SearchNodesResult;
+
+    expect(await hostTick).toBeLessThan(instances.length);
+    expect(result.nodes).toHaveLength(instances.length);
+  });
+
   it('throws when neither name nor type is provided', async () => {
     const handler = createSearchNodesHandler(fakeFigma(tree()));
     await expect(handler({})).rejects.toThrow(/at least one/);

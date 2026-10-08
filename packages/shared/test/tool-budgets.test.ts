@@ -37,10 +37,14 @@ describe('tool budgets', () => {
     }
   });
 
+  it('allows a full-page search to finish beyond the ordinary heavy-tool window', () => {
+    expect(getToolBudget('search_nodes')).toBe(300_000);
+  });
+
   // The whole point of the table: the three nested timers must be strictly increasing outward, so the
   // innermost (sandbox) fires first with the most specific error and no layer is left orphaned.
   it('nests sandbox < relay < follower by one margin per layer', () => {
-    for (const t of ['set_fills', 'export_pdf']) {
+    for (const t of ['set_fills', 'export_pdf', 'search_nodes']) {
       expect(getRelayBudget(t)).toBe(getToolBudget(t) + BUDGET_LAYER_MARGIN_MS);
       expect(getFollowerBudget(t)).toBe(getToolBudget(t) + 2 * BUDGET_LAYER_MARGIN_MS);
       expect(getToolBudget(t)).toBeLessThan(getRelayBudget(t));

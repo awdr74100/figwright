@@ -21,6 +21,10 @@ export const DEFAULT_TOOL_BUDGET_MS = 30_000;
 // per-instance async walk over a large tree — routinely exceeds the default window.
 export const HEAVY_TOOL_BUDGET_MS = 120_000;
 
+// Full-page flat searches preserve every match and resolve its main component. A real page with
+// ~30k instances exceeds the ordinary heavy window even with bounded, host-yielding serialization.
+const SEARCH_TOOL_BUDGET_MS = 300_000;
+
 // Gap added per nesting layer (relay = B + 1×, follower = B + 2×) so inner fires before outer.
 export const BUDGET_LAYER_MARGIN_MS = 5_000;
 
@@ -47,7 +51,11 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
 
 /** Base budget `B`: how long the Figma sandbox itself may take. Used by the UI → sandbox bridge. */
 export const getToolBudget = (toolName: string): number =>
-  HEAVY_TOOLS.has(toolName) ? HEAVY_TOOL_BUDGET_MS : DEFAULT_TOOL_BUDGET_MS;
+  toolName === 'search_nodes'
+    ? SEARCH_TOOL_BUDGET_MS
+    : HEAVY_TOOLS.has(toolName)
+      ? HEAVY_TOOL_BUDGET_MS
+      : DEFAULT_TOOL_BUDGET_MS;
 
 /** Relay → plugin request budget = B + one margin, so the sandbox bridge (inner) fires first. */
 export const getRelayBudget = (toolName: string): number =>
