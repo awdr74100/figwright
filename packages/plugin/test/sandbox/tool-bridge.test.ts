@@ -75,45 +75,51 @@ describe('createToolBridge', () => {
     await expect(bridge.handler('ping', undefined)).rejects.toThrow(/timeout/);
   });
 
-  it('keeps a large search pending past the ordinary heavy-tool window and accepts its result', async () => {
-    vi.useFakeTimers();
-    const { bridge, sent, emit } = setup();
-    try {
-      const promise = bridge.handler('search_nodes', { type: 'INSTANCE' });
-      // Observe rejections immediately, including when the old budget fires during timer advancement.
-      const answer = promise.then(
-        result => ({ result }),
-        error => ({ error }),
-      );
-      await vi.advanceTimersByTimeAsync(120_001);
-      emit(createToolResult({ id: sent[0]!.id, result: { nodes: [] } }));
-      await expect(answer).resolves.toEqual({ result: { nodes: [] } });
-      expect(bridge.pendingCount()).toBe(0);
-    } finally {
-      bridge.dispose();
-      vi.useRealTimers();
-    }
-  });
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+    'keeps a large %s pending past the ordinary heavy-tool window and accepts its result',
+    async method => {
+      vi.useFakeTimers();
+      const { bridge, sent, emit } = setup();
+      try {
+        const promise = bridge.handler(method, {});
+        // Observe rejections immediately, including when the old budget fires during timer advancement.
+        const answer = promise.then(
+          result => ({ result }),
+          error => ({ error }),
+        );
+        await vi.advanceTimersByTimeAsync(120_001);
+        emit(createToolResult({ id: sent[0]!.id, result: { nodes: [] } }));
+        await expect(answer).resolves.toEqual({ result: { nodes: [] } });
+        expect(bridge.pendingCount()).toBe(0);
+      } finally {
+        bridge.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
 
-  it('still times out a search that never answers within its full budget', async () => {
-    vi.useFakeTimers();
-    const { bridge } = setup();
-    try {
-      const promise = bridge.handler('search_nodes', { type: 'INSTANCE' });
-      const answer = promise.then(
-        result => ({ result }),
-        error => ({ error }),
-      );
-      await vi.advanceTimersByTimeAsync(300_000);
-      await expect(answer).resolves.toEqual({
-        error: new Error('sandbox tool timeout (method=search_nodes)'),
-      });
-      expect(bridge.pendingCount()).toBe(0);
-    } finally {
-      bridge.dispose();
-      vi.useRealTimers();
-    }
-  });
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+    'still times out %s when it never answers within its full budget',
+    async method => {
+      vi.useFakeTimers();
+      const { bridge } = setup();
+      try {
+        const promise = bridge.handler(method, {});
+        const answer = promise.then(
+          result => ({ result }),
+          error => ({ error }),
+        );
+        await vi.advanceTimersByTimeAsync(300_000);
+        await expect(answer).resolves.toEqual({
+          error: new Error(`sandbox tool timeout (method=${method})`),
+        });
+        expect(bridge.pendingCount()).toBe(0);
+      } finally {
+        bridge.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('ignores orphan replies for unknown ids', async () => {
     const log = vi.fn<(msg: string) => void>();

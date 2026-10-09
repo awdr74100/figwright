@@ -1,7 +1,7 @@
 import type { ScanTextNodesResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlat } from '../serializer.js';
+import { serializeFlatNodes } from '../serializer.js';
 import { resolveScope, walk } from '../traverse.js';
 
 export const createScanTextNodesHandler =
@@ -14,7 +14,7 @@ export const createScanTextNodesHandler =
     for (const node of walk(scope)) {
       if (node.type === 'TEXT') matches.push(node);
     }
-    const nodes: SerializedNode[] = await Promise.all(matches.map(serializeFlat));
+    const nodes: SerializedNode[] = await serializeFlatNodes(matches);
     const result: ScanTextNodesResult = { nodes };
     return result;
   };

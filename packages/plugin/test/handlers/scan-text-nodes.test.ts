@@ -59,4 +59,28 @@ describe('scan_text_nodes handler', () => {
     const result = (await handler(undefined)) as ScanTextNodesResult;
     expect(result.nodes).toEqual([]);
   });
+
+  it('yields to host timers on a large text scan without losing text, style, or order', async () => {
+    let reads = 0;
+    const fontName = { family: 'Inter', style: 'Regular' };
+    const texts = Array.from({ length: 1025 }, (_, index) =>
+      Object.defineProperty(fake(`2:${index}`, 'TEXT', { fontName, fontSize: 14 }), 'characters', {
+        get: () => {
+          reads += 1;
+          return `Text ${index}`;
+        },
+      }),
+    );
+    const handler = createScanTextNodesHandler(fakeFigma(texts));
+    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(reads), 0));
+    const result = (await handler({})) as ScanTextNodesResult;
+
+    expect(result.nodes.map(node => node.id)).toEqual(texts.map(node => node.id));
+    expect(result.nodes.map(node => node.characters)).toEqual(
+      texts.map((_, index) => `Text ${index}`),
+    );
+    expect(result.nodes.every(node => node.fontSize === 14)).toBe(true);
+    expect(result.nodes.map(node => node.fontName)).toEqual(texts.map(() => fontName));
+    expect(await hostTick).toBeLessThan(reads);
+  });
 });

@@ -1,7 +1,7 @@
 import type { ScanNodesByTypesResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlat } from '../serializer.js';
+import { serializeFlatNodes } from '../serializer.js';
 import { resolveScope, walk } from '../traverse.js';
 
 export const createScanNodesByTypesHandler =
@@ -22,7 +22,7 @@ export const createScanNodesByTypesHandler =
     for (const node of walk(scope)) {
       if (types.has(node.type)) matches.push(node);
     }
-    const nodes: SerializedNode[] = await Promise.all(matches.map(serializeFlat));
+    const nodes: SerializedNode[] = await serializeFlatNodes(matches);
     const result: ScanNodesByTypesResult = { nodes };
     return result;
   };

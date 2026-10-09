@@ -879,6 +879,27 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
+/** Flat page reads share bounded serialization, preserving every node and its original order. */
+export const serializeFlatNodes = async (
+  nodes: readonly SceneNode[],
+): Promise<SerializedNode[]> => {
+  const result: SerializedNode[] = [];
+  // A live ~30k-instance page aborts with unbounded lookups. This batch size keeps reads
+  // responsive without the excessive host-yield overhead measured with much smaller batches.
+  const batchSize = 512;
+  for (let offset = 0; offset < nodes.length; offset += batchSize) {
+    if (offset > 0) {
+      // A resolved promise only yields to microtasks, not Figma's message / timer loop.
+      // eslint-disable-next-line no-await-in-loop -- let the host run between bounded batches
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+    // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
+    const batch = await Promise.all(nodes.slice(offset, offset + batchSize).map(serializeFlat));
+    result.push(...batch);
+  }
+  return result;
+};
+
 export const serializeTrees = async (nodes: readonly SceneNode[]): Promise<SerializedNode[]> => {
   const result: SerializedNode[] = [];
   const pending = nodes.map((node, index) => ({ node, target: result, index })).toReversed();

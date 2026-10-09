@@ -21,9 +21,15 @@ export const DEFAULT_TOOL_BUDGET_MS = 30_000;
 // per-instance async walk over a large tree — routinely exceeds the default window.
 export const HEAVY_TOOL_BUDGET_MS = 120_000;
 
-// Full-page flat searches preserve every match and resolve its main component. A real page with
+// Full-page flat searches / scans preserve every match and resolve its main component. A real page with
 // ~30k instances exceeds the ordinary heavy window even with bounded, host-yielding serialization.
-const SEARCH_TOOL_BUDGET_MS = 300_000;
+const FLAT_READ_TOOL_BUDGET_MS = 300_000;
+
+const FLAT_READ_TOOLS: ReadonlySet<string> = new Set([
+  'search_nodes',
+  'scan_nodes_by_types',
+  'scan_text_nodes',
+]);
 
 // Gap added per nesting layer (relay = B + 1×, follower = B + 2×) so inner fires before outer.
 export const BUDGET_LAYER_MARGIN_MS = 5_000;
@@ -40,8 +46,6 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // this is at least as heavy as get_design_context, which already has the wide budget.
   'get_node',
   'get_nodes_info',
-  'scan_text_nodes',
-  'scan_nodes_by_types',
   // A batch runs every op it carries and, when one fails, unwinds every op already applied — and
   // any step can wait on Figma (a live rollback was measured spending ~49s inside one font load).
   // Timing out mid-rollback reports a timeout for a call that did finish, and discards the one
@@ -51,8 +55,8 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
 
 /** Base budget `B`: how long the Figma sandbox itself may take. Used by the UI → sandbox bridge. */
 export const getToolBudget = (toolName: string): number =>
-  toolName === 'search_nodes'
-    ? SEARCH_TOOL_BUDGET_MS
+  FLAT_READ_TOOLS.has(toolName)
+    ? FLAT_READ_TOOL_BUDGET_MS
     : HEAVY_TOOLS.has(toolName)
       ? HEAVY_TOOL_BUDGET_MS
       : DEFAULT_TOOL_BUDGET_MS;
