@@ -789,8 +789,16 @@ export const GetPagesResultSchema = z.object({
 });
 export type GetPagesResult = z.infer<typeof GetPagesResultSchema>;
 
-/** Shared shape for the tree-traversal tools: a flat array of matching nodes. */
+/**
+ * Shared shape for the tree-traversal tools: a flat array of matching nodes, in document order.
+ *
+ * When every match will not fit in one tool result (TOOL_RESULT_BUDGET_BYTES), `nodes` is the
+ * leading part that does, `matchCount` says how many matched in all, and `note` (first, so it is
+ * read before the data) says how to reach the rest. Absent both, `nodes` is every match.
+ */
 export const NodeListResultSchema = z.object({
+  note: z.string().optional(),
+  matchCount: z.number().int().nonnegative().optional(),
   nodes: z.array(SerializedNodeSchema),
 });
 export type SearchNodesResult = z.infer<typeof NodeListResultSchema>;

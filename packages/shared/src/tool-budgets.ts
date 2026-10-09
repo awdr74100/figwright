@@ -21,16 +21,6 @@ export const DEFAULT_TOOL_BUDGET_MS = 30_000;
 // per-instance async walk over a large tree — routinely exceeds the default window.
 export const HEAVY_TOOL_BUDGET_MS = 120_000;
 
-// Full-page flat searches / scans preserve every match and resolve its main component. A real page with
-// ~30k instances exceeds the ordinary heavy window even with bounded, host-yielding serialization.
-const FLAT_READ_TOOL_BUDGET_MS = 300_000;
-
-const FLAT_READ_TOOLS: ReadonlySet<string> = new Set([
-  'search_nodes',
-  'scan_nodes_by_types',
-  'scan_text_nodes',
-]);
-
 // Gap added per nesting layer (relay = B + 1×, follower = B + 2×) so inner fires before outer.
 export const BUDGET_LAYER_MARGIN_MS = 5_000;
 
@@ -46,6 +36,13 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // this is at least as heavy as get_design_context, which already has the wide budget.
   'get_node',
   'get_nodes_info',
+  // Page-wide walks: every node in scope is visited, then each match serialized with a
+  // main-component lookup per instance — a 32k-instance page measured ~24s warm and ~36–41s cold.
+  // The result budget now caps how much is serialized, not how far the walk goes. search_nodes
+  // does the same work as the scans and, left on the default, timed out at 35s on 16k instances.
+  'search_nodes',
+  'scan_text_nodes',
+  'scan_nodes_by_types',
   // A batch runs every op it carries and, when one fails, unwinds every op already applied — and
   // any step can wait on Figma (a live rollback was measured spending ~49s inside one font load).
   // Timing out mid-rollback reports a timeout for a call that did finish, and discards the one
@@ -55,11 +52,7 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
 
 /** Base budget `B`: how long the Figma sandbox itself may take. Used by the UI → sandbox bridge. */
 export const getToolBudget = (toolName: string): number =>
-  FLAT_READ_TOOLS.has(toolName)
-    ? FLAT_READ_TOOL_BUDGET_MS
-    : HEAVY_TOOLS.has(toolName)
-      ? HEAVY_TOOL_BUDGET_MS
-      : DEFAULT_TOOL_BUDGET_MS;
+  HEAVY_TOOLS.has(toolName) ? HEAVY_TOOL_BUDGET_MS : DEFAULT_TOOL_BUDGET_MS;
 
 /** Relay → plugin request budget = B + one margin, so the sandbox bridge (inner) fires first. */
 export const getRelayBudget = (toolName: string): number =>

@@ -1,3 +1,4 @@
+import { DEFAULT_TOOL_BUDGET_MS, HEAVY_TOOL_BUDGET_MS } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -76,18 +77,18 @@ describe('createToolBridge', () => {
   });
 
   it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
-    'keeps a large %s pending past the ordinary heavy-tool window and accepts its result',
+    'keeps a large %s pending past the default window and accepts its result',
     async method => {
       vi.useFakeTimers();
       const { bridge, sent, emit } = setup();
       try {
         const promise = bridge.handler(method, {});
-        // Observe rejections immediately, including when the old budget fires during timer advancement.
+        // Observe rejections immediately, including when a too-short budget fires mid-advance.
         const answer = promise.then(
           result => ({ result }),
           error => ({ error }),
         );
-        await vi.advanceTimersByTimeAsync(120_001);
+        await vi.advanceTimersByTimeAsync(DEFAULT_TOOL_BUDGET_MS + 1);
         emit(createToolResult({ id: sent[0]!.id, result: { nodes: [] } }));
         await expect(answer).resolves.toEqual({ result: { nodes: [] } });
         expect(bridge.pendingCount()).toBe(0);
@@ -99,7 +100,7 @@ describe('createToolBridge', () => {
   );
 
   it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
-    'still times out %s when it never answers within its full budget',
+    'still times out %s when it never answers within the heavy budget',
     async method => {
       vi.useFakeTimers();
       const { bridge } = setup();
@@ -109,7 +110,7 @@ describe('createToolBridge', () => {
           result => ({ result }),
           error => ({ error }),
         );
-        await vi.advanceTimersByTimeAsync(300_000);
+        await vi.advanceTimersByTimeAsync(HEAVY_TOOL_BUDGET_MS);
         await expect(answer).resolves.toEqual({
           error: new Error(`sandbox tool timeout (method=${method})`),
         });

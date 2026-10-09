@@ -1,7 +1,14 @@
 import type { ScanTextNodesResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createScanTextNodesHandler } from '../../src/handlers/scan-text-nodes.js';
+
+// Every Date.now() read advances a fake clock by 1ms, so a time slice ends after a fixed number of
+// reads instead of after however much work this machine fits into 40 real milliseconds.
+const tickingClock = (): { mockRestore: () => void } => {
+  let now = 0;
+  return vi.spyOn(Date, 'now').mockImplementation(() => (now += 1));
+};
 
 const fake = (
   id: string,
@@ -60,27 +67,46 @@ describe('scan_text_nodes handler', () => {
     expect(result.nodes).toEqual([]);
   });
 
-  it('yields to host timers on a large text scan without losing text, style, or order', async () => {
-    let reads = 0;
+  it('hands the thread back to Figma mid-scan without losing text, style, or order', async () => {
     const fontName = { family: 'Inter', style: 'Regular' };
     const texts = Array.from({ length: 1025 }, (_, index) =>
-      Object.defineProperty(fake(`2:${index}`, 'TEXT', { fontName, fontSize: 14 }), 'characters', {
-        get: () => {
-          reads += 1;
-          return `Text ${index}`;
-        },
-      }),
+      fake(`2:${index}`, 'TEXT', { fontName, fontSize: 14, characters: `Text ${index}` }),
     );
     const handler = createScanTextNodesHandler(fakeFigma(texts));
-    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(reads), 0));
-    const result = (await handler({})) as ScanTextNodesResult;
+    const clock = tickingClock();
+    try {
+      let finished = false;
+      const read = Promise.resolve(handler({})).then(result => {
+        finished = true;
+        return result as ScanTextNodesResult;
+      });
+      const finishedWhenHostRan = await new Promise<boolean>(resolve =>
+        setTimeout(() => resolve(finished), 0),
+      );
+      expect(finishedWhenHostRan).toBe(false);
+      const result = await read;
+      expect(result.nodes.map(node => node.id)).toEqual(texts.map(node => node.id));
+      expect(result.nodes.map(node => node.characters)).toEqual(
+        texts.map((_, index) => `Text ${index}`),
+      );
+      expect(result.nodes.every(node => node.fontSize === 14)).toBe(true);
+      expect(result.nodes.map(node => node.fontName)).toEqual(texts.map(() => fontName));
+    } finally {
+      clock.mockRestore();
+    }
+  });
 
-    expect(result.nodes.map(node => node.id)).toEqual(texts.map(node => node.id));
-    expect(result.nodes.map(node => node.characters)).toEqual(
-      texts.map((_, index) => `Text ${index}`),
+  it('stops at what one result can carry and says how many matched in all', async () => {
+    // 1 MB of text per node: the budget (9.5 MB) is certainly passed by the tenth.
+    const texts = Array.from({ length: 40 }, (_, index) =>
+      fake(`2:${index}`, 'TEXT', { characters: 'x'.repeat(1024 * 1024) }),
     );
-    expect(result.nodes.every(node => node.fontSize === 14)).toBe(true);
-    expect(result.nodes.map(node => node.fontName)).toEqual(texts.map(() => fontName));
-    expect(await hostTick).toBeLessThan(reads);
+    const result = (await createScanTextNodesHandler(fakeFigma(texts))({})) as ScanTextNodesResult;
+    expect(result.matchCount).toBe(40);
+    expect(result.nodes.length).toBeGreaterThanOrEqual(10);
+    expect(result.nodes.length).toBeLessThan(40);
+    expect(result.nodes.map(node => node.id)).toEqual(
+      texts.slice(0, result.nodes.length).map(node => node.id),
+    );
   });
 });

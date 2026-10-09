@@ -1,8 +1,17 @@
+import { TimeSlice } from './cooperative.js';
+
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
 
-const hasChildren = (node: SceneNode): node is SceneNode & { children: readonly SceneNode[] } =>
-  'children' in node && Array.isArray((node as { children?: unknown }).children);
+/**
+ * A node's children, or null for a leaf type. `children` is a native getter that builds a fresh
+ * array on every access, so it is read once here rather than once to test and again to iterate.
+ */
+export const childrenOf = (node: SceneNode): readonly SceneNode[] | null => {
+  if (!('children' in node)) return null;
+  const children = (node as { children?: unknown }).children;
+  return Array.isArray(children) ? (children as readonly SceneNode[]) : null;
+};
 
 /**
  * Depth-first pre-order walk over a forest of scene nodes (each node, then its descendants).
@@ -12,40 +21,71 @@ const hasChildren = (node: SceneNode): node is SceneNode & { children: readonly 
 export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
   for (const node of nodes) {
     yield node;
-    if (hasChildren(node)) yield* walk(node.children);
+    const children = childrenOf(node);
+    if (children !== null) yield* walk(children);
   }
 }
 
 /**
- * Preserve depth-first order while letting the host run during costly native reads.
- *
- * @yields Each scene node in the forest
+ * The nodes {@link walk} would yield that satisfy `match`, in the same order — but collected
+ * cooperatively, handing the thread back to Figma between slices. A page-wide walk is all native
+ * getter reads and measured ~8–12s for a 32k-instance page; done in one go it froze the editor and
+ * every other call for that long.
  */
-export async function* walkCooperatively(nodes: readonly SceneNode[]): AsyncGenerator<SceneNode> {
-  const pending = [nodes[Symbol.iterator]()];
-  let visited = 0;
-  let sliceStarted = Date.now();
-  while (pending.length > 0) {
-    if (visited >= 512 || Date.now() - sliceStarted >= 16) {
-      // eslint-disable-next-line no-await-in-loop -- yield to Figma, not just promise microtasks
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      visited = 0;
-      sliceStarted = Date.now();
+export const collectMatches = async (
+  nodes: readonly SceneNode[],
+  match: (node: SceneNode) => boolean,
+): Promise<SceneNode[]> => {
+  const out: SceneNode[] = [];
+  const stack = nodes.toReversed();
+  const slice = new TimeSlice();
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (match(node)) out.push(node);
+    const children = childrenOf(node);
+    if (children !== null) {
+      for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]!);
     }
-    const next = pending[pending.length - 1]!.next();
-    if (next.done) {
-      pending.pop();
-      continue;
-    }
-    const node = next.value;
-    visited += 1;
-    yield node;
-    if ('children' in node) {
-      const children = node.children;
-      if (Array.isArray(children)) pending.push(children[Symbol.iterator]());
-    }
+    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+    if (stack.length > 0 && slice.due()) await slice.yield();
   }
+  return out;
+};
+
+/**
+ * A forest flattened into pre-order, with each node's parent position (-1 for a root) and whether
+ * it has a children array (an empty one included) — enough to rebuild the tree after serializing
+ * the nodes as a flat list. Collected cooperatively, like {@link collectMatches}.
+ */
+export interface FlatForest {
+  nodes: SceneNode[];
+  parents: number[];
+  hasChildren: boolean[];
 }
+
+export const flattenForest = async (roots: readonly SceneNode[]): Promise<FlatForest> => {
+  const forest: FlatForest = { nodes: [], parents: [], hasChildren: [] };
+  const stack: Array<{ node: SceneNode; parent: number }> = roots
+    .map(node => ({ node, parent: -1 }))
+    .toReversed();
+  const slice = new TimeSlice();
+  while (stack.length > 0) {
+    const { node, parent } = stack.pop()!;
+    const index = forest.nodes.length;
+    forest.nodes.push(node);
+    forest.parents.push(parent);
+    const children = childrenOf(node);
+    forest.hasChildren.push(children !== null);
+    if (children !== null) {
+      for (let i = children.length - 1; i >= 0; i -= 1) {
+        stack.push({ node: children[i]!, parent: index });
+      }
+    }
+    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+    if (stack.length > 0 && slice.due()) await slice.yield();
+  }
+  return forest;
+};
 
 /**
  * Resolve the `root` param of a traversal tool to the forest to walk.

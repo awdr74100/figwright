@@ -6,6 +6,7 @@ export * from './envelope.js';
 export * from './heartbeat.js';
 export * from './protocol.js';
 export * from './queries.js';
+export * from './result-budget.js';
 export * from './rpc.js';
 export * from './serialized-node.js';
 export * from './styles.js';

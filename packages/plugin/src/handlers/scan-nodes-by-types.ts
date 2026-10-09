@@ -1,8 +1,8 @@
-import type { ScanNodesByTypesResult, SerializedNode } from '@figwright/shared';
+import { TOOL_RESULT_BUDGET_BYTES } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlatNodes } from '../serializer.js';
-import { resolveScope, walkCooperatively } from '../traverse.js';
+import { serializeFlatNodes, toNodeListResult } from '../serializer.js';
+import { collectMatches, resolveScope } from '../traverse.js';
 
 export const createScanNodesByTypesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -18,11 +18,6 @@ export const createScanNodesByTypesHandler =
     const types = new Set(p.types as readonly string[]);
     const scope = await resolveScope(figmaCtx, p.root);
 
-    const matches: SceneNode[] = [];
-    for await (const node of walkCooperatively(scope)) {
-      if (types.has(node.type)) matches.push(node);
-    }
-    const nodes: SerializedNode[] = await serializeFlatNodes(matches);
-    const result: ScanNodesByTypesResult = { nodes };
-    return result;
+    const matches = await collectMatches(scope, node => types.has(node.type));
+    return toNodeListResult(matches, await serializeFlatNodes(matches, TOOL_RESULT_BUDGET_BYTES));
   };

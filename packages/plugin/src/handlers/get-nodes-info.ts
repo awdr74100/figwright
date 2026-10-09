@@ -1,7 +1,11 @@
-import type { GetNodesInfoResult, SerializedNode } from '@figwright/shared';
+import {
+  type GetNodesInfoResult,
+  type SerializedNode,
+  TOOL_RESULT_BUDGET_BYTES,
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeTree } from '../serializer.js';
+import { serializeTrees, treeTooLargeError } from '../serializer.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
@@ -17,7 +21,12 @@ export const createGetNodesInfoHandler =
     const nodes: Array<SerializedNode | null> = await Promise.all(
       ids.map(async id => {
         const node = await figmaCtx.getNodeByIdAsync(id);
-        return node !== null && isSceneNode(node) ? await serializeTree(node) : null;
+        if (node === null || !isSceneNode(node)) return null;
+        // Each tree is held to the whole budget: one that alone cannot fit can never be returned,
+        // so it is refused here. Several that fit apart but not together are the server's to catch.
+        const run = await serializeTrees([node], TOOL_RESULT_BUDGET_BYTES);
+        if (!run.complete) throw treeTooLargeError(`get_nodes_info (${id})`, run.total);
+        return run.nodes[0]!;
       }),
     );
     const result: GetNodesInfoResult = { nodes };

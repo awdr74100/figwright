@@ -1,8 +1,8 @@
-import type { SearchNodesResult, SerializedNode } from '@figwright/shared';
+import { TOOL_RESULT_BUDGET_BYTES } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlatNodes } from '../serializer.js';
-import { resolveScope, walkCooperatively } from '../traverse.js';
+import { serializeFlatNodes, toNodeListResult } from '../serializer.js';
+import { collectMatches, resolveScope } from '../traverse.js';
 
 export const createSearchNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -22,13 +22,12 @@ export const createSearchNodesHandler =
     const wantType = typeof p.type === 'string' ? p.type : null;
     const scope = await resolveScope(figmaCtx, p.root);
 
-    const matches: SceneNode[] = [];
-    for await (const node of walkCooperatively(scope)) {
-      if (wantType !== null && node.type !== wantType) continue;
-      if (needle !== null && !node.name.toLowerCase().includes(needle)) continue;
-      matches.push(node);
-    }
-    const nodes: SerializedNode[] = await serializeFlatNodes(matches);
-    const result: SearchNodesResult = { nodes };
-    return result;
+    // Type first: `name` is a native getter, and a node the type already excludes need not pay it.
+    const matches = await collectMatches(
+      scope,
+      node =>
+        (wantType === null || node.type === wantType) &&
+        (needle === null || node.name.toLowerCase().includes(needle)),
+    );
+    return toNodeListResult(matches, await serializeFlatNodes(matches, TOOL_RESULT_BUDGET_BYTES));
   };

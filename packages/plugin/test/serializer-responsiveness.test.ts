@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetThrottleForTests } from '../src/cooperative.js';
 import { serializeFlatNodes, serializeTrees } from '../src/serializer.js';
 
 describe('native-read time slicing', () => {
+  beforeEach(() => {
+    resetThrottleForTests();
+  });
+
   it.each([
     ['flat', serializeFlatNodes],
     ['forest', serializeTrees],
@@ -41,8 +46,9 @@ describe('native-read time slicing', () => {
       try {
         const result = await serialize(nodes);
         expect(await hostTick).toBeLessThan(nodes.length);
-        expect(result.map(node => node.id)).toEqual(nodes.map(node => node.id));
-        expect(result.map(node => node.mainComponent?.id)).toEqual(
+        expect(result.complete).toBe(true);
+        expect(result.nodes.map(node => node.id)).toEqual(nodes.map(node => node.id));
+        expect(result.nodes.map(node => node.mainComponent?.id)).toEqual(
           nodes.map((_, index) => `3:${index}`),
         );
       } finally {

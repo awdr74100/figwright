@@ -1,4 +1,4 @@
-import { MIXED } from '@figwright/shared';
+import { MIXED, type SerializedNode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,9 +6,13 @@ import {
   serializeFlat,
   serializeFlatSync,
   serializeLayoutGrid,
+  serializeFlatNodes,
   serializePaint,
-  serializeTree,
+  serializeTrees,
 } from '../src/serializer.js';
+
+const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
+  (await serializeTrees([node])).nodes[0]!;
 
 const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   ({
@@ -1585,6 +1589,63 @@ describe('serializeFlat — typography', () => {
     // The link run carries its style ids (raw, incl. Figma's trailing comma) + variable id list.
     expect(out.segments?.[1]?.styleIds).toEqual({ text: 'S:link,', fill: 'S:brandfill,' });
     expect(out.segments?.[1]?.boundVariables).toEqual({ fills: ['VariableID:primary'] });
+  });
+});
+
+describe('serializeFlatNodes — result budget', () => {
+  const nodes = Array.from({ length: 30 }, (_, i) => fake({ id: `2:${i}`, name: `Node ${i}` }));
+  const exactChars = async (): Promise<number> => {
+    const all = await serializeFlatNodes(nodes);
+    return all.nodes.reduce((sum, n) => sum + JSON.stringify(n).length + 1, 0);
+  };
+
+  it('never stops a run that fits, even exactly', async () => {
+    const run = await serializeFlatNodes(nodes, await exactChars());
+    expect(run.complete).toBe(true);
+    expect(run.nodes.map(n => n.id)).toEqual(nodes.map(n => n.id));
+  });
+
+  it('stops a run that cannot fit, keeping an in-order prefix past the budget', async () => {
+    const budget = Math.floor((await exactChars()) / 2);
+    const run = await serializeFlatNodes(nodes, budget);
+    expect(run.complete).toBe(false);
+    expect(run.nodes.map(n => n.id)).toEqual(nodes.slice(0, run.nodes.length).map(n => n.id));
+    // A prefix that already passes the budget — enough for the server to fill it exactly.
+    expect(run.nodes.reduce((sum, n) => sum + JSON.stringify(n).length + 1, 0)).toBeGreaterThan(
+      budget,
+    );
+  });
+});
+
+describe('serializeTrees', () => {
+  it('rebuilds the tree in order, children last and after mainComponent, empty arrays kept', async () => {
+    const leaf = fake({ id: '1:3', type: 'TEXT' });
+    const empty = fake({ id: '1:4', type: 'FRAME', children: [] });
+    const instance = fake({
+      id: '1:2',
+      type: 'INSTANCE',
+      children: [leaf, empty],
+      getMainComponentAsync: async () => ({ id: '9:1', name: 'Card', key: 'card', parent: null }),
+    });
+    const run = await serializeTrees([instance, fake({ id: '1:5' })]);
+    expect(run.complete).toBe(true);
+    expect(run.total).toBe(4);
+    expect(run.nodes.map(n => n.id)).toEqual(['1:2', '1:5']);
+    const [root] = run.nodes;
+    expect(Object.keys(root!).slice(-2)).toEqual(['mainComponent', 'children']);
+    expect(root!.children!.map(n => n.id)).toEqual(['1:3', '1:4']);
+    expect(root!.children![0]!.children).toBeUndefined();
+    expect(root!.children![1]!.children).toEqual([]);
+  });
+
+  it('returns no partial tree when the budget stops it', async () => {
+    const root = fake({
+      id: '1:2',
+      type: 'FRAME',
+      children: Array.from({ length: 10 }, (_, i) => fake({ id: `2:${i}` })),
+    });
+    const run = await serializeTrees([root], 100);
+    expect(run).toEqual({ nodes: [], complete: false, total: 11 });
   });
 });
 

@@ -1,4 +1,10 @@
-import { DEFAULT_PORT, type GetScreenshotResult, newId, PROTOCOL_VERSION } from '@figwright/shared';
+import {
+  DEFAULT_PORT,
+  type GetScreenshotResult,
+  newId,
+  PROTOCOL_VERSION,
+  type SearchNodesResult,
+} from '@figwright/shared';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -41,9 +47,13 @@ import { handleListFiles, LIST_FILES_TOOL_NAME } from './tools/list-files.js';
 import { captureNotices, withRoutingNotice, withSkewNotice } from './tools/notices.js';
 import { formatPingResult, handlePing, pingTool } from './tools/ping.js';
 import { ALL_TOOL_SPECS } from './tools/registry.js';
+import { assertWithinLimit, fitNodeList } from './tools/result-budget.js';
 import { handleSaveImageFills, SAVE_IMAGE_FILLS_TOOL_NAME } from './tools/save-image-fills.js';
 import { handleSaveScreenshots, SAVE_SCREENSHOTS_TOOL_NAME } from './tools/save-screenshots.js';
 import { handleScanComponents, SCAN_COMPONENTS_TOOL_NAME } from './tools/scan-components.js';
+import { SCAN_NODES_BY_TYPES_TOOL_NAME } from './tools/scan-nodes-by-types.js';
+import { SCAN_TEXT_NODES_TOOL_NAME } from './tools/scan-text-nodes.js';
+import { SEARCH_NODES_TOOL_NAME } from './tools/search-nodes.js';
 import { handleTokenMap, TOKEN_MAP_TOOL_NAME } from './tools/token-map.js';
 import { handleUseFile, USE_FILE_TOOL_NAME } from './tools/use-file.js';
 import { checkBatchOps } from './tools/wire-schema.js';
@@ -126,6 +136,13 @@ const textResult = (data: unknown): CallToolResult => ({
   content: [{ type: 'text', text: JSON.stringify(data) }],
 });
 
+// The node-list reads can match a whole page; past what one result carries they return the leading
+// matches with a note naming the rest (see tools/result-budget.ts). The hint is how each one narrows.
+const nodeListHandler =
+  (tool: string, narrowWith: string): ToolHandler =>
+  async args =>
+    textResult(fitNodeList((await dispatch(tool, args)) as SearchNodesResult, narrowWith));
+
 // Tools whose result isn't just JSON.stringify(dispatch(...)): ping reports election state, the
 // server-local tools read the filesystem (some reusing dispatch), and get_screenshot returns an
 // image content block. Everything else takes the generic dispatch path below.
@@ -167,6 +184,18 @@ const SPECIAL_HANDLERS: Record<string, ToolHandler> = {
     textResult(await handleListFiles(await listSessions(), dispatchToSession)),
   [USE_FILE_TOOL_NAME]: async args =>
     textResult(await handleUseFile(args, listSessions, dispatchToSession)),
+  [SEARCH_NODES_TOOL_NAME]: nodeListHandler(
+    SEARCH_NODES_TOOL_NAME,
+    'pass root (a frame or section id) to scope it, or a narrower name or type',
+  ),
+  [SCAN_NODES_BY_TYPES_TOOL_NAME]: nodeListHandler(
+    SCAN_NODES_BY_TYPES_TOOL_NAME,
+    'pass root (a frame or section id) to scope it, or ask for fewer types',
+  ),
+  [SCAN_TEXT_NODES_TOOL_NAME]: nodeListHandler(
+    SCAN_TEXT_NODES_TOOL_NAME,
+    'pass root (a frame or section id) to scope it',
+  ),
   [ANALYZE_PROJECT_TOOL_NAME]: async args => textResult(await handleAnalyzeProject(args)),
   [SCAN_COMPONENTS_TOOL_NAME]: async args => textResult(await handleScanComponents(args)),
   [COMPONENT_MAP_TOOL_NAME]: async args =>
@@ -229,11 +258,16 @@ const createMcpServer = (): McpServer => {
     // cannot be trusted on its face and nothing in it says so. Saying it here, on every affected
     // call, is what replaces the refusal this used to be: the agent is told before it reports
     // success to the user.
+    // Last of all, the size net: whatever the tool built, a result past the client's message limit
+    // is refused here rather than sent and losing the connection (tools/result-budget.ts).
     const handler: ToolHandler = async args =>
-      captureNotices(
-        () => run(normalizeIdArgs(args)),
-        (result, notices) =>
-          withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
+      assertWithinLimit(
+        spec.name,
+        await captureNotices(
+          () => run(normalizeIdArgs(args)),
+          (result, notices) =>
+            withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
+        ),
       );
     // The spec's own Zod object goes straight through: it is already the Standard Schema object the
     // SDK wants. Registering heterogeneous specs through one loop needed a handler cast under v1;

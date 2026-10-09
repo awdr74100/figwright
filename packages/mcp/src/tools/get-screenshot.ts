@@ -1,4 +1,8 @@
-import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figwright/shared';
+import {
+  type GetScreenshotResult,
+  SCREENSHOT_FORMATS,
+  TOOL_RESULT_BUDGET_BYTES,
+} from '@figwright/shared';
 import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';
@@ -52,27 +56,19 @@ export type ScreenshotContent =
 const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'image/jpeg' };
 
 /**
- * How many bytes of inlined payload one result may carry.
+ * How many bytes of inlined payload one result may carry: {@linkcode TOOL_RESULT_BUDGET_BYTES}, the
+ * budget every tool result shares (see `@figwright/shared`'s result-budget.ts for the client limit
+ * behind it and what crossing it costs).
  *
- * An MCP client reads each stdio message into a bounded buffer — 10 MB by default since SDK 1.30.0,
- * on both the v1 and v2 lines. Exceeding it is not a failed call: the client's transport throws,
- * closes the connection, and every later call answers "Not connected" until the user reconnects the
- * server by hand. It cannot resynchronize instead, because stdio framing is newline-delimited and
- * the discarded remainder of an oversized message has no findable boundary.
+ * Image blocks reach it fastest — measured at ~2.4 MB for a single 1440×3140 frame, so four frames
+ * pass Claude Desktop's 1 MB content limit and ten pass the transport's 10 MB.
  *
- * This is the only Figwright tool that can get near it. Text results are held far below by the
- * client's own output cap (Claude Code: MAX_MCP_OUTPUT_TOKENS = 25k tokens, measured at roughly 50k
- * chars of minified JSON — see DESIGN_CONTEXT_TOKEN_BUDGET), but image blocks are not counted as
- * text, so they are the one payload that reaches the transport unmetered — measured at ~2.4 MB for
- * a single 1440×3140 frame, so four frames pass Claude Desktop's 1 MB content limit and ten pass
- * the transport's 10 MB.
- *
- * The budget is derived from that limit rather than picked, and deliberately sits just under it
- * rather than comfortably under it. A budget lower than it needs to be would withhold exports the
- * transport could have carried perfectly well — turning a working single-node call into a deferred
- * one, which is a regression, not a safeguard. The margin only has to cover what rides alongside
- * the payloads (labels, the closing note, the JSON-RPC envelope), and that measures under 1 KB;
- * half a megabyte is three orders of magnitude more than it needs.
+ * The budget deliberately sits just under the limit rather than comfortably under it. A budget
+ * lower than it needs to be would withhold exports the transport could have carried perfectly well
+ * — turning a working single-node call into a deferred one, which is a regression, not a safeguard.
+ * The margin only has to cover what rides alongside the payloads (labels, the closing note, the
+ * JSON-RPC envelope), and that measures under 1 KB; half a megabyte is three orders of magnitude
+ * more than it needs.
  *
  * This is the batch-level twin of a cap the sandbox already applies per image: `capScaleForVision`
  * bounds one raster's pixels partly because a single image has its own provider ceiling (10 MB
@@ -86,8 +82,7 @@ const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'i
  * useful for comparing screens in one round trip — and a batch is exactly what makes this budget
  * necessary rather than optional.
  */
-const CLIENT_READ_BUFFER_BYTES = 10 * 1024 * 1024;
-export const INLINE_IMAGE_BUDGET_BYTES = CLIENT_READ_BUFFER_BYTES - 512 * 1024;
+export const INLINE_IMAGE_BUDGET_BYTES = TOOL_RESULT_BUDGET_BYTES;
 
 /** Serialized size of a content block as the transport will count it. */
 const blockBytes = (block: ScreenshotContent): number =>

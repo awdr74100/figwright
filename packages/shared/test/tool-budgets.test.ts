@@ -27,6 +27,12 @@ describe('tool budgets', () => {
       // frame, so they get the same window instead of the 30s default that beheaded big trees.
       'get_node',
       'get_nodes_info',
+      // Page-wide walks: the result-size budget bounds how much is serialized, not how far the walk
+      // goes to find the matches. search_nodes is the same walk as the scans (it once had the 30s
+      // default and timed out at 35s on a 16k-instance page that scan_nodes_by_types finished).
+      'search_nodes',
+      'scan_nodes_by_types',
+      'scan_text_nodes',
       // Carries N writes and, on a failure, N undos — a timeout mid-rollback would hide whether the
       // document was left changed.
       'batch',
@@ -34,13 +40,6 @@ describe('tool budgets', () => {
       expect(getToolBudget(t)).toBe(HEAVY_TOOL_BUDGET_MS);
     }
   });
-
-  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
-    'allows a full-page %s to finish beyond the ordinary heavy-tool window',
-    tool => {
-      expect(getToolBudget(tool)).toBe(300_000);
-    },
-  );
 
   // The whole point of the table: the three nested timers must be strictly increasing outward, so the
   // innermost (sandbox) fires first with the most specific error and no layer is left orphaned.

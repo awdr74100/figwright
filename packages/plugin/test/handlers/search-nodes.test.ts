@@ -3,6 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createSearchNodesHandler } from '../../src/handlers/search-nodes.js';
 
+// Every Date.now() read advances a fake clock by 1ms, so a time slice ends after a fixed number of
+// reads instead of after however much work this machine fits into 40 real milliseconds.
+const tickingClock = (): { mockRestore: () => void } => {
+  let now = 0;
+  return vi.spyOn(Date, 'now').mockImplementation(() => (now += 1));
+};
+
 const fake = (id: string, type: string, name: string, children?: SceneNode[]): SceneNode =>
   ({
     id,
@@ -139,23 +146,28 @@ describe('search_nodes handler', () => {
     expect(result.nodes.every(node => node.children === undefined)).toBe(true);
   });
 
-  it('lets host timers run before all large-search matches are serialized', async () => {
-    let lookups = 0;
+  it('hands the thread back to Figma before a large search is done, dropping no match', async () => {
     const instances = Array.from({ length: 1025 }, (_, index) =>
       Object.assign(fake(`2:${index}`, 'INSTANCE', `Instance ${index}`), {
-        getMainComponentAsync: async () => {
-          lookups += 1;
-          return null;
-        },
+        getMainComponentAsync: async () => null,
       }),
     );
     const handler = createSearchNodesHandler(fakeFigma(instances));
-    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(lookups), 0));
-
-    const result = (await handler({ type: 'INSTANCE' })) as SearchNodesResult;
-
-    expect(await hostTick).toBeLessThan(instances.length);
-    expect(result.nodes).toHaveLength(instances.length);
+    const clock = tickingClock();
+    try {
+      let finished = false;
+      const read = Promise.resolve(handler({ type: 'INSTANCE' })).then(result => {
+        finished = true;
+        return result as SearchNodesResult;
+      });
+      const finishedWhenHostRan = await new Promise<boolean>(resolve =>
+        setTimeout(() => resolve(finished), 0),
+      );
+      expect(finishedWhenHostRan).toBe(false);
+      expect((await read).nodes).toHaveLength(instances.length);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('throws when neither name nor type is provided', async () => {

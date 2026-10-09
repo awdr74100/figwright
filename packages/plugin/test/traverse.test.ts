@@ -1,104 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { resolveScope, walk, walkCooperatively } from '../src/traverse.js';
+import { collectMatches, flattenForest, resolveScope, walk } from '../src/traverse.js';
 
 const node = (id: string, type: string, children?: SceneNode[]): SceneNode =>
   ({ id, type, name: id, children }) as unknown as SceneNode;
-
-const collect = async (nodes: readonly SceneNode[]): Promise<SceneNode[]> => {
-  const result: SceneNode[] = [];
-  for await (const value of walkCooperatively(nodes)) result.push(value);
-  return result;
-};
-
-describe('walkCooperatively', () => {
-  it('preserves complete depth-first order across wide, nested forests', async () => {
-    const roots = Array.from({ length: 1025 }, (_, index) =>
-      node(`root-${index}`, 'FRAME', [node(`child-${index}`, 'TEXT')]),
-    );
-    expect(await collect(roots)).toEqual([...walk(roots)]);
-  });
-
-  it('reads each native children array once and sees edits on the next traversal', async () => {
-    let reads = 0;
-    let children = [node('a', 'TEXT')];
-    const root = node('root', 'FRAME');
-    Object.defineProperty(root, 'children', {
-      get: () => {
-        reads += 1;
-        return children;
-      },
-    });
-    expect((await collect([root])).map(value => value.id)).toEqual(['root', 'a']);
-    children = [node('b', 'TEXT')];
-    expect((await collect([root])).map(value => value.id)).toEqual(['root', 'b']);
-    expect(reads).toBe(2);
-  });
-
-  it('handles deep trees without recursive generator stack growth', async () => {
-    let root = node('leaf', 'TEXT');
-    for (let depth = 0; depth < 5000; depth += 1) root = node(`level-${depth}`, 'FRAME', [root]);
-    const result = await collect([root]);
-    expect(result).toHaveLength(5001);
-    expect(result[0]?.id).toBe('level-4999');
-    expect(result.at(-1)?.id).toBe('leaf');
-  });
-
-  it('handles an empty forest', async () => {
-    expect(await collect([])).toEqual([]);
-  });
-
-  it('yields during expensive native child reads below the node-count limit', async () => {
-    let elapsed = 0;
-    let reads = 0;
-    const clock = vi.spyOn(Date, 'now').mockImplementation(() => elapsed);
-    const roots = Array.from({ length: 32 }, (_, index) =>
-      Object.defineProperty(node(`root-${index}`, 'FRAME'), 'children', {
-        get: () => {
-          reads += 1;
-          elapsed += 20;
-          return [];
-        },
-      }),
-    );
-    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(reads), 0));
-    try {
-      const result = await collect(roots);
-      expect(await hostTick).toBeLessThan(roots.length);
-      expect(result).toEqual(roots);
-      expect(reads).toBe(roots.length);
-    } finally {
-      clock.mockRestore();
-    }
-  });
-
-  it('yields after bounded visits even when native reads are cheap', async () => {
-    let visits = 0;
-    const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
-    const roots = Array.from({ length: 1025 }, (_, index) => node(`root-${index}`, 'VECTOR'));
-    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(visits), 0));
-    try {
-      for await (const value of walkCooperatively(roots)) {
-        expect(value).toBe(roots[visits]);
-        visits += 1;
-      }
-      expect(await hostTick).toBe(512);
-      expect(visits).toBe(roots.length);
-    } finally {
-      clock.mockRestore();
-    }
-  });
-
-  it('propagates native children errors rather than returning a partial forest', async () => {
-    const failure = new Error('native children unavailable');
-    const root = Object.defineProperty(node('root', 'FRAME'), 'children', {
-      get: () => {
-        throw failure;
-      },
-    });
-    await expect(collect([root])).rejects.toBe(failure);
-  });
-});
 
 describe('walk', () => {
   it('yields each node depth-first pre-order', () => {
@@ -115,6 +20,132 @@ describe('walk', () => {
 
   it('handles an empty forest', () => {
     expect([...walk([])]).toEqual([]);
+  });
+});
+
+// A frame whose `children` getter counts reads, the way Figma's native getter builds a new array.
+const countedFrame = (
+  id: string,
+  children: SceneNode[],
+): { frame: SceneNode; reads: () => number } => {
+  let reads = 0;
+  const frame = { id, type: 'FRAME', name: id } as unknown as SceneNode;
+  Object.defineProperty(frame, 'children', {
+    get: () => {
+      reads += 1;
+      return children.slice();
+    },
+  });
+  return { frame, reads: () => reads };
+};
+
+describe('walk — native children reads', () => {
+  it("reads each node's children once", () => {
+    const { frame, reads } = countedFrame('a', [node('b', 'TEXT'), node('c', 'TEXT')]);
+    expect([...walk([frame])].map(n => n.id)).toEqual(['a', 'b', 'c']);
+    expect(reads()).toBe(1);
+  });
+});
+
+const forest = (): SceneNode[] => [
+  node('a', 'FRAME', [node('b', 'FRAME', [node('c', 'TEXT')]), node('d', 'FRAME', [])]),
+  node('e', 'TEXT'),
+];
+
+describe('collectMatches', () => {
+  it('matches what walk yields, in the same order', async () => {
+    const matches = await collectMatches(forest(), n => n.type === 'TEXT');
+    expect(matches.map(n => n.id)).toEqual(
+      [...walk(forest())].filter(n => n.type === 'TEXT').map(n => n.id),
+    );
+  });
+
+  it("reads each node's children once", async () => {
+    const { frame, reads } = countedFrame('a', [node('b', 'TEXT')]);
+    await collectMatches([frame], () => true);
+    expect(reads()).toBe(1);
+  });
+
+  it('hands the thread back to Figma during a long walk', async () => {
+    const wide = [
+      node(
+        'root',
+        'FRAME',
+        Array.from({ length: 500 }, (_, i) => node(`${i}`, 'TEXT')),
+      ),
+    ];
+    // Each Date.now() read advances 1ms, so slices end after a fixed number of nodes.
+    let now = 0;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 1));
+    try {
+      let finished = false;
+      const walking = collectMatches(wide, () => true).then(found => {
+        finished = true;
+        return found;
+      });
+      expect(await new Promise<boolean>(resolve => setTimeout(() => resolve(finished), 0))).toBe(
+        false,
+      );
+      expect(await walking).toHaveLength(501);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
+
+describe('flattenForest', () => {
+  it('lists nodes in pre-order with each parent position and whether it has children', async () => {
+    const flat = await flattenForest(forest());
+    expect(flat.nodes.map(n => n.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(flat.parents).toEqual([-1, 0, 1, 0, -1]);
+    // d has an empty children array — still a container; c and e are leaves.
+    expect(flat.hasChildren).toEqual([true, true, false, true, false]);
+  });
+});
+
+describe('collectMatches / flattenForest — robustness', () => {
+  it('handles deep trees without recursive stack growth', async () => {
+    let root = node('leaf', 'TEXT');
+    for (let depth = 0; depth < 5000; depth += 1) root = node(`level-${depth}`, 'FRAME', [root]);
+    const matches = await collectMatches([root], () => true);
+    expect(matches).toHaveLength(5001);
+    expect(matches[0]?.id).toBe('level-4999');
+    expect(matches.at(-1)?.id).toBe('leaf');
+    expect((await flattenForest([root])).nodes).toHaveLength(5001);
+  });
+
+  it('yields during expensive native child reads, however few the nodes', async () => {
+    let elapsed = 0;
+    let reads = 0;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => elapsed);
+    const roots = Array.from({ length: 32 }, (_, index) =>
+      Object.defineProperty(node(`root-${index}`, 'FRAME'), 'children', {
+        get: () => {
+          reads += 1;
+          elapsed += 20;
+          return [];
+        },
+      }),
+    );
+    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(reads), 0));
+    try {
+      expect(await collectMatches(roots, () => true)).toEqual(roots);
+      expect(await hostTick).toBeLessThan(roots.length);
+      expect(reads).toBe(roots.length);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('propagates native children errors rather than returning a partial forest', async () => {
+    const failure = new Error('native children unavailable');
+    const root = Object.defineProperty(node('root', 'FRAME'), 'children', {
+      get: () => {
+        throw failure;
+      },
+    });
+    await expect(collectMatches([root], () => true)).rejects.toBe(failure);
+    await expect(flattenForest([root])).rejects.toBe(failure);
   });
 });
 

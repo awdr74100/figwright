@@ -1,5 +1,6 @@
 import {
   MIXED,
+  type SearchNodesResult,
   type SerializedAnnotation,
   type SerializedAutoLayout,
   type SerializedBindings,
@@ -19,9 +20,12 @@ import {
   type SerializedStyleIds,
   type SerializedTextSegment,
   serializeNode as serializeBase,
+  TOOL_RESULT_BUDGET_BYTES,
 } from '@figwright/shared';
 
+import { TimeSlice } from './cooperative.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
+import { flattenForest } from './traverse.js';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||
@@ -886,91 +890,121 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
-/** Bound synchronous native reads within a lookup batch, without dropping node metadata. */
-const serializeBatch = async (nodes: readonly SceneNode[]): Promise<SerializedNode[]> => {
-  const pending: Promise<{ value: SerializedNode } | { error: unknown }>[] = [];
-  let sliceStarted = Date.now();
-  for (const node of nodes) {
-    // Attach rejection handling before yielding: a native read can fail while later nodes
-    // are still being scheduled. Preserve that error for the caller, not the host's unhandled queue.
-    pending.push(
-      serializeFlat(node).then(
-        value => ({ value }),
-        error => ({ error }),
-      ),
-    );
-    if (Date.now() - sliceStarted >= 16) {
-      // eslint-disable-next-line no-await-in-loop -- keep Figma responsive even below the batch limit
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      sliceStarted = Date.now();
-    }
-  }
-  const settled = await Promise.all(pending);
-  return settled.map(entry => {
-    if ('error' in entry) throw entry.error;
-    return entry.value;
-  });
-};
+/** Main-component lookups allowed in flight at once; past this the oldest is awaited first. */
+const MAX_IN_FLIGHT = 512;
 
-/** Flat page reads share bounded serialization, preserving every node and its original order. */
-export const serializeFlatNodes = async (
+/**
+ * Nodes serialized in their input order, and whether that is all of them. `complete` is false when
+ * a size budget stopped the work early — `nodes` is then a prefix whose serialized JSON already
+ * exceeds the budget.
+ */
+export interface SerializedRun {
+  nodes: SerializedNode[];
+  complete: boolean;
+}
+
+/**
+ * Serialize many nodes without holding Figma's thread for the whole run: the synchronous reads are
+ * time-sliced (see cooperative.ts), and main-component lookups keep resolving across slices rather
+ * than being awaited batch by batch, so a slow lookup overlaps with later reads instead of stalling
+ * them. Output order is input order.
+ *
+ * `budgetChars` stops the run once the JSON of what is done passes it. Characters are a lower bound
+ * on the bytes the result will occupy on the wire (escaping and multi-byte text only add), so a run
+ * stopped here was certain not to fit — the caller never loses a result that would have.
+ */
+const serializeInOrder = async (
   nodes: readonly SceneNode[],
-): Promise<SerializedNode[]> => {
-  const result: SerializedNode[] = [];
-  // A live ~30k-instance page aborts with unbounded lookups. This batch size keeps reads
-  // responsive without the excessive host-yield overhead measured with much smaller batches.
-  const batchSize = 512;
-  for (let offset = 0; offset < nodes.length; offset += batchSize) {
-    if (offset > 0) {
-      // A resolved promise only yields to microtasks, not Figma's message / timer loop.
-      // eslint-disable-next-line no-await-in-loop -- let the host run between bounded batches
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-    }
+  budgetChars: number,
+): Promise<SerializedRun> => {
+  const done: SerializedNode[] = [];
+  const inFlight: Array<Promise<SerializedNode>> = [];
+  let chars = 0;
+  const settleOldest = async (): Promise<void> => {
+    const out = await inFlight.shift()!;
+    done.push(out);
+    // Only measured while a budget is armed; +1 for the separating comma.
+    if (budgetChars !== Infinity) chars += JSON.stringify(out).length + 1;
+  };
+  const abandon = (): SerializedRun => ({ nodes: done, complete: false });
+  const slice = new TimeSlice();
+  for (const node of nodes) {
+    const pending = serializeFlat(node);
+    // Marked handled up front: when the run stops early or an earlier node fails, the ones still in
+    // flight are dropped, and a rejection among them must not surface as unhandled. Awaiting
+    // `pending` itself still throws.
+    pending.catch(() => undefined);
+    inFlight.push(pending);
     // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
-    const batch = await serializeBatch(nodes.slice(offset, offset + batchSize));
-    result.push(...batch);
+    if (inFlight.length >= MAX_IN_FLIGHT) await settleOldest();
+    if (chars > budgetChars) return abandon();
+    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+    if (slice.due()) await slice.yield();
   }
-  return result;
+  while (inFlight.length > 0) {
+    // eslint-disable-next-line no-await-in-loop -- settle in order so the budget sees a prefix
+    await settleOldest();
+    if (chars > budgetChars) return abandon();
+  }
+  return { nodes: done, complete: true };
 };
 
-export const serializeTrees = async (nodes: readonly SceneNode[]): Promise<SerializedNode[]> => {
-  const result: SerializedNode[] = [];
-  const pending = nodes.map((node, index) => ({ node, target: result, index })).toReversed();
-  while (pending.length > 0) {
-    // Bound both the synchronous work and outstanding main-component lookups.
-    // Promise.all over the entire forest otherwise drains microtasks without ever
-    // giving Figma's message / timer loop a chance to run on a large library page.
-    const batch = pending.splice(-64).toReversed();
-    // eslint-disable-next-line no-await-in-loop -- serialize bounded batches, preserving output order
-    const serialized = await serializeBatch(batch.map(entry => entry.node));
-    for (let i = 0; i < batch.length; i += 1) {
-      const { node, target, index } = batch[i]!;
-      const out = serialized[i]!;
-      target[index] = out;
-      if ('children' in node) {
-        // This native getter materializes an array. Indexing node.children in the loop would
-        // materialize it once per sibling, making wide forests quadratic.
-        const childNodes = node.children;
-        if (Array.isArray(childNodes)) {
-          const children: SerializedNode[] = [];
-          out.children = children;
-          for (let j = childNodes.length - 1; j >= 0; j -= 1) {
-            pending.push({ node: childNodes[j]!, target: children, index: j });
-          }
-        }
-      }
+/** Flat reads (search / scans): every node, in order, unless `budgetChars` stops the run early. */
+export const serializeFlatNodes = (
+  nodes: readonly SceneNode[],
+  budgetChars = Infinity,
+): Promise<SerializedRun> => serializeInOrder(nodes, budgetChars);
+
+/**
+ * A search / scan reply: every match, or — when the budget stopped the run — the leading matches
+ * plus how many there were in all, so the server can say what was left out.
+ */
+export const toNodeListResult = (
+  matches: readonly SceneNode[],
+  run: SerializedRun,
+): SearchNodesResult =>
+  run.complete ? { nodes: run.nodes } : { matchCount: matches.length, nodes: run.nodes };
+
+/**
+ * Full recursive serialization of a forest. The tree is flattened (cooperatively), serialized as
+ * one ordered run, and rebuilt — so a wide or deep tree gets the same slicing as a flat scan. When
+ * `budgetChars` stops the run, the partial tree is meaningless and `nodes` is empty.
+ */
+export const serializeTrees = async (
+  roots: readonly SceneNode[],
+  budgetChars = Infinity,
+): Promise<SerializedRun & { total: number }> => {
+  const forest = await flattenForest(roots);
+  const total = forest.nodes.length;
+  const run = await serializeInOrder(forest.nodes, budgetChars);
+  if (!run.complete) return { nodes: [], complete: false, total };
+  const out: SerializedNode[] = [];
+  const childLists: Array<SerializedNode[] | undefined> = [];
+  run.nodes.forEach((node, i) => {
+    if (forest.hasChildren[i]) {
+      // Assigned last, after mainComponent, so `children` stays the final key as it always was.
+      const list: SerializedNode[] = [];
+      node.children = list;
+      childLists[i] = list;
     }
-    if (pending.length > 0) {
-      // A resolved promise only yields to microtasks; a timer yields to the host.
-      // eslint-disable-next-line no-await-in-loop -- let Figma process messages between batches
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-    }
-  }
-  return result;
+    const parent = forest.parents[i]!;
+    (parent < 0 ? out : childLists[parent]!).push(node);
+  });
+  return { nodes: out, complete: true, total };
 };
 
-export const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
-  (await serializeTrees([node]))[0]!;
+/**
+ * Why a full-tree read stopped: its JSON passed what one tool result can carry. Refused rather than
+ * cut, because a tree missing an arbitrary tail reads as complete; the message names the reads that
+ * do fit.
+ */
+export const treeTooLargeError = (tool: string, total: number, subject = 'tree'): Error =>
+  new Error(
+    `${tool}: this ${subject} has ${total} nodes and serializes past ` +
+      `${(TOOL_RESULT_BUDGET_BYTES / 1024 / 1024).toFixed(1)} MB — more than one tool result can ` +
+      'carry. Read it in parts: get_node on one of its children, or get_design_context, which ' +
+      'splits a large tree into sections.',
+  );
 
 export const serializeEffect = (effect: Effect): SerializedEffect => {
   // Shadow bindings (colour / radius / spread / offsetX / offsetY) live on the effect itself; a

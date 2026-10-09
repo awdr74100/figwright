@@ -1,10 +1,20 @@
-import type { GetNodeResult } from '@figwright/shared';
+import {
+  type GetNodeResult,
+  type SerializedNode,
+  TOOL_RESULT_BUDGET_BYTES,
+} from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeTree } from '../serializer.js';
+import { serializeTrees, treeTooLargeError } from '../serializer.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
+
+const serializeWithin = async (node: SceneNode): Promise<SerializedNode> => {
+  const run = await serializeTrees([node], TOOL_RESULT_BUDGET_BYTES);
+  if (!run.complete) throw treeTooLargeError('get_node', run.total);
+  return run.nodes[0]!;
+};
 
 export const createGetNodeHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -15,7 +25,7 @@ export const createGetNodeHandler =
     }
     const node = await figmaCtx.getNodeByIdAsync(nodeId);
     const result: GetNodeResult = {
-      node: node !== null && isSceneNode(node) ? await serializeTree(node) : null,
+      node: node !== null && isSceneNode(node) ? await serializeWithin(node) : null,
     };
     return result;
   };

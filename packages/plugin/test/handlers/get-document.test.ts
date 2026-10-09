@@ -1,7 +1,14 @@
 import type { GetDocumentResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createGetDocumentHandler } from '../../src/handlers/get-document.js';
+
+// Every Date.now() read advances a fake clock by 1ms, so a time slice ends after a fixed number of
+// reads instead of after however much work this machine fits into 40 real milliseconds.
+const tickingClock = (): { mockRestore: () => void } => {
+  let now = 0;
+  return vi.spyOn(Date, 'now').mockImplementation(() => (now += 1));
+};
 
 const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   ({
@@ -55,30 +62,31 @@ describe('get_document handler', () => {
     expect(result.children[0]?.children?.[0]?.children?.[0]?.id).toBe('1:4');
   });
 
-  it('lets timers run before a large page finishes without dropping any nodes', async () => {
-    let serialized = 0;
+  it('hands the thread back to Figma before a large page is done, dropping no node', async () => {
     const children = Array.from({ length: 2_048 }, (_, i) => fake({ id: `1:${i + 2}` }));
-    for (const node of children) {
-      Object.defineProperty(node, 'name', {
-        get: () => {
-          serialized += 1;
-          return `Node ${node.id}`;
+    const clock = tickingClock();
+    try {
+      let finished = false;
+      const read = Promise.resolve(createGetDocumentHandler(fakeFigma(children))(undefined)).then(
+        result => {
+          finished = true;
+          return result as GetDocumentResult;
         },
-      });
+      );
+      const finishedWhenHostRan = await new Promise<boolean>(resolve =>
+        setTimeout(() => resolve(finished), 0),
+      );
+      expect(finishedWhenHostRan).toBe(false);
+      expect((await read).children.map(n => n.id)).toEqual(children.map(n => n.id));
+    } finally {
+      clock.mockRestore();
     }
-    const timer = new Promise<number>(resolve => setTimeout(() => resolve(serialized), 0));
-    const handler = createGetDocumentHandler(fakeFigma(children));
-    const result = (await handler(undefined)) as GetDocumentResult;
-    const atTimer = await timer;
-    expect(atTimer).toBeGreaterThan(0);
-    expect(atTimer).toBeLessThan(children.length);
-    expect(result.children.map(n => n.id)).toEqual(children.map(n => n.id));
   });
 
   it('bounds main-component lookups and preserves every instance on a large page', async () => {
     let active = 0;
     let peak = 0;
-    const children = Array.from({ length: 512 }, (_, i) =>
+    const children = Array.from({ length: 1_025 }, (_, i) =>
       fake({
         id: `1:${i + 2}`,
         type: 'INSTANCE',
@@ -94,8 +102,18 @@ describe('get_document handler', () => {
     const result = (await createGetDocumentHandler(fakeFigma(children))(
       undefined,
     )) as GetDocumentResult;
-    expect(peak).toBeLessThanOrEqual(64);
+    expect(peak).toBeLessThanOrEqual(512);
     expect(result.children).toHaveLength(children.length);
     expect(result.children.every(n => n.mainComponent?.key === 'button')).toBe(true);
+  });
+
+  it('refuses a page too large for one tool result instead of returning part of it', async () => {
+    // Twelve 1 MB names: more than one result can carry, whatever the rest of each node holds.
+    const children = Array.from({ length: 12 }, (_, i) =>
+      fake({ id: `1:${i + 2}`, name: 'x'.repeat(1024 * 1024) }),
+    );
+    await expect(createGetDocumentHandler(fakeFigma(children))(undefined)).rejects.toThrow(
+      /get_document: this page has 12 nodes and serializes past 9\.5 MB/,
+    );
   });
 });

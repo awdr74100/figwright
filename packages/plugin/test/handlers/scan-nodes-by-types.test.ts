@@ -1,7 +1,14 @@
 import type { ScanNodesByTypesResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createScanNodesByTypesHandler } from '../../src/handlers/scan-nodes-by-types.js';
+
+// Every Date.now() read advances a fake clock by 1ms, so a time slice ends after a fixed number of
+// reads instead of after however much work this machine fits into 40 real milliseconds.
+const tickingClock = (): { mockRestore: () => void } => {
+  let now = 0;
+  return vi.spyOn(Date, 'now').mockImplementation(() => (now += 1));
+};
 
 const fake = (id: string, type: string, children?: SceneNode[]): SceneNode =>
   ({
@@ -77,21 +84,25 @@ describe('scan_nodes_by_types handler', () => {
     expect(peak).toBeLessThanOrEqual(512);
   });
 
-  it('lets host timers run before all large-scan matches are serialized', async () => {
-    let lookups = 0;
+  it('hands the thread back to Figma before a large scan is done, dropping no match', async () => {
     const instances = Array.from({ length: 1025 }, (_, index) =>
-      Object.assign(fake(`2:${index}`, 'INSTANCE'), {
-        getMainComponentAsync: async () => {
-          lookups += 1;
-          return null;
-        },
-      }),
+      Object.assign(fake(`2:${index}`, 'INSTANCE'), { getMainComponentAsync: async () => null }),
     );
     const handler = createScanNodesByTypesHandler(fakeFigma(instances));
-    const hostTick = new Promise<number>(resolve => setTimeout(() => resolve(lookups), 0));
-    const result = (await handler({ types: ['INSTANCE'] })) as ScanNodesByTypesResult;
-
-    expect(result.nodes).toHaveLength(instances.length);
-    expect(await hostTick).toBeLessThan(instances.length);
+    const clock = tickingClock();
+    try {
+      let finished = false;
+      const read = Promise.resolve(handler({ types: ['INSTANCE'] })).then(result => {
+        finished = true;
+        return result as ScanNodesByTypesResult;
+      });
+      const finishedWhenHostRan = await new Promise<boolean>(resolve =>
+        setTimeout(() => resolve(finished), 0),
+      );
+      expect(finishedWhenHostRan).toBe(false);
+      expect((await read).nodes).toHaveLength(instances.length);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
