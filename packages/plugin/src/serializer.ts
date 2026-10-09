@@ -215,7 +215,10 @@ const serializeGridTracks = (tracks: unknown): SerializedGridTrack[] | undefined
     .map(t => ({ type: String(t.type), value: Number(t.value) }));
 };
 
-const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
+const serializeAutoLayout = (
+  node: SceneNode,
+  mode: 'HORIZONTAL' | 'VERTICAL' | 'GRID',
+): SerializedAutoLayout => {
   const n = node as SceneNode & {
     layoutMode: 'HORIZONTAL' | 'VERTICAL' | 'GRID';
     paddingTop: number;
@@ -245,12 +248,13 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
   };
   // GRID auto-layout: no itemSpacing / primary-counter align — it carries row/col counts + gaps +
   // track sizes instead (→ CSS Grid). padding is common.
-  if (n.layoutMode === 'GRID') {
+  if (mode === 'GRID') {
     const out: SerializedAutoLayout = { mode: 'GRID', ...padding };
-    if (typeof n.gridRowCount === 'number') out.gridRowCount = n.gridRowCount;
-    if (typeof n.gridColumnCount === 'number') out.gridColumnCount = n.gridColumnCount;
-    if (typeof n.gridRowGap === 'number') out.gridRowGap = n.gridRowGap;
-    if (typeof n.gridColumnGap === 'number') out.gridColumnGap = n.gridColumnGap;
+    const { gridRowCount, gridColumnCount, gridRowGap, gridColumnGap } = n;
+    if (typeof gridRowCount === 'number') out.gridRowCount = gridRowCount;
+    if (typeof gridColumnCount === 'number') out.gridColumnCount = gridColumnCount;
+    if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
+    if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
     const rowSizes = serializeGridTracks(n.gridRowSizes);
     if (rowSizes !== undefined) out.gridRowSizes = rowSizes;
     const colSizes = serializeGridTracks(n.gridColumnSizes);
@@ -258,25 +262,28 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     return out;
   }
   const out: SerializedAutoLayout = {
-    mode: n.layoutMode,
+    mode,
     ...padding,
     itemSpacing: n.itemSpacing,
     primaryAxisAlignItems: n.primaryAxisAlignItems,
     counterAxisAlignItems: n.counterAxisAlignItems,
   };
-  if (typeof n.layoutWrap === 'string') out.layoutWrap = n.layoutWrap;
+  const wrap = n.layoutWrap;
+  if (typeof wrap === 'string') out.layoutWrap = wrap;
   // WRAP cross-axis: the gap between wrapped tracks (counterAxisSpacing — rows of a horizontal wrap,
   // columns of a vertical one) and how the tracks distribute (counterAxisAlignContent). Only
   // meaningful when wrapping; emit non-default values so a non-wrapping flex stays clean. Under
   // SPACE_BETWEEN Figma still reports the spacing but ignores it (measured: 30 → 100 moved no track),
   // so it is left out there rather than handed to codegen as a gap that does not render.
-  if (n.layoutWrap === 'WRAP') {
-    const distributed = n.counterAxisAlignContent === 'SPACE_BETWEEN';
-    if (!distributed && typeof n.counterAxisSpacing === 'number' && n.counterAxisSpacing !== 0) {
-      out.counterAxisSpacing = n.counterAxisSpacing;
+  if (wrap === 'WRAP') {
+    const alignContent = n.counterAxisAlignContent;
+    const distributed = alignContent === 'SPACE_BETWEEN';
+    if (!distributed) {
+      const spacing = n.counterAxisSpacing;
+      if (typeof spacing === 'number' && spacing !== 0) out.counterAxisSpacing = spacing;
     }
-    if (typeof n.counterAxisAlignContent === 'string' && n.counterAxisAlignContent !== 'AUTO') {
-      out.counterAxisAlignContent = n.counterAxisAlignContent;
+    if (typeof alignContent === 'string' && alignContent !== 'AUTO') {
+      out.counterAxisAlignContent = alignContent;
     }
   }
   // Non-default paint order / stroke-in-layout: later children normally paint on top (CSS agrees),
@@ -335,15 +342,6 @@ const serializeLetterSpacing = (ls: unknown): SerializedLetterSpacing | typeof M
     return { value: o.value, unit: o.unit };
   }
   return MIXED;
-};
-
-const isAutoLayoutParent = (node: SceneNode): boolean => {
-  const parent = node.parent;
-  return (
-    parent !== null &&
-    'layoutMode' in parent &&
-    (parent as { layoutMode: unknown }).layoutMode !== 'NONE'
-  );
 };
 
 /** Variable alias(es) → flat list of variable ids (names are resolved later, async). */
@@ -499,14 +497,20 @@ const collectPropertyReferences = (node: SceneNode, out: SerializedNode): void =
   if (Object.keys(refs).length > 0) out.componentPropertyReferences = refs;
 };
 
-const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode => {
+const enrichWithMixins = (
+  node: SceneNode,
+  base: SerializedNode,
+  parent: BaseNode | null,
+): SerializedNode => {
   const out: SerializedNode = { ...base };
 
-  if ('rotation' in node && typeof node.rotation === 'number') {
-    out.rotation = node.rotation;
+  if ('rotation' in node) {
+    const rotation = node.rotation;
+    if (typeof rotation === 'number') out.rotation = rotation;
   }
-  if ('opacity' in node && typeof node.opacity === 'number') {
-    out.opacity = node.opacity;
+  if ('opacity' in node) {
+    const opacity = node.opacity;
+    if (typeof opacity === 'number') out.opacity = opacity;
   }
   if ('cornerRadius' in node) {
     const cr = (node as { cornerRadius: unknown }).cornerRadius;
@@ -636,13 +640,18 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       out.effects = effects.map(e => serializeEffect(e as Effect));
     }
   }
-  if ('layoutMode' in node && (node as { layoutMode: unknown }).layoutMode !== 'NONE') {
-    out.layout = serializeAutoLayout(node);
+  if ('layoutMode' in node) {
+    const mode = (node as { layoutMode: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID' }).layoutMode;
+    if (mode !== 'NONE') out.layout = serializeAutoLayout(node, mode);
   }
 
   // How the node sizes/positions in its parent (only valid for auto-layout children); otherwise
   // fall back to absolute-positioning constraints.
-  if (isAutoLayoutParent(node)) {
+  const hasParentLayout = parent !== null && 'layoutMode' in parent;
+  const parentLayoutMode = hasParentLayout
+    ? (parent as { layoutMode: unknown }).layoutMode
+    : undefined;
+  if (hasParentLayout && parentLayoutMode !== 'NONE') {
     const sizingH = (node as { layoutSizingHorizontal?: unknown }).layoutSizingHorizontal;
     if (typeof sizingH === 'string') out.layoutSizingHorizontal = sizingH;
     const sizingV = (node as { layoutSizingVertical?: unknown }).layoutSizingVertical;
@@ -655,12 +664,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       out.layoutPositioning = 'ABSOLUTE';
     }
     // Inside a GRID parent the child also carries grid placement (anchor / span / per-cell align).
-    const parent = node.parent;
-    if (
-      parent !== null &&
-      'layoutMode' in parent &&
-      (parent as { layoutMode: unknown }).layoutMode === 'GRID'
-    ) {
+    if (parentLayoutMode === 'GRID') {
       const gc = serializeGridChild(node);
       if (gc !== undefined) out.gridChild = gc;
     }
@@ -676,7 +680,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
 
   // Min/max size bounds — the designer's explicit responsive constraints (→ min-w / max-w /
   // min-h / max-h). They apply to auto-layout frames AND their direct children, so this sits
-  // outside the isAutoLayoutParent branch above (a top-level auto-layout frame carries its own
+  // outside the parent-layout branch above (a top-level auto-layout frame carries its own
   // maxWidth). Unset bounds read null and are omitted, so plain nodes stay lean.
   if ('minWidth' in node) {
     const n = node as {
@@ -685,17 +689,16 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       minHeight?: number | null;
       maxHeight?: number | null;
     };
-    if (typeof n.minWidth === 'number') out.minWidth = n.minWidth;
-    if (typeof n.maxWidth === 'number') out.maxWidth = n.maxWidth;
-    if (typeof n.minHeight === 'number') out.minHeight = n.minHeight;
-    if (typeof n.maxHeight === 'number') out.maxHeight = n.maxHeight;
+    const { minWidth, maxWidth, minHeight, maxHeight } = n;
+    if (typeof minWidth === 'number') out.minWidth = minWidth;
+    if (typeof maxWidth === 'number') out.maxWidth = maxWidth;
+    if (typeof minHeight === 'number') out.minHeight = minHeight;
+    if (typeof maxHeight === 'number') out.maxHeight = maxHeight;
   }
 
-  if (
-    'clipsContent' in node &&
-    typeof (node as { clipsContent: unknown }).clipsContent === 'boolean'
-  ) {
-    out.clipsContent = (node as { clipsContent: boolean }).clipsContent;
+  if ('clipsContent' in node) {
+    const clipsContent = (node as { clipsContent: unknown }).clipsContent;
+    if (typeof clipsContent === 'boolean') out.clipsContent = clipsContent;
   }
   // A frame's own layout grids — the explicit responsive column system (12-col, baseline) a designer
   // sets up. This is ground-truth breakpoint structure codegen otherwise infers; emit only when the
@@ -825,7 +828,7 @@ export const serializeFontName = (font: FontName): SerializedFontName => {
   return out;
 };
 
-const toBase = (node: SceneNode): SerializedNode =>
+const toBase = (node: SceneNode, parent: BaseNode | null): SerializedNode =>
   serializeBase({
     id: node.id,
     name: node.name,
@@ -836,15 +839,19 @@ const toBase = (node: SceneNode): SerializedNode =>
     y: node.y,
     width: node.width,
     height: node.height,
-    parent: node.parent === null ? null : { id: node.parent.id },
+    parent: parent === null ? null : { id: parent.id },
   });
 
 /**
  * Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g. the
  * depth/detail-gated get_design_context view.
  */
-export const serializeFlatSync = (node: SceneNode): SerializedNode =>
-  enrichWithMixins(node, toBase(node));
+export const serializeFlatSync = (node: SceneNode): SerializedNode => {
+  // Figma properties are native getters, not plain fields. Re-read neither a node's parent nor
+  // its scalar/layout values during one snapshot; keep this local so later calls still see edits.
+  const parent = node.parent;
+  return enrichWithMixins(node, toBase(node, parent), parent);
+};
 
 /** Resolve the main component of an INSTANCE (async; tolerates unavailable/missing components). */
 const resolveMainComponent = async (
@@ -914,11 +921,16 @@ export const serializeTrees = async (nodes: readonly SceneNode[]): Promise<Seria
       const { node, target, index } = batch[i]!;
       const out = serialized[i]!;
       target[index] = out;
-      if ('children' in node && Array.isArray(node.children)) {
-        const children: SerializedNode[] = [];
-        out.children = children;
-        for (let j = node.children.length - 1; j >= 0; j -= 1) {
-          pending.push({ node: node.children[j]!, target: children, index: j });
+      if ('children' in node) {
+        // This native getter materializes an array. Indexing node.children in the loop would
+        // materialize it once per sibling, making wide forests quadratic.
+        const childNodes = node.children;
+        if (Array.isArray(childNodes)) {
+          const children: SerializedNode[] = [];
+          out.children = children;
+          for (let j = childNodes.length - 1; j >= 0; j -= 1) {
+            pending.push({ node: childNodes[j]!, target: children, index: j });
+          }
         }
       }
     }

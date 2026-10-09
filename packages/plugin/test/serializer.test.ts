@@ -26,6 +26,109 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  it('reads fresh native values on every call rather than caching across snapshots', () => {
+    const parent = { id: '1:1', layoutMode: 'HORIZONTAL' };
+    const node = fake({
+      parent,
+      opacity: 0.25,
+      layoutSizingHorizontal: 'FILL',
+      constraints: { horizontal: 'CENTER', vertical: 'MIN' },
+    });
+    const first = serializeFlatSync(node);
+    parent.layoutMode = 'NONE';
+    Object.assign(node, { opacity: 0.75 });
+    const second = serializeFlatSync(node);
+    expect(first).toMatchObject({ opacity: 0.25, layoutSizingHorizontal: 'FILL' });
+    expect(first.constraints).toBeUndefined();
+    expect(second).toMatchObject({
+      opacity: 0.75,
+      constraints: { horizontal: 'CENTER', vertical: 'MIN' },
+    });
+    expect(second.layoutSizingHorizontal).toBeUndefined();
+  });
+
+  it('reads native layout and scalar getters once per node snapshot', () => {
+    const reads: Record<string, number> = {};
+    const tracked = (target: object, key: string, value: unknown, label = key): void => {
+      Object.defineProperty(target, key, {
+        get: () => {
+          reads[label] = (reads[label] ?? 0) + 1;
+          return value;
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    };
+    const parent = { id: '1:1' };
+    tracked(parent, 'layoutMode', 'GRID', 'parent.layoutMode');
+    const node = fake({ type: 'FRAME' });
+    for (const [key, value] of Object.entries({
+      parent,
+      rotation: 12,
+      opacity: 0.75,
+      layoutMode: 'HORIZONTAL',
+      layoutWrap: 'WRAP',
+      counterAxisSpacing: 20,
+      counterAxisAlignContent: 'MIN',
+      minWidth: 5,
+      maxWidth: 50,
+      minHeight: 6,
+      maxHeight: 60,
+      clipsContent: true,
+    }))
+      tracked(node, key, value);
+    const out = serializeFlatSync(node);
+
+    expect(out).toMatchObject({
+      parentId: '1:1',
+      rotation: 12,
+      opacity: 0.75,
+      layout: {
+        mode: 'HORIZONTAL',
+        layoutWrap: 'WRAP',
+        counterAxisSpacing: 20,
+        counterAxisAlignContent: 'MIN',
+      },
+      minWidth: 5,
+      maxWidth: 50,
+      minHeight: 6,
+      maxHeight: 60,
+      clipsContent: true,
+    });
+    expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
+  it('reads each native grid dimension only once without losing tracks or placement', () => {
+    const reads: Record<string, number> = {};
+    const node = fake({ type: 'FRAME' });
+    for (const [key, value] of Object.entries({
+      layoutMode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowGap: 8,
+      gridColumnGap: 12,
+      gridRowSizes: [{ type: 'FIXED', value: 30 }],
+      gridColumnSizes: [{ type: 'FLEX', value: 1 }],
+    })) {
+      Object.defineProperty(node, key, {
+        get: () => {
+          reads[key] = (reads[key] ?? 0) + 1;
+          return value;
+        },
+      });
+    }
+    expect(serializeFlatSync(node).layout).toMatchObject({
+      mode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowGap: 8,
+      gridColumnGap: 12,
+      gridRowSizes: [{ type: 'FIXED', value: 30 }],
+      gridColumnSizes: [{ type: 'FLEX', value: 1 }],
+    });
+    expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
   it('returns only base fields when no mixin properties are present', () => {
     const out = serializeFlatSync(fake());
     expect(out).toEqual({
@@ -1486,6 +1589,21 @@ describe('serializeFlat — typography', () => {
 });
 
 describe('serializeTree', () => {
+  it('materializes a wide native children array once, preserving all siblings and order', async () => {
+    const children = Array.from({ length: 1025 }, (_, index) => fake({ id: `2:${index}` }));
+    let reads = 0;
+    const root = fake({ type: 'FRAME' });
+    Object.defineProperty(root, 'children', {
+      get: () => {
+        reads += 1;
+        return children.slice();
+      },
+    });
+    const out = await serializeTree(root);
+    expect(out.children?.map(child => child.id)).toEqual(children.map(child => child.id));
+    expect(reads).toBe(1);
+  });
+
   it('recurses into children', async () => {
     const leaf = fake({ id: '1:3', parent: { id: '1:2' } });
     const branch = fake({ id: '1:2', type: 'FRAME', children: [leaf] });
