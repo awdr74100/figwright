@@ -106,6 +106,11 @@ export class Relay {
       },
     });
     this.wss.on('connection', socket => this.handleConnection(socket));
+    // The server re-emits the HTTP server's errors here (e.g. EMFILE on accept); unheard, an
+    // 'error' event is thrown, and the leader process with every session on it goes down.
+    this.wss.on('error', err => {
+      this.opts.log(`[relay] server error: ${err.message}`);
+    });
   }
 
   async stop(): Promise<void> {

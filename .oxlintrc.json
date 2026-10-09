@@ -32,6 +32,12 @@
   },
   "overrides": [
     {
+      "files": ["packages/mcp/src/**", "packages/shared/src/**"],
+      "rules": {
+        "no-console": ["error", { "allow": ["error", "warn"] }]
+      }
+    },
+    {
       "files": ["**/test/**", "**/*.test.ts"],
       "rules": {
         "unicorn/consistent-function-scoping": "off",
