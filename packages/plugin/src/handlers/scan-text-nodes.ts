@@ -2,7 +2,7 @@ import type { ScanTextNodesResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeFlatNodes } from '../serializer.js';
-import { resolveScope, walk } from '../traverse.js';
+import { resolveScope, walkCooperatively } from '../traverse.js';
 
 export const createScanTextNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -11,7 +11,7 @@ export const createScanTextNodesHandler =
     const scope = await resolveScope(figmaCtx, root);
 
     const matches: SceneNode[] = [];
-    for (const node of walk(scope)) {
+    for await (const node of walkCooperatively(scope)) {
       if (node.type === 'TEXT') matches.push(node);
     }
     const nodes: SerializedNode[] = await serializeFlatNodes(matches);

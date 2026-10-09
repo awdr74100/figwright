@@ -886,6 +886,32 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
+/** Bound synchronous native reads within a lookup batch, without dropping node metadata. */
+const serializeBatch = async (nodes: readonly SceneNode[]): Promise<SerializedNode[]> => {
+  const pending: Promise<{ value: SerializedNode } | { error: unknown }>[] = [];
+  let sliceStarted = Date.now();
+  for (const node of nodes) {
+    // Attach rejection handling before yielding: a native read can fail while later nodes
+    // are still being scheduled. Preserve that error for the caller, not the host's unhandled queue.
+    pending.push(
+      serializeFlat(node).then(
+        value => ({ value }),
+        error => ({ error }),
+      ),
+    );
+    if (Date.now() - sliceStarted >= 16) {
+      // eslint-disable-next-line no-await-in-loop -- keep Figma responsive even below the batch limit
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      sliceStarted = Date.now();
+    }
+  }
+  const settled = await Promise.all(pending);
+  return settled.map(entry => {
+    if ('error' in entry) throw entry.error;
+    return entry.value;
+  });
+};
+
 /** Flat page reads share bounded serialization, preserving every node and its original order. */
 export const serializeFlatNodes = async (
   nodes: readonly SceneNode[],
@@ -901,7 +927,7 @@ export const serializeFlatNodes = async (
       await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
-    const batch = await Promise.all(nodes.slice(offset, offset + batchSize).map(serializeFlat));
+    const batch = await serializeBatch(nodes.slice(offset, offset + batchSize));
     result.push(...batch);
   }
   return result;
@@ -916,7 +942,7 @@ export const serializeTrees = async (nodes: readonly SceneNode[]): Promise<Seria
     // giving Figma's message / timer loop a chance to run on a large library page.
     const batch = pending.splice(-64).toReversed();
     // eslint-disable-next-line no-await-in-loop -- serialize bounded batches, preserving output order
-    const serialized = await Promise.all(batch.map(entry => serializeFlat(entry.node)));
+    const serialized = await serializeBatch(batch.map(entry => entry.node));
     for (let i = 0; i < batch.length; i += 1) {
       const { node, target, index } = batch[i]!;
       const out = serialized[i]!;

@@ -17,6 +17,37 @@ export function* walk(nodes: readonly SceneNode[]): Generator<SceneNode> {
 }
 
 /**
+ * Preserve depth-first order while letting the host run during costly native reads.
+ *
+ * @yields Each scene node in the forest
+ */
+export async function* walkCooperatively(nodes: readonly SceneNode[]): AsyncGenerator<SceneNode> {
+  const pending = [nodes[Symbol.iterator]()];
+  let visited = 0;
+  let sliceStarted = Date.now();
+  while (pending.length > 0) {
+    if (visited >= 512 || Date.now() - sliceStarted >= 16) {
+      // eslint-disable-next-line no-await-in-loop -- yield to Figma, not just promise microtasks
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      visited = 0;
+      sliceStarted = Date.now();
+    }
+    const next = pending[pending.length - 1]!.next();
+    if (next.done) {
+      pending.pop();
+      continue;
+    }
+    const node = next.value;
+    visited += 1;
+    yield node;
+    if ('children' in node) {
+      const children = node.children;
+      if (Array.isArray(children)) pending.push(children[Symbol.iterator]());
+    }
+  }
+}
+
+/**
  * Resolve the `root` param of a traversal tool to the forest to walk.
  *
  * - Omitted → the current page's children
