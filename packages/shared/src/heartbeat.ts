@@ -63,7 +63,14 @@ export class HeartbeatMonitor {
       this.onTimeout();
       return;
     }
-    if (missesElapsed >= 1) {
+    // Probe once the peer has been quiet for half an interval, not a whole one. Probing only at a
+    // full interval let a healthy peer time out: it answers in a few ms, so the next tick — fired a
+    // millisecond or two late, as real timers are — finds the silence just *under* one interval and
+    // sends nothing, and the tick after finds it past two and gives up, though the peer was never
+    // asked. Measured live: the relay's ticks drifted ~1.5ms each against ~3ms replies, and
+    // 29,997 + 2 × 1.5 crossed 30,000. Probing at half guarantees the tick before a timeout sent a
+    // probe, so the peer always had a full interval to answer one.
+    if (elapsed > this.intervalMs / 2) {
       this.sendPing();
     }
   }
