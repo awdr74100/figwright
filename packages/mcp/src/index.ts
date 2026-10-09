@@ -1,3 +1,5 @@
+// Must stay the first import: the crash guard has to be in place before any other module runs.
+import './process-guard-install.js';
 import {
   DEFAULT_PORT,
   type GetScreenshotResult,

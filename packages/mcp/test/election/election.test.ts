@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Election, WEDGED_UNRESPONSIVE_TICKS } from '../../src/election/election.js';
 import { Follower } from '../../src/election/follower.js';
@@ -192,6 +192,26 @@ describe('Election', () => {
     await election.determineRole();
     // The squatter answers no Figwright /ping, so we must NOT attach as its follower (that would
     // forward every RPC into a wall). Stay conflicted and keep contending.
+    expect(node.role).toBe(NodeRole.Conflicted);
+  });
+
+  it('tick: logs a bind error other than EADDRINUSE instead of throwing it out of the ticker', async () => {
+    // The ticker runs `void this.tick()`: anything tick lets escape is an unhandled rejection,
+    // which ends the process — and with it the client's connection.
+    const port = await freePort();
+    const blocker = createServer();
+    await new Promise<void>(resolve => blocker.listen(port, '127.0.0.1', () => resolve()));
+    blockers.push(blocker);
+    const logs: string[] = [];
+    const { node, election } = buildElection(port, 100, 0, msg => logs.push(msg));
+    await election.determineRole();
+    expect(node.role).toBe(NodeRole.Conflicted);
+
+    vi.spyOn(node, 'becomeLeader').mockRejectedValue(
+      Object.assign(new Error('permission denied'), { code: 'EACCES' }),
+    );
+    await expect(election.tickOnce()).resolves.toBeUndefined();
+    expect(logs.some(line => line.includes('tick failed: permission denied'))).toBe(true);
     expect(node.role).toBe(NodeRole.Conflicted);
   });
 

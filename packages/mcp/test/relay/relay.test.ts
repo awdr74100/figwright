@@ -63,6 +63,23 @@ const startRelay = async (
   return b;
 };
 
+describe('Relay server errors', () => {
+  it('logs an error the HTTP server raises instead of letting it end the process', async () => {
+    const server = createServer();
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+    const logs: string[] = [];
+    const relay = new Relay({ serverVersion: '1.0.0', server, log: msg => logs.push(msg) });
+    bound.push({ relay, server, port: (server.address() as AddressInfo).port });
+
+    // What Node raises on the listening server when accept fails (e.g. out of file descriptors).
+    // The WebSocket server re-emits it; an 'error' event nobody listens to is thrown.
+    expect(() =>
+      server.emit('error', Object.assign(new Error('accept EMFILE'), { code: 'EMFILE' })),
+    ).not.toThrow();
+    expect(logs).toContain('[relay] server error: accept EMFILE');
+  });
+});
+
 const connect = (port: number): Promise<WebSocket> =>
   new Promise((resolve, reject) => {
     // These fixtures ignore all heartbeats unless a test explicitly answers them.

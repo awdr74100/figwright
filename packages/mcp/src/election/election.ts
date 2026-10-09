@@ -168,6 +168,11 @@ export class Election {
     this.tickInFlight = true;
     try {
       await this.tickBody();
+    } catch (err) {
+      // The interval fires this without awaiting it, so a throw here would be an unhandled
+      // rejection — and in the conflicted branch tryLeadOrFollow rethrows any bind error other than
+      // EADDRINUSE. The next tick retries from whatever state this one left.
+      this.log(`[election] tick failed: ${(err as Error).message}`);
     } finally {
       this.tickInFlight = false;
     }
