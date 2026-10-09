@@ -1,7 +1,5 @@
-import { TOOL_RESULT_BUDGET_BYTES } from '@figwright/shared';
-
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlatNodes, toNodeListResult } from '../serializer.js';
+import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
 import { collectMatches, resolveScope } from '../traverse.js';
 
 export const createScanNodesByTypesHandler =
@@ -19,5 +17,5 @@ export const createScanNodesByTypesHandler =
     const scope = await resolveScope(figmaCtx, p.root);
 
     const matches = await collectMatches(scope, node => types.has(node.type));
-    return toNodeListResult(matches, await serializeFlatNodes(matches, TOOL_RESULT_BUDGET_BYTES));
+    return toNodeListResult(matches, await serializeFlatNodes(matches, resultCharBudget()));
   };

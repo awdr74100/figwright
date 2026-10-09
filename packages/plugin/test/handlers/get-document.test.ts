@@ -113,7 +113,7 @@ describe('get_document handler', () => {
       fake({ id: `1:${i + 2}`, name: 'x'.repeat(1024 * 1024) }),
     );
     await expect(createGetDocumentHandler(fakeFigma(children))(undefined)).rejects.toThrow(
-      /get_document: this page has 12 nodes and serializes past 9\.5 MB/,
+      /get_document: this page has 12 nodes and serializes past 10\.0 MB/,
     );
   });
 });

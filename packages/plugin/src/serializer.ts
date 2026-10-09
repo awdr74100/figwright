@@ -20,7 +20,7 @@ import {
   type SerializedStyleIds,
   type SerializedTextSegment,
   serializeNode as serializeBase,
-  TOOL_RESULT_BUDGET_BYTES,
+  TOOL_RESULT_LIMIT_BYTES,
 } from '@figwright/shared';
 
 import { TimeSlice } from './cooperative.js';
@@ -894,9 +894,29 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
 const MAX_IN_FLIGHT = 512;
 
 /**
+ * A size allowance for serialized output, in JSON characters. Passed by reference, so several runs
+ * can draw on one allowance — get_nodes_info's trees end up in one result, so they share one.
+ */
+export interface CharBudget {
+  readonly limit: number;
+  used: number;
+}
+
+/**
+ * The allowance for one tool result: its JSON passing {@linkcode TOOL_RESULT_LIMIT_BYTES} means the
+ * result cannot be sent at all. Characters are a lower bound on the bytes the result will occupy on
+ * the wire (escaping and multi-byte text only add), so a run stopped here was certain not to fit —
+ * nothing that would have arrived is ever stopped.
+ */
+export const resultCharBudget = (): CharBudget => ({ limit: TOOL_RESULT_LIMIT_BYTES, used: 0 });
+
+/** "10.0 MB" — the limit as the refusals below name it. */
+export const RESULT_LIMIT_LABEL = `${(TOOL_RESULT_LIMIT_BYTES / 1024 / 1024).toFixed(1)} MB`;
+
+/**
  * Nodes serialized in their input order, and whether that is all of them. `complete` is false when
- * a size budget stopped the work early — `nodes` is then a prefix whose serialized JSON already
- * exceeds the budget.
+ * the budget ran out — `nodes` is then a prefix that, with whatever else drew on the same budget,
+ * already passes it.
  */
 export interface SerializedRun {
   nodes: SerializedNode[];
@@ -909,23 +929,21 @@ export interface SerializedRun {
  * than being awaited batch by batch, so a slow lookup overlaps with later reads instead of stalling
  * them. Output order is input order.
  *
- * `budgetChars` stops the run once the JSON of what is done passes it. Characters are a lower bound
- * on the bytes the result will occupy on the wire (escaping and multi-byte text only add), so a run
- * stopped here was certain not to fit — the caller never loses a result that would have.
+ * `budget` stops the run once the JSON of everything drawn against it passes its limit.
  */
 const serializeInOrder = async (
   nodes: readonly SceneNode[],
-  budgetChars: number,
+  budget: CharBudget | null,
 ): Promise<SerializedRun> => {
   const done: SerializedNode[] = [];
   const inFlight: Array<Promise<SerializedNode>> = [];
-  let chars = 0;
   const settleOldest = async (): Promise<void> => {
     const out = await inFlight.shift()!;
     done.push(out);
-    // Only measured while a budget is armed; +1 for the separating comma.
-    if (budgetChars !== Infinity) chars += JSON.stringify(out).length + 1;
+    // +1 for the separating comma.
+    if (budget !== null) budget.used += JSON.stringify(out).length + 1;
   };
+  const spent = (): boolean => budget !== null && budget.used > budget.limit;
   const abandon = (): SerializedRun => ({ nodes: done, complete: false });
   const slice = new TimeSlice();
   for (const node of nodes) {
@@ -937,23 +955,23 @@ const serializeInOrder = async (
     inFlight.push(pending);
     // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
     if (inFlight.length >= MAX_IN_FLIGHT) await settleOldest();
-    if (chars > budgetChars) return abandon();
+    if (spent()) return abandon();
     // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
     if (slice.due()) await slice.yield();
   }
   while (inFlight.length > 0) {
     // eslint-disable-next-line no-await-in-loop -- settle in order so the budget sees a prefix
     await settleOldest();
-    if (chars > budgetChars) return abandon();
+    if (spent()) return abandon();
   }
   return { nodes: done, complete: true };
 };
 
-/** Flat reads (search / scans): every node, in order, unless `budgetChars` stops the run early. */
+/** Flat reads (search / scans / selection): every node, in order, unless `budget` runs out. */
 export const serializeFlatNodes = (
   nodes: readonly SceneNode[],
-  budgetChars = Infinity,
-): Promise<SerializedRun> => serializeInOrder(nodes, budgetChars);
+  budget: CharBudget | null = null,
+): Promise<SerializedRun> => serializeInOrder(nodes, budget);
 
 /**
  * A search / scan reply: every match, or — when the budget stopped the run — the leading matches
@@ -968,15 +986,15 @@ export const toNodeListResult = (
 /**
  * Full recursive serialization of a forest. The tree is flattened (cooperatively), serialized as
  * one ordered run, and rebuilt — so a wide or deep tree gets the same slicing as a flat scan. When
- * `budgetChars` stops the run, the partial tree is meaningless and `nodes` is empty.
+ * `budget` runs out, the partial tree is meaningless and `nodes` is empty.
  */
 export const serializeTrees = async (
   roots: readonly SceneNode[],
-  budgetChars = Infinity,
+  budget: CharBudget | null = null,
 ): Promise<SerializedRun & { total: number }> => {
   const forest = await flattenForest(roots);
   const total = forest.nodes.length;
-  const run = await serializeInOrder(forest.nodes, budgetChars);
+  const run = await serializeInOrder(forest.nodes, budget);
   if (!run.complete) return { nodes: [], complete: false, total };
   const out: SerializedNode[] = [];
   const childLists: Array<SerializedNode[] | undefined> = [];
@@ -1000,10 +1018,9 @@ export const serializeTrees = async (
  */
 export const treeTooLargeError = (tool: string, total: number, subject = 'tree'): Error =>
   new Error(
-    `${tool}: this ${subject} has ${total} nodes and serializes past ` +
-      `${(TOOL_RESULT_BUDGET_BYTES / 1024 / 1024).toFixed(1)} MB — more than one tool result can ` +
-      'carry. Read it in parts: get_node on one of its children, or get_design_context, which ' +
-      'splits a large tree into sections.',
+    `${tool}: this ${subject} has ${total} nodes and serializes past ${RESULT_LIMIT_LABEL} — more ` +
+      'than one tool result can carry. Read it in parts: get_node on one of its children, or ' +
+      'get_design_context, which splits a large tree into sections.',
   );
 
 export const serializeEffect = (effect: Effect): SerializedEffect => {

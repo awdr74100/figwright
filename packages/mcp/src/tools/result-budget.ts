@@ -1,7 +1,8 @@
 import {
   CLIENT_MESSAGE_LIMIT_BYTES,
+  NODE_LIST_BUDGET_BYTES,
   type SearchNodesResult,
-  TOOL_RESULT_BUDGET_BYTES,
+  TOOL_RESULT_LIMIT_BYTES,
 } from '@figwright/shared';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 
@@ -9,7 +10,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 //
 //   fitNodeList        — search / scan results, which can be cut cleanly: a prefix of a document-order
 //                        list is still a true answer about the nodes it holds, once a note says how
-//                        many there are in all. Trimmed to the budget.
+//                        many there are in all. Trimmed only when it does not fit whole.
 //   assertWithinLimit  — every tool, after everything else: a result that would still cross the hard
 //                        limit is refused with a message instead of being sent and taking the
 //                        connection down with it.
@@ -33,7 +34,7 @@ const wireBytes = (text: string): number => Buffer.byteLength(JSON.stringify(tex
 export const fitNodeList = (
   result: SearchNodesResult,
   narrowWith: string,
-  budgetBytes = TOOL_RESULT_BUDGET_BYTES,
+  budgetBytes = NODE_LIST_BUDGET_BYTES,
 ): SearchNodesResult => {
   const total = result.matchCount ?? result.nodes.length;
   const sizes = result.nodes.map(node => wireBytes(JSON.stringify(node)));
@@ -61,9 +62,6 @@ export const fitNodeList = (
   return { note: noteFor(kept), matchCount: total, nodes: result.nodes.slice(0, kept) };
 };
 
-// What rides around the content blocks: the JSON-RPC envelope and the result's own keys.
-const ENVELOPE_MARGIN_BYTES = 64 * 1024;
-
 /**
  * Refuse a result that would cross the client's message limit. Sending it is not a failed call but
  * a lost connection — every later call fails until the user reconnects by hand — so an error the
@@ -73,7 +71,7 @@ const ENVELOPE_MARGIN_BYTES = 64 * 1024;
 export const assertWithinLimit = (
   tool: string,
   result: CallToolResult,
-  limitBytes = CLIENT_MESSAGE_LIMIT_BYTES - ENVELOPE_MARGIN_BYTES,
+  limitBytes = TOOL_RESULT_LIMIT_BYTES,
 ): CallToolResult => {
   const blocks = result.content as ReadonlyArray<{ text?: unknown; data?: unknown }>;
   let ceiling = 0;

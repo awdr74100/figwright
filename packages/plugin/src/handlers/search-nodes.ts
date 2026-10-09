@@ -1,7 +1,5 @@
-import { TOOL_RESULT_BUDGET_BYTES } from '@figwright/shared';
-
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeFlatNodes, toNodeListResult } from '../serializer.js';
+import { resultCharBudget, serializeFlatNodes, toNodeListResult } from '../serializer.js';
 import { collectMatches, resolveScope } from '../traverse.js';
 
 export const createSearchNodesHandler =
@@ -29,5 +27,5 @@ export const createSearchNodesHandler =
         (wantType === null || node.type === wantType) &&
         (needle === null || node.name.toLowerCase().includes(needle)),
     );
-    return toNodeListResult(matches, await serializeFlatNodes(matches, TOOL_RESULT_BUDGET_BYTES));
+    return toNodeListResult(matches, await serializeFlatNodes(matches, resultCharBudget()));
   };

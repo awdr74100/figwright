@@ -6,6 +6,7 @@ import {
   serializeFlat,
   serializeFlatSync,
   serializeLayoutGrid,
+  resultCharBudget,
   serializeFlatNodes,
   serializePaint,
   serializeTrees,
@@ -1600,20 +1601,42 @@ describe('serializeFlatNodes — result budget', () => {
   };
 
   it('never stops a run that fits, even exactly', async () => {
-    const run = await serializeFlatNodes(nodes, await exactChars());
+    const run = await serializeFlatNodes(nodes, { limit: await exactChars(), used: 0 });
     expect(run.complete).toBe(true);
     expect(run.nodes.map(n => n.id)).toEqual(nodes.map(n => n.id));
   });
 
   it('stops a run that cannot fit, keeping an in-order prefix past the budget', async () => {
     const budget = Math.floor((await exactChars()) / 2);
-    const run = await serializeFlatNodes(nodes, budget);
+    const run = await serializeFlatNodes(nodes, { limit: budget, used: 0 });
     expect(run.complete).toBe(false);
     expect(run.nodes.map(n => n.id)).toEqual(nodes.slice(0, run.nodes.length).map(n => n.id));
     // A prefix that already passes the budget — enough for the server to fill it exactly.
     expect(run.nodes.reduce((sum, n) => sum + JSON.stringify(n).length + 1, 0)).toBeGreaterThan(
       budget,
     );
+  });
+
+  it('draws several runs from one shared allowance', async () => {
+    const half = Math.floor((await exactChars()) / 2);
+    // Each run alone fits the limit; together they do not — so one shared allowance stops them.
+    const shared = { limit: half + 10, used: 0 };
+    const [a, b] = await Promise.all([
+      serializeFlatNodes(nodes.slice(0, 15), shared),
+      serializeFlatNodes(nodes.slice(15), shared),
+    ]);
+    expect(a.complete && b.complete).toBe(false);
+    expect(shared.used).toBeGreaterThan(shared.limit);
+    // Separately, each half fits an allowance of the same size.
+    const alone = await serializeFlatNodes(nodes.slice(0, 15), { limit: half + 10, used: 0 });
+    expect(alone.complete).toBe(true);
+  });
+
+  it('caps a single tool result at the client message limit, less only the envelope', () => {
+    const budget = resultCharBudget();
+    expect(budget.used).toBe(0);
+    expect(budget.limit).toBeGreaterThan(10 * 1024 * 1024 - 64 * 1024);
+    expect(budget.limit).toBeLessThan(10 * 1024 * 1024);
   });
 });
 
@@ -1644,7 +1667,7 @@ describe('serializeTrees', () => {
       type: 'FRAME',
       children: Array.from({ length: 10 }, (_, i) => fake({ id: `2:${i}` })),
     });
-    const run = await serializeTrees([root], 100);
+    const run = await serializeTrees([root], { limit: 100, used: 0 });
     expect(run).toEqual({ nodes: [], complete: false, total: 11 });
   });
 });

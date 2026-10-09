@@ -1,17 +1,13 @@
-import {
-  type GetNodeResult,
-  type SerializedNode,
-  TOOL_RESULT_BUDGET_BYTES,
-} from '@figwright/shared';
+import type { GetNodeResult, SerializedNode } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeTrees, treeTooLargeError } from '../serializer.js';
+import { resultCharBudget, serializeTrees, treeTooLargeError } from '../serializer.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
 
 const serializeWithin = async (node: SceneNode): Promise<SerializedNode> => {
-  const run = await serializeTrees([node], TOOL_RESULT_BUDGET_BYTES);
+  const run = await serializeTrees([node], resultCharBudget());
   if (!run.complete) throw treeTooLargeError('get_node', run.total);
   return run.nodes[0]!;
 };

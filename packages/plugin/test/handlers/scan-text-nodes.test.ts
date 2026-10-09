@@ -97,7 +97,7 @@ describe('scan_text_nodes handler', () => {
   });
 
   it('stops at what one result can carry and says how many matched in all', async () => {
-    // 1 MB of text per node: the budget (9.5 MB) is certainly passed by the tenth.
+    // 1 MiB of text per node: the limit (just under 10 MiB) is certainly passed by the tenth.
     const texts = Array.from({ length: 40 }, (_, index) =>
       fake(`2:${index}`, 'TEXT', { characters: 'x'.repeat(1024 * 1024) }),
     );
