@@ -49,4 +49,38 @@ describe('get_nodes_info handler', () => {
     const result = (await handler({ nodeIds: ['p-1'] })) as GetNodesInfoResult;
     expect(result.nodes).toEqual([null]);
   });
+
+  // A frame of six children, each carrying a 1 MiB name: ~6 MiB serialized — one fits a result,
+  // two do not.
+  const wideFrame = (id: string): SceneNode =>
+    fake({
+      id,
+      type: 'FRAME',
+      children: Array.from({ length: 6 }, (_, i) =>
+        fake({ id: `${id}-${i}`, name: 'x'.repeat(1024 * 1024) }),
+      ),
+    });
+
+  it('returns trees that fit one result together, unchanged', async () => {
+    const big = wideFrame('1:2');
+    const small = fake({ id: '1:9' });
+    const handler = createGetNodesInfoHandler(
+      fakeFigma({ '1:2': big as unknown as BaseNode, '1:9': small as unknown as BaseNode }),
+    );
+    const result = (await handler({ nodeIds: ['1:2', '1:9'] })) as GetNodesInfoResult;
+    expect(result.nodes.map(n => n?.id)).toEqual(['1:2', '1:9']);
+    expect(result.nodes[0]?.children).toHaveLength(6);
+  });
+
+  it('refuses trees that fit one at a time but not together, naming each', async () => {
+    const handler = createGetNodesInfoHandler(
+      fakeFigma({
+        '1:2': wideFrame('1:2') as unknown as BaseNode,
+        '1:3': wideFrame('1:3') as unknown as BaseNode,
+      }),
+    );
+    await expect(handler({ nodeIds: ['1:2', '1:3'] })).rejects.toThrow(
+      /together serialize past 10\.0 MB .*\(1:2: 7 nodes, 1:3: 7 nodes\)/,
+    );
+  });
 });

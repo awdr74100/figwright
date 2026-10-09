@@ -27,8 +27,12 @@ describe('tool budgets', () => {
       // frame, so they get the same window instead of the 30s default that beheaded big trees.
       'get_node',
       'get_nodes_info',
-      'scan_text_nodes',
+      // Page-wide walks: the result-size budget bounds how much is serialized, not how far the walk
+      // goes to find the matches. search_nodes is the same walk as the scans (it once had the 30s
+      // default and timed out at 35s on a 16k-instance page that scan_nodes_by_types finished).
+      'search_nodes',
       'scan_nodes_by_types',
+      'scan_text_nodes',
       // Carries N writes and, on a failure, N undos — a timeout mid-rollback would hide whether the
       // document was left changed.
       'batch',
@@ -40,7 +44,13 @@ describe('tool budgets', () => {
   // The whole point of the table: the three nested timers must be strictly increasing outward, so the
   // innermost (sandbox) fires first with the most specific error and no layer is left orphaned.
   it('nests sandbox < relay < follower by one margin per layer', () => {
-    for (const t of ['set_fills', 'export_pdf']) {
+    for (const t of [
+      'set_fills',
+      'export_pdf',
+      'search_nodes',
+      'scan_nodes_by_types',
+      'scan_text_nodes',
+    ]) {
       expect(getRelayBudget(t)).toBe(getToolBudget(t) + BUDGET_LAYER_MARGIN_MS);
       expect(getFollowerBudget(t)).toBe(getToolBudget(t) + 2 * BUDGET_LAYER_MARGIN_MS);
       expect(getToolBudget(t)).toBeLessThan(getRelayBudget(t));

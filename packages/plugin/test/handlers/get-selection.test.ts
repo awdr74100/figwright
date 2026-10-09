@@ -52,4 +52,13 @@ describe('get_selection handler', () => {
     const result = (await handler(undefined)) as GetSelectionResult;
     expect(result.nodes[0]!.parentId).toBeNull();
   });
+
+  it('refuses a selection too large for one result rather than returning part of it', async () => {
+    const selection = Array.from({ length: 12 }, (_, i) =>
+      fakeNode({ id: `1:${i + 2}`, name: 'x'.repeat(1024 * 1024) }),
+    );
+    await expect(createGetSelectionHandler(fakeFigma(selection))(undefined)).rejects.toThrow(
+      /get_selection: the 12 selected layers serialize past 10\.0 MB/,
+    );
+  });
 });

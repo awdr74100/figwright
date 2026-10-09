@@ -1,5 +1,6 @@
 import {
   MIXED,
+  type SearchNodesResult,
   type SerializedAnnotation,
   type SerializedAutoLayout,
   type SerializedBindings,
@@ -19,9 +20,12 @@ import {
   type SerializedStyleIds,
   type SerializedTextSegment,
   serializeNode as serializeBase,
+  TOOL_RESULT_LIMIT_BYTES,
 } from '@figwright/shared';
 
+import { TimeSlice } from './cooperative.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
+import { flattenForest } from './traverse.js';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||
@@ -215,7 +219,10 @@ const serializeGridTracks = (tracks: unknown): SerializedGridTrack[] | undefined
     .map(t => ({ type: String(t.type), value: Number(t.value) }));
 };
 
-const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
+const serializeAutoLayout = (
+  node: SceneNode,
+  mode: 'HORIZONTAL' | 'VERTICAL' | 'GRID',
+): SerializedAutoLayout => {
   const n = node as SceneNode & {
     layoutMode: 'HORIZONTAL' | 'VERTICAL' | 'GRID';
     paddingTop: number;
@@ -245,12 +252,13 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
   };
   // GRID auto-layout: no itemSpacing / primary-counter align — it carries row/col counts + gaps +
   // track sizes instead (→ CSS Grid). padding is common.
-  if (n.layoutMode === 'GRID') {
+  if (mode === 'GRID') {
     const out: SerializedAutoLayout = { mode: 'GRID', ...padding };
-    if (typeof n.gridRowCount === 'number') out.gridRowCount = n.gridRowCount;
-    if (typeof n.gridColumnCount === 'number') out.gridColumnCount = n.gridColumnCount;
-    if (typeof n.gridRowGap === 'number') out.gridRowGap = n.gridRowGap;
-    if (typeof n.gridColumnGap === 'number') out.gridColumnGap = n.gridColumnGap;
+    const { gridRowCount, gridColumnCount, gridRowGap, gridColumnGap } = n;
+    if (typeof gridRowCount === 'number') out.gridRowCount = gridRowCount;
+    if (typeof gridColumnCount === 'number') out.gridColumnCount = gridColumnCount;
+    if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
+    if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
     const rowSizes = serializeGridTracks(n.gridRowSizes);
     if (rowSizes !== undefined) out.gridRowSizes = rowSizes;
     const colSizes = serializeGridTracks(n.gridColumnSizes);
@@ -258,25 +266,28 @@ const serializeAutoLayout = (node: SceneNode): SerializedAutoLayout => {
     return out;
   }
   const out: SerializedAutoLayout = {
-    mode: n.layoutMode,
+    mode,
     ...padding,
     itemSpacing: n.itemSpacing,
     primaryAxisAlignItems: n.primaryAxisAlignItems,
     counterAxisAlignItems: n.counterAxisAlignItems,
   };
-  if (typeof n.layoutWrap === 'string') out.layoutWrap = n.layoutWrap;
+  const wrap = n.layoutWrap;
+  if (typeof wrap === 'string') out.layoutWrap = wrap;
   // WRAP cross-axis: the gap between wrapped tracks (counterAxisSpacing — rows of a horizontal wrap,
   // columns of a vertical one) and how the tracks distribute (counterAxisAlignContent). Only
   // meaningful when wrapping; emit non-default values so a non-wrapping flex stays clean. Under
   // SPACE_BETWEEN Figma still reports the spacing but ignores it (measured: 30 → 100 moved no track),
   // so it is left out there rather than handed to codegen as a gap that does not render.
-  if (n.layoutWrap === 'WRAP') {
-    const distributed = n.counterAxisAlignContent === 'SPACE_BETWEEN';
-    if (!distributed && typeof n.counterAxisSpacing === 'number' && n.counterAxisSpacing !== 0) {
-      out.counterAxisSpacing = n.counterAxisSpacing;
+  if (wrap === 'WRAP') {
+    const alignContent = n.counterAxisAlignContent;
+    const distributed = alignContent === 'SPACE_BETWEEN';
+    if (!distributed) {
+      const spacing = n.counterAxisSpacing;
+      if (typeof spacing === 'number' && spacing !== 0) out.counterAxisSpacing = spacing;
     }
-    if (typeof n.counterAxisAlignContent === 'string' && n.counterAxisAlignContent !== 'AUTO') {
-      out.counterAxisAlignContent = n.counterAxisAlignContent;
+    if (typeof alignContent === 'string' && alignContent !== 'AUTO') {
+      out.counterAxisAlignContent = alignContent;
     }
   }
   // Non-default paint order / stroke-in-layout: later children normally paint on top (CSS agrees),
@@ -335,15 +346,6 @@ const serializeLetterSpacing = (ls: unknown): SerializedLetterSpacing | typeof M
     return { value: o.value, unit: o.unit };
   }
   return MIXED;
-};
-
-const isAutoLayoutParent = (node: SceneNode): boolean => {
-  const parent = node.parent;
-  return (
-    parent !== null &&
-    'layoutMode' in parent &&
-    (parent as { layoutMode: unknown }).layoutMode !== 'NONE'
-  );
 };
 
 /** Variable alias(es) → flat list of variable ids (names are resolved later, async). */
@@ -499,14 +501,20 @@ const collectPropertyReferences = (node: SceneNode, out: SerializedNode): void =
   if (Object.keys(refs).length > 0) out.componentPropertyReferences = refs;
 };
 
-const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode => {
+const enrichWithMixins = (
+  node: SceneNode,
+  base: SerializedNode,
+  parent: BaseNode | null,
+): SerializedNode => {
   const out: SerializedNode = { ...base };
 
-  if ('rotation' in node && typeof node.rotation === 'number') {
-    out.rotation = node.rotation;
+  if ('rotation' in node) {
+    const rotation = node.rotation;
+    if (typeof rotation === 'number') out.rotation = rotation;
   }
-  if ('opacity' in node && typeof node.opacity === 'number') {
-    out.opacity = node.opacity;
+  if ('opacity' in node) {
+    const opacity = node.opacity;
+    if (typeof opacity === 'number') out.opacity = opacity;
   }
   if ('cornerRadius' in node) {
     const cr = (node as { cornerRadius: unknown }).cornerRadius;
@@ -636,13 +644,18 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       out.effects = effects.map(e => serializeEffect(e as Effect));
     }
   }
-  if ('layoutMode' in node && (node as { layoutMode: unknown }).layoutMode !== 'NONE') {
-    out.layout = serializeAutoLayout(node);
+  if ('layoutMode' in node) {
+    const mode = (node as { layoutMode: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID' }).layoutMode;
+    if (mode !== 'NONE') out.layout = serializeAutoLayout(node, mode);
   }
 
   // How the node sizes/positions in its parent (only valid for auto-layout children); otherwise
   // fall back to absolute-positioning constraints.
-  if (isAutoLayoutParent(node)) {
+  const hasParentLayout = parent !== null && 'layoutMode' in parent;
+  const parentLayoutMode = hasParentLayout
+    ? (parent as { layoutMode: unknown }).layoutMode
+    : undefined;
+  if (hasParentLayout && parentLayoutMode !== 'NONE') {
     const sizingH = (node as { layoutSizingHorizontal?: unknown }).layoutSizingHorizontal;
     if (typeof sizingH === 'string') out.layoutSizingHorizontal = sizingH;
     const sizingV = (node as { layoutSizingVertical?: unknown }).layoutSizingVertical;
@@ -655,12 +668,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       out.layoutPositioning = 'ABSOLUTE';
     }
     // Inside a GRID parent the child also carries grid placement (anchor / span / per-cell align).
-    const parent = node.parent;
-    if (
-      parent !== null &&
-      'layoutMode' in parent &&
-      (parent as { layoutMode: unknown }).layoutMode === 'GRID'
-    ) {
+    if (parentLayoutMode === 'GRID') {
       const gc = serializeGridChild(node);
       if (gc !== undefined) out.gridChild = gc;
     }
@@ -676,7 +684,7 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
 
   // Min/max size bounds — the designer's explicit responsive constraints (→ min-w / max-w /
   // min-h / max-h). They apply to auto-layout frames AND their direct children, so this sits
-  // outside the isAutoLayoutParent branch above (a top-level auto-layout frame carries its own
+  // outside the parent-layout branch above (a top-level auto-layout frame carries its own
   // maxWidth). Unset bounds read null and are omitted, so plain nodes stay lean.
   if ('minWidth' in node) {
     const n = node as {
@@ -685,17 +693,16 @@ const enrichWithMixins = (node: SceneNode, base: SerializedNode): SerializedNode
       minHeight?: number | null;
       maxHeight?: number | null;
     };
-    if (typeof n.minWidth === 'number') out.minWidth = n.minWidth;
-    if (typeof n.maxWidth === 'number') out.maxWidth = n.maxWidth;
-    if (typeof n.minHeight === 'number') out.minHeight = n.minHeight;
-    if (typeof n.maxHeight === 'number') out.maxHeight = n.maxHeight;
+    const { minWidth, maxWidth, minHeight, maxHeight } = n;
+    if (typeof minWidth === 'number') out.minWidth = minWidth;
+    if (typeof maxWidth === 'number') out.maxWidth = maxWidth;
+    if (typeof minHeight === 'number') out.minHeight = minHeight;
+    if (typeof maxHeight === 'number') out.maxHeight = maxHeight;
   }
 
-  if (
-    'clipsContent' in node &&
-    typeof (node as { clipsContent: unknown }).clipsContent === 'boolean'
-  ) {
-    out.clipsContent = (node as { clipsContent: boolean }).clipsContent;
+  if ('clipsContent' in node) {
+    const clipsContent = (node as { clipsContent: unknown }).clipsContent;
+    if (typeof clipsContent === 'boolean') out.clipsContent = clipsContent;
   }
   // A frame's own layout grids — the explicit responsive column system (12-col, baseline) a designer
   // sets up. This is ground-truth breakpoint structure codegen otherwise infers; emit only when the
@@ -825,7 +832,7 @@ export const serializeFontName = (font: FontName): SerializedFontName => {
   return out;
 };
 
-const toBase = (node: SceneNode): SerializedNode =>
+const toBase = (node: SceneNode, parent: BaseNode | null): SerializedNode =>
   serializeBase({
     id: node.id,
     name: node.name,
@@ -836,15 +843,19 @@ const toBase = (node: SceneNode): SerializedNode =>
     y: node.y,
     width: node.width,
     height: node.height,
-    parent: node.parent === null ? null : { id: node.parent.id },
+    parent: parent === null ? null : { id: parent.id },
   });
 
 /**
  * Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g. the
  * depth/detail-gated get_design_context view.
  */
-export const serializeFlatSync = (node: SceneNode): SerializedNode =>
-  enrichWithMixins(node, toBase(node));
+export const serializeFlatSync = (node: SceneNode): SerializedNode => {
+  // Figma properties are native getters, not plain fields. Re-read neither a node's parent nor
+  // its scalar/layout values during one snapshot; keep this local so later calls still see edits.
+  const parent = node.parent;
+  return enrichWithMixins(node, toBase(node, parent), parent);
+};
 
 /** Resolve the main component of an INSTANCE (async; tolerates unavailable/missing components). */
 const resolveMainComponent = async (
@@ -879,14 +890,138 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   return out;
 };
 
-export const serializeTree = async (node: SceneNode): Promise<SerializedNode> => {
-  const out = await serializeFlat(node);
-  if ('children' in node && Array.isArray(node.children)) {
-    const children = await Promise.all((node.children as readonly SceneNode[]).map(serializeTree));
-    return { ...out, children };
+/** Main-component lookups allowed in flight at once; past this the oldest is awaited first. */
+const MAX_IN_FLIGHT = 512;
+
+/**
+ * A size allowance for serialized output, in JSON characters. Passed by reference, so several runs
+ * can draw on one allowance — get_nodes_info's trees end up in one result, so they share one.
+ */
+export interface CharBudget {
+  readonly limit: number;
+  used: number;
+}
+
+/**
+ * The allowance for one tool result: its JSON passing {@linkcode TOOL_RESULT_LIMIT_BYTES} means the
+ * result cannot be sent at all. Characters are a lower bound on the bytes the result will occupy on
+ * the wire (escaping and multi-byte text only add), so a run stopped here was certain not to fit —
+ * nothing that would have arrived is ever stopped.
+ */
+export const resultCharBudget = (): CharBudget => ({ limit: TOOL_RESULT_LIMIT_BYTES, used: 0 });
+
+/** "10.0 MB" — the limit as the refusals below name it. */
+export const RESULT_LIMIT_LABEL = `${(TOOL_RESULT_LIMIT_BYTES / 1024 / 1024).toFixed(1)} MB`;
+
+/**
+ * Nodes serialized in their input order, and whether that is all of them. `complete` is false when
+ * the budget ran out — `nodes` is then a prefix that, with whatever else drew on the same budget,
+ * already passes it.
+ */
+export interface SerializedRun {
+  nodes: SerializedNode[];
+  complete: boolean;
+}
+
+/**
+ * Serialize many nodes without holding Figma's thread for the whole run: the synchronous reads are
+ * time-sliced (see cooperative.ts), and main-component lookups keep resolving across slices rather
+ * than being awaited batch by batch, so a slow lookup overlaps with later reads instead of stalling
+ * them. Output order is input order.
+ *
+ * `budget` stops the run once the JSON of everything drawn against it passes its limit.
+ */
+const serializeInOrder = async (
+  nodes: readonly SceneNode[],
+  budget: CharBudget | null,
+): Promise<SerializedRun> => {
+  const done: SerializedNode[] = [];
+  const inFlight: Array<Promise<SerializedNode>> = [];
+  const settleOldest = async (): Promise<void> => {
+    const out = await inFlight.shift()!;
+    done.push(out);
+    // +1 for the separating comma.
+    if (budget !== null) budget.used += JSON.stringify(out).length + 1;
+  };
+  const spent = (): boolean => budget !== null && budget.used > budget.limit;
+  const abandon = (): SerializedRun => ({ nodes: done, complete: false });
+  const slice = new TimeSlice();
+  for (const node of nodes) {
+    const pending = serializeFlat(node);
+    // Marked handled up front: when the run stops early or an earlier node fails, the ones still in
+    // flight are dropped, and a rejection among them must not surface as unhandled. Awaiting
+    // `pending` itself still throws.
+    pending.catch(() => undefined);
+    inFlight.push(pending);
+    // eslint-disable-next-line no-await-in-loop -- bound outstanding main-component lookups
+    if (inFlight.length >= MAX_IN_FLIGHT) await settleOldest();
+    if (spent()) return abandon();
+    // eslint-disable-next-line no-await-in-loop -- hand the thread back between slices
+    if (slice.due()) await slice.yield();
   }
-  return out;
+  while (inFlight.length > 0) {
+    // eslint-disable-next-line no-await-in-loop -- settle in order so the budget sees a prefix
+    await settleOldest();
+    if (spent()) return abandon();
+  }
+  return { nodes: done, complete: true };
 };
+
+/** Flat reads (search / scans / selection): every node, in order, unless `budget` runs out. */
+export const serializeFlatNodes = (
+  nodes: readonly SceneNode[],
+  budget: CharBudget | null = null,
+): Promise<SerializedRun> => serializeInOrder(nodes, budget);
+
+/**
+ * A search / scan reply: every match, or — when the budget stopped the run — the leading matches
+ * plus how many there were in all, so the server can say what was left out.
+ */
+export const toNodeListResult = (
+  matches: readonly SceneNode[],
+  run: SerializedRun,
+): SearchNodesResult =>
+  run.complete ? { nodes: run.nodes } : { matchCount: matches.length, nodes: run.nodes };
+
+/**
+ * Full recursive serialization of a forest. The tree is flattened (cooperatively), serialized as
+ * one ordered run, and rebuilt — so a wide or deep tree gets the same slicing as a flat scan. When
+ * `budget` runs out, the partial tree is meaningless and `nodes` is empty.
+ */
+export const serializeTrees = async (
+  roots: readonly SceneNode[],
+  budget: CharBudget | null = null,
+): Promise<SerializedRun & { total: number }> => {
+  const forest = await flattenForest(roots);
+  const total = forest.nodes.length;
+  const run = await serializeInOrder(forest.nodes, budget);
+  if (!run.complete) return { nodes: [], complete: false, total };
+  const out: SerializedNode[] = [];
+  const childLists: Array<SerializedNode[] | undefined> = [];
+  run.nodes.forEach((node, i) => {
+    if (forest.hasChildren[i]) {
+      // Assigned last, after mainComponent, so `children` stays the final key as it always was.
+      const list: SerializedNode[] = [];
+      node.children = list;
+      childLists[i] = list;
+    }
+    const parent = forest.parents[i]!;
+    (parent < 0 ? out : childLists[parent]!).push(node);
+  });
+  return { nodes: out, complete: true, total };
+};
+
+/**
+ * Why a full-tree read stopped: its JSON passed what one tool result can carry. Refused rather than
+ * cut, because a tree missing an arbitrary tail reads as complete; the message names the reads that
+ * do fit.
+ */
+export const treeTooLargeError = (tool: string, total: number, subject = 'tree'): Error =>
+  new Error(
+    `${tool}: this ${subject} has ${total} nodes and serializes past ${RESULT_LIMIT_LABEL} — more ` +
+      'than one tool result can carry. Read it in parts: get_node on one of its children, or ' +
+      'get_design_context, which splits a large tree into sections.',
+  );
 
 export const serializeEffect = (effect: Effect): SerializedEffect => {
   // Shadow bindings (colour / radius / spread / offsetX / offsetY) live on the effect itself; a

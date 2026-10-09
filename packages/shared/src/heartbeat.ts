@@ -20,6 +20,7 @@ export class HeartbeatMonitor {
   private readonly now: () => number;
   private timer: unknown = null;
   private lastReceivedAt = 0;
+  private lastTickAt = 0;
 
   constructor(opts: HeartbeatOptions) {
     this.intervalMs = opts.intervalMs ?? HEARTBEAT_INTERVAL_MS;
@@ -31,6 +32,7 @@ export class HeartbeatMonitor {
 
   start(): void {
     this.lastReceivedAt = this.now();
+    this.lastTickAt = this.lastReceivedAt;
     this.timer = setInterval(() => this.tick(), this.intervalMs);
   }
 
@@ -46,14 +48,29 @@ export class HeartbeatMonitor {
   }
 
   private tick(): void {
-    const elapsed = this.now() - this.lastReceivedAt;
+    const now = this.now();
+    // A suspended renderer / sleeping computer could not send or receive heartbeats.
+    // Probe on resume and allow a response window, rather than treating the local
+    // timer's absence as proof that the remote peer died.
+    if (now - this.lastTickAt >= this.intervalMs * 2) {
+      this.lastReceivedAt = Math.max(this.lastReceivedAt, now - this.intervalMs);
+    }
+    this.lastTickAt = now;
+    const elapsed = now - this.lastReceivedAt;
     const missesElapsed = Math.floor(elapsed / this.intervalMs);
     if (missesElapsed >= this.maxMisses) {
       this.stop();
       this.onTimeout();
       return;
     }
-    if (missesElapsed >= 1) {
+    // Probe once the peer has been quiet for half an interval, not a whole one. Probing only at a
+    // full interval let a healthy peer time out: it answers in a few ms, so the next tick — fired a
+    // millisecond or two late, as real timers are — finds the silence just *under* one interval and
+    // sends nothing, and the tick after finds it past two and gives up, though the peer was never
+    // asked. Measured live: the relay's ticks drifted ~1.5ms each against ~3ms replies, and
+    // 29,997 + 2 × 1.5 crossed 30,000. Probing at half guarantees the tick before a timeout sent a
+    // probe, so the peer always had a full interval to answer one.
+    if (elapsed > this.intervalMs / 2) {
       this.sendPing();
     }
   }

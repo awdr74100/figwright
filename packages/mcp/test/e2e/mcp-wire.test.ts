@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
+import { CLIENT_MESSAGE_LIMIT_BYTES, NODE_LIST_BUDGET_BYTES } from '@figwright/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { leaderLockPath } from '../../src/election/leader-lock.js';
@@ -54,6 +55,8 @@ class WireClient {
   private readonly pending = new Map<number, (r: JsonRpcResponse) => void>();
   private nextId = 1;
   stderr = '';
+  /** Size of each response's line as the client buffered it, by request id. */
+  readonly lineBytes = new Map<number, number>();
   /** Relay port this server owns, so a test can attach a plugin to the process it is driving. */
   port = 0;
 
@@ -76,6 +79,7 @@ class WireClient {
         this.buffer = this.buffer.slice(nl + 1);
         if (line === '') continue;
         const msg = JSON.parse(line) as JsonRpcResponse;
+        this.lineBytes.set(msg.id, Buffer.byteLength(line, 'utf8'));
         const resolve = this.pending.get(msg.id);
         if (resolve !== undefined) {
           this.pending.delete(msg.id);
@@ -565,6 +569,99 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
   it('rejects a call to a tool it does not advertise', async () => {
     const res = await client.send('tools/call', { name: 'no_such_tool', arguments: {} });
     expect(res.error?.code).toBe(-32602);
+  });
+
+  // Results past the client's message limit: what reaches the client must be a reply it can act on,
+  // never a line its transport refuses — that drops the connection for every later call. The plugin
+  // side is faked with an old-plugin reply (no early stop, no matchCount), so these hold even when
+  // the plugin is older than the server.
+  describe('results near the client message limit', () => {
+    /** Node-like records of ~1.3 KB each, the size a real serialized instance measures. */
+    const nodes = (count: number): Record<string, unknown>[] =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `1:${i}`,
+        type: 'FRAME',
+        name: 'n'.repeat(1_300),
+      }));
+
+    const textOf = (res: JsonRpcResponse): string => {
+      const content = res.result?.content as { type: string; text: string }[] | undefined;
+      return content?.[0]?.text ?? '';
+    };
+
+    const withPlugin = async (
+      handlers: Record<string, (params: unknown) => unknown>,
+      run: (server: WireClient) => Promise<void>,
+    ): Promise<void> => {
+      const server = new WireClient();
+      await server.start();
+      await server.handshake(LATEST_CLIENT_PROTOCOL);
+      const plugin = await connectFakePlugin({ port: server.port, handlers });
+      try {
+        await run(server);
+        // The connection outlived the oversized result: a later call still gets an answer.
+        const after = await server.send('tools/call', { name: 'ping', arguments: {} });
+        expect(after.result).toBeDefined();
+      } finally {
+        closeSocket(plugin);
+        await server.stop();
+      }
+    };
+
+    it('trims a node list past the limit, leading with a note and the full match count', async () => {
+      await withPlugin({ search_nodes: () => ({ nodes: nodes(9_000) }) }, async server => {
+        const res = await server.send('tools/call', {
+          name: 'search_nodes',
+          arguments: { type: 'FRAME' },
+        });
+        expect(server.lineBytes.get(2)).toBeLessThan(CLIENT_MESSAGE_LIMIT_BYTES);
+        const payload = JSON.parse(textOf(res)) as {
+          note: string;
+          matchCount: number;
+          nodes: { id: string }[];
+        };
+        expect(Object.keys(payload)).toEqual(['note', 'matchCount', 'nodes']);
+        expect(payload.matchCount).toBe(9_000);
+        expect(payload.nodes.length).toBeGreaterThan(7_000);
+        expect(payload.nodes.map(n => n.id)).toEqual(nodes(payload.nodes.length).map(n => n.id));
+        expect(payload.note).toMatch(/of 9,000 matching nodes/);
+      });
+    }, 60_000);
+
+    it('delivers a node list just under the limit whole, with no note', async () => {
+      // As many nodes as fit the list budget with ~1 KB to spare: everything that arrived whole
+      // before the limit existed has to keep arriving whole.
+      // Escaped bytes of each record as it sits in the text block, summed until one more would
+      // leave less than that spare.
+      const escaped = (value: unknown): number =>
+        Buffer.byteLength(JSON.stringify(JSON.stringify(value))) - 2;
+      let used = escaped({ nodes: [] });
+      let count = 0;
+      for (const node of nodes(10_000)) {
+        const next = used + escaped(node) + (count > 0 ? 1 : 0);
+        if (next > NODE_LIST_BUDGET_BYTES - 1_024) break;
+        used = next;
+        count += 1;
+      }
+      await withPlugin({ search_nodes: () => ({ nodes: nodes(count) }) }, async server => {
+        const res = await server.send('tools/call', {
+          name: 'search_nodes',
+          arguments: { type: 'FRAME' },
+        });
+        const payload = JSON.parse(textOf(res)) as { note?: string; nodes: unknown[] };
+        expect(payload.note).toBeUndefined();
+        expect(payload.nodes).toHaveLength(count);
+      });
+    }, 60_000);
+
+    it('refuses a tree past the limit with an error the model can read, not a dropped line', async () => {
+      const tree = { pageId: '0:1', pageName: 'Page', children: nodes(9_000) };
+      await withPlugin({ get_document: () => tree }, async server => {
+        const res = await server.send('tools/call', { name: 'get_document', arguments: {} });
+        expect(res.result?.isError).toBe(true);
+        expect(textOf(res)).toMatch(/get_document: the result is .* MB, more than the 10\.0 MB/);
+      });
+    }, 60_000);
   });
 
   it('still serves a client that opens with the oldest supported protocol revision', async () => {

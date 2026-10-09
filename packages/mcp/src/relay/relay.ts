@@ -388,6 +388,12 @@ export class Relay {
       }
     }, 5_000);
 
+    socket.on('pong', () => {
+      // Browsers answer control-frame pings without running a background iframe's
+      // throttled JS. Transport liveness must not depend on that iframe's timers.
+      if (session?.socket === socket) session.heartbeat?.notifyReceived();
+    });
+
     socket.on('message', raw => {
       let envelope: Envelope;
       try {
@@ -589,6 +595,8 @@ export class Relay {
 
   private sendPing(session: Session): void {
     if (session.socket === null) return;
+    session.socket.ping();
+    // Retain the application ping for plugin-side liveness and older clients.
     session.socket.send(
       encodeEnvelope(
         createRequest({

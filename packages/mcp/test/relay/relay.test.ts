@@ -65,7 +65,8 @@ const startRelay = async (
 
 const connect = (port: number): Promise<WebSocket> =>
   new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    // These fixtures ignore all heartbeats unless a test explicitly answers them.
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { autoPong: false });
     ws.binaryType = 'arraybuffer';
     ws.once('open', () => resolve(ws));
     ws.once('error', reject);
@@ -441,11 +442,8 @@ describe('Relay hello loop', () => {
     );
     await nextMessage(ws);
 
-    // Assert only the contract: a plugin that misses maxMisses heartbeats gets closed with 1001.
-    // We deliberately do NOT assert "a ping was sent first" — HeartbeatMonitor.tick() closes
-    // straight away when the first timer callback already spans >= maxMisses intervals (real under
-    // CI timer jitter), so a preceding ping is not a guarantee the implementation makes. Asserting
-    // it made this test flaky; the ping-is-sent behaviour is covered deterministically below.
+    // A peer that answers neither application nor transport heartbeats is still closed.
+    // Exact timer ordering is covered with fake timers in shared/test/heartbeat.test.ts.
     const closeCode = await new Promise<number>(resolve => {
       ws.once('close', code => resolve(code));
     });
@@ -508,6 +506,30 @@ describe('Relay hello loop', () => {
 
     await new Promise(r => setTimeout(r, 300));
     expect(closed).toBe(false);
+    ws.close();
+  });
+
+  it('keeps a background plugin alive while its browser answers transport pings', async () => {
+    const { relay, port } = await startRelay({ heartbeatIntervalMs: 30, heartbeatMaxMisses: 3 });
+    const ws = await connect(port);
+    const sessionId = newId();
+    let pings = 0;
+    ws.on('ping', data => {
+      pings += 1;
+      ws.pong(data);
+    });
+    ws.send(
+      encodeEnvelope(
+        createRequest({ id: 'h', sessionId, method: SystemMethod.Hello, params: helloParams() }),
+      ),
+    );
+    await nextMessage(ws);
+    // No application-level $ping replies: a throttled iframe need not run JS for
+    // its browser's WebSocket implementation to answer a control-frame ping.
+    await new Promise(r => setTimeout(r, 300));
+    expect(pings).toBeGreaterThan(0);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(relay.sessions.connected().map(s => s.id)).toContain(sessionId);
     ws.close();
   });
 

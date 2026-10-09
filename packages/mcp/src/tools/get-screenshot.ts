@@ -1,4 +1,8 @@
-import { type GetScreenshotResult, SCREENSHOT_FORMATS } from '@figwright/shared';
+import {
+  CLIENT_MESSAGE_LIMIT_BYTES,
+  type GetScreenshotResult,
+  SCREENSHOT_FORMATS,
+} from '@figwright/shared';
 import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';
@@ -54,18 +58,13 @@ const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'i
 /**
  * How many bytes of inlined payload one result may carry.
  *
- * An MCP client reads each stdio message into a bounded buffer — 10 MB by default since SDK 1.30.0,
- * on both the v1 and v2 lines. Exceeding it is not a failed call: the client's transport throws,
- * closes the connection, and every later call answers "Not connected" until the user reconnects the
- * server by hand. It cannot resynchronize instead, because stdio framing is newline-delimited and
- * the discarded remainder of an oversized message has no findable boundary.
- *
- * This is the only Figwright tool that can get near it. Text results are held far below by the
- * client's own output cap (Claude Code: MAX_MCP_OUTPUT_TOKENS = 25k tokens, measured at roughly 50k
- * chars of minified JSON — see DESIGN_CONTEXT_TOKEN_BUDGET), but image blocks are not counted as
- * text, so they are the one payload that reaches the transport unmetered — measured at ~2.4 MB for
- * a single 1440×3140 frame, so four frames pass Claude Desktop's 1 MB content limit and ten pass
- * the transport's 10 MB.
+ * An MCP client reads each stdio message into a bounded buffer —
+ * {@linkcode CLIENT_MESSAGE_LIMIT_BYTES} (see `@figwright/shared`'s result-budget.ts for what
+ * crossing it costs). A client's output cap (Claude Code's MAX_MCP_OUTPUT_TOKENS) applies only
+ * after a result has arrived, so it does not hold anything below the transport limit; every tool
+ * result passes that limit's net in index.ts. Image blocks reach it fastest — measured at ~2.4 MB
+ * for a single 1440×3140 frame, so four frames pass Claude Desktop's 1 MB content limit and ten
+ * pass the transport's 10 MB.
  *
  * The budget is derived from that limit rather than picked, and deliberately sits just under it
  * rather than comfortably under it. A budget lower than it needs to be would withhold exports the
@@ -86,8 +85,7 @@ const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'i
  * useful for comparing screens in one round trip — and a batch is exactly what makes this budget
  * necessary rather than optional.
  */
-const CLIENT_READ_BUFFER_BYTES = 10 * 1024 * 1024;
-export const INLINE_IMAGE_BUDGET_BYTES = CLIENT_READ_BUFFER_BYTES - 512 * 1024;
+export const INLINE_IMAGE_BUDGET_BYTES = CLIENT_MESSAGE_LIMIT_BYTES - 512 * 1024;
 
 /** Serialized size of a content block as the transport will count it. */
 const blockBytes = (block: ScreenshotContent): number =>

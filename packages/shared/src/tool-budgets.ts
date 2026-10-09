@@ -36,6 +36,11 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // this is at least as heavy as get_design_context, which already has the wide budget.
   'get_node',
   'get_nodes_info',
+  // Page-wide walks: every node in scope is visited, then each match serialized with a
+  // main-component lookup per instance — a 32k-instance page measured ~24s warm and ~36–41s cold.
+  // The result budget now caps how much is serialized, not how far the walk goes. search_nodes
+  // does the same work as the scans and, left on the default, timed out at 35s on 16k instances.
+  'search_nodes',
   'scan_text_nodes',
   'scan_nodes_by_types',
   // A batch runs every op it carries and, when one fails, unwinds every op already applied — and

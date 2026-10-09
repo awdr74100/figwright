@@ -1,4 +1,4 @@
-import { MIXED } from '@figwright/shared';
+import { MIXED, type SerializedNode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,9 +6,14 @@ import {
   serializeFlat,
   serializeFlatSync,
   serializeLayoutGrid,
+  resultCharBudget,
+  serializeFlatNodes,
   serializePaint,
-  serializeTree,
+  serializeTrees,
 } from '../src/serializer.js';
+
+const serializeTree = async (node: SceneNode): Promise<SerializedNode> =>
+  (await serializeTrees([node])).nodes[0]!;
 
 const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   ({
@@ -26,6 +31,109 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  it('reads fresh native values on every call rather than caching across snapshots', () => {
+    const parent = { id: '1:1', layoutMode: 'HORIZONTAL' };
+    const node = fake({
+      parent,
+      opacity: 0.25,
+      layoutSizingHorizontal: 'FILL',
+      constraints: { horizontal: 'CENTER', vertical: 'MIN' },
+    });
+    const first = serializeFlatSync(node);
+    parent.layoutMode = 'NONE';
+    Object.assign(node, { opacity: 0.75 });
+    const second = serializeFlatSync(node);
+    expect(first).toMatchObject({ opacity: 0.25, layoutSizingHorizontal: 'FILL' });
+    expect(first.constraints).toBeUndefined();
+    expect(second).toMatchObject({
+      opacity: 0.75,
+      constraints: { horizontal: 'CENTER', vertical: 'MIN' },
+    });
+    expect(second.layoutSizingHorizontal).toBeUndefined();
+  });
+
+  it('reads native layout and scalar getters once per node snapshot', () => {
+    const reads: Record<string, number> = {};
+    const tracked = (target: object, key: string, value: unknown, label = key): void => {
+      Object.defineProperty(target, key, {
+        get: () => {
+          reads[label] = (reads[label] ?? 0) + 1;
+          return value;
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    };
+    const parent = { id: '1:1' };
+    tracked(parent, 'layoutMode', 'GRID', 'parent.layoutMode');
+    const node = fake({ type: 'FRAME' });
+    for (const [key, value] of Object.entries({
+      parent,
+      rotation: 12,
+      opacity: 0.75,
+      layoutMode: 'HORIZONTAL',
+      layoutWrap: 'WRAP',
+      counterAxisSpacing: 20,
+      counterAxisAlignContent: 'MIN',
+      minWidth: 5,
+      maxWidth: 50,
+      minHeight: 6,
+      maxHeight: 60,
+      clipsContent: true,
+    }))
+      tracked(node, key, value);
+    const out = serializeFlatSync(node);
+
+    expect(out).toMatchObject({
+      parentId: '1:1',
+      rotation: 12,
+      opacity: 0.75,
+      layout: {
+        mode: 'HORIZONTAL',
+        layoutWrap: 'WRAP',
+        counterAxisSpacing: 20,
+        counterAxisAlignContent: 'MIN',
+      },
+      minWidth: 5,
+      maxWidth: 50,
+      minHeight: 6,
+      maxHeight: 60,
+      clipsContent: true,
+    });
+    expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
+  it('reads each native grid dimension only once without losing tracks or placement', () => {
+    const reads: Record<string, number> = {};
+    const node = fake({ type: 'FRAME' });
+    for (const [key, value] of Object.entries({
+      layoutMode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowGap: 8,
+      gridColumnGap: 12,
+      gridRowSizes: [{ type: 'FIXED', value: 30 }],
+      gridColumnSizes: [{ type: 'FLEX', value: 1 }],
+    })) {
+      Object.defineProperty(node, key, {
+        get: () => {
+          reads[key] = (reads[key] ?? 0) + 1;
+          return value;
+        },
+      });
+    }
+    expect(serializeFlatSync(node).layout).toMatchObject({
+      mode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 3,
+      gridRowGap: 8,
+      gridColumnGap: 12,
+      gridRowSizes: [{ type: 'FIXED', value: 30 }],
+      gridColumnSizes: [{ type: 'FLEX', value: 1 }],
+    });
+    expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
   it('returns only base fields when no mixin properties are present', () => {
     const out = serializeFlatSync(fake());
     expect(out).toEqual({
@@ -1485,7 +1593,101 @@ describe('serializeFlat — typography', () => {
   });
 });
 
+describe('serializeFlatNodes — result budget', () => {
+  const nodes = Array.from({ length: 30 }, (_, i) => fake({ id: `2:${i}`, name: `Node ${i}` }));
+  const exactChars = async (): Promise<number> => {
+    const all = await serializeFlatNodes(nodes);
+    return all.nodes.reduce((sum, n) => sum + JSON.stringify(n).length + 1, 0);
+  };
+
+  it('never stops a run that fits, even exactly', async () => {
+    const run = await serializeFlatNodes(nodes, { limit: await exactChars(), used: 0 });
+    expect(run.complete).toBe(true);
+    expect(run.nodes.map(n => n.id)).toEqual(nodes.map(n => n.id));
+  });
+
+  it('stops a run that cannot fit, keeping an in-order prefix past the budget', async () => {
+    const budget = Math.floor((await exactChars()) / 2);
+    const run = await serializeFlatNodes(nodes, { limit: budget, used: 0 });
+    expect(run.complete).toBe(false);
+    expect(run.nodes.map(n => n.id)).toEqual(nodes.slice(0, run.nodes.length).map(n => n.id));
+    // A prefix that already passes the budget — enough for the server to fill it exactly.
+    expect(run.nodes.reduce((sum, n) => sum + JSON.stringify(n).length + 1, 0)).toBeGreaterThan(
+      budget,
+    );
+  });
+
+  it('draws several runs from one shared allowance', async () => {
+    const half = Math.floor((await exactChars()) / 2);
+    // Each run alone fits the limit; together they do not — so one shared allowance stops them.
+    const shared = { limit: half + 10, used: 0 };
+    const [a, b] = await Promise.all([
+      serializeFlatNodes(nodes.slice(0, 15), shared),
+      serializeFlatNodes(nodes.slice(15), shared),
+    ]);
+    expect(a.complete && b.complete).toBe(false);
+    expect(shared.used).toBeGreaterThan(shared.limit);
+    // Separately, each half fits an allowance of the same size.
+    const alone = await serializeFlatNodes(nodes.slice(0, 15), { limit: half + 10, used: 0 });
+    expect(alone.complete).toBe(true);
+  });
+
+  it('caps a single tool result at the client message limit, less only the envelope', () => {
+    const budget = resultCharBudget();
+    expect(budget.used).toBe(0);
+    expect(budget.limit).toBeGreaterThan(10 * 1024 * 1024 - 64 * 1024);
+    expect(budget.limit).toBeLessThan(10 * 1024 * 1024);
+  });
+});
+
+describe('serializeTrees', () => {
+  it('rebuilds the tree in order, children last and after mainComponent, empty arrays kept', async () => {
+    const leaf = fake({ id: '1:3', type: 'TEXT' });
+    const empty = fake({ id: '1:4', type: 'FRAME', children: [] });
+    const instance = fake({
+      id: '1:2',
+      type: 'INSTANCE',
+      children: [leaf, empty],
+      getMainComponentAsync: async () => ({ id: '9:1', name: 'Card', key: 'card', parent: null }),
+    });
+    const run = await serializeTrees([instance, fake({ id: '1:5' })]);
+    expect(run.complete).toBe(true);
+    expect(run.total).toBe(4);
+    expect(run.nodes.map(n => n.id)).toEqual(['1:2', '1:5']);
+    const [root] = run.nodes;
+    expect(Object.keys(root!).slice(-2)).toEqual(['mainComponent', 'children']);
+    expect(root!.children!.map(n => n.id)).toEqual(['1:3', '1:4']);
+    expect(root!.children![0]!.children).toBeUndefined();
+    expect(root!.children![1]!.children).toEqual([]);
+  });
+
+  it('returns no partial tree when the budget stops it', async () => {
+    const root = fake({
+      id: '1:2',
+      type: 'FRAME',
+      children: Array.from({ length: 10 }, (_, i) => fake({ id: `2:${i}` })),
+    });
+    const run = await serializeTrees([root], { limit: 100, used: 0 });
+    expect(run).toEqual({ nodes: [], complete: false, total: 11 });
+  });
+});
+
 describe('serializeTree', () => {
+  it('materializes a wide native children array once, preserving all siblings and order', async () => {
+    const children = Array.from({ length: 1025 }, (_, index) => fake({ id: `2:${index}` }));
+    let reads = 0;
+    const root = fake({ type: 'FRAME' });
+    Object.defineProperty(root, 'children', {
+      get: () => {
+        reads += 1;
+        return children.slice();
+      },
+    });
+    const out = await serializeTree(root);
+    expect(out.children?.map(child => child.id)).toEqual(children.map(child => child.id));
+    expect(reads).toBe(1);
+  });
+
   it('recurses into children', async () => {
     const leaf = fake({ id: '1:3', parent: { id: '1:2' } });
     const branch = fake({ id: '1:2', type: 'FRAME', children: [leaf] });

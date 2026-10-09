@@ -1,3 +1,4 @@
+import { DEFAULT_TOOL_BUDGET_MS, HEAVY_TOOL_BUDGET_MS } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -74,6 +75,52 @@ describe('createToolBridge', () => {
     const { bridge } = setup(20);
     await expect(bridge.handler('ping', undefined)).rejects.toThrow(/timeout/);
   });
+
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+    'keeps a large %s pending past the default window and accepts its result',
+    async method => {
+      vi.useFakeTimers();
+      const { bridge, sent, emit } = setup();
+      try {
+        const promise = bridge.handler(method, {});
+        // Observe rejections immediately, including when a too-short budget fires mid-advance.
+        const answer = promise.then(
+          result => ({ result }),
+          error => ({ error }),
+        );
+        await vi.advanceTimersByTimeAsync(DEFAULT_TOOL_BUDGET_MS + 1);
+        emit(createToolResult({ id: sent[0]!.id, result: { nodes: [] } }));
+        await expect(answer).resolves.toEqual({ result: { nodes: [] } });
+        expect(bridge.pendingCount()).toBe(0);
+      } finally {
+        bridge.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+    'still times out %s when it never answers within the heavy budget',
+    async method => {
+      vi.useFakeTimers();
+      const { bridge } = setup();
+      try {
+        const promise = bridge.handler(method, {});
+        const answer = promise.then(
+          result => ({ result }),
+          error => ({ error }),
+        );
+        await vi.advanceTimersByTimeAsync(HEAVY_TOOL_BUDGET_MS);
+        await expect(answer).resolves.toEqual({
+          error: new Error(`sandbox tool timeout (method=${method})`),
+        });
+        expect(bridge.pendingCount()).toBe(0);
+      } finally {
+        bridge.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('ignores orphan replies for unknown ids', async () => {
     const log = vi.fn<(msg: string) => void>();
