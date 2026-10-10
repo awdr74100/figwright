@@ -68,6 +68,16 @@ Set the value, then bind it — there are **three** binding paths by what's bein
   reusable multi-property look (a shadow, a type-ramp step) that lives as a style rather than a single
   variable.
 
+### Theme variants: switch the mode, don't repaint
+
+When the file's collections have modes (Light / Dark, a brand, a language — `get_variable_defs`
+lists them per collection) and the source has a variant of a screen in another mode, build it once
+with bound tokens, then `clone_node` it and `set_node_variable_mode` the copy to that mode. Every
+bound variable then resolves in the new mode by itself. Re-filling the copy with that mode's hex
+values gives a screen that looks right but no longer follows the tokens; and a node built from
+literals cannot switch at all, which is one more reason to bind. `modeId: null` lets a node inherit
+its parent's mode again.
+
 ### Tokens from a published library
 
 `get_variable_defs` and `get_styles` list the file's own definitions only. A file built on a team

@@ -18,6 +18,12 @@ per-property fidelity catalog, and how to ground a page too big for one call.
   stub carries its own `textOverrides` (`{ name, characters }` for every visible TEXT it renders) —
   fill each repeated element's text from that, so cards/rows/form-fields get their distinct titles /
   labels / values without re-expanding the un-deduped tree or drilling per instance.
+- **…and its `propertyOverrides` for what it looks like differently.** The same stub lists each layer
+  whose fill, stroke, effect, radius, opacity, blend or visibility differs from the main component
+  (`{ name, fills: […] }`, `{ name, visible: false }`) — apply those per instance (a prop, a class),
+  or every card renders like the first. An entry's `variableModes` (`{ name, variableModes: { color:
+  "Dark" } }`) is a layer switched to another mode inside that instance: its token names are the
+  first instance's, its colours are that mode's (`{}` means it went back to inheriting).
 - **A variable's `codeSyntax` is the declared code name — prefer it over deriving one.** An entry in
   the top-level `variables` map may carry `codeSyntax` (`{ WEB: '--color-primary', … }`): the
   designer's own declaration of the code-side token, stronger than any name you'd derive from the
@@ -25,6 +31,16 @@ per-property fidelity catalog, and how to ground a page too big for one call.
   css/Tailwind). It's a naming declaration, not a guarantee the token exists — when it matches a
   token in the project (theme file / `token_map`), use it verbatim; when it matches nothing (a stale
   declaration after a rename), trust the project's actual token found by value/name instead.
+- **`variableModes` says which theme a subtree is drawn in.** A node may carry `variableModes`
+  (`{ color: "Dark" }`): every variable bound below it resolves in that mode, so its hex values are
+  that mode's — but its **token names are the same as in the default mode**. A root carries every
+  non-default mode in effect, even one set on a frame or page outside your read; deeper nodes carry
+  only a mode set on them. So a frame with `{ color: "Dark" }` is the **dark variant**, not a dark
+  design: keep the token references, and render the subtree inside the project's mechanism for that
+  mode (`.dark` / `[data-theme="dark"]` / a `dark:` story — whatever `token_map`'s `figmaModes`
+  pointed you to). Don't hardcode its hex (that freezes one theme), and don't emit it with plain token
+  refs either (they would render the default theme). Two frames that differ only in `variableModes`
+  are one component in two themes — implement it once; the second frame is a verification target.
 
 ## Per-node visual fidelity
 

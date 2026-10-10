@@ -542,6 +542,12 @@ export interface SerializedNode {
   // design-system links (→ tokens / shared styles for codegen)
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The variable modes set explicitly on this node — collection id → mode id — as Figma reports
+   * them (a frame switched to a collection's Dark mode). Its subtree inherits them; ancestors' and
+   * the page's settings are not repeated here. Omitted when none is set.
+   */
+  explicitVariableModes?: Readonly<Record<string, string>>;
   // instance variant / props + which component it instantiates
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   mainComponent?: SerializedMainComponent;
@@ -665,6 +671,7 @@ export const SerializedNodeSchema = z.lazy(() =>
     annotations: z.array(SerializedAnnotationSchema).optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
+    explicitVariableModes: z.record(z.string(), z.string()).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
     mainComponent: SerializedMainComponentSchema.optional(),
     componentPropertyReferences: z

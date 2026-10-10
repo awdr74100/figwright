@@ -109,6 +109,10 @@ Run the grounded tools against the selection, then generate — **trust them ove
      default mode is the base, other modes ride the project's dark-mode mechanism (`dark:` variants /
      `prefers-color-scheme`). Themes encoded without native modes — paired collections or name
      groups (`Color/Light/*` + `Color/Dark/*`, a plan-limited workaround) — get the same treatment.
+     A node carrying `variableModes` (`{ color: "Dark" }`) is drawn in that mode: same token names,
+     that mode's values. Keep the token refs and put the subtree under the project's mechanism for
+     that mode; a Light and a Dark frame of the same thing are one component in two themes.
+     → `references/grounding.md`.
 
 4. **Export the assets grounding can't carry** — logos, photos, icons have no pixels and otherwise
    render as grey blocks. `save_image_fills` for `IMAGE`-fill nodes (the original asset, not a

@@ -142,6 +142,17 @@ export const VariableResultSchema = z.object({
 });
 export type VariableResult = z.infer<typeof VariableResultSchema>;
 
+/** Result of set_node_variable_mode: the mode now explicit on the node, or null once cleared. */
+export const VariableModeResultSchema = z.object({
+  ok: z.literal(true),
+  nodeId: z.string(),
+  collectionId: z.string(),
+  collectionName: z.string(),
+  modeId: z.string().nullable(),
+  modeName: z.string().nullable(),
+});
+export type VariableModeResult = z.infer<typeof VariableModeResultSchema>;
+
 /**
  * Result of a component-property authoring write (add / edit / delete_component_property). The
  * propertyId is the name-with-unique-suffix ("Show Icon#12:5") Figma assigns — the handle every
