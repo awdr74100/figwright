@@ -8,35 +8,68 @@
 // magnitude from file to file (~0.7ms per instance on a light page, ~4.4ms on a heavy library page):
 // a fixed batch that is responsive on one blocks for seconds on the other.
 //
-// Handing the thread back takes a timer, and a hidden page's timers are throttled (Chromium wakes
-// them at most once a second, and a chain of timers on a page hidden for five minutes at most once a
-// minute). Measured with Figma minimized, reads that yielded on a timer after every fixed batch went
-// from ~3s to past the 120s budget — a 4,096-instance scan, a 2,048-instance get_node — while the
-// main branch, which never yields, still took ~4s. So a yield that comes back late is read as "the
-// host is throttling us" and yielding stops for a while: nobody is watching a hidden editor repaint,
-// and the run finishes as fast as an unsliced one (measured minimized: 3.1s for that scan, 3.8s for
-// that get_node). The first late yield is the whole cost; a run starts from a message rather than a
-// timer, so by Chromium's rules that first one waits at most the one-second wake-up.
+// Timers in a hidden Figma file can stop answering altogether, while the same sandbox still
+// answers tool messages promptly. Waiting for a timer to finish before detecting throttling cannot
+// recover that case. Yield through the panel's message channel instead: a round-trip lets the host
+// run without relying on a background timer. A slow round-trip still triggers adaptive backoff
+// rather than multiplying a slow host's delay by every slice. Backoff
+// coarsens slices instead of stopping them: long uninterrupted background reads can abort the
+// plugin runtime. The panel reports its visibility, so this need not wait for a late callback.
+
+import { createHostYield, parseHostYield } from '../protocol/host-yield.js';
 
 /** How long one slice may hold the thread before handing it back. */
 export const SLICE_MS = 40;
 
-/** A yield slower than this means the host is throttling timers (a hidden page), not just busy. */
+/** A yield slower than this means the host is throttling our handoffs, not just busy. */
 const THROTTLED_YIELD_MS = 250;
 
-/** After a throttled yield, how long to stop yielding before probing again. */
+/** A background / slow host gets fewer handoffs, but never a whole unsliced heavy read. */
+const BACKOFF_SLICE_MS = 250;
+
+/** After a throttled yield, how long to use coarser slices before probing normal pacing again. */
 const THROTTLED_BACKOFF_MS = 30_000;
 
 let throttledUntil = 0;
+let wasBackground = false;
+let nextYieldId = 0;
+const pendingYields = new Map<number, (background: boolean) => void>();
 
 /**
- * Let Figma run its own queue. Awaiting a resolved promise only drains microtasks — the host's
- * message / timer / render loop never gets a turn — so it has to be a timer.
+ * A message round-trip is a host turn; a resolved promise would only drain microtasks. Outside the
+ * Figma runtime (standalone consumers / tests), a timer supplies that same boundary.
  */
 const yieldToHost = (): Promise<void> =>
-  new Promise<void>(resolve => {
-    setTimeout(resolve, 0);
+  new Promise<void>((resolve, reject) => {
+    if (typeof figma === 'undefined') {
+      setTimeout(resolve, 0);
+      return;
+    }
+    const id = ++nextYieldId;
+    pendingYields.set(id, background => {
+      if (background) throttledUntil = Date.now() + THROTTLED_BACKOFF_MS;
+      else if (wasBackground) throttledUntil = 0;
+      wasBackground = background;
+      resolve();
+    });
+    try {
+      // eslint-disable-next-line unicorn/require-post-message-target-origin
+      figma.ui.postMessage(createHostYield(id, 'yield-request'));
+    } catch (error) {
+      pendingYields.delete(id);
+      reject(error);
+    }
   });
+
+/** Consume only panel resumes, leaving tool and panel-control traffic to their own dispatchers. */
+export const resumeHostYield = (raw: unknown): boolean => {
+  const message = parseHostYield(raw);
+  if (message?.kind !== 'yield-resume') return false;
+  const resume = pendingYields.get(message.id);
+  pendingYields.delete(message.id);
+  resume?.(message.background);
+  return true;
+};
 
 /** Tracks how long the current slice has run; `due()` says it is time to yield. */
 export class TimeSlice {
@@ -44,7 +77,8 @@ export class TimeSlice {
 
   due(): boolean {
     const now = Date.now();
-    return now >= throttledUntil && now - this.start >= SLICE_MS;
+    const length = now < throttledUntil ? BACKOFF_SLICE_MS : SLICE_MS;
+    return now - this.start >= length;
   }
 
   async yield(): Promise<void> {
@@ -59,4 +93,5 @@ export class TimeSlice {
 /** Test seam: forget a throttled yield seen by an earlier run. */
 export const resetThrottleForTests = (): void => {
   throttledUntil = 0;
+  wasBackground = false;
 };
