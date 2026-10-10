@@ -7,7 +7,8 @@ export const SET_LAYOUT_PROPS_TOOL_NAME = 'set_layout_props';
 export const setLayoutPropsTool: ToolSpec = {
   name: SET_LAYOUT_PROPS_TOOL_NAME,
   description:
-    "Set a node's auto-layout sizing and child properties. layoutSizingHorizontal / " +
+    "Set a node's sizing, child properties and content clipping. clipsContent controls whether " +
+    'a frame-like container clips its children; it also works without auto-layout. layoutSizingHorizontal / ' +
     'layoutSizingVertical (HUG = shrink to fit children, FILL = stretch to fill the auto-layout ' +
     'parent, FIXED = keep the current size) are the preferred way to size a frame to its content ' +
     '(HUG) or make a child fill its container (FILL) — reach for these instead of guessing pixel ' +
@@ -19,7 +20,8 @@ export const setLayoutPropsTool: ToolSpec = {
     'children. HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. Any ' +
     'field may be omitted to leave it unchanged. Returns { ok, nodeId }.',
   inputSchema: z.object({
-    nodeId: z.string().describe('Node id — an auto-layout frame, or a child inside one'),
+    nodeId: z.string().describe('Node id — a frame-like container, or an auto-layout child'),
+    clipsContent: z.boolean().optional().describe('Clip children to the container bounds'),
     layoutSizingHorizontal: z
       .enum(['FIXED', 'HUG', 'FILL'])
       .optional()

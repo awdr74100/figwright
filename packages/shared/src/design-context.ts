@@ -106,6 +106,8 @@ export interface DesignContextNode {
   rotation?: number;
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
+  /** Figma corner smoothing, 0–1; omitted when 0 (circular). */
+  cornerSmoothing?: number;
   /**
    * Per-corner radii when cornerRadius is `mixed` → border-top-left-radius / …
    * (cards/tabs/bubbles).
@@ -326,6 +328,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     rotation: z.number().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    cornerSmoothing: z.number().min(0).max(1).optional(),
     cornerRadii: z
       .object({
         topLeft: z.number(),

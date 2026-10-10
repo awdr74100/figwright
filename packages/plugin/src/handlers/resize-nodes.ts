@@ -82,10 +82,14 @@ export const createResizeNodesHandler =
     if (
       typeof p.width !== 'number' ||
       typeof p.height !== 'number' ||
-      p.width <= 0 ||
-      p.height <= 0
+      !Number.isFinite(p.width) ||
+      !Number.isFinite(p.height) ||
+      p.width < 0.01 ||
+      p.height < 0
     ) {
-      throw new TypeError('resize_nodes: width and height must be positive numbers');
+      throw new TypeError(
+        'resize_nodes: width and height must be finite numbers; width must be at least 0.01 and height non-negative',
+      );
     }
     const requested: Box = { width: p.width, height: p.height };
     const ids = p.nodeIds as readonly string[];
@@ -101,6 +105,15 @@ export const createResizeNodesHandler =
           ]
         : [],
     );
+    // LINE has a zero-height box even when rotated. Validate the entire request before writes,
+    // so a line mixed with ordinary nodes cannot leave earlier targets partly resized.
+    for (const { id, node } of targets) {
+      if (node.type === 'LINE' ? requested.height !== 0 : requested.height < 0.01) {
+        throw new TypeError(
+          `resize_nodes: node ${id} (${node.type}) requires height ${node.type === 'LINE' ? '0' : 'at least 0.01; only LINE nodes accept height 0'}`,
+        );
+      }
+    }
     // Every size is captured before any write and read after all of them: one target's resize can
     // move another's (a main component's layer carries its instances' copies with it), so a size read
     // straight after its own write can already be stale by the end of the call.

@@ -548,6 +548,10 @@ const enrichWithMixins = (
       }
     }
   }
+  if ('cornerSmoothing' in node) {
+    const smoothing = (node as { cornerSmoothing: unknown }).cornerSmoothing;
+    if (typeof smoothing === 'number') out.cornerSmoothing = smoothing;
+  }
   // Blend mode (overlays / multiply / screen). Omit the no-op PASS_THROUGH (the common case) so the
   // field only appears when it actually changes compositing.
   if ('blendMode' in node) {

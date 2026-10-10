@@ -38,6 +38,35 @@ const fakeFigma = (opts: {
   }) as unknown as typeof figma;
 
 describe('get_design_context handler', () => {
+  it.each([0, 0.6])(
+    'keeps corner smoothing %s on a deduped instance child override',
+    async value => {
+      const instance = (id: string, smoothing: number, overridden: boolean) =>
+        node({
+          id,
+          type: 'INSTANCE',
+          getMainComponentAsync: async () => ({ id: 'main' }),
+          children: [
+            node({ id: `${id}-card`, name: 'Card', cornerRadius: 12, cornerSmoothing: smoothing }),
+          ],
+          overrides: overridden
+            ? [{ id: `${id}-card`, overriddenFields: ['cornerSmoothing'] }]
+            : [],
+        });
+      const result = (await createGetDesignContextHandler(
+        fakeFigma({
+          selection: [instance('first', 1, false), instance('second', value, true)],
+        }),
+      )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+      expect(result.nodes[1]?.deduped).toBe(true);
+      expect(result.nodes[1]?.propertyOverrides).toContainEqual({
+        name: 'Card',
+        cornerRadius: 12,
+        cornerSmoothing: value,
+      });
+    },
+  );
+
   it('limits depth and flags truncated nodes', async () => {
     const grandchild = node({ id: 'gc', type: 'RECTANGLE' });
     const child = node({ id: 'c', children: [grandchild] });

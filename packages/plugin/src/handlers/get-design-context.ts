@@ -87,6 +87,8 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
     out.cornerRadius = flat.cornerRadius;
   if (flat.cornerRadii !== undefined) out.cornerRadii = flat.cornerRadii;
+  if (flat.cornerSmoothing !== undefined && flat.cornerSmoothing !== 0)
+    out.cornerSmoothing = flat.cornerSmoothing;
   if (flat.blendMode !== undefined) out.blendMode = flat.blendMode;
   if (flat.isMask !== undefined) out.isMask = flat.isMask;
   if (flat.maskType !== undefined) out.maskType = flat.maskType;
@@ -391,6 +393,7 @@ const VISUAL_OVERRIDE_FIELDS = [
   'effects',
   'cornerRadius',
   'cornerRadii',
+  'cornerSmoothing',
   'opacity',
   'blendMode',
 ] as const;
@@ -438,6 +441,11 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
         if (v === undefined) continue;
         entry[f] =
           f === 'fills' || f === 'strokes' ? (v as SerializedPaint[]).map(simplifyPaint) : v;
+      }
+      // A circular corner can override a smoothed main-component corner. project() omits the
+      // default 0, but an override must keep it or a deduped instance inherits the wrong shape.
+      if ('cornerSmoothing' in n && typeof n.cornerSmoothing === 'number') {
+        entry.cornerSmoothing = n.cornerSmoothing;
       }
       // Only a node that actually carries a visual override (beyond its name) is worth an entry.
       if (Object.keys(entry).length > 1) out.push(entry);

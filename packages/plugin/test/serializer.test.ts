@@ -31,6 +31,13 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  it.each([0, 0.6, 1])('preserves corner smoothing %s through node serialization', value => {
+    expect(serializeFlatSync(fake({ cornerRadius: 12, cornerSmoothing: value }))).toMatchObject({
+      cornerRadius: 12,
+      cornerSmoothing: value,
+    });
+  });
+
   it('reads fresh native values on every call rather than caching across snapshots', () => {
     const parent = { id: '1:1', layoutMode: 'HORIZONTAL' };
     const node = fake({
