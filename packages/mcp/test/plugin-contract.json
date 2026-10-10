@@ -392,6 +392,7 @@
       "styleId"
     ],
     "apply_style_to_node": ["field", "nodeId", "requestId", "styleId"],
+    "import_style": ["requestId", "styleKey"],
     "delete_style": ["requestId", "styleId"],
     "create_variable_collection": ["name", "requestId"],
     "update_variable_collection": [
@@ -435,6 +436,7 @@
     ],
     "bind_variable_to_node": ["field", "nodeId", "requestId", "variableId"],
     "bind_variable_to_paint": ["index", "nodeId", "requestId", "target", "variableId"],
+    "import_variable": ["requestId", "variableKey"],
     "rename_variable": ["name", "requestId", "variableId"],
     "set_variable_code_syntax": [
       "codeSyntax",

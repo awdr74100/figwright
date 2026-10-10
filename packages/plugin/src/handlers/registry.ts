@@ -60,7 +60,9 @@ import { createGetVariableDefsHandler } from './get-variable-defs.js';
 import { createGetViewportHandler } from './get-viewport.js';
 import { createGroupNodesHandler } from './group-nodes.js';
 import { createImportImageHandler } from './import-image.js';
+import { createImportStyleHandler } from './import-style.js';
 import { createImportSvgHandler } from './import-svg.js';
+import { createImportVariableHandler } from './import-variable.js';
 import { createListFilesHandler } from './list-files.js';
 import { createSetLockedHandler } from './lock-nodes.js';
 import { createMoveNodesHandler } from './move-nodes.js';
@@ -160,6 +162,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     update_text_style: createUpdateTextStyleHandler(figmaCtx),
     update_effect_style: createUpdateEffectStyleHandler(figmaCtx),
     apply_style_to_node: createApplyStyleToNodeHandler(figmaCtx),
+    import_style: createImportStyleHandler(figmaCtx),
     delete_style: createDeleteStyleHandler(figmaCtx),
     // Variables
     create_variable_collection: createCreateVariableCollectionHandler(figmaCtx),
@@ -169,6 +172,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     set_variable_value: createSetVariableValueHandler(figmaCtx),
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
     bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
+    import_variable: createImportVariableHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),

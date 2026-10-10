@@ -68,6 +68,24 @@ Set the value, then bind it — there are **three** binding paths by what's bein
   reusable multi-property look (a shadow, a type-ramp step) that lives as a style rather than a single
   variable.
 
+### Tokens from a published library
+
+`get_variable_defs` and `get_styles` list the file's own definitions only. A file built on a team
+library uses the library's variables and styles, and a binding tool can only take one once it has been
+imported into this file — a library item's key, or its id in the library file, is not an id here.
+
+1. Ask the user to open the library's source file in Figma as well; the plugin connects to it like any
+   other file, and `list_files` then names both.
+2. `use_file` the library file. `get_variable_defs` / `get_styles` there give each token's `key`.
+3. `use_file` the file you are building in. `import_variable({ variableKey })` /
+   `import_style({ styleKey })` each token you will use, then bind or apply the `variableId` / `styleId`
+   it returns — never the library file's own id.
+4. Import before any `batch`: an import cannot be rolled back, so `batch` refuses it. If an import times
+   out while the file sits in a background tab, bring it to the front and retry.
+
+Library components need no import step: `create_instance` takes their `componentKey`, which
+`get_local_components` in the library file reports.
+
 ## Auto-layout for related children, absolute only for placement
 
 - **Use auto-layout whenever children have a structural relationship** (stacked, side-by-side,

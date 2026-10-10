@@ -68,7 +68,9 @@ import { getViewportTool } from './get-viewport.js';
 import { groupNodesTool } from './group-nodes.js';
 import { iconMapTool } from './icon-map.js';
 import { importImageTool } from './import-image.js';
+import { importStyleTool } from './import-style.js';
 import { importSvgTool } from './import-svg.js';
+import { importVariableTool } from './import-variable.js';
 import { listFilesTool } from './list-files.js';
 import { lockNodesTool } from './lock-nodes.js';
 import { moveNodesTool } from './move-nodes.js';
@@ -206,6 +208,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   updateTextStyleTool,
   updateEffectStyleTool,
   applyStyleToNodeTool,
+  importStyleTool,
   deleteStyleTool,
   createVariableCollectionTool,
   updateVariableCollectionTool,
@@ -214,6 +217,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setVariableValueTool,
   bindVariableToNodeTool,
   bindVariableToPaintTool,
+  importVariableTool,
   renameVariableTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,

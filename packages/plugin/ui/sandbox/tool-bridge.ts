@@ -3,7 +3,7 @@
  * a bridge message the sandbox can execute, and resolves once the matching reply comes back.
  */
 
-import { getToolBudget, newId } from '@figwright/shared';
+import { ErrorCode, getToolBudget, newId } from '@figwright/shared';
 
 import {
   createToolCall,
@@ -13,6 +13,13 @@ import {
 } from '../../protocol/bridge.js';
 import type { ToolHandler } from '../relay/state.js';
 import { onSandboxMessage, postToSandbox } from './messaging.js';
+
+/**
+ * Tools whose Figma work is library resolution, which Figma may defer in a background file. A
+ * timeout for one says how to recover; it does not cancel the import, which may still complete
+ * afterwards.
+ */
+const LIBRARY_IMPORT_TOOLS: ReadonlySet<string> = new Set(['import_variable', 'import_style']);
 
 export type PostMessageFn = (msg: PluginBridgeMessage) => void;
 export type SubscribeFn = (cb: (raw: unknown) => void) => () => void;
@@ -69,7 +76,19 @@ export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
       const timeoutMs = opts.timeoutMs ?? getToolBudget(method);
       const timer = setTimeout(() => {
         pending.delete(id);
-        reject(new Error(`sandbox tool timeout (method=${method})`));
+        const message = `sandbox tool timeout (method=${method})`;
+        if (LIBRARY_IMPORT_TOOLS.has(method)) {
+          reject(
+            new PluginToolFailure(
+              ErrorCode.Timeout,
+              `${message}. Figma may defer library resolution in a background file. ` +
+                'Bring the target Figma file to the foreground and retry. ' +
+                'The import may still complete after this timeout.',
+            ),
+          );
+        } else {
+          reject(new Error(message));
+        }
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer, method });
       post(createToolCall({ id, method, params }));

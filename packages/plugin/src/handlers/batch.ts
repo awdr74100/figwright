@@ -1755,6 +1755,10 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  import_variable:
+    'a library import has no faithful inverse; import the variable before the batch and use its returned variableId',
+  import_style:
+    'a library import has no faithful inverse; import the style before the batch and use its returned styleId',
   delete_nodes: 'a deleted node cannot be brought back under its id',
   delete_page: 'a deleted page cannot be brought back under its id',
   delete_style:

@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_BUDGET_MS, HEAVY_TOOL_BUDGET_MS } from '@figwright/shared';
+import { DEFAULT_TOOL_BUDGET_MS, ErrorCode, HEAVY_TOOL_BUDGET_MS } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -76,7 +76,43 @@ describe('createToolBridge', () => {
     await expect(bridge.handler('ping', undefined)).rejects.toThrow(/timeout/);
   });
 
-  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+  it.each(['import_variable', 'import_style'])(
+    'reports a %s timeout with a foreground retry path without closing the bridge',
+    async method => {
+      vi.useFakeTimers();
+      const { bridge, sent, emit } = setup();
+      try {
+        const answer = bridge.handler(method, {}).then(
+          result => ({ result }),
+          error => ({ error }),
+        );
+        // Still pending past the default window: a background import gets the heavy one.
+        await vi.advanceTimersByTimeAsync(DEFAULT_TOOL_BUDGET_MS + 1);
+        expect(bridge.pendingCount()).toBe(1);
+        await vi.advanceTimersByTimeAsync(HEAVY_TOOL_BUDGET_MS - DEFAULT_TOOL_BUDGET_MS);
+        await expect(answer).resolves.toMatchObject({
+          error: {
+            code: ErrorCode.Timeout,
+            message: expect.stringMatching(/target Figma file.*foreground.*retry/),
+          },
+        });
+        expect(bridge.pendingCount()).toBe(0);
+
+        // Timing out abandons the reply, not Figma's pending import. A late result must not
+        // resurrect the call or prevent an independent foreground retry from succeeding.
+        emit(createToolResult({ id: sent[0]!.id, result: { ok: true } }));
+        const retry = bridge.handler(method, {});
+        emit(createToolResult({ id: sent[1]!.id, result: { ok: true } }));
+        await expect(retry).resolves.toEqual({ ok: true });
+        expect(bridge.pendingCount()).toBe(0);
+      } finally {
+        bridge.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes', 'get_local_components'])(
     'keeps a large %s pending past the default window and accepts its result',
     async method => {
       vi.useFakeTimers();
@@ -99,7 +135,7 @@ describe('createToolBridge', () => {
     },
   );
 
-  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes'])(
+  it.each(['search_nodes', 'scan_nodes_by_types', 'scan_text_nodes', 'get_local_components'])(
     'still times out %s when it never answers within the heavy budget',
     async method => {
       vi.useFakeTimers();
