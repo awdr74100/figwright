@@ -412,7 +412,7 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
   // Which descendant nodes Figma reports a non-text visual override on (id → changed fields). We
   // read instance.overrides for the *what changed*, then walk the subtree (like collectTextOverrides)
   // for the actual values — no figma.getNodeById, so this stays sync and dependency-free.
-  const overridden = new Set<string>();
+  const overridden = new Map<string, readonly string[]>();
   // overrides is always present on a real InstanceNode; guard so a node lacking it (tests, an
   // unexpected node) is a no-op rather than a throw.
   const ovs =
@@ -425,7 +425,7 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
       fields.includes('visible') ||
       fields.some(f => (VISUAL_OVERRIDE_FIELDS as readonly string[]).includes(f))
     ) {
-      overridden.add(ov.id);
+      overridden.set(ov.id, fields);
     }
   }
   if (overridden.size === 0) return [];
@@ -443,8 +443,15 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
           f === 'fills' || f === 'strokes' ? (v as SerializedPaint[]).map(simplifyPaint) : v;
       }
       // A circular corner can override a smoothed main-component corner. project() omits the
-      // default 0, but an override must keep it or a deduped instance inherits the wrong shape.
-      if ('cornerSmoothing' in n && typeof n.cornerSmoothing === 'number') {
+      // default 0, so an override *to* 0 is added back here — or a deduped instance would inherit
+      // the main's curve. Only when smoothing is what was overridden: every other entry stays as it
+      // was, without a 0 that says nothing.
+      if (
+        entry.cornerSmoothing === undefined &&
+        overridden.get(n.id)?.includes('cornerSmoothing') === true &&
+        'cornerSmoothing' in n &&
+        typeof n.cornerSmoothing === 'number'
+      ) {
         entry.cornerSmoothing = n.cornerSmoothing;
       }
       // Only a node that actually carries a visual override (beyond its name) is worth an entry.

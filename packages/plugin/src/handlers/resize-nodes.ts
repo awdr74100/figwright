@@ -32,6 +32,9 @@ const bound = (node: BaseNode, key: 'minWidth' | 'maxWidth' | 'minHeight' | 'max
  */
 const explain = (node: BaseNode, requested: Box, before: Box, after: Box): string => {
   const instance = enclosingInstance(node);
+  if (node.type === 'LINE' && instance === null && sameSize(after.width, requested.width)) {
+    return `a line has no height — it was set to length ${after.width} and keeps height 0`;
+  }
   if (
     instance !== null &&
     sameSize(after.width, before.width) &&
@@ -105,12 +108,17 @@ export const createResizeNodesHandler =
           ]
         : [],
     );
-    // LINE has a zero-height box even when rotated. Validate the entire request before writes,
-    // so a line mixed with ordinary nodes cannot leave earlier targets partly resized.
+    // A LINE is a length, not a box: its height is 0 however it is rotated. Figma will store another
+    // height, but it draws nothing — measured, a line resized to 250 × 10 rendered as the same
+    // hairline while every later read (and the code generated from it) saw a 10px-tall node. So a
+    // line always takes height 0, and a request for any other height lands in `adjusted`, saying
+    // so. Any other node needs Figma's minimum height, checked for all of them before any write so a
+    // refusal never leaves earlier targets resized.
+    const heightOf = (node: BaseNode): number => (node.type === 'LINE' ? 0 : requested.height);
     for (const { id, node } of targets) {
-      if (node.type === 'LINE' ? requested.height !== 0 : requested.height < 0.01) {
+      if (node.type !== 'LINE' && requested.height < 0.01) {
         throw new TypeError(
-          `resize_nodes: node ${id} (${node.type}) requires height ${node.type === 'LINE' ? '0' : 'at least 0.01; only LINE nodes accept height 0'}`,
+          `resize_nodes: node ${id} (${node.type}) needs a height of at least 0.01 — only a LINE takes height 0`,
         );
       }
     }
@@ -118,7 +126,7 @@ export const createResizeNodesHandler =
     // move another's (a main component's layer carries its instances' copies with it), so a size read
     // straight after its own write can already be stale by the end of the call.
     const before = targets.map(({ node }): Box => ({ width: node.width, height: node.height }));
-    for (const { node } of targets) node.resize(requested.width, requested.height);
+    for (const { node } of targets) node.resize(requested.width, heightOf(node));
 
     const affected: string[] = [];
     const adjusted: Adjusted[] = [];

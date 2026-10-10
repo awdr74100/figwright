@@ -7,8 +7,9 @@ export const RESIZE_NODES_TOOL_NAME = 'resize_nodes';
 export const resizeNodesTool: ToolSpec = {
   name: RESIZE_NODES_TOOL_NAME,
   description:
-    'Resize nodes to the given width × height (at least 0.01 px; LINE nodes require height 0). ' +
-    'Invalid dimensions for any resizable target are rejected before any node is resized. ' +
+    'Resize nodes to the given width × height (width at least 0.01 px). A LINE takes the width as ' +
+    'its length and keeps height 0 — pass 0, or any height is reported in adjusted; every other ' +
+    'node needs a height of at least 0.01 px, checked before any node is resized. ' +
     'This fixes the size, so an auto-layout ' +
     'FILL / HUG axis becomes FIXED. Non-resizable nodes are skipped. A layer inside an instance keeps ' +
     'the size its main component gives it — resize the instance itself, change the layer in the main ' +
@@ -19,7 +20,12 @@ export const resizeNodesTool: ToolSpec = {
   inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to resize'),
     width: z.number().min(0.01),
-    height: z.number().min(0).describe('0 for LINE nodes; at least 0.01 px for other nodes'),
+    height: z
+      .number()
+      .min(0)
+      .describe(
+        'At least 0.01 px; a LINE keeps height 0 whatever is passed (0 is exact for a line)',
+      ),
   }),
   kind: 'write',
 };

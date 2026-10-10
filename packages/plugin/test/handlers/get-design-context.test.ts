@@ -67,6 +67,24 @@ describe('get_design_context handler', () => {
     },
   );
 
+  it('leaves an override that is not about smoothing exactly as it was, with no smoothing 0', async () => {
+    // A child whose only override is its opacity: the entry carries that, and no smoothing field
+    // — the circular default says nothing, and every deduped instance would otherwise repeat it.
+    const instance = (id: string, opacity: number, overridden: boolean) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        getMainComponentAsync: async () => ({ id: 'main' }),
+        children: [node({ id: `${id}-card`, name: 'Card', opacity, cornerSmoothing: 0 })],
+        overrides: overridden ? [{ id: `${id}-card`, overriddenFields: ['opacity'] }] : [],
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [instance('first', 1, false), instance('second', 0.5, true)] }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped).toBe(true);
+    expect(result.nodes[1]?.propertyOverrides).toEqual([{ name: 'Card', opacity: 0.5 }]);
+  });
+
   it('limits depth and flags truncated nodes', async () => {
     const grandchild = node({ id: 'gc', type: 'RECTANGLE' });
     const child = node({ id: 'c', children: [grandchild] });

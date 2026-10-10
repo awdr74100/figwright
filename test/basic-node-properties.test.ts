@@ -41,8 +41,10 @@ const setup = () => {
       [1, 0, 0],
       [0, 1, 0],
     ],
+    // Figma stores whatever height a line is resized to (measured: 250 × 10 was kept, and drew the
+    // same hairline). Modelled the same, so a test can only see height 0 if 0 is what was written.
     resize(w: number, h: number) {
-      if (w < 0.01 || h !== 0) throw new Error('Invalid line size');
+      if (w < 0.01) throw new Error('Invalid line size');
       this.width = w;
       this.height = h;
     },
@@ -89,7 +91,8 @@ describe('basic node property round-trips', () => {
     const target = setup();
     await target.call('set_corner_radius', { nodeId: '1:1', cornerSmoothing: value });
     expect(target.frame).toMatchObject({ cornerRadius: 12, cornerSmoothing: value });
-    expect(target.read().flat).toMatchObject({ cornerSmoothing: value });
+    // 0 is Figma's default (a circular corner): neither read writes it out.
+    expect(target.read().flat.cornerSmoothing).toBe(value === 0 ? undefined : value);
     expect(target.read().full.cornerSmoothing).toBe(value === 0 ? undefined : value);
   });
 
@@ -108,12 +111,39 @@ describe('basic node property round-trips', () => {
     expect(target.line).toMatchObject({ width: 240, height: 0 });
   });
 
-  it.each([
-    { nodeIds: ['1:2', '1:1'], width: 240, height: 0 },
-    { nodeIds: ['1:1', '1:2'], width: 240, height: 10 },
-  ])('checks every target before resizing a mixed line/frame request', async input => {
+  it('gives a line its length and keeps it 0 high when another height is asked for', async () => {
     const target = setup();
-    await expect(target.call('resize_nodes', input)).rejects.toThrow(/height.*LINE|LINE.*height/);
+    const result = (await target.call('resize_nodes', {
+      nodeIds: ['1:2'],
+      width: 240,
+      height: 10,
+    })) as { affected: string[]; adjusted?: { nodeId: string; reason: string }[] };
+    expect(target.line).toMatchObject({ width: 240, height: 0 });
+    expect(result.affected).toEqual([]);
+    expect(result.adjusted?.[0]).toMatchObject({ nodeId: '1:2', width: 240, height: 0 });
+    expect(result.adjusted?.[0]?.reason).toMatch(/a line has no height/);
+  });
+
+  it('sizes a frame and a line together, each the way it can be sized', async () => {
+    const target = setup();
+    const result = (await target.call('resize_nodes', {
+      nodeIds: ['1:1', '1:2'],
+      width: 240,
+      height: 10,
+    })) as { affected: string[]; adjusted?: { nodeId: string }[] };
+    expect(target.frame).toMatchObject({ width: 240, height: 10 });
+    expect(target.line).toMatchObject({ width: 240, height: 0 });
+    expect(result.affected).toEqual(['1:1']);
+    expect(result.adjusted?.map(entry => entry.nodeId)).toEqual(['1:2']);
+  });
+
+  it('refuses height 0 for anything but a line, before resizing any target', async () => {
+    const target = setup();
+    await expect(
+      target.call('resize_nodes', { nodeIds: ['1:2', '1:1'], width: 240, height: 0 }),
+    ).rejects.toThrow(
+      /1:1 \(FRAME\) needs a height of at least 0\.01 — only a LINE takes height 0/,
+    );
     expect(target.line).toMatchObject({ width: 100, height: 0 });
     expect(target.frame).toMatchObject({ width: 100, height: 100 });
   });

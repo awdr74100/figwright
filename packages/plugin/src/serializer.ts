@@ -548,9 +548,11 @@ const enrichWithMixins = (
       }
     }
   }
+  // Corner smoothing (the iOS-style squircle curve). Omit Figma's default 0 — a circular corner, and
+  // nearly every node's value — so the field only appears when the curve actually differs.
   if ('cornerSmoothing' in node) {
     const smoothing = (node as { cornerSmoothing: unknown }).cornerSmoothing;
-    if (typeof smoothing === 'number') out.cornerSmoothing = smoothing;
+    if (typeof smoothing === 'number' && smoothing !== 0) out.cornerSmoothing = smoothing;
   }
   // Blend mode (overlays / multiply / screen). Omit the no-op PASS_THROUGH (the common case) so the
   // field only appears when it actually changes compositing.
