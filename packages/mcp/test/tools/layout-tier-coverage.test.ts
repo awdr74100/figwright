@@ -38,6 +38,7 @@ const APPEARANCE: Record<string, string> = {
   opacity: 'appearance',
   cornerRadius: 'appearance',
   cornerRadii: 'appearance',
+  cornerSmoothing: 'corner curvature, not layout',
   blendMode: 'appearance',
   isMask: 'appearance (clipping is realised from the mask layer, needs its geometry + paint)',
   maskType: 'appearance',

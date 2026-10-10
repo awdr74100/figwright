@@ -87,6 +87,8 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
     out.cornerRadius = flat.cornerRadius;
   if (flat.cornerRadii !== undefined) out.cornerRadii = flat.cornerRadii;
+  if (flat.cornerSmoothing !== undefined && flat.cornerSmoothing !== 0)
+    out.cornerSmoothing = flat.cornerSmoothing;
   if (flat.blendMode !== undefined) out.blendMode = flat.blendMode;
   if (flat.isMask !== undefined) out.isMask = flat.isMask;
   if (flat.maskType !== undefined) out.maskType = flat.maskType;
@@ -391,6 +393,7 @@ const VISUAL_OVERRIDE_FIELDS = [
   'effects',
   'cornerRadius',
   'cornerRadii',
+  'cornerSmoothing',
   'opacity',
   'blendMode',
 ] as const;
@@ -409,7 +412,7 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
   // Which descendant nodes Figma reports a non-text visual override on (id → changed fields). We
   // read instance.overrides for the *what changed*, then walk the subtree (like collectTextOverrides)
   // for the actual values — no figma.getNodeById, so this stays sync and dependency-free.
-  const overridden = new Set<string>();
+  const overridden = new Map<string, readonly string[]>();
   // overrides is always present on a real InstanceNode; guard so a node lacking it (tests, an
   // unexpected node) is a no-op rather than a throw.
   const ovs =
@@ -422,7 +425,7 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
       fields.includes('visible') ||
       fields.some(f => (VISUAL_OVERRIDE_FIELDS as readonly string[]).includes(f))
     ) {
-      overridden.add(ov.id);
+      overridden.set(ov.id, fields);
     }
   }
   if (overridden.size === 0) return [];
@@ -438,6 +441,18 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
         if (v === undefined) continue;
         entry[f] =
           f === 'fills' || f === 'strokes' ? (v as SerializedPaint[]).map(simplifyPaint) : v;
+      }
+      // A circular corner can override a smoothed main-component corner. project() omits the
+      // default 0, so an override *to* 0 is added back here — or a deduped instance would inherit
+      // the main's curve. Only when smoothing is what was overridden: every other entry stays as it
+      // was, without a 0 that says nothing.
+      if (
+        entry.cornerSmoothing === undefined &&
+        overridden.get(n.id)?.includes('cornerSmoothing') === true &&
+        'cornerSmoothing' in n &&
+        typeof n.cornerSmoothing === 'number'
+      ) {
+        entry.cornerSmoothing = n.cornerSmoothing;
       }
       // Only a node that actually carries a visual override (beyond its name) is worth an entry.
       if (Object.keys(entry).length > 1) out.push(entry);

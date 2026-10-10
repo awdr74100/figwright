@@ -31,6 +31,20 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  it.each([0.6, 1])('preserves corner smoothing %s through node serialization', value => {
+    expect(serializeFlatSync(fake({ cornerRadius: 12, cornerSmoothing: value }))).toMatchObject({
+      cornerRadius: 12,
+      cornerSmoothing: value,
+    });
+  });
+
+  it('omits the default corner smoothing 0, leaving the node exactly as it serialized before', () => {
+    // Nearly every node carries 0 (a circular corner); writing it out would only grow every read.
+    const out = serializeFlatSync(fake({ cornerRadius: 12, cornerSmoothing: 0 }));
+    expect(out).toEqual(serializeFlatSync(fake({ cornerRadius: 12 })));
+    expect('cornerSmoothing' in out).toBe(false);
+  });
+
   it('reads fresh native values on every call rather than caching across snapshots', () => {
     const parent = { id: '1:1', layoutMode: 'HORIZONTAL' };
     const node = fake({

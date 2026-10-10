@@ -43,6 +43,7 @@ export const createSetLayoutPropsHandler =
   async params => {
     const p = (params ?? {}) as {
       nodeId?: unknown;
+      clipsContent?: unknown;
       layoutSizingHorizontal?: unknown;
       layoutSizingVertical?: unknown;
       layoutAlign?: unknown;
@@ -55,6 +56,9 @@ export const createSetLayoutPropsHandler =
     };
     if (typeof p.nodeId !== 'string')
       throw new TypeError('set_layout_props: nodeId must be a string');
+    if (p.clipsContent !== undefined && typeof p.clipsContent !== 'boolean') {
+      throw new TypeError('set_layout_props: clipsContent must be a boolean');
+    }
     if (p.layoutGrow !== undefined && (typeof p.layoutGrow !== 'number' || p.layoutGrow < 0)) {
       throw new TypeError('set_layout_props: layoutGrow must be a non-negative number');
     }
@@ -67,6 +71,9 @@ export const createSetLayoutPropsHandler =
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (node === null) throw new Error(`set_layout_props: node ${p.nodeId} not found`);
+    if (p.clipsContent !== undefined && !('clipsContent' in node)) {
+      throw new Error(`set_layout_props: node ${p.nodeId} does not support clipsContent`);
+    }
     if (!('layoutAlign' in node)) {
       throw new Error(`set_layout_props: node ${p.nodeId} has no auto-layout child properties`);
     }
@@ -104,6 +111,9 @@ export const createSetLayoutPropsHandler =
       }
     }
 
+    if (typeof p.clipsContent === 'boolean') {
+      (node as { clipsContent: boolean }).clipsContent = p.clipsContent;
+    }
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
   };

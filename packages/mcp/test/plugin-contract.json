@@ -1,5 +1,5 @@
 {
-  "minPluginVersion": "0.6.0",
+  "minPluginVersion": "0.6.1",
   "tools": {
     "ping": [],
     "get_selection": [],
@@ -141,6 +141,7 @@
     "set_corner_radius": [
       "bottomLeftRadius",
       "bottomRightRadius",
+      "cornerSmoothing",
       "nodeId",
       "radius",
       "requestId",
@@ -201,6 +202,7 @@
       "strokesIncludedInLayout"
     ],
     "set_layout_props": [
+      "clipsContent",
       "layoutAlign",
       "layoutGrow",
       "layoutPositioning",

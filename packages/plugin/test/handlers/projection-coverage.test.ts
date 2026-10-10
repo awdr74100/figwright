@@ -54,6 +54,7 @@ const frameInGrid = base({
   rotation: 45,
   opacity: 0.5,
   cornerRadius: Symbol('mixed'),
+  cornerSmoothing: 0.6,
   topLeftRadius: 8,
   topRightRadius: 0,
   bottomRightRadius: 4,

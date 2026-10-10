@@ -450,6 +450,8 @@ export interface SerializedNode {
   rotation?: number;
   opacity?: number;
   cornerRadius?: number | Mixed;
+  /** Figma corner smoothing, 0–1 (0 = circular). */
+  cornerSmoothing?: number;
   /**
    * Per-corner radii, only when cornerRadius is `mixed` (the corners differ). Maps to
    * border-top-left-radius / …; cards rounded on one side, tabs, chat bubbles and segmented
@@ -608,6 +610,7 @@ export const SerializedNodeSchema = z.lazy(() =>
     rotation: z.number().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
+    cornerSmoothing: z.number().min(0).max(1).optional(),
     cornerRadii: z
       .object({
         topLeft: z.number(),
