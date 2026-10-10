@@ -573,6 +573,7 @@
       "x",
       "y"
     ],
+    "set_image_fill": ["data", "index", "nodeId", "requestId", "scaleMode", "url"],
     "import_svg": ["height", "name", "parentId", "requestId", "svg", "width", "x", "y"],
     "create_ellipse": ["height", "name", "parentId", "requestId", "width", "x", "y"],
     "create_component": [

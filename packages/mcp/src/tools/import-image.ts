@@ -3,9 +3,16 @@ import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
+import { SET_IMAGE_FILL_TOOL_NAME } from './set-image-fill.js';
 import type { ToolSpec } from './spec.js';
 
 export const IMPORT_IMAGE_TOOL_NAME = 'import_image';
+
+/** The tools whose `path` this server reads and sends on as `data`. */
+export const IMAGE_PATH_TOOLS: ReadonlySet<string> = new Set([
+  IMPORT_IMAGE_TOOL_NAME,
+  SET_IMAGE_FILL_TOOL_NAME,
+]);
 
 export const importImageTool: ToolSpec = {
   name: IMPORT_IMAGE_TOOL_NAME,
@@ -84,13 +91,16 @@ const megabytes = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1);
  * A short read leaves the rest of the buffer as the zeroes `Buffer.alloc` wrote, which no signature
  * matches, so a truncated file falls through to the same "not a PNG, JPEG or GIF" answer.
  */
-const readImageHeader = async (file: string): Promise<{ header: Buffer; size: number }> => {
+const readImageHeader = async (
+  file: string,
+  tool: string,
+): Promise<{ header: Buffer; size: number }> => {
   const header = Buffer.alloc(HEADER_BYTES);
   const handle = await open(file, 'r');
   try {
     const stats = await handle.stat();
     if (stats.isDirectory()) {
-      throw new Error(`import_image: ${file} is a directory, not an image file`);
+      throw new Error(`${tool}: ${file} is a directory, not an image file`);
     }
     await handle.read(header, 0, HEADER_BYTES, 0);
     return { header, size: stats.size };
@@ -110,20 +120,21 @@ const readImageHeader = async (file: string): Promise<{ header: Buffer; size: nu
  */
 export const resolveImagePath = async (
   args: Record<string, unknown>,
+  tool: string = IMPORT_IMAGE_TOOL_NAME,
 ): Promise<Record<string, unknown>> => {
   const { path, ...rest } = args;
   if (path === undefined) return args;
-  if (typeof path !== 'string') throw new Error('import_image: path must be a string');
+  if (typeof path !== 'string') throw new Error(`${tool}: path must be a string`);
   if (rest.data !== undefined || rest.url !== undefined)
-    throw new Error('import_image: provide exactly one of path, data or url');
+    throw new Error(`${tool}: provide exactly one of path, data or url`);
   const file = resolve(path);
 
-  const { header, size } = await readImageHeader(file);
+  const { header, size } = await readImageHeader(file, tool);
   if (!isSupportedImage(header))
-    throw new Error(`import_image: ${file} is not a PNG, JPEG or GIF image`);
+    throw new Error(`${tool}: ${file} is not a PNG, JPEG or GIF image`);
   if (size > MAX_FILE_BYTES) {
     throw new Error(
-      `import_image: ${file} is ${megabytes(size)}MB, over the ${megabytes(MAX_FILE_BYTES)}MB a ` +
+      `${tool}: ${file} is ${megabytes(size)}MB, over the ${megabytes(MAX_FILE_BYTES)}MB a ` +
         'single relay message can carry once base64-encoded — downscale or re-compress the file.',
     );
   }
@@ -133,7 +144,8 @@ export const resolveImagePath = async (
 };
 
 /**
- * Re-raise a failed `import_image` dispatch with what the caller needs to act on it.
+ * Re-raise a failed `import_image` / `set_image_fill` dispatch with what the caller needs to act on
+ * it.
  *
  * Figma's ceilings are not ours to predict — `createImage` refuses anything over 4096px in either
  * dimension and says only "Image is too large", naming neither the file nor the limit. When the
@@ -141,11 +153,15 @@ export const resolveImagePath = async (
  * half added, the same shape `add_variable_mode` uses for the plan ceiling on modes. Any other
  * failure, and any call that did not use `path`, is returned untouched.
  */
-export const importImageError = (err: unknown, path: unknown): unknown => {
+export const importImageError = (
+  err: unknown,
+  path: unknown,
+  tool: string = IMPORT_IMAGE_TOOL_NAME,
+): unknown => {
   const message = err instanceof Error ? err.message : String(err);
   if (typeof path !== 'string' || !/too large/i.test(message)) return err;
   return new Error(
-    `import_image: Figma refused ${resolve(path)} (${message}). createImage accepts at most ` +
+    `${tool}: Figma refused ${resolve(path)} (${message}). createImage accepts at most ` +
       '4096px in width and height — downscale the image, or place it at full resolution outside ' +
       'Figma and import a view that fits.',
     { cause: err },
@@ -153,9 +169,9 @@ export const importImageError = (err: unknown, path: unknown): unknown => {
 };
 
 /**
- * `batch` dispatches its ops straight to the sandbox, so an `import_image` op with a `path` has to
- * be resolved here too — otherwise the handler would answer "provide data or url" for an argument
- * the tool advertises. Other ops pass through unchanged.
+ * `batch` dispatches its ops straight to the sandbox, so an image op with a `path` has to be
+ * resolved here too — otherwise the handler would answer "provide data or url" for an argument the
+ * tool advertises. Other ops pass through unchanged.
  */
 export const resolveBatchImagePaths = async (
   args: Record<string, unknown>,
@@ -165,9 +181,9 @@ export const resolveBatchImagePaths = async (
     args.ops.map(async (op: unknown) => {
       if (typeof op !== 'object' || op === null) return op;
       const { tool, params } = op as { tool?: unknown; params?: unknown };
-      if (tool !== IMPORT_IMAGE_TOOL_NAME || typeof params !== 'object' || params === null)
-        return op;
-      return { ...op, params: await resolveImagePath(params as Record<string, unknown>) };
+      if (typeof tool !== 'string' || !IMAGE_PATH_TOOLS.has(tool)) return op;
+      if (typeof params !== 'object' || params === null) return op;
+      return { ...op, params: await resolveImagePath(params as Record<string, unknown>, tool) };
     }),
   );
   return { ...args, ops };

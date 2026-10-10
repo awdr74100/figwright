@@ -34,6 +34,17 @@ export const CreateResultSchema = z.object({
 export type CreateResult = z.infer<typeof CreateResultSchema>;
 
 /** Result of a multi-node op (delete_nodes / …): which target ids were actually affected. */
+/** Set_image_fill: the fill it wrote, and the image's size in pixels. */
+export const ImageFillResultSchema = z.object({
+  ok: z.literal(true),
+  nodeId: z.string(),
+  index: z.number(),
+  imageHash: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+export type ImageFillResult = z.infer<typeof ImageFillResultSchema>;
+
 export const BatchNodeResultSchema = z.object({
   ok: z.literal(true),
   affected: z.array(z.string()),
