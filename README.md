@@ -45,7 +45,7 @@ Everything runs on your machine: the server, the relay, and the plugin. Your des
 ## Why Figwright
 
 - **Not gated**: the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
-- **Bidirectional**: not read-only. **117 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
+- **Bidirectional**: not read-only. **119 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen**: Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
 - **One agent per file**: several agents can work at once, each claiming its own open Figma file. Switching tabs no longer sends one agent's edits into another's design — see [working across files](#faq).
 - **Open & extensible**: the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
@@ -121,7 +121,7 @@ npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-cod
 
 ## Tools
 
-Figwright exposes **117 MCP tools** in three groups:
+Figwright exposes **119 MCP tools** in three groups:
 
 - **Read**: selection, document and node inspection, styles, variables, components, fonts, prototype reactions and flows, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM); plus `list_files` / `use_file` for working across more than one open Figma file at once.
 - **Write**: create and edit frames, text, shapes, auto-layout, effects, styles, variables, components (including authoring their boolean/text/instance-swap properties), pages, prototype reactions and flows, and Motion animations (keyframes, animation-style presets, timelines); plus a `batch` tool to apply many edits at once.
@@ -129,6 +129,16 @@ Figwright exposes **117 MCP tools** in three groups:
 
 > [!TIP]
 > Your MCP client lists every tool at connect time, which is always the authoritative, up-to-date catalog.
+
+For cross-file library reuse, read the variable or style **key** in the source file with
+`get_variable_defs` or `get_styles`, then call `import_variable` or `import_style` in the target
+file. Bind or apply the returned `variableId` or `styleId`; source-file ids and keys are not
+target-file ids. Imports require a published, accessible library resource and do not edit any
+node. Import before `batch`, since a library import cannot be rolled back. The two reads list
+local definitions, not every shared reference used by imported instances.
+
+If library resolution times out in a background file, bring the target Figma file to the
+foreground and retry. A timeout stops waiting for the result; it does not cancel Figma's import.
 
 ## Plugin
 

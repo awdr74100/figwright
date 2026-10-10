@@ -3,7 +3,7 @@
  * a bridge message the sandbox can execute, and resolves once the matching reply comes back.
  */
 
-import { getToolBudget, newId } from '@figwright/shared';
+import { ErrorCode, getToolBudget, newId } from '@figwright/shared';
 
 import {
   createToolCall,
@@ -69,7 +69,22 @@ export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
       const timeoutMs = opts.timeoutMs ?? getToolBudget(method);
       const timer = setTimeout(() => {
         pending.delete(id);
-        reject(new Error(`sandbox tool timeout (method=${method})`));
+        const message = `sandbox tool timeout (method=${method})`;
+        if (method === 'import_variable' || method === 'import_style') {
+          // Native library resolution can stall in a hidden file even while ordinary tool
+          // messages are answered. Keep background imports working when Figma can resolve them;
+          // only a timeout gets this recovery path, and it does not cancel the native import.
+          reject(
+            new PluginToolFailure(
+              ErrorCode.Timeout,
+              `${message}. Figma may defer library resolution in a background file. ` +
+                'Bring the target Figma file to the foreground and retry. ' +
+                'The import may still complete after this timeout.',
+            ),
+          );
+        } else {
+          reject(new Error(message));
+        }
       }, timeoutMs);
       pending.set(id, { resolve, reject, timer, method });
       post(createToolCall({ id, method, params }));

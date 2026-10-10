@@ -10,7 +10,9 @@ export const bindVariableToNodeTool: ToolSpec = {
     'Bind a variable to a node field (e.g. width, height, characters, itemSpacing, topLeftRadius, ' +
     'or cornerRadius to bind all four corners at once), or unbind by passing variableId: null. The ' +
     "variable's resolvedType must match the field's type. To bind a fill or stroke color use " +
-    'bind_variable_to_paint instead; get bindable variable ids from get_variable_defs. Returns ' +
+    'bind_variable_to_paint instead; get local variable ids from get_variable_defs. For a library ' +
+    'variable, call import_variable with its key in the target file and bind the returned variableId ' +
+    '(not the key or a source-file id). Returns ' +
     '{ ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node to bind on'),

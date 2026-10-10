@@ -8,7 +8,9 @@ export const applyStyleToNodeTool: ToolSpec = {
   name: APPLY_STYLE_TO_NODE_TOOL_NAME,
   description:
     'Bind a shared style to a node. `field` selects which slot the style applies to: fill / ' +
-    'stroke / effect / grid / text. Returns { ok, nodeId }.',
+    'stroke / effect / grid / text. Use a style id already available in this file (including ' +
+    'get_node styleIds); for a library style, call import_style with its key in the target file ' +
+    'and apply the returned styleId, not the key or a source-file id. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node to apply the style to'),
     styleId: z.string().describe('Style id to bind'),

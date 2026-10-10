@@ -42,6 +42,9 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // does the same work as the scans and, left on the default, timed out at 35s on 16k instances.
   'search_nodes',
   'scan_text_nodes',
+  // Component catalogues also scan a whole subtree. A cold library page in a background file
+  // exceeded the default sandbox window before its native component scan could return.
+  'get_local_components',
   'scan_nodes_by_types',
   // A batch runs every op it carries and, when one fails, unwinds every op already applied — and
   // any step can wait on Figma (a live rollback was measured spending ~49s inside one font load).

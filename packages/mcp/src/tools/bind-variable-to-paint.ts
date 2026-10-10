@@ -13,7 +13,9 @@ export const bindVariableToPaintTool: ToolSpec = {
     'width / padding / radius). target is fills (default) or strokes; index selects which paint ' +
     "(default 0). The paint at that index must be SOLID. Binding replaces the paint's opacity " +
     "with the variable's alpha, so a 50% fill bound to an opaque variable ends up opaque; for a " +
-    'translucent token, bind a variable whose value carries that alpha. Returns { ok, nodeId }.',
+    'translucent token, bind a variable whose value carries that alpha. For a library variable, ' +
+    'call import_variable with its key in the target file and bind the returned variableId. ' +
+    'Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node whose fill/stroke paint to bind'),
     target: z

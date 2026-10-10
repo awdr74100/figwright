@@ -15,7 +15,9 @@ export const getStylesTool: ToolSpec = {
     'text style itself for typography. A bound value is a reference, not a literal: emit the token, ' +
     'not the resolved colour/number sitting next to it. `variables` maps every referenced id to its ' +
     '{ name, type, codeSyntax? } (ids stay the key because variable names collide across ' +
-    'collections); it is omitted when nothing in the document is bound.',
+    'collections); it is omitted when nothing in the document is bound. This lists local styles, ' +
+    'not all shared styles used by imported instances. To use a published style in another file, ' +
+    'pass its key to import_style in that target file and use the returned styleId.',
   inputSchema: z.object({}),
   kind: 'read',
 };

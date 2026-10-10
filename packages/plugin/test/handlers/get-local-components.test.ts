@@ -11,10 +11,12 @@ const frame = (id: string, found: unknown[]): unknown => ({
 });
 
 const fakeFigma = (opts: {
+  root?: unknown;
   selection?: unknown[];
   lookup?: Record<string, unknown>;
 }): typeof figma =>
   ({
+    root: opts.root ?? { id: '0:0', type: 'DOCUMENT' },
     currentPage: { selection: opts.selection ?? [] },
     getNodeByIdAsync: async (id: string) => opts.lookup?.[id] ?? null,
   }) as unknown as typeof figma;
@@ -91,6 +93,32 @@ describe('get_local_components handler', () => {
   it('throws when nothing is selected and no nodeId is given', async () => {
     await expect(createGetLocalComponentsHandler(fakeFigma({ selection: [] }))({})).rejects.toThrow(
       /Nothing selected/,
+    );
+  });
+
+  it('rejects a document root with page-scoping guidance before native dynamic-page scanning', async () => {
+    const document = {
+      id: '0:0',
+      type: 'DOCUMENT',
+      findAllWithCriteria: () => {
+        throw new Error(
+          'Cannot call with documentAccess: dynamic-page without calling figma.loadAllPagesAsync() first.',
+        );
+      },
+    };
+    const handler = createGetLocalComponentsHandler(fakeFigma({ root: document }));
+
+    await expect(handler({ nodeId: '0:0' })).rejects.toThrow(/get_pages.*page.*nodeId/);
+  });
+
+  it('returns page-scoping guidance even when async node resolution cannot connect to Figma', async () => {
+    const figmaCtx = fakeFigma({});
+    figmaCtx.getNodeByIdAsync = async () => {
+      throw new Error('Unable to establish connection to Figma after 10 seconds.');
+    };
+
+    await expect(createGetLocalComponentsHandler(figmaCtx)({ nodeId: '0:0' })).rejects.toThrow(
+      /get_pages.*page.*nodeId/,
     );
   });
 });

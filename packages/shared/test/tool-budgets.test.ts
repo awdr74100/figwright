@@ -33,6 +33,7 @@ describe('tool budgets', () => {
       'search_nodes',
       'scan_nodes_by_types',
       'scan_text_nodes',
+      'get_local_components',
       // Carries N writes and, on a failure, N undos — a timeout mid-rollback would hide whether the
       // document was left changed.
       'batch',
@@ -50,6 +51,7 @@ describe('tool budgets', () => {
       'search_nodes',
       'scan_nodes_by_types',
       'scan_text_nodes',
+      'get_local_components',
     ]) {
       expect(getRelayBudget(t)).toBe(getToolBudget(t) + BUDGET_LAYER_MARGIN_MS);
       expect(getFollowerBudget(t)).toBe(getToolBudget(t) + 2 * BUDGET_LAYER_MARGIN_MS);

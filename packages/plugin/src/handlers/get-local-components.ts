@@ -16,7 +16,10 @@ export const createGetLocalComponentsHandler =
     // files (e.g. a big component-library page). Require an explicit target like the other reads.
     let roots: readonly BaseNode[];
     if (typeof p.nodeId === 'string') {
-      const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
+      // The document root is already available. Resolving it through the async API can wait on
+      // Figma's connection in a background file before we can give the page-scoping guidance.
+      const node =
+        p.nodeId === figmaCtx.root.id ? figmaCtx.root : await figmaCtx.getNodeByIdAsync(p.nodeId);
       roots = node === null ? [] : [node];
     } else if (figmaCtx.currentPage.selection.length > 0) {
       roots = figmaCtx.currentPage.selection;
@@ -24,6 +27,13 @@ export const createGetLocalComponentsHandler =
       throw new Error(
         'Nothing selected. Select frames/layers in Figma (or pass an explicit nodeId). ' +
           'get_local_components scans a subtree, not the whole document (times out on large files).',
+      );
+    }
+
+    if (roots.some(root => root.type === 'DOCUMENT')) {
+      throw new Error(
+        'get_local_components scans a subtree, not the whole document. ' +
+          'Use get_pages to find a page, then pass its id as nodeId (or select frames to scan).',
       );
     }
 

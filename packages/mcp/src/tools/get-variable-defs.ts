@@ -14,7 +14,9 @@ export const getVariableDefsTool: ToolSpec = {
     'or — for an EASING variable — an easing curve ' +
     '{ type, easingFunctionCubicBezier?, easingFunctionSpring? }). A variable also carries scopes ' +
     'when the designer narrowed where Figma offers it (e.g. ["CORNER_RADIUS"]) — authoritative ' +
-    'intent about what the token is for; absent means every scope.',
+    'intent about what the token is for; absent means every scope. This lists local definitions, ' +
+    'not all shared library references. To use a published variable in another file, pass its key ' +
+    'to import_variable in that target file and use the returned variableId.',
   inputSchema: z.object({}),
   kind: 'read',
 };
