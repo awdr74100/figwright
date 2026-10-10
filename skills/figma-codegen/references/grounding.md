@@ -128,12 +128,12 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Corner smoothing.** A node may carry `cornerSmoothing` (0–1; Figma's "iOS" preset is 0.6). Keep
   its `border-radius` as is and add nothing for it — in particular not `corner-shape: squircle`.
   Measured against Figma's own render, a plain radius is the closest portable shape (on a 200px box
-  with a 60px radius at 0.6, the outlines differ by about 0.35% of its area), while `squircle` at the
-  same radius came out at least 15× further off on every shape tried, and about 200× on a pill, where
-  smoothing changes nothing: Figma's smoothing lengthens the curve where a squircle squares the
-  corner. The best `corner-shape` fit found was only ~20% closer, needed a larger radius, and is worse
-  than plain wherever `corner-shape` is unsupported. Only where the exact curve is the point (an app
-  icon), draw it as an SVG or `clip-path`.
+  with a 60px radius at 0.6, the outlines differ by about 0.35% of its area), while `squircle` at
+  the same radius came out about 15× further off or more on every shape tried, and about 200× on a
+  pill, where smoothing changes nothing: Figma's smoothing lengthens the curve where a squircle
+  squares the corner. The best `corner-shape` fit found was only ~20% closer, needed a larger
+  radius, and is worse than plain wherever `corner-shape` is unsupported. Only where the exact curve
+  is the point (an app icon), draw it as an SVG or `clip-path`.
 - **Blend mode.** A node may carry `blendMode` (`MULTIPLY` / `SCREEN` / `OVERLAY` / …) — map it to
   `mix-blend-mode` (on the element) or `background-blend-mode` (a fill over an image). An overlay
   swatch blended onto a photo reads as the wrong flat colour if you drop it.
