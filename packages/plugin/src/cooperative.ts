@@ -8,13 +8,18 @@
 // magnitude from file to file (~0.7ms per instance on a light page, ~4.4ms on a heavy library page):
 // a fixed batch that is responsive on one blocks for seconds on the other.
 //
-// Timers in a hidden Figma file can stop answering altogether, while the same sandbox still
-// answers tool messages promptly. Waiting for a timer to finish before detecting throttling cannot
-// recover that case. Yield through the panel's message channel instead: a round-trip lets the host
-// run without relying on a background timer. A slow round-trip still triggers adaptive backoff
-// rather than multiplying a slow host's delay by every slice. Backoff
-// coarsens slices instead of stopping them: long uninterrupted background reads can abort the
-// plugin runtime. The panel reports its visibility, so this need not wait for a late callback.
+// Handing the thread back cannot rely on a timer. In a background Figma tab a zero-delay timer can
+// wait close to a minute before it fires, while the same sandbox still answers messages within
+// milliseconds. Measured with every slice yielding on a timer: a 3,591-instance scan that took 3.2s
+// in front took 52–76s once its file had sat in a background tab for two minutes. So the sandbox
+// yields through a message round-trip with the panel instead, which no timer gates — the same scan
+// took 2.8–2.9s in a background tab, 3.0–3.3s minimized and 2.7–2.9s with the panel hidden.
+//
+// The panel also reports whether its document is hidden. A hidden file, or a round-trip slower than
+// THROTTLED_YIELD_MS (a panel busy with other work), gets coarser slices for a while: fewer
+// handoffs where nobody is watching the editor repaint, or where each handoff is expensive. Slices
+// are coarsened rather than stopped, so the host keeps getting turns and other tool calls and the
+// panel's own traffic still flow during a long read.
 
 import { createHostYield, parseHostYield } from '../protocol/host-yield.js';
 
