@@ -86,7 +86,10 @@ describe('createToolBridge', () => {
           result => ({ result }),
           error => ({ error }),
         );
-        await vi.advanceTimersByTimeAsync(DEFAULT_TOOL_BUDGET_MS);
+        // Still pending past the default window: a background import gets the heavy one.
+        await vi.advanceTimersByTimeAsync(DEFAULT_TOOL_BUDGET_MS + 1);
+        expect(bridge.pendingCount()).toBe(1);
+        await vi.advanceTimersByTimeAsync(HEAVY_TOOL_BUDGET_MS - DEFAULT_TOOL_BUDGET_MS);
         await expect(answer).resolves.toMatchObject({
           error: {
             code: ErrorCode.Timeout,

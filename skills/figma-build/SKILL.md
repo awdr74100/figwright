@@ -46,6 +46,11 @@ actual environment first, then build into it** — never apply a generic templat
   2. **`scan_components`** / **`get_local_components`** → existing components to **instance** rather
      than rebuild. Match the source UI pattern (a card, a list row, a nav, a button) to a component.
   3. **`get_styles`** → shared paint / text / effect styles to apply.
+  4. **A design system that lives in a published library** — these reads list only the file's _own_
+     definitions. When they come back empty or sparse but the file is built on a team library (its
+     components are library instances, or the user says so), the tokens are in the library file:
+     read their keys there and import what you bind. Don't conclude "no tokens" and hardcode values.
+     → `references/write-rules.md`, "Tokens from a published library".
 - **The source you were handed** — when it's code, _which_ stack and styling system (Tailwind /
   Chakra / MUI / CSS modules / vanilla …) and whether it has a config / theme / tokens file. That's
   where its real values live — read them from there, don't assume a default.

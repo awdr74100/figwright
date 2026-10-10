@@ -42,10 +42,17 @@ const HEAVY_TOOLS: ReadonlySet<string> = new Set([
   // does the same work as the scans and, left on the default, timed out at 35s on 16k instances.
   'search_nodes',
   'scan_text_nodes',
+  'scan_nodes_by_types',
   // Component catalogues also scan a whole subtree. A cold library page in a background file
   // exceeded the default sandbox window before its native component scan could return.
   'get_local_components',
-  'scan_nodes_by_types',
+  // A library import resolves the library inside Figma, and in a background file that work can wait
+  // on Figma's own throttled timers: a background tab was measured delaying a zero-delay timer by
+  // close to a minute, and first-time resolution there was seen to outlast the default window. This
+  // is inferred from those, not measured on an import (no published library was at hand). The wide
+  // window lets a background import finish instead of timing out while Figma is still importing.
+  'import_variable',
+  'import_style',
   // A batch runs every op it carries and, when one fails, unwinds every op already applied — and
   // any step can wait on Figma (a live rollback was measured spending ~49s inside one font load).
   // Timing out mid-rollback reports a timeout for a call that did finish, and discards the one

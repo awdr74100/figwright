@@ -14,6 +14,13 @@ import {
 import type { ToolHandler } from '../relay/state.js';
 import { onSandboxMessage, postToSandbox } from './messaging.js';
 
+/**
+ * Tools whose Figma work is library resolution, which Figma may defer in a background file. A
+ * timeout for one says how to recover; it does not cancel the import, which may still complete
+ * afterwards.
+ */
+const LIBRARY_IMPORT_TOOLS: ReadonlySet<string> = new Set(['import_variable', 'import_style']);
+
 export type PostMessageFn = (msg: PluginBridgeMessage) => void;
 export type SubscribeFn = (cb: (raw: unknown) => void) => () => void;
 
@@ -70,10 +77,7 @@ export const createToolBridge = (opts: ToolBridgeOptions = {}): ToolBridge => {
       const timer = setTimeout(() => {
         pending.delete(id);
         const message = `sandbox tool timeout (method=${method})`;
-        if (method === 'import_variable' || method === 'import_style') {
-          // Native library resolution can stall in a hidden file even while ordinary tool
-          // messages are answered. Keep background imports working when Figma can resolve them;
-          // only a timeout gets this recovery path, and it does not cancel the native import.
+        if (LIBRARY_IMPORT_TOOLS.has(method)) {
           reject(
             new PluginToolFailure(
               ErrorCode.Timeout,

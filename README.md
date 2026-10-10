@@ -124,21 +124,11 @@ npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-cod
 Figwright exposes **119 MCP tools** in three groups:
 
 - **Read**: selection, document and node inspection, styles, variables, components, fonts, prototype reactions and flows, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM); plus `list_files` / `use_file` for working across more than one open Figma file at once.
-- **Write**: create and edit frames, text, shapes, auto-layout, effects, styles, variables, components (including authoring their boolean/text/instance-swap properties), pages, prototype reactions and flows, and Motion animations (keyframes, animation-style presets, timelines); plus a `batch` tool to apply many edits at once.
+- **Write**: create and edit frames, text, shapes, auto-layout, effects, styles, variables (including importing a team library's variables and styles), components (including authoring their boolean/text/instance-swap properties), pages, prototype reactions and flows, and Motion animations (keyframes, animation-style presets, timelines); plus a `batch` tool to apply many edits at once.
 - **Grounding**: `get_design_context` for faithful, de-duplicated design context, and `component_map` / `token_map` / `icon_map`, which join Figma data to your codebase so codegen reuses what you already have; plus `design_diff`, which reports what changed in a design against a saved baseline so you update only the affected code.
 
 > [!TIP]
 > Your MCP client lists every tool at connect time, which is always the authoritative, up-to-date catalog.
-
-For cross-file library reuse, read the variable or style **key** in the source file with
-`get_variable_defs` or `get_styles`, then call `import_variable` or `import_style` in the target
-file. Bind or apply the returned `variableId` or `styleId`; source-file ids and keys are not
-target-file ids. Imports require a published, accessible library resource and do not edit any
-node. Import before `batch`, since a library import cannot be rolled back. The two reads list
-local definitions, not every shared reference used by imported instances.
-
-If library resolution times out in a background file, bring the target Figma file to the
-foreground and retry. A timeout stops waiting for the result; it does not cancel Figma's import.
 
 ## Plugin
 
