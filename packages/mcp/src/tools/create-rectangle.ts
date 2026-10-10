@@ -9,7 +9,8 @@ export const createRectangleTool: ToolSpec = {
   description:
     'Create a rectangle, optionally sized/positioned and appended to a parent (default: current ' +
     'page). Useful for solid shapes, dividers, and color blocks; for a container that holds other ' +
-    'layers use create_frame, and for placed bitmaps use import_image. Returns ' +
+    'layers use create_frame; for a bitmap, import_image places one, or set_image_fill puts it ' +
+    'into this rectangle (a rounded thumbnail, an avatar). Returns ' +
     '{ ok, nodeId, name, type }.',
   inputSchema: z.object({
     parentId: z.string().optional().describe('Container node id; omit for current page'),

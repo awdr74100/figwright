@@ -33,6 +33,7 @@ Figwright runs **entirely on your machine**; there is no Figwright cloud service
 - **What it can access.** The plugin runs in Figma's plugin sandbox and uses the official public Plugin API, the same one every Community plugin uses. It can only touch the Figma file you have open; it cannot reach your other files, your account, or your org's data, because the Plugin API doesn't expose them.
 - **What leaves your machine.** Nothing. Figwright sends no telemetry and phones home to no one. Design data flows only between the plugin, the local relay, and your MCP client.
 - **File writes.** Export tools (screenshots, PDF, video, image fills) write only to the paths your agent explicitly passes in the tool call; the server never writes anywhere it wasn't asked to.
+- **File reads.** `import_image` and `set_image_fill` read the file at the `path` your agent passes, and only after its first bytes identify it as a PNG, JPEG or GIF: any other file is refused before it is read. The bytes go only to the plugin. A `url` passed to those tools is fetched by Figma, not by the server. Calls arriving over the leader's HTTP endpoint cannot make it read a file; `path` is accepted only from an MCP client.
 
 ## Scope
 
