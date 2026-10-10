@@ -1662,8 +1662,13 @@ const variableModeInverse: BatchInverse = {
     if (collection === null) {
       return `variable collection ${collectionId} is gone, so ${id}'s mode for it was not put back`;
     }
-    if (previous === null) (node as ModeBearer).clearExplicitVariableModeForCollection(collection);
-    else (node as ModeBearer).setExplicitVariableModeForCollection(collection, previous);
+    // A previous mode deleted from the collection since (Figma keeps it on the node, rendered as
+    // unset) cannot be set again; clearing renders the same.
+    if (previous === null || !collection.modes.some(m => m.modeId === previous)) {
+      (node as ModeBearer).clearExplicitVariableModeForCollection(collection);
+    } else {
+      (node as ModeBearer).setExplicitVariableModeForCollection(collection, previous);
+    }
     return undefined;
   },
   touches: (_params, captured) => [(captured as VariableModeState).id],

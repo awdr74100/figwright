@@ -163,6 +163,14 @@ describe('set_node_variable_mode in a batch', () => {
     expect(frame.explicitVariableModes).toEqual({ [COLLECTION.id]: '1:0', other: 'o:1' });
   });
 
+  it('clears rather than fails when the previous mode was deleted from the collection', async () => {
+    // Figma keeps a deleted mode on the node; setting it again would throw, clearing renders the same.
+    const frame = modeNode('1:1', { [COLLECTION.id]: '5:5' });
+    await expect(run(frame, '9:0')).rejects.toThrow(/rolled back 1/);
+    expect(frame.explicitVariableModes).toEqual({});
+    expect(frame.calls.at(-1)?.[0]).toBe('clear');
+  });
+
   it('puts back a mode the op cleared', async () => {
     const frame = modeNode('1:1', { [COLLECTION.id]: '9:0' });
     await expect(run(frame, null)).rejects.toThrow(/rolled back 1/);

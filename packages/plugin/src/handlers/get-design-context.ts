@@ -346,12 +346,24 @@ const resolveVariableModes = async (
     }
     return collections.get(id) ?? null;
   };
+  // Figma keeps a node's explicit mode after that mode is deleted from its collection (seen live),
+  // and renders the node as if it were not set. Such a mode is not what the node shows; only a
+  // readable collection can tell, so an unreadable one's ids still stand.
+  const stale = (collectionId: string, modeId: string): boolean => {
+    const collection = collections.get(collectionId);
+    return collection != null && !collection.modes.some(m => m.modeId === modeId);
+  };
 
   // Roots first: what each one inherits, merged under what it sets itself.
   for (let i = 0; i < roots.length; i += 1) {
     const resolved = (roots[i] as { resolvedVariableModes?: unknown }).resolvedVariableModes;
     if (typeof resolved !== 'object' || resolved === null) continue;
-    const own = nodes[i]!.variableModes ?? {};
+    const own: Record<string, string> = {};
+    for (const [collectionId, modeId] of Object.entries(nodes[i]!.variableModes ?? {})) {
+      // eslint-disable-next-line no-await-in-loop -- cached per collection, few per read
+      await load(collectionId);
+      if (!stale(collectionId, modeId)) own[collectionId] = modeId;
+    }
     const effective: Record<string, string> = {};
     for (const [collectionId, modeId] of Object.entries(resolved)) {
       if (typeof modeId !== 'string' || collectionId in own) continue;
@@ -359,17 +371,25 @@ const resolveVariableModes = async (
       const collection = await load(collectionId);
       // Only a mode known not to be the default is worth saying; an unreadable collection's default
       // is unknown, so its ids would be a guess on every root.
+      // (A deleted mode reported here is dropped with the rest when the modes are named below.)
       if (collection === null || modeId === collection.defaultModeId) continue;
       effective[collectionId] = modeId;
     }
-    if (Object.keys(effective).length > 0) nodes[i]!.variableModes = { ...effective, ...own };
+    const modes = { ...effective, ...own };
+    if (Object.keys(modes).length > 0) nodes[i]!.variableModes = modes;
+    else delete nodes[i]!.variableModes;
   }
 
   // Nodes, and the override entries of deduped instances, that carry modes still keyed by id.
   const carriers: { variableModes?: Readonly<Record<string, string>> }[] = [];
+  const overrideEntries = new Set<object>();
   const visit = (n: DesignContextNode): void => {
     if (n.variableModes !== undefined) carriers.push(n);
-    for (const o of n.propertyOverrides ?? []) if (o.variableModes !== undefined) carriers.push(o);
+    for (const o of n.propertyOverrides ?? []) {
+      if (o.variableModes === undefined) continue;
+      carriers.push(o);
+      overrideEntries.add(o);
+    }
     if (n.children) for (const c of n.children) visit(c);
   };
   for (const n of nodes) visit(n);
@@ -393,9 +413,11 @@ const resolveVariableModes = async (
   for (const n of carriers) {
     const named: Record<string, string> = {};
     for (const [collectionId, modeId] of Object.entries(n.variableModes!)) {
-      named[keyOf(collectionId)] = modeName(collectionId, modeId);
+      if (!stale(collectionId, modeId)) named[keyOf(collectionId)] = modeName(collectionId, modeId);
     }
-    n.variableModes = named;
+    // A node left with no live mode says nothing; an override entry keeps `{}` — "inherits".
+    if (Object.keys(named).length === 0 && !overrideEntries.has(n)) delete n.variableModes;
+    else n.variableModes = named;
   }
 };
 
