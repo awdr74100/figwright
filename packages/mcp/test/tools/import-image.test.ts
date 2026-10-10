@@ -11,6 +11,7 @@ import {
   resolveBatchImagePaths,
   resolveImagePath,
 } from '../../src/tools/import-image.js';
+import { SET_IMAGE_FILL_TOOL_NAME, setImageFillTool } from '../../src/tools/set-image-fill.js';
 import { WIRE_TOOL_SCHEMAS } from '../../src/tools/wire-schema.js';
 import { toToolDefinition } from '../tool-schema.js';
 
@@ -106,6 +107,38 @@ describe('resolveImagePath', () => {
   });
 });
 
+describe('set_image_fill — the same path handling', () => {
+  it('advertises path to the agent and keeps it off the wire to the plugin', () => {
+    expect(toToolDefinition(setImageFillTool).inputSchema).toMatchObject({
+      properties: { path: { type: 'string' }, data: { type: 'string' }, url: { type: 'string' } },
+    });
+    const wire = WIRE_TOOL_SCHEMAS.get(SET_IMAGE_FILL_TOOL_NAME);
+    expect(Object.keys(wire?.shape ?? {})).not.toContain('path');
+    expect(Object.keys(wire?.shape ?? {})).toContain('data');
+  });
+
+  it('reads the file into data, and names its own tool when refusing one', async () => {
+    const path = await fileWith('cover.jpg', JPEG);
+    await expect(
+      resolveImagePath({ nodeId: '1:1', path }, SET_IMAGE_FILL_TOOL_NAME),
+    ).resolves.toEqual({ nodeId: '1:1', data: Buffer.from(JPEG).toString('base64') });
+    const text = await fileWith('notes.txt', 'hello');
+    await expect(resolveImagePath({ path: text }, SET_IMAGE_FILL_TOOL_NAME)).rejects.toThrow(
+      /^set_image_fill: .* is not a PNG, JPEG or GIF image/,
+    );
+  });
+
+  it('names its own tool when Figma refuses the size', () => {
+    const file = join(tmpdir(), 'cover.png');
+    const wrapped = importImageError(
+      new Error('Image is too large'),
+      file,
+      SET_IMAGE_FILL_TOOL_NAME,
+    ) as Error;
+    expect(wrapped.message).toMatch(/^set_image_fill: Figma refused/);
+  });
+});
+
 describe('resolveBatchImagePaths', () => {
   it('resolves import_image ops and leaves every other op untouched', async () => {
     const path = await fileWith('photo.png', PNG);
@@ -120,6 +153,21 @@ describe('resolveBatchImagePaths', () => {
           params: { data: Buffer.from(PNG).toString('base64'), parentId: '1:3' },
         },
         other,
+      ],
+    });
+  });
+
+  it('resolves set_image_fill ops too', async () => {
+    const path = await fileWith('avatar.gif', GIF);
+    const resolved = await resolveBatchImagePaths({
+      ops: [{ tool: SET_IMAGE_FILL_TOOL_NAME, params: { nodeId: '1:1', path } }],
+    });
+    expect(resolved).toEqual({
+      ops: [
+        {
+          tool: SET_IMAGE_FILL_TOOL_NAME,
+          params: { nodeId: '1:1', data: Buffer.from(GIF).toString('base64') },
+        },
       ],
     });
   });

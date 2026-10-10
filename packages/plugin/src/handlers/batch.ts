@@ -1674,6 +1674,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // plus the bindings a write drops. Order matters where a uniform value precedes per-side/corner
   // values it would otherwise overwrite (mirrors the handlers).
   set_fills: propsInverse('set_fills', ['fills']),
+  set_image_fill: propsInverse('set_image_fill', ['fills']),
   set_strokes: propsInverse(
     'set_strokes',
     [

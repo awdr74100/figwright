@@ -40,7 +40,7 @@ import { GET_DESIGN_CONTEXT_TOOL_NAME } from './tools/get-design-context.js';
 import { GET_SCREENSHOT_TOOL_NAME, screenshotContent } from './tools/get-screenshot.js';
 import { handleIconMap, ICON_MAP_TOOL_NAME } from './tools/icon-map.js';
 import {
-  IMPORT_IMAGE_TOOL_NAME,
+  IMAGE_PATH_TOOLS,
   importImageError,
   resolveBatchImagePaths,
   resolveImagePath,
@@ -238,11 +238,11 @@ const createMcpServer = (): McpServer => {
         // Server-only arguments are resolved here, before dispatch, so the sandbox never sees them —
         // including inside a batch, whose ops go to the sandbox without passing their own tool.
         let args = rawArgs;
-        if (spec.name === IMPORT_IMAGE_TOOL_NAME) args = await resolveImagePath(rawArgs);
+        if (IMAGE_PATH_TOOLS.has(spec.name)) args = await resolveImagePath(rawArgs, spec.name);
         if (spec.name === BATCH_TOOL_NAME) args = await resolveBatchImagePaths(rawArgs);
         // Inject a stable idempotency key for writes before the (possibly retrying) dispatch.
         const dispatchArgs = spec.kind === 'write' ? { ...args, requestId: newId() } : args;
-        if (spec.name !== IMPORT_IMAGE_TOOL_NAME) {
+        if (!IMAGE_PATH_TOOLS.has(spec.name)) {
           return textResult(await dispatch(spec.name, dispatchArgs));
         }
         // A `path` import is the one case where this side knows something the sandbox's error does
@@ -251,7 +251,7 @@ const createMcpServer = (): McpServer => {
         try {
           return textResult(await dispatch(spec.name, dispatchArgs));
         } catch (err) {
-          throw importImageError(err, (rawArgs as { path?: unknown }).path);
+          throw importImageError(err, (rawArgs as { path?: unknown }).path, spec.name);
         }
       });
     // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
