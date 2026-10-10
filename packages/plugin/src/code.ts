@@ -1,5 +1,6 @@
 import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '../protocol/bridge.js';
 import { parsePanelControl } from '../protocol/panel-control.js';
+import { resumeHostYield } from './cooperative.js';
 import { dispatchSandboxMessage } from './dispatcher.js';
 import { createSandboxHandlers } from './handlers/registry.js';
 import { createPanelController } from './panel.js';
@@ -42,6 +43,7 @@ const emitContext = (): void => {
 const handlers = createSandboxHandlers(figma);
 
 figma.ui.onmessage = (raw: unknown) => {
+  if (resumeHostYield(raw)) return;
   // Panel control (resize / hide / reveal) is driven by the user's own clicks, not the agent, so
   // it's carried out here and never produces a relay reply. Anything else is tool traffic.
   const control = parsePanelControl(raw);

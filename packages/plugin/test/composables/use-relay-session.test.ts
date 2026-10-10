@@ -3,6 +3,10 @@ import { type App, createApp, h, nextTick } from 'vue';
 
 // @vitest-environment happy-dom
 import { createPluginContextEvent, type PluginContextEvent } from '../../protocol/bridge.js';
+import { createHostYield } from '../../protocol/host-yield.js';
+import { resetThrottleForTests, resumeHostYield } from '../../src/cooperative.js';
+import { createSearchNodesHandler } from '../../src/handlers/search-nodes.js';
+import { serializeTrees } from '../../src/serializer.js';
 import type { ActivityEntry, RelayClientState } from '../../ui/relay/state.js';
 
 /**
@@ -131,6 +135,106 @@ describe('useRelaySession', () => {
   afterEach(() => {
     while (mounted.length > 0) mounted.pop()?.unmount();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('cooperative host turns', () => {
+    it.each(['search', 'tree'] as const)(
+      'completes a large %s read with all component metadata while hidden timers never run',
+      async kind => {
+        await setVisibility('hidden');
+        resetThrottleForTests();
+        let elapsed = 0;
+        vi.spyOn(Date, 'now').mockImplementation(() => elapsed);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const hostTurns: number[] = [0];
+        const postMessage = vi.fn<(pluginMessage: unknown) => void>(pluginMessage => {
+          hostTurns.push(elapsed);
+          queueMicrotask(() => {
+            globalThis.dispatchEvent(new MessageEvent('message', { data: { pluginMessage } }));
+          });
+        });
+        const nodes = Array.from({ length: 1025 }, (_, index) => ({
+          id: `2:${index}`,
+          type: 'INSTANCE',
+          get name() {
+            elapsed += 20;
+            return `Instance ${index}`;
+          },
+          visible: true,
+          locked: false,
+          x: 0,
+          y: 0,
+          get width() {
+            elapsed += 20;
+            return 10;
+          },
+          height: 10,
+          parent: null,
+          getMainComponentAsync: async () => ({
+            id: `3:${index}`,
+            name: `Main ${index}`,
+            key: `key-${index}`,
+            parent: null,
+          }),
+        })) as unknown as SceneNode[];
+        const figmaCtx = {
+          ui: { postMessage },
+          currentPage: { children: nodes },
+        } as unknown as typeof figma;
+        vi.stubGlobal('figma', figmaCtx);
+        const parentPost = vi.fn<(envelope: { pluginMessage: unknown }) => void>(envelope => {
+          resumeHostYield(envelope.pluginMessage);
+        });
+        vi.stubGlobal('parent', { postMessage: parentPost });
+        withSession();
+        const initialTimers = vi.getTimerCount();
+
+        const result =
+          kind === 'search'
+            ? await createSearchNodesHandler(figmaCtx)({ type: 'INSTANCE' })
+            : await serializeTrees(nodes);
+        const output = (result as { nodes: Array<{ id: string; mainComponent: { id: string } }> })
+          .nodes;
+        expect(output.map(node => node.id)).toEqual(nodes.map(node => node.id));
+        expect(output.map(node => node.mainComponent.id)).toEqual(
+          nodes.map((_, index) => `3:${index}`),
+        );
+        expect(parentPost).toHaveBeenCalledWith(
+          { pluginMessage: expect.objectContaining({ kind: 'yield-resume', background: true }) },
+          '*',
+        );
+        hostTurns.push(elapsed);
+        // Each node contributes at most 40ms of synchronous getters in this fixture. Backoff
+        // must still give the host a turn within one coarse slice plus that final node.
+        expect(
+          Math.max(...hostTurns.slice(1).map((at, index) => at - hostTurns[index]!)),
+        ).toBeLessThanOrEqual(290);
+        expect(vi.getTimerCount()).toBe(initialTimers);
+        expect(mocks.notifyActivity).not.toHaveBeenCalled();
+      },
+    );
+
+    it('ignores unrelated traffic and stops replying after unmount', () => {
+      const postMessage = vi.fn<(message: unknown, targetOrigin: string) => void>();
+      vi.stubGlobal('parent', { postMessage });
+      withSession();
+      const deliver = (pluginMessage: unknown): void => {
+        globalThis.dispatchEvent(new MessageEvent('message', { data: { pluginMessage } }));
+      };
+      deliver(createHostYield(1, 'yield-resume'));
+      deliver({ tag: '@figwright/yield', kind: 'yield-request', id: -1 });
+      expect(postMessage).not.toHaveBeenCalled();
+      deliver(createHostYield(1, 'yield-request'));
+      expect(postMessage).toHaveBeenCalledExactlyOnceWith(
+        { pluginMessage: createHostYield(1, 'yield-resume') },
+        '*',
+      );
+      mounted.pop()?.unmount();
+      deliver(createHostYield(2, 'yield-request'));
+      expect(postMessage).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('activity routing (the multi-file routing invariant)', () => {

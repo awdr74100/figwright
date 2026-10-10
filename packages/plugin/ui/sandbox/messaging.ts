@@ -14,10 +14,11 @@ import {
   type PluginBridgeMessage,
   type PluginContextEvent,
 } from '../../protocol/bridge.js';
+import type { HostYieldMessage } from '../../protocol/host-yield.js';
 import type { PanelControlMessage } from '../../protocol/panel-control.js';
 
 /** Everything the panel is allowed to send up to the sandbox. */
-export type SandboxOutbound = PluginBridgeMessage | PanelControlMessage;
+export type SandboxOutbound = PluginBridgeMessage | PanelControlMessage | HostYieldMessage;
 
 type ParentFrame = { postMessage: (message: unknown, targetOrigin: string) => void };
 

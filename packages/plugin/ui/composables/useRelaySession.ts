@@ -3,10 +3,11 @@ import { tryOnScopeDispose, useDocumentVisibility } from '@vueuse/core';
 import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from 'vue';
 
 import { type PluginContextEvent } from '../../protocol/bridge.js';
+import { createHostYield, parseHostYield } from '../../protocol/host-yield.js';
 import { RelayClient } from '../relay/client.js';
 import { buildDiagnosticBundle } from '../relay/diagnostics.js';
 import type { RelayClientState } from '../relay/state.js';
-import { onSandboxContext } from '../sandbox/messaging.js';
+import { onSandboxContext, onSandboxMessage, postToSandbox } from '../sandbox/messaging.js';
 import { createToolBridge } from '../sandbox/tool-bridge.js';
 
 export interface RelaySession {
@@ -29,6 +30,15 @@ export interface RelaySession {
  * components — the invariants below are subtle and were arrived at empirically.
  */
 export const useRelaySession = (appVersion: string): RelaySession => {
+  const visibility = useDocumentVisibility();
+  const stopYield = onSandboxMessage(raw => {
+    const message = parseHostYield(raw);
+    if (message?.kind === 'yield-request') {
+      // This listener runs in a host message task. Do not add a timer: hidden-file timers are
+      // precisely the queue a cooperative read must not depend on to resume.
+      postToSandbox(createHostYield(message.id, 'yield-resume', visibility.value === 'hidden'));
+    }
+  });
   const client = new RelayClient({
     // The relay leader always binds DEFAULT_PORT — the server never hops to a fallback — so we probe
     // exactly that one port. Scanning a range would only risk stalling on unrelated local services.
@@ -41,7 +51,6 @@ export const useRelaySession = (appVersion: string): RelaySession => {
 
   const state = ref<RelayClientState>(client.getState());
   const context = ref<PluginContextEvent | null>(null);
-  const visibility = useDocumentVisibility();
 
   // Re-assert this session's activity from the latest known context. The leader routes to the
   // most-recently-active session, so emitting from the foreground bumps this plugin to the front.
@@ -120,6 +129,7 @@ export const useRelaySession = (appVersion: string): RelaySession => {
   });
   tryOnScopeDispose(() => {
     stopSubscribe();
+    stopYield();
     stopContext();
     bridge.dispose();
     client.disconnect().catch(() => {});
