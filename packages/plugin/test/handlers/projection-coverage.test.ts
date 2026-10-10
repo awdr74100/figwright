@@ -1,7 +1,13 @@
-import { SerializedNodeSchema, SerializedTextSegmentSchema } from '@figwright/shared';
+import { readFileSync } from 'node:fs';
+
+import {
+  DesignContextNodeSchema,
+  SerializedNodeSchema,
+  SerializedTextSegmentSchema,
+} from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
-import { project } from '../../src/handlers/get-design-context.js';
+import { project, VISUAL_OVERRIDE_FIELDS } from '../../src/handlers/get-design-context.js';
 
 // Projection-coverage guard. The `full` branch of project() is a hand-copied field list mapping
 // serializeFlatSync's output (SerializedNode) into the design-context view — historically this
@@ -242,5 +248,33 @@ describe('get_design_context projection coverage (full detail)', () => {
       notInSchema: [],
       actuallyProjected: [],
     });
+  });
+});
+
+describe('deduped-instance override entries', () => {
+  // A deduped stub's propertyOverrides entries are assembled field by field outside project(), so
+  // nothing above sees them — cornerSmoothing went out in them undeclared. The schema is what
+  // documents the result and what design_diff's format gate records, so every field an entry can
+  // carry must be on it. Read the fields off the handler's own source, so a new one fails here.
+  it('declares every field an entry can carry', () => {
+    const source = readFileSync(
+      new URL('../../src/handlers/get-design-context.ts', import.meta.url),
+      'utf8',
+    );
+    const assigned = [...source.matchAll(/\bentry\.([A-Za-z]+) =/g)].map(m => m[1]!);
+    const initial = [
+      ...(/const entry: Record<string, unknown> = \{ ([A-Za-z]+):/.exec(source) ?? []),
+    ];
+    expect(assigned.length).toBeGreaterThan(1); // the regexes still match something
+    expect(initial).toHaveLength(2);
+    const emitted = new Set([initial[1]!, ...assigned, ...VISUAL_OVERRIDE_FIELDS]);
+
+    const node = (
+      DesignContextNodeSchema as unknown as { unwrap(): { shape: Record<string, unknown> } }
+    ).unwrap().shape;
+    const entry = (
+      node.propertyOverrides as { unwrap(): { element: { shape: Record<string, unknown> } } }
+    ).unwrap().element.shape;
+    expect([...emitted].filter(f => !(f in entry))).toEqual([]);
   });
 });

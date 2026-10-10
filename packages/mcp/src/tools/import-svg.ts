@@ -10,8 +10,8 @@ export const importSvgTool: ToolSpec = {
     'Import an SVG and place it as editable vector nodes (a FRAME of VECTOR paths) via ' +
     "createNodeFromSvg — use this for vector logos, brand marks, and icons. Provide the SVG's raw " +
     'markup string (read it from the project asset, or inline it). The frame defaults to the SVG ' +
-    'intrinsic size unless width/height are given. For raster photos (PNG / JPG) use import_image ' +
-    'instead; when a matching icon component already exists, create_instance it rather than re-pasting ' +
+    'intrinsic size unless width/height are given. For raster photos (PNG / JPG) use import_image, ' +
+    'or set_image_fill to fill an existing layer, instead; when a matching icon component already exists, create_instance it rather than re-pasting ' +
     'the SVG. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     svg: z.string().describe('Raw SVG markup, e.g. "<svg …>…</svg>"'),

@@ -6,7 +6,7 @@ import { toFigmaPaintsBound } from './bindings.js';
 /**
  * Convert a serialized paint back to a Figma Paint. SOLID and the four gradient types are supported
  * (gradients round-trip serializePaint's gradientStops + gradientTransform). IMAGE/VIDEO/PATTERN
- * are not writable here — use import_image for raster fills.
+ * are not writable here — set_image_fill puts an image into a fill, import_image places a new one.
  */
 export const toFigmaPaint = (paint: SerializedPaint): Paint => {
   if (paint.type === 'SOLID') {
@@ -40,7 +40,10 @@ export const toFigmaPaint = (paint: SerializedPaint): Paint => {
       visible: paint.visible,
     } as GradientPaint;
   }
-  throw new TypeError(`set_fills: unsupported paint type ${paint.type} (SOLID + gradients only)`);
+  throw new TypeError(
+    `set_fills: unsupported paint type ${paint.type} (SOLID + gradients only) — put an image into ` +
+      'a fill with set_image_fill',
+  );
 };
 
 export const createSetFillsHandler =

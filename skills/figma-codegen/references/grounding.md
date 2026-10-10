@@ -19,9 +19,9 @@ per-property fidelity catalog, and how to ground a page too big for one call.
   fill each repeated element's text from that, so cards/rows/form-fields get their distinct titles /
   labels / values without re-expanding the un-deduped tree or drilling per instance.
 - **…and its `propertyOverrides` for what it looks like differently.** The same stub lists each layer
-  whose fill, stroke, effect, radius, opacity, blend or visibility differs from the main component
-  (`{ name, fills: […] }`, `{ name, visible: false }`) — apply those per instance (a prop, a class),
-  or every card renders like the first. An entry's `variableModes` (`{ name, variableModes: { color:
+  whose fill, stroke, effect, radius, corner smoothing, opacity, blend or visibility differs from
+  the main component (`{ name, fills: […] }`, `{ name, visible: false }`) — apply those per instance
+  (a prop, a class), or every card renders like the first. An entry's `variableModes` (`{ name, variableModes: { color:
   "Dark" } }`) is a layer switched to another mode inside that instance: its token names are the
   first instance's, its colours are that mode's (`{}` means it went back to inheriting).
 - **A variable's `codeSyntax` is the declared code name — prefer it over deriving one.** An entry in
@@ -125,6 +125,11 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   `{ topLeft, topRight, bottomRight, bottomLeft }` — round only those corners (`rounded-t` /
   `rounded-tl` / …), **never a uniform radius**. A card rounded on one edge, a tab, or a chat bubble
   round only some corners; collapsing to one radius squares them off or rounds the wrong side.
+- **Corner smoothing.** A node may carry `cornerSmoothing` (0–1; Figma's "iOS" preset is 0.6) — the
+  squircle curve of app icons and iOS-style cards. CSS's closest shape is `corner-shape: squircle`
+  (`superellipse(2)`), which needs the `border-radius` to stay and is not yet in every browser: add it
+  on top of the radius as a progressive enhancement (it is not an exact match for Figma's curve), and
+  reach for a `clip-path` / SVG mask only where the exact curve matters. Never drop the radius for it.
 - **Blend mode.** A node may carry `blendMode` (`MULTIPLY` / `SCREEN` / `OVERLAY` / …) — map it to
   `mix-blend-mode` (on the element) or `background-blend-mode` (a fill over an image). An overlay
   swatch blended onto a photo reads as the wrong flat colour if you drop it.

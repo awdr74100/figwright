@@ -12,7 +12,7 @@ export const setFillsTool: ToolSpec = {
     "{ type:'GRADIENT_LINEAR'|…, gradientStops:[{position,color:{r,g,b,a}}], gradientTransform } " +
     '(round-trips get_node output). A SOLID paint may carry boundVariables ({ color: variableId }) ' +
     'and a gradient stop its own — the paint then tracks that variable instead of the literal. ' +
-    'Returns { ok, nodeId }.',
+    'Images go in with set_image_fill. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Figma node id to repaint'),
     fills: z.array(paintItemSchema).describe('Paints to apply'),

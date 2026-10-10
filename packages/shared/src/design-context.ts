@@ -284,15 +284,15 @@ export interface DesignContextNode {
   /**
    * Per-instance NON-text overrides of a deduped instance — the visual counterpart to
    * `textOverrides`. The fields a child renders that differ from the main component: fill colour,
-   * stroke, effect, radius, opacity, blend, and visibility (hiding an optional element). Without
-   * this a deduped instance that recolours its title or hides a badge would silently collapse to
-   * the main component's defaults (the "every card looks identical" miss). Derived from Figma's
-   * native `instance.overrides`, so only genuinely-changed nodes appear; paints are simplified to
-   * hex like `globalVars` values. Text content stays in `textOverrides`. Only emitted on deduped
-   * instances that actually carry such overrides. `variableModes` is a layer switched to another
-   * variable mode inside this instance (named like a node's own; `{}` when the override clears a
-   * mode the main component sets) — its colours resolve in that mode though its token names don't
-   * change.
+   * stroke, effect, radius and corner smoothing, opacity, blend, and visibility (hiding an optional
+   * element). Without this a deduped instance that recolours its title or hides a badge would
+   * silently collapse to the main component's defaults (the "every card looks identical" miss).
+   * Derived from Figma's native `instance.overrides`, so only genuinely-changed nodes appear;
+   * paints are simplified to hex like `globalVars` values. Text content stays in `textOverrides`.
+   * Only emitted on deduped instances that actually carry such overrides. `variableModes` is a
+   * layer switched to another variable mode inside this instance (named like a node's own; `{}`
+   * when the override clears a mode the main component sets) — its colours resolve in that mode
+   * though its token names don't change.
    */
   propertyOverrides?: readonly {
     name: string;
@@ -300,6 +300,7 @@ export interface DesignContextNode {
     opacity?: number;
     cornerRadius?: number;
     cornerRadii?: unknown;
+    cornerSmoothing?: number;
     fills?: readonly unknown[];
     strokes?: readonly unknown[];
     strokeWeight?: number;
@@ -463,6 +464,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
           opacity: z.number().optional(),
           cornerRadius: z.number().optional(),
           cornerRadii: z.unknown().optional(),
+          cornerSmoothing: z.number().optional(),
           fills: z.array(z.unknown()).optional(),
           strokes: z.array(z.unknown()).optional(),
           strokeWeight: z.number().optional(),
