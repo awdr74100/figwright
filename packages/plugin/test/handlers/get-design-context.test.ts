@@ -1011,6 +1011,15 @@ describe('get_design_context — variable modes', () => {
     expect((await read([inside])).nodes[0]?.variableModes).toEqual({ color: 'Dark' });
   });
 
+  it('leaves out an inherited mode whose collection it cannot read, since it cannot tell it from the default', async () => {
+    const inside = node({
+      id: 'i',
+      explicitVariableModes: {},
+      resolvedVariableModes: { 'VariableCollectionId:lib': 'm:1' },
+    });
+    expect('variableModes' in (await read([inside])).nodes[0]!).toBe(false);
+  });
+
   it('says nothing when the mode in effect is the default', async () => {
     const plain = node({
       id: 'p',

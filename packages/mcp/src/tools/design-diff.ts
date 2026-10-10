@@ -20,9 +20,13 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * Bumped only when the on-disk snapshot shape changes; an older file is re-baselined, never
  * mis-diffed. v2: the read-dimension batch (itemReverseZIndex / strokesIncludedInLayout /
  * targetAspectRatio / numberOfFixedChildren / annotations / filtersApplied) — a v1 baseline lacking
- * those fields would report them as spurious "changes" against a fresh capture.
+ * those fields would report them as spurious "changes" against a fresh capture. v3: every field
+ * added since without a bump — textWrapStyle, the motion summary, component-property references,
+ * gradient cssAngle, font variationSettings, shader identity, cornerSmoothing, variableModes.
+ * test/design-diff-format.test.ts now fails when the captured shape changes, so the next one is a
+ * decision rather than an oversight.
  */
-const SNAPSHOT_FORMAT_VERSION = 2;
+export const SNAPSHOT_FORMAT_VERSION = 3;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

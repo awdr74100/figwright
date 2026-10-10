@@ -321,7 +321,8 @@ const resolveTokens = async (
  * mode in effect on it that is not its collection's default, plus anything set on it explicitly (an
  * explicit default inside a Dark ancestor is a real switch back).
  *
- * Collections the plugin cannot read (an inaccessible library) keep their ids rather than vanish.
+ * A mode set on a node in the read whose collection the plugin cannot read keeps its ids rather
+ * than vanish; one inherited from such a collection is left out, since its default is unknown.
  */
 const resolveVariableModes = async (
   figmaCtx: typeof figma,
@@ -356,7 +357,9 @@ const resolveVariableModes = async (
       if (typeof modeId !== 'string' || collectionId in own) continue;
       // eslint-disable-next-line no-await-in-loop -- cached per collection, few per read
       const collection = await load(collectionId);
-      if (collection !== null && modeId === collection.defaultModeId) continue;
+      // Only a mode known not to be the default is worth saying; an unreadable collection's default
+      // is unknown, so its ids would be a guess on every root.
+      if (collection === null || modeId === collection.defaultModeId) continue;
       effective[collectionId] = modeId;
     }
     if (Object.keys(effective).length > 0) nodes[i]!.variableModes = { ...effective, ...own };
