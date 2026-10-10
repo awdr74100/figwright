@@ -93,6 +93,7 @@ import { createSetInstancePropertiesHandler } from './set-instance-properties.js
 import { createSetLayoutGridsHandler } from './set-layout-grids.js';
 import { createSetLayoutPropsHandler } from './set-layout-props.js';
 import { createSetMaskHandler } from './set-mask.js';
+import { createSetNodeVariableModeHandler } from './set-node-variable-mode.js';
 import { createSetOpacityHandler } from './set-opacity.js';
 import { createSetPositionHandler } from './set-position.js';
 import { createSetReactionsHandler } from './set-reactions.js';
@@ -173,6 +174,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     bind_variable_to_node: createBindVariableToNodeHandler(figmaCtx),
     bind_variable_to_paint: createBindVariableToPaintHandler(figmaCtx),
     import_variable: createImportVariableHandler(figmaCtx),
+    set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),

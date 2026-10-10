@@ -233,6 +233,14 @@ export interface DesignContextNode {
   segments?: readonly DesignContextTextSegment[];
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The variable modes this node renders in, as collection name → mode name (`{ color: "Dark" }`):
+   * every variable bound in its subtree takes that mode's value. On a root it is every non-default
+   * mode in effect, wherever it was set (the node, an ancestor outside this read, or the page);
+   * below a root, only a mode set on that node itself. Token names do not change with the mode —
+   * this is what says a subtree is the dark (or other) variant. Omitted when nothing differs.
+   */
+  variableModes?: Readonly<Record<string, string>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   /**
    * For a sublayer inside a COMPONENT or an INSTANCE: which component property drives which field,
@@ -281,7 +289,10 @@ export interface DesignContextNode {
    * the main component's defaults (the "every card looks identical" miss). Derived from Figma's
    * native `instance.overrides`, so only genuinely-changed nodes appear; paints are simplified to
    * hex like `globalVars` values. Text content stays in `textOverrides`. Only emitted on deduped
-   * instances that actually carry such overrides.
+   * instances that actually carry such overrides. `variableModes` is a layer switched to another
+   * variable mode inside this instance (named like a node's own; `{}` when the override clears a
+   * mode the main component sets) — its colours resolve in that mode though its token names don't
+   * change.
    */
   propertyOverrides?: readonly {
     name: string;
@@ -295,6 +306,7 @@ export interface DesignContextNode {
     strokeAlign?: string;
     effects?: readonly unknown[];
     blendMode?: string;
+    variableModes?: Readonly<Record<string, string>>;
   }[];
   truncated?: boolean;
   children?: readonly DesignContextNode[];
@@ -417,6 +429,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
       .optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
+    variableModes: z.record(z.string(), z.string()).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
     componentPropertyReferences: z
       .object({
@@ -456,6 +469,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
           strokeAlign: z.string().optional(),
           effects: z.array(z.unknown()).optional(),
           blendMode: z.string().optional(),
+          variableModes: z.record(z.string(), z.string()).optional(),
         }),
       )
       .optional(),

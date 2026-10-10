@@ -437,6 +437,7 @@
     "bind_variable_to_node": ["field", "nodeId", "requestId", "variableId"],
     "bind_variable_to_paint": ["index", "nodeId", "requestId", "target", "variableId"],
     "import_variable": ["requestId", "variableKey"],
+    "set_node_variable_mode": ["collectionId", "modeId", "nodeId", "requestId"],
     "rename_variable": ["name", "requestId", "variableId"],
     "set_variable_code_syntax": [
       "codeSyntax",

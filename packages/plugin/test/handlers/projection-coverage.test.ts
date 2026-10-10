@@ -26,6 +26,18 @@ const DROPPED = new Map<string, string>([
 const HANDLED_ELSEWHERE = new Map<string, string>([
   ['mainComponent', 'resolved async per INSTANCE in buildNode'],
   ['children', 'recursed per node in buildNode'],
+  [
+    'explicitVariableModes',
+    'carried as variableModes; resolveVariableModes names it and adds the modes a root inherits',
+  ],
+]);
+
+/**
+ * Emitted by project() under a name the serialized schema does not use, on purpose — each maps the
+ * serialized field it stands for. The typo guard accepts these and nothing else.
+ */
+const RENAMED = new Map<string, string>([
+  ['variableModes', 'explicitVariableModes — named per collection/mode for the design context'],
 ]);
 
 const SOLID = { type: 'SOLID', color: { r: 1, g: 0, b: 0 } };
@@ -128,6 +140,7 @@ const frameInGrid = base({
   strokeStyleId: 'S:stroke',
   effectStyleId: 'S:effect',
   boundVariables: { fills: [{ type: 'VARIABLE_ALIAS', id: 'V:1' }] },
+  explicitVariableModes: { 'VariableCollectionId:1:2': '1:1' },
   componentProperties: { Size: { type: 'VARIANT', value: 'lg' } },
 });
 
@@ -216,7 +229,7 @@ describe('get_design_context projection coverage (full detail)', () => {
   });
 
   it('never emits a field the serialized schema does not define (typo guard)', () => {
-    const unknown = [...projectedKeys].filter(k => !schemaKeys.includes(k));
+    const unknown = [...projectedKeys].filter(k => !schemaKeys.includes(k) && !RENAMED.has(k));
     const unknownSeg = [...projectedSegmentKeys].filter(k => !segmentSchemaKeys.includes(k));
     expect({ unknown, unknownSeg }).toEqual({ unknown: [], unknownSeg: [] });
   });

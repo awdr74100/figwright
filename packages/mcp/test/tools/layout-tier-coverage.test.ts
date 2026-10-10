@@ -65,6 +65,7 @@ const APPEARANCE: Record<string, string> = {
   segments: 'per-run typography — the single largest text-side cost',
   styleIds: 'token binding',
   boundVariables: 'token binding — measured as the single largest field cost in a full payload',
+  variableModes: 'which theme the colours resolve in — moot once this tier has dropped the colours',
   motion: 'animation, not layout',
   mainComponent: 'full-only resolved object; mainComponentId carries identity in the compact base',
   fill: 'globalVars ref (appearance)',

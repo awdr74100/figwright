@@ -1622,6 +1622,53 @@ const setTimelineDurationInverse: BatchInverse = {
 };
 
 /** Tool name → inverse. Membership here is the allowlist: only these ops may appear in a batch. */
+// ── Variable modes ──────────────────────────────────────────────────────────
+
+interface VariableModeState {
+  id: string;
+  collectionId: string;
+  /** The mode set explicitly on the node before, or null when it inherited. */
+  previous: string | null;
+}
+
+type ModeBearer = BaseNode & {
+  explicitVariableModes: Readonly<Record<string, string>>;
+  setExplicitVariableModeForCollection(collection: VariableCollection, modeId: string): void;
+  clearExplicitVariableModeForCollection(collection: VariableCollection): void;
+};
+
+/** Set_node_variable_mode: put back the node's own setting for that collection, or clear it. */
+const variableModeInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const tool = 'set_node_variable_mode';
+    const id = stringParam(params, 'nodeId', tool);
+    const collectionId = stringParam(params, 'collectionId', tool);
+    const node = await nodeOf(figmaCtx, id, tool);
+    if (!('explicitVariableModes' in node)) {
+      throw new Error(`batch/${tool}: node ${id} (${node.type}) cannot take a variable mode`);
+    }
+    const state: VariableModeState = {
+      id,
+      collectionId,
+      previous: (node as ModeBearer).explicitVariableModes[collectionId] ?? null,
+    };
+    return state;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, collectionId, previous } = captured as VariableModeState;
+    const node = await live(figmaCtx, id);
+    if (node === null) return undefined;
+    const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(collectionId);
+    if (collection === null) {
+      return `variable collection ${collectionId} is gone, so ${id}'s mode for it was not put back`;
+    }
+    if (previous === null) (node as ModeBearer).clearExplicitVariableModeForCollection(collection);
+    else (node as ModeBearer).setExplicitVariableModeForCollection(collection, previous);
+    return undefined;
+  },
+  touches: (_params, captured) => [(captured as VariableModeState).id],
+};
+
 const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Single-node properties. Snapshot every field the handler can write, not just the headline one,
   // plus the bindings a write drops. Order matters where a uniform value precedes per-side/corner
@@ -1660,6 +1707,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Styles and bindings on nodes.
   apply_style_to_node: applyStyleInverse,
   bind_variable_to_node: bindToNodeInverse,
+  set_node_variable_mode: variableModeInverse,
   bind_variable_to_paint: bindToPaintInverse,
   // Multi-node.
   move_nodes: nodesSnapshot(

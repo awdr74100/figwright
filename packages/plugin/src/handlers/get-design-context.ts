@@ -217,6 +217,9 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.styleIds !== undefined)
     out.styleIds = cleanStyleIds(flat.styleIds as Record<string, string>);
   if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
+  // Ids for now (collection id → mode id); resolveVariableModes names them once the tree is built,
+  // and adds to each root the modes it inherits from outside the read.
+  if (flat.explicitVariableModes !== undefined) out.variableModes = flat.explicitVariableModes;
   if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
   if (flat.componentPropertyReferences !== undefined)
     out.componentPropertyReferences = flat.componentPropertyReferences;
@@ -305,6 +308,92 @@ const resolveTokens = async (
   }
 
   return out;
+};
+
+/**
+ * Name every node's variable modes (collection name → mode name), and give each root the modes it
+ * renders in from outside the read.
+ *
+ * A mode is inherited: a frame switched to Dark makes its whole subtree dark, and so does a Dark
+ * page. Below a root, the tree carries each setting where it was made; a root would carry only its
+ * own, so a read that starts inside a Dark frame — or on a Dark page — would show no mode at all
+ * and look exactly like the light variant (the token names are identical). So a root takes every
+ * mode in effect on it that is not its collection's default, plus anything set on it explicitly (an
+ * explicit default inside a Dark ancestor is a real switch back).
+ *
+ * Collections the plugin cannot read (an inaccessible library) keep their ids rather than vanish.
+ */
+const resolveVariableModes = async (
+  figmaCtx: typeof figma,
+  roots: readonly SceneNode[],
+  nodes: DesignContextNode[],
+): Promise<void> => {
+  const getCollection = figmaCtx.variables?.getVariableCollectionByIdAsync;
+  const collections = new Map<string, VariableCollection | null>();
+  const load = async (id: string): Promise<VariableCollection | null> => {
+    if (!collections.has(id)) {
+      let collection: VariableCollection | null = null;
+      try {
+        collection =
+          typeof getCollection === 'function'
+            ? await getCollection.call(figmaCtx.variables, id)
+            : null;
+      } catch {
+        /* unreadable — the ids stand in for the names */
+      }
+      collections.set(id, collection);
+    }
+    return collections.get(id) ?? null;
+  };
+
+  // Roots first: what each one inherits, merged under what it sets itself.
+  for (let i = 0; i < roots.length; i += 1) {
+    const resolved = (roots[i] as { resolvedVariableModes?: unknown }).resolvedVariableModes;
+    if (typeof resolved !== 'object' || resolved === null) continue;
+    const own = nodes[i]!.variableModes ?? {};
+    const effective: Record<string, string> = {};
+    for (const [collectionId, modeId] of Object.entries(resolved)) {
+      if (typeof modeId !== 'string' || collectionId in own) continue;
+      // eslint-disable-next-line no-await-in-loop -- cached per collection, few per read
+      const collection = await load(collectionId);
+      if (collection !== null && modeId === collection.defaultModeId) continue;
+      effective[collectionId] = modeId;
+    }
+    if (Object.keys(effective).length > 0) nodes[i]!.variableModes = { ...effective, ...own };
+  }
+
+  // Nodes, and the override entries of deduped instances, that carry modes still keyed by id.
+  const carriers: { variableModes?: Readonly<Record<string, string>> }[] = [];
+  const visit = (n: DesignContextNode): void => {
+    if (n.variableModes !== undefined) carriers.push(n);
+    for (const o of n.propertyOverrides ?? []) if (o.variableModes !== undefined) carriers.push(o);
+    if (n.children) for (const c of n.children) visit(c);
+  };
+  for (const n of nodes) visit(n);
+  if (carriers.length === 0) return;
+
+  const ids = new Set(carriers.flatMap(n => Object.keys(n.variableModes!)));
+  await Promise.all([...ids].map(load));
+  // Two collections can share a name (a local `color` and a library's); qualify those with the id.
+  const byName = new Map<string, number>();
+  for (const id of ids) {
+    const name = collections.get(id)?.name;
+    if (name !== undefined) byName.set(name, (byName.get(name) ?? 0) + 1);
+  }
+  const keyOf = (id: string): string => {
+    const name = collections.get(id)?.name;
+    if (name === undefined) return id;
+    return (byName.get(name) ?? 0) > 1 ? `${name} (${id})` : name;
+  };
+  const modeName = (collectionId: string, modeId: string): string =>
+    collections.get(collectionId)?.modes.find(m => m.modeId === modeId)?.name ?? modeId;
+  for (const n of carriers) {
+    const named: Record<string, string> = {};
+    for (const [collectionId, modeId] of Object.entries(n.variableModes!)) {
+      named[keyOf(collectionId)] = modeName(collectionId, modeId);
+    }
+    n.variableModes = named;
+  }
 };
 
 /** Width buckets mirror responsive.md: ~≥1280 desktop · 600–1280 tablet · <600 mobile. */
@@ -421,8 +510,11 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
   for (const ov of ovs) {
     if (ov.id === instance.id) continue; // instance-level (componentProperties), not a child's visual
     const fields = ov.overriddenFields as readonly string[];
+    // `explicitVariableModes` is missing from the typings' NodeChangeProperty, but Figma reports it
+    // for a layer switched to another mode inside the instance (seen live).
     if (
       fields.includes('visible') ||
+      fields.includes('explicitVariableModes') ||
       fields.some(f => (VISUAL_OVERRIDE_FIELDS as readonly string[]).includes(f))
     ) {
       overridden.set(ov.id, fields);
@@ -453,6 +545,12 @@ const collectPropertyOverrides = (instance: InstanceNode): Record<string, unknow
         typeof n.cornerSmoothing === 'number'
       ) {
         entry.cornerSmoothing = n.cornerSmoothing;
+      }
+      // Ids here, named by resolveVariableModes with the rest. An override that clears a mode the
+      // main component sets leaves none on the node: `{}` says so, where omitting it would read as
+      // "same as the main component".
+      if (overridden.get(n.id)?.includes('explicitVariableModes') === true) {
+        entry.variableModes = proj.variableModes ?? {};
       }
       // Only a node that actually carries a visual override (beyond its name) is worth an entry.
       if (Object.keys(entry).length > 1) out.push(entry);
@@ -724,6 +822,7 @@ export const createGetDesignContextHandler =
     // Full detail only: resolve token ids → names (P2), then dedupe styles into globalVars and
     // measure the simplification (P3). Below full, styleIds/boundVariables/fills aren't surfaced.
     if (ctx.detail === 'full') {
+      await resolveVariableModes(figmaCtx, roots, nodes);
       Object.assign(result, await resolveTokens(figmaCtx, nodes));
       const { nodes: deduped, globalVars } = dedupeStyles(nodes);
       result.nodes = deduped;

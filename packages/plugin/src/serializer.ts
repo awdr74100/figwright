@@ -391,6 +391,22 @@ const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
 
   const bound = collectBoundVariables((node as { boundVariables?: unknown }).boundVariables);
   if (bound !== undefined) out.boundVariables = bound;
+
+  // A mode set on this node (a frame switched to Dark): every variable bound below it resolves in
+  // that mode. Bindings alone cannot show it — the token names are the same in every mode.
+  const modes = explicitModesOf(node);
+  if (modes !== undefined) out.explicitVariableModes = modes;
+};
+
+/** A node's explicitly set variable modes (collection id → mode id), or undefined when none. */
+export const explicitModesOf = (node: BaseNode): Record<string, string> | undefined => {
+  const raw = (node as { explicitVariableModes?: unknown }).explicitVariableModes;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const modes: Record<string, string> = {};
+  for (const [collectionId, modeId] of Object.entries(raw)) {
+    if (typeof modeId === 'string') modes[collectionId] = modeId;
+  }
+  return Object.keys(modes).length > 0 ? modes : undefined;
 };
 
 // Per-run fields we break a mixed TEXT node on. Beyond the 5 style basics we ask for the structural

@@ -103,6 +103,7 @@ import { setInstancePropertiesTool } from './set-instance-properties.js';
 import { setLayoutGridsTool } from './set-layout-grids.js';
 import { setLayoutPropsTool } from './set-layout-props.js';
 import { setMaskTool } from './set-mask.js';
+import { setNodeVariableModeTool } from './set-node-variable-mode.js';
 import { setOpacityTool } from './set-opacity.js';
 import { setPositionTool } from './set-position.js';
 import { setReactionsTool } from './set-reactions.js';
@@ -218,6 +219,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   bindVariableToNodeTool,
   bindVariableToPaintTool,
   importVariableTool,
+  setNodeVariableModeTool,
   renameVariableTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
