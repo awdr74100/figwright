@@ -19,9 +19,9 @@ per-property fidelity catalog, and how to ground a page too big for one call.
   fill each repeated element's text from that, so cards/rows/form-fields get their distinct titles /
   labels / values without re-expanding the un-deduped tree or drilling per instance.
 - **…and its `propertyOverrides` for what it looks like differently.** The same stub lists each layer
-  whose fill, stroke, effect, radius, opacity, blend or visibility differs from the main component
-  (`{ name, fills: […] }`, `{ name, visible: false }`) — apply those per instance (a prop, a class),
-  or every card renders like the first. An entry's `variableModes` (`{ name, variableModes: { color:
+  whose fill, stroke, effect, radius, corner smoothing, opacity, blend or visibility differs from
+  the main component (`{ name, fills: […] }`, `{ name, visible: false }`) — apply those per instance
+  (a prop, a class), or every card renders like the first. An entry's `variableModes` (`{ name, variableModes: { color:
   "Dark" } }`) is a layer switched to another mode inside that instance: its token names are the
   first instance's, its colours are that mode's (`{}` means it went back to inheriting).
 - **A variable's `codeSyntax` is the declared code name — prefer it over deriving one.** An entry in

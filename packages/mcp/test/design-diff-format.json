@@ -237,6 +237,7 @@
     "<__schema0>.propertyOverrides[].blendMode",
     "<__schema0>.propertyOverrides[].cornerRadii",
     "<__schema0>.propertyOverrides[].cornerRadius",
+    "<__schema0>.propertyOverrides[].cornerSmoothing",
     "<__schema0>.propertyOverrides[].effects",
     "<__schema0>.propertyOverrides[].fills",
     "<__schema0>.propertyOverrides[].name",

@@ -477,7 +477,7 @@ const collectTextOverrides = (instance: SceneNode): { name: string; characters: 
 };
 
 /** Visual (non-text) fields a deduped instance may override; text lives in textOverrides. */
-const VISUAL_OVERRIDE_FIELDS = [
+export const VISUAL_OVERRIDE_FIELDS = [
   'fills',
   'strokes',
   'strokeWeight',

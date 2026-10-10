@@ -29,6 +29,9 @@ export const getDesignContextTool: ToolSpec = {
     'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +
     'characters } — the visible text it actually renders) and propertyOverrides (its per-instance ' +
     'visual diffs), so per-instance content survives without re-expanding the collapsed subtree. ' +
+    'A node carrying variableModes ({ color: "Dark" }) renders in that variable mode: its values ' +
+    "are that mode's but its token names are the default's, so keep the token refs and scope the " +
+    "subtree in the project's theme mechanism (a root lists the modes it inherits too). " +
     'A tree too large to return whole comes back as a sectionPlan instead ({ sections: [{ nodeId, ' +
     'name, nodes, … }] } + a note): do not retry unscoped — call again per section nodeId at ' +
     'detail full and build section by section. On a full result, raw color values that exactly ' +
