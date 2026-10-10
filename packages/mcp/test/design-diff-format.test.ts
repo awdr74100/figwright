@@ -30,12 +30,14 @@ interface JsonNode {
   allOf?: JsonNode[];
 }
 
-/** Every property path of the captured result, recursive node definitions walked once. */
-const capturedFields = (): string[] => {
-  const json = z.toJSONSchema(GetDesignContextResultSchema, {
-    unrepresentable: 'any',
-    io: 'output',
-  }) as JsonNode;
+/**
+ * Every property path of a result schema, each shared definition walked once. A definition is
+ * labelled by the path it is first reached at (`nodes[]`), never by its key in `$defs`: that key is
+ * Zod's internal name (`__schema0`), and a Zod release that renamed it would otherwise report every
+ * node field as changed — and the report would advise a version bump that throws away every user's
+ * baseline for a shape that did not move.
+ */
+const fieldsOf = (json: JsonNode): string[] => {
   const defs = json.$defs ?? {};
   const fields = new Set<string>();
   const visited = new Set<string>();
@@ -45,7 +47,7 @@ const capturedFields = (): string[] => {
       const name = node.$ref.split('/').at(-1)!;
       if (visited.has(name)) return;
       visited.add(name);
-      walk(defs[name], `<${name}>`);
+      walk(defs[name], path);
       return;
     }
     for (const [key, child] of Object.entries(node.properties ?? {})) {
@@ -62,6 +64,14 @@ const capturedFields = (): string[] => {
   walk(json, '');
   return [...fields].toSorted();
 };
+
+const resultSchema = (): JsonNode =>
+  z.toJSONSchema(GetDesignContextResultSchema, {
+    unrepresentable: 'any',
+    io: 'output',
+  }) as JsonNode;
+
+const capturedFields = (): string[] => fieldsOf(resultSchema());
 
 interface Recorded {
   version: number;
@@ -81,8 +91,21 @@ const recorded = JSON.parse(readFileSync(RECORD_PATH, 'utf8')) as Recorded;
 it('walks the real result shape', () => {
   // A walk that silently found nothing would pass forever; these are long-standing fields.
   expect(current.fields).toEqual(
-    expect.arrayContaining(['nodes', 'globalVars', '<__schema0>.id', '<__schema0>.children']),
+    expect.arrayContaining(['nodes', 'globalVars', 'nodes[].id', 'nodes[].children']),
   );
+});
+
+it("does not depend on Zod's names for its definitions", () => {
+  // Rename every definition the way a Zod release might, and point every $ref at the new name.
+  const json = resultSchema();
+  const renamed = JSON.parse(
+    JSON.stringify(json).replaceAll(
+      /"(#\/\$defs\/)?(__schema\d+)"/g,
+      (_m, ref: string | undefined, name: string) => `"${ref ?? ''}renamed_${name}"`,
+    ),
+  ) as JsonNode;
+  expect(Object.keys(renamed.$defs ?? {})).not.toEqual(Object.keys(json.$defs ?? {}));
+  expect(fieldsOf(renamed)).toEqual(fieldsOf(json));
 });
 
 it('versions every change to what a baseline captures', () => {
