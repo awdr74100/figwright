@@ -186,6 +186,7 @@ const STROKE_WEIGHTS = [
 ];
 const CORNERS = [
   'cornerRadius',
+  'cornerSmoothing',
   'topLeftRadius',
   'topRightRadius',
   'bottomRightRadius',
@@ -691,6 +692,7 @@ interface GeometryState {
   id: string;
   geometry: GeometrySnapshot;
   bindings: BindingSnapshot;
+  props: PropsSnapshot;
 }
 
 /** Set_layout_props writes sizing, grow/align, positioning and min/max — the box, whole. */
@@ -704,6 +706,7 @@ const layoutPropsInverse: BatchInverse = {
     const state: GeometryState = {
       id,
       geometry: captureGeometry(node as SceneNode),
+      props: await captureProps(figmaCtx, node, ['clipsContent']),
       bindings: await captureBindings(figmaCtx, node, [
         'minWidth',
         'maxWidth',
@@ -716,11 +719,12 @@ const layoutPropsInverse: BatchInverse = {
     return state;
   },
   async undo(figmaCtx, _params, captured) {
-    const { id, geometry, bindings } = captured as GeometryState;
+    const { id, geometry, bindings, props } = captured as GeometryState;
     const node = await live(figmaCtx, id);
     if (node === null) return undefined;
     unbindAdded(node, bindings);
     restoreGeometry(node as SceneNode, geometry);
+    await restoreProps(node, props);
     rebind(node, bindings);
     return undefined;
   },
