@@ -1109,6 +1109,52 @@ describe('get_design_context — variable modes', () => {
     expect(result.nodes[2]?.propertyOverrides).toEqual([{ name: 'Label', variableModes: {} }]);
   });
 
+  // Figma keeps a node's explicit mode after the mode is deleted (seen live) and renders the node as
+  // if it were unset; '7:7' is not among color's modes.
+  it('drops a mode deleted from its collection, on a root and below it', async () => {
+    const child = node({ id: 'c', explicitVariableModes: { [color.id]: '7:7' } });
+    const frame = node({
+      id: 'f',
+      explicitVariableModes: { [color.id]: '7:7' },
+      resolvedVariableModes: { [color.id]: '7:7' },
+      children: [child],
+    });
+    const result = await read([frame]);
+    expect('variableModes' in result.nodes[0]!).toBe(false);
+    expect('variableModes' in result.nodes[0]!.children![0]!).toBe(false);
+  });
+
+  it('reports what a root inherits when its own explicit mode was deleted', async () => {
+    const frame = node({
+      id: 'f',
+      explicitVariableModes: { [color.id]: '7:7' },
+      resolvedVariableModes: { [color.id]: '9:0' },
+    });
+    expect((await read([frame])).nodes[0]?.variableModes).toEqual({ color: 'Dark' });
+  });
+
+  it('turns a deleted mode in a deduped override into {}, which is what renders', async () => {
+    const instance = (id: string, label: Record<string, unknown>, overrides: unknown[]) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        getMainComponentAsync: async () => ({ id: 'main', name: 'Card', key: 'k' }),
+        overrides,
+        children: [node({ id: `I${id};1`, name: 'Label', ...label })],
+      });
+    const result = await read(
+      [
+        instance('a', {}, []),
+        instance('b', { explicitVariableModes: { [color.id]: '7:7' } }, [
+          { id: 'Ib;1', overriddenFields: ['explicitVariableModes'] },
+        ]),
+      ],
+      {},
+      { detail: 'full', dedupeComponents: true },
+    );
+    expect(result.nodes[1]?.propertyOverrides).toEqual([{ name: 'Label', variableModes: {} }]);
+  });
+
   it('leaves the compact view alone', async () => {
     const frame = node({
       id: 'f',
