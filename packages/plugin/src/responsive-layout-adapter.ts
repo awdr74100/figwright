@@ -235,7 +235,13 @@ const validateGrid = (
       fail(rootId, node.id, 'Automatic reflow must be explicitly configured');
     if (
       node.children.some(
-        n => n.layoutPositioning === 'ABSOLUTE' || n.gridRowSpan !== 1 || n.gridColumnSpan !== 1,
+        n =>
+          !('layoutPositioning' in n) ||
+          !('gridRowSpan' in n) ||
+          !('gridColumnSpan' in n) ||
+          n.layoutPositioning === 'ABSOLUTE' ||
+          n.gridRowSpan !== 1 ||
+          n.gridColumnSpan !== 1,
       )
     )
       fail(rootId, node.id, 'Automatic reflow supports only single-cell non-absolute children');
@@ -245,6 +251,10 @@ const validateGrid = (
     if (
       node.children.some(
         n =>
+          !('gridColumnAnchorIndex' in n) ||
+          !('gridColumnSpan' in n) ||
+          !('gridRowAnchorIndex' in n) ||
+          !('gridRowSpan' in n) ||
           n.gridColumnAnchorIndex + n.gridColumnSpan > columns ||
           n.gridRowAnchorIndex + n.gridRowSpan > rows,
       )
