@@ -328,6 +328,55 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
     });
   });
 
+  it('advertises public responsive rules and transports actual controller status', async () => {
+    const advertised = tools.find(t => t.name === 'configure_responsive_layout')!;
+    expect(advertised.inputSchema.additionalProperties).toBe(false);
+    expect(JSON.stringify(advertised.inputSchema)).not.toMatch(
+      /fileName|mainId|sidebar|fitRules|responsive_layout_v1/,
+    );
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const status = {
+      enabled: false,
+      config: null,
+      version: null,
+      breakpointPreset: null,
+      effectiveBreakpoints: [],
+      roots: [],
+    };
+    const seen: unknown[] = [];
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      handlers: {
+        configure_responsive_layout: params => {
+          seen.push(params);
+          return { accepted: true, applied: false, ...status };
+        },
+        get_responsive_layout: () => status,
+      },
+    });
+    try {
+      const configured = await server.send('tools/call', {
+        name: 'configure_responsive_layout',
+        arguments: { enabled: false },
+      });
+      const content = configured.result?.content as { text: string }[];
+      expect(JSON.parse(content[0]!.text)).toEqual({ accepted: true, applied: false, ...status });
+      expect(seen[0]).toMatchObject({ enabled: false, requestId: expect.any(String) });
+      const read = await server.send('tools/call', {
+        name: 'get_responsive_layout',
+        arguments: {},
+      });
+      expect(JSON.parse(((read.result?.content ?? []) as { text: string }[])[0]!.text)).toEqual(
+        status,
+      );
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
   it('warns on a real tools/call when the connected plugin is out of date', async () => {
     // The assembled product, over real stdio, against a real plugin socket. Every piece of this had
     // unit coverage and the wiring in index.ts had none: deleting the append there left all 1387

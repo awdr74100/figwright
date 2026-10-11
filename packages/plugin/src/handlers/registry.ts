@@ -1,6 +1,13 @@
+import { ResponsiveLayoutConfigureInputSchema } from '@figwright/shared';
+import { z } from 'zod';
+
 import type { SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { withInstanceIdLookup } from '../node-lookup.js';
+import {
+  createResponsiveLayoutController,
+  type ResponsiveLayoutController,
+} from '../responsive-layout.js';
 import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
@@ -122,11 +129,25 @@ import { createUpdateVariableCollectionHandler } from './update-variable-collect
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
  */
-export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers => {
+const responsiveWireInput = ResponsiveLayoutConfigureInputSchema.extend({
+  requestId: z.string().optional(),
+});
+const responsiveGetInput = z.strictObject({});
+export const createSandboxHandlers = (
+  figmaApi: typeof figma,
+  responsive: Pick<
+    ResponsiveLayoutController,
+    'configure' | 'get'
+  > = createResponsiveLayoutController(figmaApi),
+): SandboxHandlers => {
   const figmaCtx = withInstanceIdLookup(figmaApi);
   const cache = createIdempotencyCache();
 
   const rawWrites: SandboxHandlers = {
+    configure_responsive_layout: params => {
+      const { requestId: _requestId, ...input } = responsiveWireInput.parse(params);
+      return responsive.configure(input);
+    },
     set_fills: createSetFillsHandler(figmaCtx),
     set_text: createSetTextHandler(figmaCtx),
     set_text_properties: createSetTextPropertiesHandler(figmaCtx),
@@ -221,6 +242,10 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
   };
 
   const handlers: SandboxHandlers = {
+    get_responsive_layout: params => {
+      responsiveGetInput.parse(params ?? {});
+      return responsive.get();
+    },
     ping: createPingHandler(figmaCtx),
     get_selection: createGetSelectionHandler(figmaCtx),
     get_document: createGetDocumentHandler(figmaCtx),

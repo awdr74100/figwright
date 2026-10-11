@@ -1817,6 +1817,8 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
  * either side without someone deciding which, and saying why when it is this one.
  */
 export const NON_BATCHABLE: Readonly<Record<string, string>> = {
+  configure_responsive_layout:
+    'responsive configuration persists a controller and ongoing writes; it has no faithful batch inverse — configure it separately',
   import_variable:
     'a library import has no faithful inverse; import the variable before the batch and use its returned variableId',
   import_style:

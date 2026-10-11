@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
 import { WIRE_TOOL_SCHEMAS } from '../packages/mcp/src/tools/wire-schema.js';
 import { toToolDefinition } from '../packages/mcp/test/tool-schema.js';
 import { BATCHABLE_TOOLS, NON_BATCHABLE } from '../packages/plugin/src/handlers/batch.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
+import { createResponsiveLayoutController } from '../packages/plugin/src/responsive-layout.js';
+import { createResponsiveFixture } from '../packages/plugin/test/responsive-layout-fixtures.js';
 
 // Cross-package guard: a tool is wired across ~6 places (server def + ListTools + WRITE set, plugin
 // handler + idempotent wrap + batch inverse). Forgetting one fails silently at runtime. These tests
@@ -62,6 +64,28 @@ const missingType = (schema: unknown, path: string, out: string[]): void => {
 };
 
 describe('tool registry', () => {
+  it('registry uses one responsive controller, dedupes configure and rejects batch', async () => {
+    const f = createResponsiveFixture();
+    const c = createResponsiveLayoutController(f.api);
+    const configure = vi.spyOn(c, 'configure');
+    const handlers = createSandboxHandlers(f.api, c);
+    const params = { enabled: false, config: f.config, requestId: 'same' };
+    const first = await handlers.configure_responsive_layout!(params);
+    expect(await handlers.configure_responsive_layout!(params)).toEqual(first);
+    expect(configure).toHaveBeenCalledTimes(1);
+    expect(await handlers.get_responsive_layout!({})).toEqual(c.get());
+    await expect(
+      handlers.configure_responsive_layout!({ enabled: false, unknown: true }),
+    ).rejects.toThrow(Error);
+    await expect(
+      handlers.batch!({
+        ops: [{ tool: 'configure_responsive_layout', params: { enabled: false } }],
+      }),
+    ).rejects.toThrow(/not batchable/);
+    expect(WIRE_TOOL_SCHEMAS.has('configure_responsive_layout')).toBe(true);
+    expect(NON_BATCHABLE).toHaveProperty('configure_responsive_layout');
+    c.dispose();
+  });
   it('server-dispatched tools and plugin handlers are exactly in sync', () => {
     const onlyServer = dispatchedNames.filter(n => !handlerKeys.includes(n));
     const onlyPlugin = handlerKeys.filter(n => !serverNames.includes(n));

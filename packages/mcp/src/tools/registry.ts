@@ -85,6 +85,7 @@ import { renameVariableTool } from './rename-variable.js';
 import { reorderNodesTool } from './reorder-nodes.js';
 import { reparentNodesTool } from './reparent-nodes.js';
 import { resizeNodesTool } from './resize-nodes.js';
+import { configureResponsiveLayoutTool, getResponsiveLayoutTool } from './responsive-layout.js';
 import { rotateNodesTool } from './rotate-nodes.js';
 import { saveImageFillsTool } from './save-image-fills.js';
 import { saveScreenshotsTool } from './save-screenshots.js';
@@ -261,6 +262,8 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   removeManualKeyframeTrackTool,
   setTimelineDurationTool,
   batchTool,
+  configureResponsiveLayoutTool,
+  getResponsiveLayoutTool,
 ];
 
 /**

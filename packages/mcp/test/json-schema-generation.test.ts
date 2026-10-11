@@ -80,6 +80,12 @@ const CANARIES: Canary[] = [
   { what: 'boolean', schema: z.boolean(), json: { type: 'boolean' } },
   { what: 'null', schema: z.null(), json: { type: 'null' } },
   { what: 'literal', schema: z.literal('LIT'), json: { type: 'string', const: 'LIT' } },
+  { what: 'numeric version literal', schema: z.literal(1), json: { type: 'number', const: 1 } },
+  {
+    what: 'array with maximum length',
+    schema: z.array(z.string()).max(24),
+    json: { maxItems: 24, type: 'array', items: { type: 'string' } },
+  },
   { what: 'enum', schema: z.enum(['A', 'B']), json: { type: 'string', enum: ['A', 'B'] } },
   {
     what: 'array',
