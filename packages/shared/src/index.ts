@@ -1,5 +1,6 @@
 export * from './codec.js';
 export * from './components.js';
+export * from './responsive-layout.js';
 export * from './design-context.js';
 export * from './design-context-dedupe.js';
 export * from './envelope.js';
