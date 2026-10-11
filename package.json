@@ -32,10 +32,10 @@
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
-    "@types/node": "^24.19.1",
+    "@types/node": "^24.19.2",
     "@vitest/coverage-v8": "^5.0.3",
     "changelogen": "^0.6.2",
-    "knip": "^6.40.0",
+    "knip": "^6.41.0",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "typescript": "^6.0.3",
@@ -44,5 +44,5 @@
   "engines": {
     "node": "^24.11.0 || >=26.0.0"
   },
-  "packageManager": "pnpm@12.10.1"
+  "packageManager": "pnpm@12.11.2"
 }
