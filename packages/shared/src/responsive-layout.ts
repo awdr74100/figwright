@@ -122,7 +122,7 @@ export type ResponsiveGridValues = Extract<ResponsiveAction, { type: 'grid' }>['
 export type ResponsiveTrack = z.infer<typeof track>;
 export interface ResolvedResponsiveBreakpoint {
   minWidth: number;
-  at?: string;
+  at?: string | undefined;
   source: 'preset' | 'config' | 'root' | 'numeric';
   overrides: ResponsiveAction[];
 }
@@ -233,4 +233,73 @@ export const evaluateResponsiveRoot = (
     ...(selected.at === undefined ? {} : { at: selected.at }),
     actions,
   };
+};
+
+const resolvedBreakpointSchema = z.strictObject({
+  minWidth: width,
+  at: id.optional(),
+  source: z.enum(['preset', 'config', 'root', 'numeric']),
+  overrides: z.array(action).max(128),
+});
+export const SavedResponsiveLayoutSchema = z
+  .strictObject({
+    version: z.literal(1),
+    enabled: z.boolean(),
+    resolved: z.strictObject({
+      config: ResponsiveLayoutConfigSchema,
+      breakpointPreset: z.enum(['standard-v1', 'none']),
+      roots: z
+        .array(
+          z.strictObject({
+            rootId: id,
+            base: z.array(action).max(128),
+            breakpoints: z.array(resolvedBreakpointSchema).min(1).max(24),
+          }),
+        )
+        .min(1)
+        .max(32),
+    }),
+  })
+  .superRefine((saved, ctx) => {
+    try {
+      // Validate consistency with this immutable preset version; retain the saved resolved values.
+      if (
+        JSON.stringify(resolveResponsiveLayoutConfig(saved.resolved.config)) !==
+        JSON.stringify(saved.resolved)
+      )
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Saved responsive thresholds or actions are inconsistent',
+        });
+    } catch (error) {
+      ctx.addIssue({
+        code: 'custom',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+export interface ResponsiveRootState {
+  rootId: string;
+  status: 'disabled' | 'paused' | 'active' | 'error';
+  width?: number;
+  minWidth?: number;
+  at?: string;
+  lastAppliedAt?: number;
+  error?: { nodeId?: string; phase: 'resolve' | 'validate' | 'apply'; message: string };
+}
+export interface ResponsiveLayoutStatus {
+  enabled: boolean;
+  config: ResponsiveLayoutConfig | null;
+  version: 1 | null;
+  breakpointPreset: 'standard-v1' | 'none' | null;
+  effectiveBreakpoints: {
+    rootId: string;
+    breakpoints: Omit<ResolvedResponsiveBreakpoint, 'overrides'>[];
+  }[];
+  roots: ResponsiveRootState[];
+  error?: { phase: 'load'; message: string };
+}
+export type ResponsiveLayoutConfigureResult = ResponsiveLayoutStatus & {
+  accepted: true;
+  applied: boolean;
 };

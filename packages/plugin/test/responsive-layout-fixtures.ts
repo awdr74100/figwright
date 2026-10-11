@@ -52,6 +52,11 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
         if (v === null) delete data.boundVariables[field];
         else data.boundVariables[field] = { type: 'VARIABLE_ALIAS', id: v.id };
       },
+      on: (event: string, cb: () => void) => {
+        if (!listeners.has(event)) listeners.set(event, new Set());
+        listeners.get(event)!.add(cb);
+      },
+      off: (event: string, cb: () => void) => listeners.get(event)?.delete(cb),
     };
     const node = new Proxy(data, {
       set: (target, field, value) => {
