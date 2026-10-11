@@ -317,6 +317,8 @@ export const SerializedAutoLayoutSchema = z.object({
   // GRID only
   gridRowCount: z.number().optional(),
   gridColumnCount: z.number().optional(),
+  gridAutoTracks: z.enum(['NONE', 'ROWS']).optional(),
+  gridItemsPositioning: z.enum(['MANUAL', 'ROW_AUTO_FLOW']).optional(),
   gridRowGap: z.number().optional(),
   gridColumnGap: z.number().optional(),
   gridRowSizes: z.array(SerializedGridTrackSchema).optional(),

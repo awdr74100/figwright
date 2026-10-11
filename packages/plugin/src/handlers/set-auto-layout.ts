@@ -59,7 +59,8 @@ export const createSetAutoLayoutHandler =
     }
 
     // Set the mode first: grid counts / gaps only become writable once layoutMode is GRID.
-    target.layoutMode = p.layoutMode;
+    // Reassigning GRID resets its tracks, and Figma refuses to delete occupied cells.
+    if (target.layoutMode !== p.layoutMode) target.layoutMode = p.layoutMode;
 
     if (p.layoutMode !== 'NONE') {
       // padding is common to HORIZONTAL / VERTICAL / GRID

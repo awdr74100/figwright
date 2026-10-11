@@ -610,6 +610,8 @@ const GRID_PROPS = [
   'gridColumnSizes',
   'gridRowGap',
   'gridColumnGap',
+  'gridItemsPositioning',
+  'gridAutoTracks',
 ];
 const AUTO_LAYOUT_BINDINGS = [
   'paddingTop',
@@ -651,7 +653,11 @@ const autoLayoutInverse: BatchInverse = {
     const grid: Bag = {};
     if (frame.layoutMode === 'GRID') {
       // Track sizes are live objects with setters; keep plain copies.
-      for (const k of GRID_PROPS) grid[k] = toPlainJson(bag[k]);
+      for (const k of GRID_PROPS) {
+        if (!(k in frame)) continue;
+        const value = bag[k];
+        if (value !== undefined) grid[k] = toPlainJson(value);
+      }
     }
     const state: AutoLayoutState = {
       id,
@@ -674,6 +680,8 @@ const autoLayoutInverse: BatchInverse = {
     // that uses them, set the mode first; back to NONE, write them while the mode still allows it.
     if (s.mode !== 'NONE') writeIfDifferent(frame, 'layoutMode', s.mode);
     for (const [k, v] of Object.entries(s.values)) writeIfDifferent(frame, k, v);
+    // Automatic ROWS forbids direct count writes. Restore counts/tracks before automatic modes.
+    if ('gridAutoTracks' in s.grid) writeIfDifferent(frame, 'gridAutoTracks', 'NONE');
     for (const [k, v] of Object.entries(s.grid)) writeIfDifferent(frame, k, v);
     if (s.mode === 'NONE') writeIfDifferent(frame, 'layoutMode', 'NONE');
     restoreGeometry(frame, s.frame);

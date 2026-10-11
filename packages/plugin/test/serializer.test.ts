@@ -988,6 +988,28 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
     expect(out.gridChild).toBeUndefined();
   });
 
+  it('reads native automatic grid modes and omits computed cell anchors from automatic flow', () => {
+    const grid = fake({
+      type: 'FRAME',
+      layoutMode: 'GRID',
+      gridAutoTracks: 'ROWS',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+    });
+    expect(serializeFlatSync(grid).layout).toMatchObject({
+      gridAutoTracks: 'ROWS',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+    });
+    const child = fake({
+      parent: grid,
+      gridRowAnchorIndex: 1,
+      gridColumnAnchorIndex: 2,
+      gridRowSpan: 1,
+      gridColumnSpan: 1,
+      gridChildHorizontalAlign: 'CENTER',
+    });
+    expect(serializeFlatSync(child).gridChild).toEqual({ horizontalAlign: 'CENTER' });
+  });
+
   it('omits gridChild when the parent is not a GRID', () => {
     const out = serializeFlatSync(
       fake({

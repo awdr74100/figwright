@@ -26,7 +26,7 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * test/design-diff-format.test.ts now fails when the captured shape changes, so the next one is a
  * decision rather than an oversight.
  */
-export const SNAPSHOT_FORMAT_VERSION = 3;
+export const SNAPSHOT_FORMAT_VERSION = 4;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

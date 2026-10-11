@@ -545,7 +545,9 @@ export const captureGeometry = (node: SceneNode): GeometrySnapshot => {
   }
   const parent = node.parent as (BaseNode & { layoutMode?: string }) | null;
   const grid =
-    parent?.layoutMode === 'GRID' && 'gridRowAnchorIndex' in node
+    parent?.layoutMode === 'GRID' &&
+    (parent as { gridItemsPositioning?: string }).gridItemsPositioning !== 'ROW_AUTO_FLOW' &&
+    'gridRowAnchorIndex' in node
       ? { row: bag.gridRowAnchorIndex as number, column: bag.gridColumnAnchorIndex as number }
       : null;
   return {

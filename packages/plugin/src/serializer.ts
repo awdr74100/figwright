@@ -239,6 +239,8 @@ const serializeAutoLayout = (
     strokesIncludedInLayout?: boolean;
     gridRowCount?: number;
     gridColumnCount?: number;
+    gridAutoTracks?: 'NONE' | 'ROWS';
+    gridItemsPositioning?: 'MANUAL' | 'ROW_AUTO_FLOW';
     gridRowGap?: number;
     gridColumnGap?: number;
     gridRowSizes?: unknown;
@@ -257,6 +259,8 @@ const serializeAutoLayout = (
     const { gridRowCount, gridColumnCount, gridRowGap, gridColumnGap } = n;
     if (typeof gridRowCount === 'number') out.gridRowCount = gridRowCount;
     if (typeof gridColumnCount === 'number') out.gridColumnCount = gridColumnCount;
+    if (n.gridAutoTracks !== undefined) out.gridAutoTracks = n.gridAutoTracks;
+    if (n.gridItemsPositioning !== undefined) out.gridItemsPositioning = n.gridItemsPositioning;
     if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
     if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
     const rowSizes = serializeGridTracks(n.gridRowSizes);
@@ -298,7 +302,7 @@ const serializeAutoLayout = (
 };
 
 /** A node's placement inside a GRID parent → `gridChild` (anchor / span / per-cell align). */
-const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined => {
+const serializeGridChild = (node: SceneNode, autoFlow = false): SerializedGridChild | undefined => {
   const n = node as SceneNode & {
     gridRowAnchorIndex?: number;
     gridColumnAnchorIndex?: number;
@@ -309,10 +313,10 @@ const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined =>
   };
   const out: SerializedGridChild = {};
   // anchor -1 = auto-flowed (no explicit cell) → omit; >= 0 = pinned to a specific row/column.
-  if (typeof n.gridRowAnchorIndex === 'number' && n.gridRowAnchorIndex >= 0) {
+  if (!autoFlow && typeof n.gridRowAnchorIndex === 'number' && n.gridRowAnchorIndex >= 0) {
     out.rowAnchorIndex = n.gridRowAnchorIndex;
   }
-  if (typeof n.gridColumnAnchorIndex === 'number' && n.gridColumnAnchorIndex >= 0) {
+  if (!autoFlow && typeof n.gridColumnAnchorIndex === 'number' && n.gridColumnAnchorIndex >= 0) {
     out.columnAnchorIndex = n.gridColumnAnchorIndex;
   }
   if (typeof n.gridRowSpan === 'number' && n.gridRowSpan !== 1) out.rowSpan = n.gridRowSpan;
@@ -691,7 +695,10 @@ const enrichWithMixins = (
     }
     // Inside a GRID parent the child also carries grid placement (anchor / span / per-cell align).
     if (parentLayoutMode === 'GRID') {
-      const gc = serializeGridChild(node);
+      const gc = serializeGridChild(
+        node,
+        (parent as { gridItemsPositioning?: string }).gridItemsPositioning === 'ROW_AUTO_FLOW',
+      );
       if (gc !== undefined) out.gridChild = gc;
     }
   } else if ('constraints' in node) {

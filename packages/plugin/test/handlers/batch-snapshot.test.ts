@@ -189,6 +189,29 @@ describe('restoreOrder', () => {
 });
 
 describe('restoreGeometry', () => {
+  it('does not restore computed anchors on ROW_AUTO_FLOW children', () => {
+    const node = {
+      id: 'child',
+      type: 'INSTANCE',
+      width: 100,
+      height: 134,
+      parent: { layoutMode: 'GRID', gridItemsPositioning: 'ROW_AUTO_FLOW' },
+      gridRowAnchorIndex: 1,
+      gridColumnAnchorIndex: 2,
+      relativeTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      setGridChildPosition() {
+        throw new Error('ROW_AUTO_FLOW forbids manual placement');
+      },
+    };
+    const snapshot = captureGeometry(node as unknown as SceneNode);
+    node.gridRowAnchorIndex = 0;
+    node.gridColumnAnchorIndex = 0;
+    restoreGeometry(node as unknown as SceneNode, snapshot);
+    expect(snapshot.grid).toBeNull();
+  });
   it('writes bounds, positioning, the sizing primitives, then the size and transform', () => {
     const log: string[] = [];
     const state: Record<string, unknown> = {

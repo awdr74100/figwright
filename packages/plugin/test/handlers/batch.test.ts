@@ -1886,6 +1886,70 @@ describe('batch inverses for tree structure', () => {
     expect(undo.at(-1)).toBe('layoutMode=NONE');
     expect(undo).toContain('paddingLeft=0');
   });
+
+  it('restores native automatic grid modes after a failed layout batch', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const frame = node('A', 'FRAME', page, {
+      layoutMode: 'GRID',
+      gridAutoTracks: 'ROWS',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+      gridRowCount: 2,
+      gridColumnCount: 4,
+      gridRowGap: 16,
+      gridColumnGap: 20,
+      gridRowSizes: [
+        { type: 'HUG', value: 1 },
+        { type: 'HUG', value: 1 },
+      ],
+      gridColumnSizes: Array.from({ length: 4 }, () => ({ type: 'FLEX', value: 1 })),
+    });
+    let rows = 2;
+    Object.defineProperty(frame, 'gridRowCount', {
+      get: () => rows,
+      set: (v: number) => {
+        if (frame.gridAutoTracks === 'ROWS') throw new Error('automatic ROWS forbids count writes');
+        rows = v;
+      },
+    });
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const handler = createBatchHandler(figmaCtx, {
+      set_auto_layout: () => {
+        frame.layoutMode = 'NONE';
+        rows = 1;
+        frame.gridColumnCount = 1;
+        frame.gridRowSizes = [{ type: 'FIXED', value: 60 }];
+        frame.gridColumnSizes = [{ type: 'FIXED', value: 100 }];
+        frame.gridRowGap = 0;
+        frame.gridColumnGap = 0;
+      },
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'set_auto_layout', params: { nodeId: 'A', layoutMode: 'NONE' } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(frame).toMatchObject({
+      layoutMode: 'GRID',
+      gridRowCount: 2,
+      gridColumnCount: 4,
+      gridAutoTracks: 'ROWS',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+      gridRowGap: 16,
+      gridColumnGap: 20,
+      gridRowSizes: [
+        { type: 'HUG', value: 1 },
+        { type: 'HUG', value: 1 },
+      ],
+      gridColumnSizes: [
+        { type: 'FLEX', value: 1 },
+        { type: 'FLEX', value: 1 },
+        { type: 'FLEX', value: 1 },
+        { type: 'FLEX', value: 1 },
+      ],
+    });
+  });
 });
 
 // ── Instances and text styles ────────────────────────────────────────────────

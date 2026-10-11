@@ -28,6 +28,21 @@ const makeFrame = () => ({
 });
 
 describe('set_auto_layout handler', () => {
+  it('does not reset occupied GRID tracks when updating the same mode', async () => {
+    const node = makeFrame();
+    Object.defineProperty(node, 'layoutMode', {
+      get: () => 'GRID',
+      set: () => {
+        throw new Error('Cannot delete occupied row/column');
+      },
+    });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridRowGap: 16,
+    });
+    expect(node.gridRowGap).toBe(16);
+  });
   it('enables auto layout and applies padding / spacing / alignment', async () => {
     const node = makeFrame();
     const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
