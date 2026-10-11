@@ -140,6 +140,74 @@ card, a `min-w-[120px]` button), author them as real bounds via `set_layout_prop
 `FIXED` — the frame then resizes the way the CSS does, and codegen reads the same bounds back.
 Bounds apply to auto-layout frames and their direct children.
 
+## Opt-in responsive rules (configuration through AI, not the panel)
+
+Use static `set_auto_layout` / `set_layout_props` to establish the initial layout. When the user
+wants it to keep adapting while resizing, confirm the file with `use_file`, read the actual
+page/root/target IDs, then `get_responsive_layout` before configuring. Preserve an existing custom
+configuration. Ordinary users describe the desired changes in their AI client; the agent writes
+the configuration — there is no responsive editing UI in the plugin panel.
+
+Use explicit user/project thresholds first (including documented numbers or readable numeric
+variables). FRAME widths show examples, not a native Figma breakpoint table; minWidth/maxWidth are
+constraints, not breakpoints. Without custom requirements, explain the versioned `standard-v1`
+threshold preset: base=0, sm=640, md=768, lg=1024, xl=1280, 2xl=1536. It supplies thresholds only,
+not any actions. Compare against the chosen ordinary FRAME root's width in design units, not a
+browser viewport, physical pixels or canvas zoom. Reading a variable for a threshold does not bind
+that threshold to future variable changes.
+
+For tool callers, this complete example uses placeholder IDs to be replaced with verified IDs.
+The configuration-wide md=820 is overridden to 800 for this root; absent breakpointPreset defaults
+to standard-v1. Only the two listed rules run:
+
+```json
+{
+  "enabled": true,
+  "config": {
+    "version": 1,
+    "pageId": "p",
+    "breakpointValues": { "md": 820 },
+    "roots": [
+      {
+        "rootId": "r",
+        "breakpointValues": { "md": 800 },
+        "base": [{ "type": "layout", "nodeId": "f", "values": { "layoutMode": "VERTICAL" } }],
+        "breakpoints": [
+          { "at": "base", "overrides": [] },
+          {
+            "at": "md",
+            "overrides": [
+              { "type": "layout", "nodeId": "f", "values": { "layoutMode": "HORIZONTAL" } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+To replace the preset completely, use `breakpointPreset: "none"` and custom breakpointValues
+(for example `{ "base": 0, "wide": 900 }` with rules at base/wide), or use numeric minWidth rules
+such as 0/600/900/1200. Every rule has exactly one at/minWidth selector; thresholds begin at zero
+and strictly increase. Root values override configuration values, then the preset. The selected
+rule overlays base independently; an empty override restores base, not the previous rule.
+
+Targets remain inside non-overlapping roots. Roots cannot be horizontal HUG or control their own
+horizontal sizing/maxWidth. Only ordinary FRAME layout, existing GRID tracks, safe whole-node
+visibility and complete INSTANCE public BOOLEAN/VARIANT properties are supported. Grid strategies
+MANUAL/ROW_AUTO_FLOW and NONE/ROWS are fixed in base; ROWS requires autoRowTrack, never manual rows.
+Spacing `{ value, variableId }` must match an existing FLOAT variable for the target; omitting
+variableId explicitly unbinds that owned field. Do not control component internals or invent
+properties/variant combinations.
+
+Check configure's accepted **and** applied and inspect each root's status/error with
+`get_responsive_layout({})`. A failed root requires explicit reconfiguration; other roots may have
+applied. No transactional rollback is promised. `configure_responsive_layout({ enabled: false })`
+stops future control without undoing the current design. Other pages pause; the plugin must remain
+open. Verify the requested widths by reading the nodes and screenshots before claiming a live
+result.
+
 ## Text uses a real font, not the fallback
 
 A new `TEXT` node defaults to a **fallback font (Inter)**, not the design system's font. Set the real

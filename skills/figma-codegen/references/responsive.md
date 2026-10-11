@@ -3,10 +3,17 @@
 Loaded by **figma-codegen**. Real designs ship multiple breakpoints and modern output is expected to
 be responsive — so **never hardcode the artboard width** (a root `w-[1920px]` scrolls on every smaller
 screen). The root is `w-full`; sections stay fluid with content centered in a `max-w`. Ground the
-breakpoints instead of guessing them:
+breakpoints instead of guessing them. First `get_responsive_layout`: an existing configuration's
+effectiveBreakpoints and base/overrides are explicit authored rules, and outrank an inferred frame
+width. Keep custom values; standard-v1's 0/640/768/1024/1280/1536 is only a fallback preset, never a
+reason to replace authored values. Its width source is a FRAME, not necessarily a viewport — choose
+the appropriate container/media-query implementation and disclose differences. Do not configure or
+enable rules merely to read a design.
+
+When no explicit rules exist, compare width examples and disclose inferred transition thresholds:
 
 1. **Get every breakpoint's frame — then read each one's own exact values.** When several roots are
-   already selected, _those are the breakpoints_: different width buckets = different breakpoints, so
+   already selected, _those are width examples_, not an exact Figma breakpoint table, so
    never pick one as canonical and scale the rest by eye. Otherwise find the counterparts —
    `search_nodes` (type `FRAME`, scoped to the file/page) lists sibling frames with widths; match the
    desktop frame to its narrower ones by **width buckets** (~1920/1440 desktop · ~768 tablet · ~375
@@ -34,6 +41,16 @@ breakpoints instead of guessing them:
 
 No other-breakpoint frame? Still output best-effort RWD (fluid container + sensible reflow) and note
 the responsive behaviour is inferred, not grounded.
+
+## Native GRID policy is part of the read
+
+Keep unequal gridColumnSizes/gridRowSizes: FIXED maps to explicit lengths, FLEX to its declared
+fraction, HUG is content-sized (not a promise of exact CSS equivalence). MANUAL positioning keeps
+the serialized anchors/spans; ROW_AUTO_FLOW has no meaningful manual anchors to restore. ROWS
+means automatically managed rows, so use its observed row track policy rather than inventing a
+fixed row count. Gaps alone do not imply ownership of tracks or row policy. Do not convert every
+grid to equal fractions or force HUG height. A responsive configuration describes explicit state,
+not runtime content-fit measurement or a complete CSS framework.
 
 ## Same-size siblings can be a state, not another breakpoint
 
