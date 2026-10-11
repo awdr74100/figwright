@@ -16,6 +16,24 @@ import { leaderLockPath } from '../../src/election/leader-lock.js';
 const DIST_ENTRY = join(import.meta.dirname, '..', '..', 'dist', 'index.mjs');
 const MISBEHAVE = pathToFileURL(join(import.meta.dirname, 'fixtures', 'misbehave.mjs')).href;
 
+const completeJsonLines = (stdout: string): { id?: number }[] =>
+  stdout
+    .slice(0, stdout.lastIndexOf('\n') + 1)
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(line => JSON.parse(line) as { id?: number });
+
+describe('process guard stdout framing', () => {
+  it('waits for the newline when a JSON response is split across chunks', () => {
+    const partial = '{"id":1}\n{"id":2,"result":"par';
+    expect(completeJsonLines(partial)).toEqual([{ id: 1 }]);
+    expect(completeJsonLines(`${partial}t"}\n`)).toEqual([{ id: 1 }, { id: 2, result: 'part' }]);
+  });
+  it('still rejects a complete non-protocol line', () => {
+    expect(() => completeJsonLines('stray console output\n')).toThrow(SyntaxError);
+  });
+});
+
 const freePort = async (): Promise<number> => {
   const s = createServer();
   await new Promise<void>(resolve => s.listen(0, '127.0.0.1', () => resolve()));
@@ -48,9 +66,7 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process guard (built dist)', () => {
             `server exited (${child.exitCode ?? child.signalCode})\nstderr:\n${stderr}`,
           );
         }
-        for (const line of stdout.split('\n')) {
-          if (line.trim() === '') continue;
-          const msg = JSON.parse(line) as { id?: number };
+        for (const msg of completeJsonLines(stdout)) {
           if (msg.id !== undefined) responses.set(msg.id, msg);
         }
         if (responses.has(id)) return responses.get(id);
