@@ -72,10 +72,12 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
         )
           throw new Error('new FLEX tracks on HUG axis');
         if (
-          target.gridAutoTracks === 'ROWS' &&
-          field === 'gridColumnCount' &&
           target.layoutSizingVertical === 'HUG' &&
-          Math.ceil(target.children.length / value) > target.gridRowCount
+          ((target.gridAutoTracks === 'ROWS' && field === 'gridColumnCount') ||
+            (field === 'gridAutoTracks' && value === 'ROWS')) &&
+          Math.ceil(
+            target.children.length / (field === 'gridColumnCount' ? value : target.gridColumnCount),
+          ) > target.gridRowCount
         )
           throw new Error('new automatic FLEX rows on HUG axis');
         if (field === 'layoutMode' && value === 'GRID' && target.layoutMode === 'GRID')

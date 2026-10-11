@@ -213,17 +213,25 @@ const growingGridAxes = (node: FrameNode, values: ResponsiveGridValues) => {
   const columns = values.columns?.length ?? node.gridColumnCount;
   const autoRows = (values.gridAutoTracks ?? node.gridAutoTracks) === 'ROWS';
   const autoFlow = (values.gridItemsPositioning ?? node.gridItemsPositioning) === 'ROW_AUTO_FLOW';
-  const rows = autoRows
-    ? autoFlow
-      ? Math.max(1, Math.ceil(node.children.length / columns))
-      : Math.max(
+  const automaticRows = (columnCount: number): number =>
+    autoFlow
+      ? Math.max(1, Math.ceil(node.children.length / columnCount))
+      : node.children.reduce(
+          (count, n) =>
+            Math.max(
+              count,
+              'gridRowAnchorIndex' in n && 'gridRowSpan' in n
+                ? n.gridRowAnchorIndex + n.gridRowSpan
+                : node.gridRowCount,
+            ),
           1,
-          ...node.children.map(n =>
-            'gridRowAnchorIndex' in n && 'gridRowSpan' in n
-              ? n.gridRowAnchorIndex + n.gridRowSpan
-              : node.gridRowCount,
-          ),
-        )
+        );
+  const strategyChanges =
+    (values.gridAutoTracks !== undefined && values.gridAutoTracks !== node.gridAutoTracks) ||
+    (values.gridItemsPositioning !== undefined &&
+      values.gridItemsPositioning !== node.gridItemsPositioning);
+  const rows = autoRows
+    ? Math.max(automaticRows(columns), strategyChanges ? automaticRows(node.gridColumnCount) : 0)
     : (values.rows?.length ?? node.gridRowCount);
   return {
     layoutSizingHorizontal: columns > node.gridColumnCount,

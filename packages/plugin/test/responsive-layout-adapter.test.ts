@@ -119,6 +119,30 @@ describe('protected responsive adapter', () => {
     expect(f.frame.paddingTop).toBe(8);
     expect(f.frame.boundVariables.paddingTop?.id).toBe('v');
   });
+  it('grid preflights intermediate automatic rows before expanding columns', async () => {
+    const f = createResponsiveFixture('grid');
+    for (let i = 0; i < 10; i++) f.makeNode(`extra${i}`, 'RECTANGLE', f.frame);
+    f.frame.gridRowSizes = [f.makeTrack('f', 'HUG'), f.makeTrack('f', 'HUG')];
+    f.frame.layoutSizingVertical = 'HUG';
+    f.writes.length = 0;
+    f.config.roots[0]!.base = [
+      { type: 'layout', nodeId: 'f', values: { layoutSizingVertical: 'HUG' } },
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: {
+          gridItemsPositioning: 'ROW_AUTO_FLOW',
+          gridAutoTracks: 'ROWS',
+          autoRowTrack: { type: 'HUG' },
+          columns: Array.from({ length: 24 }, () => ({ type: 'FIXED' as const, value: 80 })),
+        },
+      },
+    ];
+    await run(f);
+    expect(f.frame.gridRowCount).toBe(1);
+    expect(f.frame.gridRowSizes[0].type).toBe('HUG');
+    expect(f.frame.layoutSizingVertical).toBe('HUG');
+  });
   it('grid preserves unequal tracks and declared row strategy', async () => {
     const f = createResponsiveFixture('grid');
     f.config.roots[0]!.base = [
