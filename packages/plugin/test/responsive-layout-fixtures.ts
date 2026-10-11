@@ -74,7 +74,7 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
           const key = field === 'gridColumnCount' ? 'gridColumnSizes' : 'gridRowSizes';
           target[key] = Array.from(
             { length: value },
-            (_, i) => target[key][i] ?? makeTrack(id, 'FLEX', 1),
+            (_, i) => target[key]?.[i] ?? makeTrack(id, 'FLEX', 1),
           );
         }
         if (

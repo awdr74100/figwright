@@ -4,7 +4,9 @@ import type {
   ResolvedResponsiveRoot,
   ResponsiveAction,
   ResponsiveEvaluation,
+  ResponsiveGridValues,
   ResponsiveLayoutValues,
+  ResponsiveTrack,
 } from '@figwright/shared';
 
 import { withInstanceIdLookup } from './node-lookup.js';
@@ -190,6 +192,82 @@ const spacingFields = new Set([
   'gridRowGap',
   'gridColumnGap',
 ]);
+const gridOf = (node: FrameNode, actions: ResponsiveAction[]): ResponsiveGridValues =>
+  actions.find(
+    (a): a is Extract<ResponsiveAction, { type: 'grid' }> =>
+      a.nodeId === node.id && a.type === 'grid',
+  )?.values ?? {};
+const validateGrid = (
+  node: FrameNode,
+  values: ResponsiveGridValues,
+  actions: ResponsiveAction[],
+  rootId: string,
+): void => {
+  if (node.type !== 'FRAME' || node.layoutMode !== 'GRID')
+    fail(rootId, node.id, 'GRID requires an existing ordinary GRID FRAME');
+  const required = [
+    'gridAutoTracks',
+    'gridItemsPositioning',
+    'gridColumnCount',
+    'gridRowCount',
+    'gridColumnSizes',
+    'gridRowSizes',
+  ];
+  if (required.some(field => !(field in node)))
+    fail(rootId, node.id, 'Runtime lacks GRID capabilities');
+  const auto = values.gridAutoTracks ?? node.gridAutoTracks;
+  const positioning = values.gridItemsPositioning ?? node.gridItemsPositioning;
+  if (!['NONE', 'ROWS'].includes(auto) || !['MANUAL', 'ROW_AUTO_FLOW'].includes(positioning))
+    fail(rootId, node.id, 'Unsupported GRID strategy');
+  if (values.gridAutoTracks === 'ROWS' && values.autoRowTrack === undefined)
+    fail(rootId, node.id, 'ROWS must explicitly own autoRowTrack');
+  if (auto === 'ROWS' && values.rows !== undefined)
+    fail(rootId, node.id, 'Automatic rows cannot declare manual rows');
+  if (auto !== 'ROWS' && values.autoRowTrack !== undefined)
+    fail(rootId, node.id, 'autoRowTrack requires ROWS');
+  const reflow =
+    values.gridItemsPositioning === 'ROW_AUTO_FLOW' ||
+    (values.columns !== undefined &&
+      positioning === 'ROW_AUTO_FLOW' &&
+      values.columns.length !== node.gridColumnCount);
+  if (reflow) {
+    if (values.gridItemsPositioning !== 'ROW_AUTO_FLOW')
+      fail(rootId, node.id, 'Automatic reflow must be explicitly configured');
+    if (
+      node.children.some(
+        n => n.layoutPositioning === 'ABSOLUTE' || n.gridRowSpan !== 1 || n.gridColumnSpan !== 1,
+      )
+    )
+      fail(rootId, node.id, 'Automatic reflow supports only single-cell non-absolute children');
+  } else if (values.columns !== undefined || values.rows !== undefined) {
+    const columns = values.columns?.length ?? node.gridColumnCount;
+    const rows = values.rows?.length ?? node.gridRowCount;
+    if (
+      node.children.some(
+        n =>
+          n.gridColumnAnchorIndex + n.gridColumnSpan > columns ||
+          n.gridRowAnchorIndex + n.gridRowSpan > rows,
+      )
+    )
+      fail(rootId, node.id, 'Track change would delete occupied cells');
+  }
+  const layout = layoutOf(node, actions);
+  for (const [field, tracks] of [
+    ['layoutSizingHorizontal', values.columns ?? node.gridColumnSizes],
+    [
+      'layoutSizingVertical',
+      values.autoRowTrack === undefined
+        ? (values.rows ?? node.gridRowSizes)
+        : [values.autoRowTrack],
+    ],
+  ] as const) {
+    if ((layout[field] ?? node[field]) === 'HUG' && tracks.some(t => t.type === 'FLEX'))
+      fail(rootId, node.id, 'HUG axes cannot contain FLEX tracks');
+  }
+  for (const field of ['gridRowGap', 'gridColumnGap'] as const)
+    if (values[field] !== undefined && !(field in node))
+      fail(rootId, node.id, `Runtime lacks ${field}`);
+};
 const validateActions = (
   data: PreparedData,
   root: FrameNode,
@@ -201,8 +279,11 @@ const validateActions = (
     checkSafe(node, root, data.pageId);
     if (action.type === 'layout')
       validateLayout(node as FrameNode, action.values, actions, root.id);
-    if (action.type === 'grid')
-      fail(root.id, node.id, 'GRID rules are not supported by this adapter yet');
+    if (
+      action.type === 'grid' ||
+      (action.type === 'layout' && (node as FrameNode).layoutMode === 'GRID')
+    )
+      validateGrid(node as FrameNode, gridOf(node as FrameNode, actions), actions, root.id);
     if (action.type === 'componentProperties')
       validateProperties(
         node as InstanceNode,
@@ -210,7 +291,7 @@ const validateActions = (
         data.variants.get(node.id) ?? [],
         root.id,
       );
-    if (action.type === 'layout')
+    if (action.type === 'layout' || action.type === 'grid')
       for (const [field, value] of Object.entries(action.values)) {
         if (!spacingFields.has(field)) continue;
         const spacing = value as { value: number; variableId?: string };
@@ -311,7 +392,105 @@ export const applyPreparedResponsiveRoot = (
     changed = true;
     return true;
   };
+  const applyField = (node: SceneNode, field: string, value: unknown): boolean => {
+    const target = node as unknown as Record<string, unknown>;
+    if (spacingFields.has(field)) {
+      const spacing = value as { value: number; variableId?: string };
+      const binding = (
+        node.boundVariables as Record<string, VariableAlias | undefined> | undefined
+      )?.[field];
+      if (
+        binding?.id !== spacing.variableId &&
+        !write(() =>
+          node.setBoundVariable(
+            field as VariableBindableNodeField,
+            spacing.variableId === undefined ? null : data.variables.get(spacing.variableId)!,
+          ),
+        )
+      )
+        return false;
+      return (
+        target[field] === spacing.value ||
+        write(() => {
+          target[field] = spacing.value;
+        })
+      );
+    }
+    return (
+      target[field] === value ||
+      write(() => {
+        target[field] = value;
+      })
+    );
+  };
+  const applyTracks = (tracks: GridTrackSize[], desiredTracks: ResponsiveTrack[]): boolean => {
+    for (let i = 0; i < desiredTracks.length; i++) {
+      const target = tracks[i]!;
+      const next = desiredTracks[i]!;
+      if (
+        target.type !== next.type &&
+        !write(() => {
+          target.type = next.type;
+        })
+      )
+        return false;
+      if (
+        next.type !== 'HUG' &&
+        target.value !== next.value &&
+        !write(() => {
+          target.value = next.value;
+        })
+      )
+        return false;
+    }
+    return true;
+  };
   try {
+    // GRID tracks and axis sizing have setter dependencies independent of action order.
+    for (const action of desired.actions.filter(a => a.type === 'grid')) {
+      const node = data.nodes.get(action.nodeId)! as FrameNode;
+      currentNodeId = node.id;
+      const values = gridOf(node, desired.actions);
+      const layout = layoutOf(node, desired.actions);
+      for (const field of ['layoutSizingHorizontal', 'layoutSizingVertical'] as const)
+        if (
+          layout[field] !== undefined &&
+          layout[field] !== 'HUG' &&
+          !applyField(node, field, layout[field])
+        )
+          return { status: 'cancelled', changed };
+      for (const field of ['gridItemsPositioning', 'gridAutoTracks'] as const)
+        if (values[field] !== undefined && !applyField(node, field, values[field]))
+          return { status: 'cancelled', changed };
+      if (values.columns !== undefined) {
+        if (
+          !applyField(node, 'gridColumnCount', values.columns.length) ||
+          !applyTracks(node.gridColumnSizes, values.columns)
+        )
+          return { status: 'cancelled', changed };
+      }
+      if (values.rows !== undefined) {
+        if (
+          !applyField(node, 'gridRowCount', values.rows.length) ||
+          !applyTracks(node.gridRowSizes, values.rows)
+        )
+          return { status: 'cancelled', changed };
+      }
+      if (
+        values.autoRowTrack !== undefined &&
+        !applyTracks(
+          node.gridRowSizes,
+          node.gridRowSizes.map(() => values.autoRowTrack!),
+        )
+      )
+        return { status: 'cancelled', changed };
+      for (const field of ['gridRowGap', 'gridColumnGap'] as const)
+        if (values[field] !== undefined && !applyField(node, field, values[field]))
+          return { status: 'cancelled', changed };
+      for (const field of ['layoutSizingHorizontal', 'layoutSizingVertical'] as const)
+        if (layout[field] === 'HUG' && !applyField(node, field, 'HUG'))
+          return { status: 'cancelled', changed };
+    }
     for (const action of desired.actions) {
       const node = data.nodes.get(action.nodeId)!;
       currentNodeId = node.id;
@@ -326,36 +505,7 @@ export const applyPreparedResponsiveRoot = (
           return { status: 'cancelled', changed };
       } else if (action.type !== 'grid') {
         for (const [field, value] of Object.entries(action.values)) {
-          const target = node as unknown as Record<string, unknown>;
-          if (spacingFields.has(field)) {
-            const spacing = value as { value: number; variableId?: string };
-            const binding = (
-              node.boundVariables as Record<string, VariableAlias | undefined> | undefined
-            )?.[field];
-            if (
-              binding?.id !== spacing.variableId &&
-              !write(() =>
-                node.setBoundVariable(
-                  field as VariableBindableNodeField,
-                  spacing.variableId === undefined ? null : data.variables.get(spacing.variableId)!,
-                ),
-              )
-            )
-              return { status: 'cancelled', changed };
-            if (
-              target[field] !== spacing.value &&
-              !write(() => {
-                target[field] = spacing.value;
-              })
-            )
-              return { status: 'cancelled', changed };
-          } else if (
-            target[field] !== value &&
-            !write(() => {
-              target[field] = value;
-            })
-          )
-            return { status: 'cancelled', changed };
+          if (!applyField(node, field, value)) return { status: 'cancelled', changed };
         }
       }
     }

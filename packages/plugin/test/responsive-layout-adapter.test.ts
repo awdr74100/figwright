@@ -17,6 +17,174 @@ const run = async (f: ReturnType<typeof createResponsiveFixture>, width = 900) =
 };
 
 describe('protected responsive adapter', () => {
+  it('grid preserves unequal tracks and declared row strategy', async () => {
+    const f = createResponsiveFixture('grid');
+    f.config.roots[0]!.base = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: {
+          columns: [
+            { type: 'FLEX', value: 2 },
+            { type: 'FIXED', value: 240 },
+            { type: 'FLEX', value: 1 },
+          ],
+          rows: [{ type: 'FIXED', value: 80 }, { type: 'HUG' }],
+          gridItemsPositioning: 'MANUAL',
+          gridAutoTracks: 'NONE',
+          gridColumnGap: { value: 16 },
+        },
+      },
+    ];
+    const ids = f.frame.children.map((n: { id: string }) => n.id);
+    await run(f);
+    expect(
+      f.frame.gridColumnSizes.map((t: { type: string; value?: number }) => ({
+        type: t.type,
+        value: t.value,
+      })),
+    ).toEqual([
+      { type: 'FLEX', value: 2 },
+      { type: 'FIXED', value: 240 },
+      { type: 'FLEX', value: 1 },
+    ]);
+    expect(f.frame.layoutSizingVertical).toBe('FIXED');
+    expect(f.frame.children.map((n: { id: string }) => n.id)).toEqual(ids);
+    const count = f.writes.length;
+    await run(f);
+    expect(f.writes).toHaveLength(count);
+  });
+  it('grid automatic rows never write row count and replenish new tracks', async () => {
+    const f = createResponsiveFixture('grid');
+    f.config.roots[0]!.base = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: {
+          columns: [{ type: 'FLEX', value: 1 }],
+          gridItemsPositioning: 'ROW_AUTO_FLOW',
+          gridAutoTracks: 'ROWS',
+          autoRowTrack: { type: 'FIXED', value: 96 },
+        },
+      },
+    ];
+    await run(f);
+    expect(f.writes.some(w => w.field === 'gridRowCount')).toBe(false);
+    expect(f.frame.gridRowSizes).toHaveLength(3);
+    expect(
+      f.frame.gridRowSizes.every(
+        (t: { type: string; value: number }) => t.type === 'FIXED' && t.value === 96,
+      ),
+    ).toBe(true);
+  });
+  it('grid gap-only preserves complex manual placement and unowned tracks', async () => {
+    const f = createResponsiveFixture('grid');
+    f.frame.children[0].gridColumnSpan = 2;
+    f.writes.length = 0;
+    f.config.roots[0]!.base = [
+      { type: 'grid', nodeId: 'f', values: { gridRowGap: { value: 12 } } },
+    ];
+    await run(f);
+    expect(f.writes.map(w => w.field)).toEqual(['gridRowGap']);
+  });
+  it.each([
+    'manual-shrink',
+    'absolute',
+    'span',
+    'missing-track',
+    'rows-and-auto',
+    'hug-flex',
+    'runtime',
+  ])('grid rejects %s before writes', async scenario => {
+    const f = createResponsiveFixture('grid');
+    const values: Record<string, unknown> = { columns: [{ type: 'FLEX', value: 1 }] };
+    if (scenario === 'absolute' || scenario === 'span') {
+      values.gridItemsPositioning = 'ROW_AUTO_FLOW';
+      f.frame.children[0][scenario === 'absolute' ? 'layoutPositioning' : 'gridColumnSpan'] =
+        scenario === 'absolute' ? 'ABSOLUTE' : 2;
+    }
+    if (scenario === 'missing-track') values.gridAutoTracks = 'ROWS';
+    if (scenario === 'rows-and-auto')
+      Object.assign(values, {
+        gridAutoTracks: 'ROWS',
+        autoRowTrack: { type: 'HUG' },
+        rows: [{ type: 'HUG' }],
+      });
+    if (scenario === 'hug-flex') {
+      f.frame.gridColumnSizes = [
+        f.makeTrack('f', 'HUG'),
+        f.makeTrack('f', 'HUG'),
+        f.makeTrack('f', 'HUG'),
+      ];
+      f.frame.layoutSizingHorizontal = 'HUG';
+      values.columns = [
+        { type: 'FLEX', value: 1 },
+        { type: 'FLEX', value: 1 },
+        { type: 'FLEX', value: 1 },
+      ];
+    }
+    if (scenario === 'runtime') delete f.frame.gridColumnSizes;
+    f.writes.length = 0;
+    f.config.roots[0]!.base = [{ type: 'grid', nodeId: 'f', values } as never];
+    await expect(run(f)).rejects.toMatchObject({ phase: 'validate' });
+    expect(f.writes).toEqual([]);
+  });
+  it('grid rejects conflict at a future breakpoint before applying base', async () => {
+    const f = createResponsiveFixture('grid');
+    f.config.roots[0]!.base = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: { columns: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }] },
+      },
+      { type: 'layout', nodeId: 'f', values: { layoutSizingHorizontal: 'HUG' } },
+    ];
+    f.config.roots[0]!.breakpoints[2]!.overrides = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: {
+          columns: [
+            { type: 'FLEX', value: 1 },
+            { type: 'FLEX', value: 1 },
+            { type: 'FLEX', value: 1 },
+          ],
+        },
+      },
+    ];
+    await expect(run(f)).rejects.toMatchObject({ phase: 'validate' });
+    expect(f.writes).toEqual([]);
+  });
+  it('grid composes sizing with tracks before validating and writing', async () => {
+    const f = createResponsiveFixture('grid');
+    f.config.roots[0]!.base = [
+      { type: 'layout', nodeId: 'f', values: { layoutSizingHorizontal: 'HUG' } },
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: { columns: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }] },
+      },
+    ];
+    await run(f);
+    expect(f.frame.layoutSizingHorizontal).toBe('HUG');
+    f.config.roots[0]!.base = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: {
+          columns: [
+            { type: 'FLEX', value: 2 },
+            { type: 'FIXED', value: 240 },
+            { type: 'FLEX', value: 1 },
+          ],
+        },
+      },
+      { type: 'layout', nodeId: 'f', values: { layoutSizingHorizontal: 'FIXED' } },
+    ];
+    await run(f);
+    expect(f.frame.layoutSizingHorizontal).toBe('FIXED');
+    expect(f.frame.gridColumnSizes[0].value).toBe(2);
+  });
   it('flex rules preserve negative gap and fixed height', async () => {
     const f = createResponsiveFixture();
     f.config.roots[0]!.base = [
