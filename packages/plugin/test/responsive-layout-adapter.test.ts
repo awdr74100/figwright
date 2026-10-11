@@ -17,6 +17,108 @@ const run = async (f: ReturnType<typeof createResponsiveFixture>, width = 900) =
 };
 
 describe('protected responsive adapter', () => {
+  it('grid grows an owned HUG axis without transient FLEX conflicts', async () => {
+    const f = createResponsiveFixture('grid');
+    f.config.roots[0]!.base = [
+      { type: 'layout', nodeId: 'f', values: { layoutSizingHorizontal: 'HUG' } },
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: { columns: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }] },
+      },
+    ];
+    await run(f);
+    f.writes.length = 0;
+    f.config.roots[0]!.base[1] = {
+      type: 'grid',
+      nodeId: 'f',
+      values: { columns: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }] },
+    };
+    await run(f);
+    expect(f.frame.gridColumnCount).toBe(4);
+    expect(f.frame.layoutSizingHorizontal).toBe('HUG');
+    expect(f.frame.gridColumnSizes.every((t: { type: string }) => t.type === 'HUG')).toBe(true);
+  });
+  it('grid refuses HUG growth when the sizing field is not owned', async () => {
+    const f = createResponsiveFixture('grid');
+    f.frame.gridColumnSizes = [
+      f.makeTrack('f', 'HUG'),
+      f.makeTrack('f', 'HUG'),
+      f.makeTrack('f', 'HUG'),
+    ];
+    f.frame.layoutSizingHorizontal = 'HUG';
+    f.writes.length = 0;
+    f.config.roots[0]!.base = [
+      {
+        type: 'grid',
+        nodeId: 'f',
+        values: { columns: [{ type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }, { type: 'HUG' }] },
+      },
+    ];
+    await expect(run(f)).rejects.toMatchObject({ phase: 'validate' });
+    expect(f.writes).toEqual([]);
+  });
+  it.each([
+    { owned: true, outcome: 'applied', rowCount: 2 },
+    { owned: false, outcome: 'validate', rowCount: 1 },
+  ])(
+    'grid automatic HUG row growth respects sizing ownership $owned',
+    async ({ owned, outcome, rowCount }) => {
+      const f = createResponsiveFixture('grid');
+      f.frame.gridAutoTracks = 'ROWS';
+      f.frame.gridRowSizes = [f.makeTrack('f', 'HUG')];
+      f.frame.layoutSizingVertical = 'HUG';
+      f.config.roots[0]!.base = [
+        ...(owned
+          ? [
+              {
+                type: 'layout' as const,
+                nodeId: 'f',
+                values: { layoutSizingVertical: 'HUG' as const },
+              },
+            ]
+          : []),
+        {
+          type: 'grid',
+          nodeId: 'f',
+          values: {
+            gridItemsPositioning: 'ROW_AUTO_FLOW',
+            gridAutoTracks: 'ROWS',
+            autoRowTrack: { type: 'HUG' },
+            columns: [
+              { type: 'FIXED', value: 160 },
+              { type: 'FIXED', value: 160 },
+            ],
+          },
+        },
+      ];
+      f.writes.length = 0;
+      const result = await run(f).then(
+        applied => applied.status,
+        error => error.phase,
+      );
+      expect(result).toBe(outcome);
+      expect(f.writes.length > 0).toBe(owned);
+      expect(f.frame.gridRowCount).toBe(rowCount);
+      expect(f.frame.layoutSizingVertical).toBe('HUG');
+      expect(f.frame.gridRowSizes.every((t: { type: string }) => t.type === 'HUG')).toBe(true);
+      expect(f.writes.some(w => w.field === 'gridRowCount')).toBe(false);
+    },
+  );
+  it('applies a numeric value before its binding so literals cannot silently clear it', async () => {
+    const f = createResponsiveFixture();
+    f.variables.set('v', {
+      id: 'v',
+      resolvedType: 'FLOAT',
+      resolveForConsumer: () => ({ value: 8, resolvedType: 'FLOAT' }),
+    });
+    f.config.roots[0]!.base = [
+      { type: 'layout', nodeId: 'f', values: { paddingTop: { value: 8, variableId: 'v' } } },
+    ];
+    await run(f);
+    expect(f.frame.paddingTop).toBe(8);
+    expect(f.frame.boundVariables.paddingTop?.id).toBe('v');
+  });
   it('grid preserves unequal tracks and declared row strategy', async () => {
     const f = createResponsiveFixture('grid');
     f.config.roots[0]!.base = [

@@ -16,6 +16,7 @@ import {
   prepareResponsiveRoot,
   ResponsiveRootError,
   validateResponsiveOwnership,
+  validateResponsiveRootIsolation,
 } from './responsive-layout-adapter.js';
 
 export interface ResponsiveLayoutController {
@@ -103,11 +104,20 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
       }),
     );
     if (!current(token)) return;
+    // Failed roots remain boundaries even though their actions are not retried.
+    const boundaries = await Promise.all(
+      selected.roots.map(
+        (rule, index) =>
+          prepared[index]?.prepared.root ?? api.getNodeByIdAsync(rule.rootId).catch(() => null),
+      ),
+    );
+    if (!current(token)) return;
     for (const result of prepared) {
       if (result === null || !current(token)) continue;
       const { index, prepared: root } = result;
       const rule = selected.roots[index]!;
       try {
+        validateResponsiveRootIsolation(root.root, boundaries);
         const desired = evaluateResponsiveRoot(rule, root.root.width);
         const applied = applyPreparedResponsiveRoot(root, desired, () => current(token));
         if (applied.status === 'applied' && current(token))

@@ -14,6 +14,33 @@ const fixture = () => {
   return f;
 };
 describe('responsive lifecycle', () => {
+  it('stops newly overlapping roots without blocking an unrelated root', async () => {
+    const f = fixture();
+    const r2 = f.makeNode('r2', 'FRAME', f.nodes.get('outer'));
+    f.makeNode('f2', 'FRAME', r2);
+    const r3 = f.makeNode('r3', 'FRAME', f.nodes.get('outer'));
+    f.makeNode('f3', 'FRAME', r3);
+    f.config.roots.push(
+      ...['r2', 'r3'].map((rootId, i) => ({
+        rootId,
+        base: [{ type: 'visibility' as const, nodeId: `f${i + 2}`, values: { visible: false } }],
+        breakpoints: [{ minWidth: 0, overrides: [] }],
+      })),
+    );
+    const c = createResponsiveLayoutController(f.api);
+    c.start();
+    await c.configure({ enabled: true, config: f.config });
+    r2.parent = f.root;
+    f.frame.visible = true;
+    f.nodes.get('f2').visible = true;
+    f.nodes.get('f3').visible = true;
+    f.writes.length = 0;
+    f.emitChange();
+    await vi.advanceTimersByTimeAsync(120);
+    expect(c.get().roots.map(r => r.status)).toEqual(['error', 'error', 'active']);
+    expect(f.writes.map(w => w.nodeId)).toEqual(['f3']);
+    c.dispose();
+  });
   it('disabled startup does not watch scan or write or read legacy data', () => {
     const f = fixture();
     const lookup = vi.spyOn(f.api, 'getNodeByIdAsync');

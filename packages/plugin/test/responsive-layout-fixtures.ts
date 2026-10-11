@@ -62,6 +62,22 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
       set: (target, field, value) => {
         if (field === 'gridRowCount' && target.gridAutoTracks === 'ROWS')
           throw new Error('automatic rows');
+        if (
+          (field === 'gridColumnCount' &&
+            target.layoutSizingHorizontal === 'HUG' &&
+            value > target.gridColumnCount) ||
+          (field === 'gridRowCount' &&
+            target.layoutSizingVertical === 'HUG' &&
+            value > target.gridRowCount)
+        )
+          throw new Error('new FLEX tracks on HUG axis');
+        if (
+          target.gridAutoTracks === 'ROWS' &&
+          field === 'gridColumnCount' &&
+          target.layoutSizingVertical === 'HUG' &&
+          Math.ceil(target.children.length / value) > target.gridRowCount
+        )
+          throw new Error('new automatic FLEX rows on HUG axis');
         if (field === 'layoutMode' && value === 'GRID' && target.layoutMode === 'GRID')
           throw new Error('grid reset');
         if (
@@ -75,6 +91,8 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
         }
         writes.push({ nodeId: id, field: String(field), value });
         target[String(field)] = value;
+        if (typeof value === 'number' && target.boundVariables[String(field)] !== undefined)
+          delete target.boundVariables[String(field)];
         if (field === 'gridColumnCount' || field === 'gridRowCount') {
           const key = field === 'gridColumnCount' ? 'gridColumnSizes' : 'gridRowSizes';
           target[key] = Array.from(

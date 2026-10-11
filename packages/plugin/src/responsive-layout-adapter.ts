@@ -43,6 +43,21 @@ const hasAncestor = (node: BaseNode, ancestor: BaseNode): boolean => {
     if (parent === ancestor) return true;
   return false;
 };
+export const validateResponsiveRootIsolation = (
+  root: FrameNode,
+  roots: readonly (BaseNode | null)[],
+): void => {
+  if (
+    roots.some(
+      other =>
+        other !== null &&
+        other !== root &&
+        !other.removed &&
+        (hasAncestor(other, root) || hasAncestor(root, other)),
+    )
+  )
+    fail(root.id, root.id, 'Responsive roots cannot overlap');
+};
 const checkSafe = (node: BaseNode, root: FrameNode, pageId: string): void => {
   if (node.removed || root.removed || !hasAncestor(node, root))
     fail(root.id, node.id, 'Target was removed or moved outside its root');
@@ -80,10 +95,7 @@ export const validateResponsiveOwnership = async (
   await Promise.all(
     roots.map(async (root, i) => {
       checkSafe(root, root, resolved.config.pageId);
-      if (
-        roots.some((other, j) => j !== i && (hasAncestor(other, root) || hasAncestor(root, other)))
-      )
-        fail(root.id, root.id, 'Responsive roots cannot overlap');
+      validateResponsiveRootIsolation(root, roots);
       await Promise.all(
         resolved.roots[i]!.base.map(async action =>
           checkSafe(await lookup(ctx, root.id, action.nodeId), root, resolved.config.pageId),
@@ -197,6 +209,27 @@ const gridOf = (node: FrameNode, actions: ResponsiveAction[]): ResponsiveGridVal
     (a): a is Extract<ResponsiveAction, { type: 'grid' }> =>
       a.nodeId === node.id && a.type === 'grid',
   )?.values ?? {};
+const growingGridAxes = (node: FrameNode, values: ResponsiveGridValues) => {
+  const columns = values.columns?.length ?? node.gridColumnCount;
+  const autoRows = (values.gridAutoTracks ?? node.gridAutoTracks) === 'ROWS';
+  const autoFlow = (values.gridItemsPositioning ?? node.gridItemsPositioning) === 'ROW_AUTO_FLOW';
+  const rows = autoRows
+    ? autoFlow
+      ? Math.max(1, Math.ceil(node.children.length / columns))
+      : Math.max(
+          1,
+          ...node.children.map(n =>
+            'gridRowAnchorIndex' in n && 'gridRowSpan' in n
+              ? n.gridRowAnchorIndex + n.gridRowSpan
+              : node.gridRowCount,
+          ),
+        )
+    : (values.rows?.length ?? node.gridRowCount);
+  return {
+    layoutSizingHorizontal: columns > node.gridColumnCount,
+    layoutSizingVertical: rows > node.gridRowCount,
+  };
+};
 const validateGrid = (
   node: FrameNode,
   values: ResponsiveGridValues,
@@ -262,6 +295,10 @@ const validateGrid = (
       fail(rootId, node.id, 'Track change would delete occupied cells');
   }
   const layout = layoutOf(node, actions);
+  const growing = growingGridAxes(node, values);
+  for (const field of ['layoutSizingHorizontal', 'layoutSizingVertical'] as const)
+    if (node[field] === 'HUG' && growing[field] && layout[field] === undefined)
+      fail(rootId, node.id, 'Growing a HUG axis requires explicit sizing ownership');
   for (const [field, tracks] of [
     ['layoutSizingHorizontal', values.columns ?? node.gridColumnSizes],
     [
@@ -406,6 +443,13 @@ export const applyPreparedResponsiveRoot = (
     const target = node as unknown as Record<string, unknown>;
     if (spacingFields.has(field)) {
       const spacing = value as { value: number; variableId?: string };
+      if (
+        target[field] !== spacing.value &&
+        !write(() => {
+          target[field] = spacing.value;
+        })
+      )
+        return false;
       const binding = (
         node.boundVariables as Record<string, VariableAlias | undefined> | undefined
       )?.[field];
@@ -419,12 +463,7 @@ export const applyPreparedResponsiveRoot = (
         )
       )
         return false;
-      return (
-        target[field] === spacing.value ||
-        write(() => {
-          target[field] = spacing.value;
-        })
-      );
+      return true;
     }
     return (
       target[field] === value ||
@@ -462,13 +501,21 @@ export const applyPreparedResponsiveRoot = (
       currentNodeId = node.id;
       const values = gridOf(node, desired.actions);
       const layout = layoutOf(node, desired.actions);
-      for (const field of ['layoutSizingHorizontal', 'layoutSizingVertical'] as const)
+      const growing = growingGridAxes(node, values);
+      for (const field of ['layoutSizingHorizontal', 'layoutSizingVertical'] as const) {
+        if (
+          node[field] === 'HUG' &&
+          growing[field] &&
+          !applyField(node, field, layout[field] === 'HUG' ? 'FIXED' : layout[field])
+        )
+          return { status: 'cancelled', changed };
         if (
           layout[field] !== undefined &&
           layout[field] !== 'HUG' &&
           !applyField(node, field, layout[field])
         )
           return { status: 'cancelled', changed };
+      }
       for (const field of ['gridItemsPositioning', 'gridAutoTracks'] as const)
         if (values[field] !== undefined && !applyField(node, field, values[field]))
           return { status: 'cancelled', changed };
