@@ -10,6 +10,10 @@ reason to replace authored values. Its width source is a FRAME, not necessarily 
 the appropriate container/media-query implementation and disclose differences. Do not configure or
 enable rules merely to read a design.
 
+Duplicated responsive roots on the configured page in the same file inherit rules and custom
+thresholds with remapped target IDs. Use each root's actual status and effectiveBreakpoints from
+`get_responsive_layout`; `copyErrors` means a candidate was refused, not that its rules applied.
+
 When no explicit rules exist, compare width examples and disclose inferred transition thresholds:
 
 1. **Get every breakpoint's frame — then read each one's own exact values.** When several roots are

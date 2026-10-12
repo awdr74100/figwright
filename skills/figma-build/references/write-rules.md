@@ -203,6 +203,13 @@ properties/variant combinations.
 
 Accepted configuration, enabled state and resolved thresholds are saved in the Figma document.
 Enabled rules resume when the plugin reopens on the configured page, without another MCP call.
+After a root applies successfully, duplicating the entire frame on that page in the same file
+automatically inherits its rules and custom thresholds, using the copy's own node IDs. Copies can
+be copied again. Copies made while closed or disabled are checked on reopen or re-enable; disabled
+rules never adopt or modify them. Only copies carrying the source's metadata qualify. Changed target
+paths, types or names are refused and reported in `copyErrors`; explicitly configure such a copy
+after verifying its IDs. The existing 32-root limit also applies to copies. Deleting an inherited
+copy removes its saved registration; deleting an explicitly configured root still reports an error.
 Configure separately from `batch`, which cannot undo a persistent controller. FIXED keeps the
 node's current size when switching from HUG; use FILL when the intent is to regain the parent's
 available width.

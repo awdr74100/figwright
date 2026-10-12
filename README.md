@@ -130,6 +130,23 @@ Figwright exposes **123 MCP tools** in three groups:
 > [!TIP]
 > Your MCP client lists every tool at connect time, which is always the authoritative, up-to-date catalog.
 
+### Responsive layouts
+
+Ask your agent to configure a frame's responsive rules, then resize the frame with Figwright open.
+Duplicate the **entire configured frame** on the same page in the same file: the copy automatically
+inherits its rules and custom breakpoints, including when you copy a copy. Saved rules resume after
+reopening the plugin. Copies made while the plugin is closed are checked when it reopens; disabled
+rules wait until you enable them again.
+
+To override preset breakpoints, ask for your own values: for example, `breakpointValues: { md: 800 }`
+changes `md` to 800 for the configuration, and the same field on a root overrides it for that frame.
+Use `breakpointPreset: "none"` with numeric `minWidth` rules to replace the preset completely.
+The [configuration guide](./skills/figma-build/references/write-rules.md#opt-in-responsive-rules-configuration-through-ai-not-the-panel)
+contains a complete MCP example. Read `get_responsive_layout` to inspect effective thresholds,
+root status and `copyErrors`. A changed target structure or the 32-root limit can prevent inheritance;
+verify the copy's IDs before configuring it explicitly. Deleting an inherited copy also removes its
+saved registration.
+
 ## Plugin
 
 The Figma-side plugin isn't a black box. It shows every call as it happens, lets you inspect the exact payload sent to the model, and surfaces its own connection health.
