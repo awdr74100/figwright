@@ -24,7 +24,7 @@ The server talks to the Figwright Figma plugin running in your Figma app. See th
 ## Responsive tools
 
 - `configure_responsive_layout` — opt-in width rules for explicit layout, existing GRID tracks,
-  whole-node visibility and public INSTANCE BOOLEAN/VARIANT properties. The default `standard-v1`
+  whole-node visibility and public INSTANCE BOOLEAN/VARIANT properties. The default `standard`
   thresholds are 0/640/768/1024/1280/1536; users can override them through their AI client. It does
   not add an editor to the plugin panel or infer actions from the preset.
 - `get_responsive_layout` — read configuration, effective thresholds and each root's status/error

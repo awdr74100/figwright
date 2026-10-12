@@ -83,7 +83,7 @@ const breakpoint = z.union([
 ]);
 
 /** Thresholds only: no implicit layout, visibility, component semantics or activation. */
-const STANDARD_V1: Readonly<Record<string, number>> = Object.freeze({
+const STANDARD_BREAKPOINTS: Readonly<Record<string, number>> = Object.freeze({
   base: 0,
   sm: 640,
   md: 768,
@@ -95,7 +95,7 @@ const STANDARD_V1: Readonly<Record<string, number>> = Object.freeze({
 export const ResponsiveLayoutConfigSchema = z.strictObject({
   version: z.literal(1),
   pageId: id,
-  breakpointPreset: z.enum(['standard-v1', 'none']).optional(),
+  breakpointPreset: z.enum(['standard', 'none']).optional(),
   breakpointValues: namedValues.optional(),
   roots: z
     .array(
@@ -133,7 +133,7 @@ export interface ResolvedResponsiveRoot {
 }
 export interface ResolvedResponsiveLayoutConfig {
   config: ResponsiveLayoutConfig;
-  breakpointPreset: 'standard-v1' | 'none';
+  breakpointPreset: 'standard' | 'none';
   roots: ResolvedResponsiveRoot[];
 }
 export interface ResponsiveEvaluation {
@@ -153,7 +153,7 @@ export const resolveResponsiveLayoutConfig = (
   input: ResponsiveLayoutConfig,
 ): ResolvedResponsiveLayoutConfig => {
   const config = clone(ResponsiveLayoutConfigSchema.parse(input));
-  const breakpointPreset = config.breakpointPreset ?? 'standard-v1';
+  const breakpointPreset = config.breakpointPreset ?? 'standard';
   const rootIds = new Set<string>();
   const owners = new Map<string, string>();
   const roots = config.roots.map(root => {
@@ -177,7 +177,7 @@ export const resolveResponsiveLayoutConfig = (
         names.set(name, { value, source });
       }
     };
-    if (breakpointPreset === 'standard-v1') mergeNames(STANDARD_V1, 'preset');
+    if (breakpointPreset === 'standard') mergeNames(STANDARD_BREAKPOINTS, 'preset');
     mergeNames(config.breakpointValues ?? {}, 'config');
     mergeNames(root.breakpointValues ?? {}, 'root');
     if (names.size > 24) throw new Error('At most 24 effective breakpoint names');
@@ -247,7 +247,7 @@ export const SavedResponsiveLayoutSchema = z
     enabled: z.boolean(),
     resolved: z.strictObject({
       config: ResponsiveLayoutConfigSchema,
-      breakpointPreset: z.enum(['standard-v1', 'none']),
+      breakpointPreset: z.enum(['standard', 'none']),
       roots: z
         .array(
           z.strictObject({
@@ -262,7 +262,7 @@ export const SavedResponsiveLayoutSchema = z
   })
   .superRefine((saved, ctx) => {
     try {
-      // Validate consistency with this immutable preset version; retain the saved resolved values.
+      // Validate consistency with the immutable preset; retain the saved resolved values.
       if (
         JSON.stringify(resolveResponsiveLayoutConfig(saved.resolved.config)) !==
         JSON.stringify(saved.resolved)
@@ -291,7 +291,7 @@ export interface ResponsiveLayoutStatus {
   enabled: boolean;
   config: ResponsiveLayoutConfig | null;
   version: 1 | null;
-  breakpointPreset: 'standard-v1' | 'none' | null;
+  breakpointPreset: 'standard' | 'none' | null;
   effectiveBreakpoints: {
     rootId: string;
     breakpoints: Omit<ResolvedResponsiveBreakpoint, 'overrides'>[];

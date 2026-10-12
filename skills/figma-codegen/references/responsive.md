@@ -5,7 +5,7 @@ be responsive — so **never hardcode the artboard width** (a root `w-[1920px]` 
 screen). The root is `w-full`; sections stay fluid with content centered in a `max-w`. Ground the
 breakpoints instead of guessing them. First `get_responsive_layout`: an existing configuration's
 effectiveBreakpoints and base/overrides are explicit authored rules, and outrank an inferred frame
-width. Keep custom values; standard-v1's 0/640/768/1024/1280/1536 is only a fallback preset, never a
+width. Keep custom values; standard's 0/640/768/1024/1280/1536 is only a fallback preset, never a
 reason to replace authored values. Its width source is a FRAME, not necessarily a viewport — choose
 the appropriate container/media-query implementation and disclose differences. Do not configure or
 enable rules merely to read a design.

@@ -15,7 +15,7 @@ describe('responsive public tools', () => {
     const config = schema.properties.config;
     expect(config.additionalProperties).toBe(false);
     expect(config.properties.version.const).toBe(1);
-    expect(config.properties.breakpointPreset.enum).toEqual(['standard-v1', 'none']);
+    expect(config.properties.breakpointPreset.enum).toEqual(['standard', 'none']);
     expect(config.properties.roots).toMatchObject({ minItems: 1, maxItems: 32 });
     const root = config.properties.roots.items;
     expect(root.properties.base.maxItems).toBe(128);

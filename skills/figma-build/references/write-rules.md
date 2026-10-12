@@ -150,7 +150,7 @@ the configuration — there is no responsive editing UI in the plugin panel.
 
 Use explicit user/project thresholds first (including documented numbers or readable numeric
 variables). FRAME widths show examples, not a native Figma breakpoint table; minWidth/maxWidth are
-constraints, not breakpoints. Without custom requirements, explain the versioned `standard-v1`
+constraints, not breakpoints. Without custom requirements, explain the `standard`
 threshold preset: base=0, sm=640, md=768, lg=1024, xl=1280, 2xl=1536. It supplies thresholds only,
 not any actions. Compare against the chosen ordinary FRAME root's width in design units, not a
 browser viewport, physical pixels or canvas zoom. Reading a variable for a threshold does not bind
@@ -158,7 +158,7 @@ that threshold to future variable changes.
 
 For tool callers, this complete example uses placeholder IDs to be replaced with verified IDs.
 The configuration-wide md=820 is overridden to 800 for this root; absent breakpointPreset defaults
-to standard-v1. Only the two listed rules run:
+to standard. Only the two listed rules run:
 
 ```json
 {

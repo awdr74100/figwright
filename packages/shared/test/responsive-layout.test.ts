@@ -38,7 +38,12 @@ describe('responsive rules', () => {
       at,
       overrides: [],
     }));
-    const root = resolve(c).roots[0]!;
+    const resolved = resolve(c);
+    expect(resolved.breakpointPreset).toBe('standard');
+    const explicit = resolve({ ...c, breakpointPreset: 'standard' });
+    expect(explicit.breakpointPreset).toBe('standard');
+    expect(explicit.roots).toEqual(resolved.roots);
+    const root = resolved.roots[0]!;
     expect(evaluateResponsiveRoot(root, width).minWidth).toBe(width);
     expect(evaluateResponsiveRoot(root, Math.max(0, width - 0.5)).minWidth).toBe(below);
   });
