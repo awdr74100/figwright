@@ -36,6 +36,13 @@ stops future writes without rollback. Inspect `accepted`, `applied` and root err
 alone does not mean all rules were applied. See the [write rules](../../skills/figma-build/references/write-rules.md#opt-in-responsive-rules-configuration-through-ai-not-the-panel)
 for configuration examples and protection boundaries.
 
+Accepted configuration, its enabled flag and resolved thresholds are saved in the Figma document.
+Enabled rules resume when the plugin reopens on their configured page, without another MCP call.
+Call `configure_responsive_layout` separately from `batch`: ongoing control has no faithful inverse.
+An apply failure may leave earlier writes in place; inspect root errors and reconfigure explicitly
+to retry. Updating only the server does not add these tools to an older plugin; install the matching
+plugin build as well.
+
 ## Requirements
 
 - Node.js 20.19+ or 22.12+ (the server runs via `npx` as its own process, independent of your project's Node version)

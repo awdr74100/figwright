@@ -201,6 +201,12 @@ Spacing `{ value, variableId }` must match an existing FLOAT variable for the ta
 variableId explicitly unbinds that owned field. Do not control component internals or invent
 properties/variant combinations.
 
+Accepted configuration, enabled state and resolved thresholds are saved in the Figma document.
+Enabled rules resume when the plugin reopens on the configured page, without another MCP call.
+Configure separately from `batch`, which cannot undo a persistent controller. FIXED keeps the
+node's current size when switching from HUG; use FILL when the intent is to regain the parent's
+available width.
+
 Check configure's accepted **and** applied and inspect each root's status/error with
 `get_responsive_layout({})`. A failed root requires explicit reconfiguration; other roots may have
 applied. No transactional rollback is promised. `configure_responsive_layout({ enabled: false })`
