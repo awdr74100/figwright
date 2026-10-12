@@ -4,6 +4,7 @@ import {
   ResponsiveLayoutConfigSchema,
   resolveResponsiveLayoutConfig,
   evaluateResponsiveRoot,
+  SavedResponsiveLayoutSchema,
 } from '../src/responsive-layout.js';
 
 const fixture = () => ({
@@ -25,6 +26,19 @@ const resolve = (input: unknown) =>
   resolveResponsiveLayoutConfig(ResponsiveLayoutConfigSchema.parse(input));
 
 describe('responsive rules', () => {
+  it('accepts saved copy identities only when they identify unique configured roots', () => {
+    const saved = { version: 1, enabled: true, resolved: resolve(fixture()) };
+    expect(SavedResponsiveLayoutSchema.safeParse(saved).success).toBe(true);
+    expect(
+      SavedResponsiveLayoutSchema.safeParse({ ...saved, inheritedRootIds: ['r'] }).success,
+    ).toBe(true);
+    expect(
+      SavedResponsiveLayoutSchema.safeParse({ ...saved, inheritedRootIds: ['missing'] }).success,
+    ).toBe(false);
+    expect(
+      SavedResponsiveLayoutSchema.safeParse({ ...saved, inheritedRootIds: ['r', 'r'] }).success,
+    ).toBe(false);
+  });
   it.each([
     [0, 0],
     [640, 0],

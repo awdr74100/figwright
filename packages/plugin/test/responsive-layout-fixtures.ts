@@ -7,7 +7,10 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
   const pending = new Map<string, Promise<void>>();
   const nodes = new Map<string, any>();
   const variables = new Map<string, any>();
+  const pluginData = new Map<string, Map<string, string>>();
   const makeNode = (id: string, type = 'FRAME', parent?: any): any => {
+    const dataSlots = new Map<string, string>();
+    pluginData.set(id, dataSlots);
     const data: Record<string, any> = {
       id,
       type,
@@ -42,6 +45,8 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
         'Flag#1': { type: 'BOOLEAN', value: false },
         Size: { type: 'VARIANT', value: 'A' },
       },
+      getPluginData: (key: string) => dataSlots.get(key) ?? '',
+      setPluginData: (key: string, value: string) => dataSlots.set(key, value),
       setProperties: (values: Record<string, unknown>) => {
         writes.push({ nodeId: id, field: 'componentProperties', value: values });
         for (const [key, value] of Object.entries(values))
@@ -133,6 +138,7 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
     );
   const document = {
     id: 'doc',
+    name: 'fixture',
     type: 'DOCUMENT',
     parent: null,
     getPluginData: (key: string) => saved.get(key) ?? '',
@@ -202,6 +208,21 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
     ],
   };
   writes.length = 0;
+  const cloneNode = (source: any, prefix: string, parent = source.parent): any => {
+    const node = makeNode(`${prefix}-${source.id}`, source.type, parent);
+    for (const [field, value] of Object.entries(source)) {
+      if (['id', 'parent', 'children', 'removed'].includes(field) || typeof value === 'function')
+        continue;
+      if (field === 'gridColumnSizes' || field === 'gridRowSizes')
+        node[field] = (value as any[]).map(track => makeTrack(node.id, track.type, track.value));
+      else node[field] = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+    }
+    for (const [key, value] of pluginData.get(source.id) ?? []) node.setPluginData(key, value);
+    if (source.getMainComponentAsync !== undefined)
+      node.getMainComponentAsync = source.getMainComponentAsync;
+    for (const child of source.children) cloneNode(child, prefix, node);
+    return node;
+  };
   return {
     api: api as unknown as typeof figma,
     root,
@@ -215,13 +236,15 @@ export const createResponsiveFixture = (kind: 'flex' | 'grid' | 'instances' = 'f
     saved,
     makeNode,
     makeTrack,
+    cloneNode,
     main,
     set,
     setWidth: (width: number) => {
       root.width = width;
     },
-    emitChange: () => {
-      for (const cb of listeners.get('nodechange') ?? []) cb();
+    emitChange: (event?: NodeChangeEvent) => {
+      for (const cb of listeners.get('nodechange') ?? [])
+        (cb as (event?: NodeChangeEvent) => void)(event);
     },
     switchPage: (id: string) => {
       api.currentPage = nodes.get(id) ?? makeNode(id, 'PAGE', document);

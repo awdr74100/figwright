@@ -18,6 +18,7 @@ import {
   validateResponsiveOwnership,
   validateResponsiveRootIsolation,
 } from './responsive-layout-adapter.js';
+import { createResponsiveCopyTracker } from './responsive-layout-copy.js';
 
 export interface ResponsiveLayoutController {
   configure(params: unknown): Promise<ResponsiveLayoutConfigureResult>;
@@ -39,6 +40,8 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
   let queue = Promise.resolve();
   let roots: ResponsiveRootState[] = [];
   let loadError: ResponsiveLayoutStatus['error'];
+  let inheritedRootIds = new Set<string>();
+  const copies = createResponsiveCopyTracker(api);
   const current = (token: number): boolean =>
     !disposed &&
     enabled &&
@@ -51,6 +54,7 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
     timer = undefined;
     // A blocked old lookup must not prevent disable/replacement from taking effect.
     queue = Promise.resolve();
+    copies.reset();
     return generation;
   };
   const get = (): ResponsiveLayoutStatus =>
@@ -66,9 +70,44 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
         })) ?? [],
       roots,
       ...(loadError === undefined ? {} : { error: loadError }),
+      ...(copies.errors().length === 0 ? {} : { copyErrors: copies.errors() }),
     });
+  const save = (selected: ResolvedResponsiveLayoutConfig, active: boolean): void => {
+    api.root.setPluginData(
+      SLOT,
+      JSON.stringify({
+        version: 1,
+        enabled: active,
+        resolved: selected,
+        ...(inheritedRootIds.size === 0 ? {} : { inheritedRootIds: [...inheritedRootIds] }),
+      }),
+    );
+  };
   const apply = async (token: number): Promise<void> => {
     if (!current(token) || resolved === null) return;
+    const removed = await Promise.all(
+      [...inheritedRootIds].map(async id => {
+        const node = await api.getNodeByIdAsync(id);
+        return node === null || node.removed ? id : null;
+      }),
+    );
+    if (!current(token) || resolved === null) return;
+    const added = copies.inherit(resolved.config);
+    if (removed.some(id => id !== null) || added.length > 0) {
+      const dropped = new Set(removed.filter((id): id is string => id !== null));
+      const next = resolveResponsiveLayoutConfig({
+        ...resolved.config,
+        roots: [...resolved.config.roots.filter(root => !dropped.has(root.rootId)), ...added],
+      });
+      for (const id of dropped) inheritedRootIds.delete(id);
+      for (const root of added) inheritedRootIds.add(root.rootId);
+      save(next, enabled);
+      resolved = next;
+      const previous = new Map(roots.map(root => [root.rootId, root]));
+      roots = next.roots.map(
+        root => previous.get(root.rootId) ?? { rootId: root.rootId, status: 'paused' },
+      );
+    }
     const selected = resolved;
     // Resolve roots in parallel; apply in configured order, with independent error states.
     const prepared = await Promise.all(
@@ -120,7 +159,13 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
         validateResponsiveRootIsolation(root.root, boundaries);
         const desired = evaluateResponsiveRoot(rule, root.root.width);
         const applied = applyPreparedResponsiveRoot(root, desired, () => current(token));
-        if (applied.status === 'applied' && current(token))
+        if (applied.status === 'applied' && current(token)) {
+          // Copy only complete, successfully validated roots; templates never grant component-internal ownership.
+          // eslint-disable-next-line no-await-in-loop -- each root's writes remain ordered
+          await copies.stamp(root.root, selected.config.roots[index]!, selected.config.pageId, () =>
+            current(token),
+          );
+          if (!current(token)) continue;
           roots[index] = {
             rootId: rule.rootId,
             status: 'active',
@@ -129,6 +174,7 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
             ...(desired.at === undefined ? {} : { at: desired.at }),
             lastAppliedAt: Date.now(),
           };
+        }
       } catch (error) {
         if (!current(token)) continue;
         const e =
@@ -156,8 +202,9 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
     queue = work.catch(() => undefined);
     return work;
   };
-  const onChange = (): void => {
+  const onChange = (event?: NodeChangeEvent): void => {
     if (!current(generation)) return;
+    copies.collect(event);
     if (timer !== undefined) clearTimeout(timer);
     const token = generation;
     timer = setTimeout(() => {
@@ -178,7 +225,10 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
     updateWatch();
     for (const root of roots)
       if (root.status !== 'error') root.status = !enabled ? 'disabled' : 'paused';
-    if (current(token)) void enqueue(token);
+    if (current(token)) {
+      copies.collect();
+      void enqueue(token);
+    }
   };
   const configure = async (params: unknown): Promise<ResponsiveLayoutConfigureResult> => {
     if (disposed) throw new Error('Responsive controller is disposed');
@@ -196,12 +246,9 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
         throw new Error('Responsive configuration was superseded');
       if (input.enabled && candidate === null)
         throw new Error('Configure responsive rules before enabling');
-      // Save only an accepted, explicit configure. No startup migration or event persistence.
-      if (candidate !== null)
-        api.root.setPluginData(
-          SLOT,
-          JSON.stringify({ version: 1, enabled: input.enabled, resolved: candidate }),
-        );
+      // Ordinary applies do not rewrite settings. Accepted configure and copy identity changes persist.
+      if (input.config !== undefined) inheritedRootIds = new Set();
+      if (candidate !== null) save(candidate, input.enabled);
       resolved = candidate;
       enabled = input.enabled;
       loadError = undefined;
@@ -211,7 +258,10 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
           status: enabled ? 'paused' : 'disabled',
         })) ?? [];
       updateWatch();
-      if (current(token)) await enqueue(token);
+      if (current(token)) {
+        copies.collect();
+        await enqueue(token);
+      }
       return {
         accepted: true,
         applied: current(token) && roots.every(root => root.status === 'active'),
@@ -237,6 +287,7 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
           const parsed = SavedResponsiveLayoutSchema.parse(JSON.parse(saved));
           resolved = parsed.resolved;
           enabled = parsed.enabled;
+          inheritedRootIds = new Set(parsed.inheritedRootIds ?? []);
           roots = parsed.resolved.roots.map(rule => ({
             rootId: rule.rootId,
             status: enabled ? 'paused' : 'disabled',
@@ -251,7 +302,10 @@ export const createResponsiveLayoutController = (api: typeof figma): ResponsiveL
         }
       api.on('currentpagechange', onPage);
       updateWatch();
-      if (current(generation)) void enqueue(generation);
+      if (current(generation)) {
+        copies.collect();
+        void enqueue(generation);
+      }
     },
     dispose: () => {
       if (disposed) return;

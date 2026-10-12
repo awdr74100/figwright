@@ -245,6 +245,7 @@ export const SavedResponsiveLayoutSchema = z
   .strictObject({
     version: z.literal(1),
     enabled: z.boolean(),
+    inheritedRootIds: z.array(id).max(32).optional(),
     resolved: z.strictObject({
       config: ResponsiveLayoutConfigSchema,
       breakpointPreset: z.enum(['standard', 'none']),
@@ -261,6 +262,16 @@ export const SavedResponsiveLayoutSchema = z
     }),
   })
   .superRefine((saved, ctx) => {
+    if (
+      saved.inheritedRootIds?.some(
+        rootId => !saved.resolved.roots.some(root => root.rootId === rootId),
+      ) ||
+      new Set(saved.inheritedRootIds).size !== (saved.inheritedRootIds?.length ?? 0)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Inherited root identities must be unique configured roots',
+      });
     try {
       // Validate consistency with the immutable preset; retain the saved resolved values.
       if (
@@ -298,6 +309,7 @@ export interface ResponsiveLayoutStatus {
   }[];
   roots: ResponsiveRootState[];
   error?: { phase: 'load'; message: string };
+  copyErrors?: { rootId: string; message: string }[];
 }
 export type ResponsiveLayoutConfigureResult = ResponsiveLayoutStatus & {
   accepted: true;
