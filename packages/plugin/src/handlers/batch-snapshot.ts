@@ -530,6 +530,16 @@ export interface GeometrySnapshot {
   grid: { row: number; column: number } | null;
 }
 
+/**
+ * A child of a ROW_AUTO_FLOW grid sits in the cell its layer order gives it, and Figma refuses to
+ * place it directly (measured). Its cell is the order's to restore, not its own: it is neither
+ * captured nor written while the grid flows — every op snapshots before the first one runs, so an
+ * earlier reorder leaves a later snapshot's cell stale, and writing it failed the rollback.
+ */
+const flowsIntoCells = (node: SceneNode): boolean =>
+  (node.parent as { gridItemsPositioning?: unknown } | null)?.gridItemsPositioning ===
+  'ROW_AUTO_FLOW';
+
 export const captureGeometry = (node: SceneNode): GeometrySnapshot => {
   const bag = bagOf(node);
   const layout: Bag = {};
@@ -545,7 +555,7 @@ export const captureGeometry = (node: SceneNode): GeometrySnapshot => {
   }
   const parent = node.parent as (BaseNode & { layoutMode?: string }) | null;
   const grid =
-    parent?.layoutMode === 'GRID' && 'gridRowAnchorIndex' in node
+    parent?.layoutMode === 'GRID' && !flowsIntoCells(node) && 'gridRowAnchorIndex' in node
       ? { row: bag.gridRowAnchorIndex as number, column: bag.gridColumnAnchorIndex as number }
       : null;
   return {
@@ -587,6 +597,7 @@ export const restoreGeometry = (node: SceneNode, snapshot: GeometrySnapshot): vo
   const bag = bagOf(node);
   if (
     snapshot.grid !== null &&
+    !flowsIntoCells(node) &&
     (bag.gridRowAnchorIndex !== snapshot.grid.row ||
       bag.gridColumnAnchorIndex !== snapshot.grid.column)
   ) {

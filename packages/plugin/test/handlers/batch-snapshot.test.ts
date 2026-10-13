@@ -189,6 +189,54 @@ describe('restoreOrder', () => {
 });
 
 describe('restoreGeometry', () => {
+  /** A grid child whose direct placement Figma refuses while its grid flows (measured). */
+  const gridChild = (parent: Record<string, unknown>) => {
+    const placed: [number, number][] = [];
+    const child = {
+      id: 'c',
+      type: 'RECTANGLE',
+      parent,
+      width: 40,
+      height: 40,
+      relativeTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      gridRowAnchorIndex: 0,
+      gridColumnAnchorIndex: 1,
+      setGridChildPosition(row: number, column: number) {
+        if (parent.gridItemsPositioning === 'ROW_AUTO_FLOW')
+          throw new Error('cannot place directly');
+        placed.push([row, column]);
+      },
+    };
+    return { child: child as unknown as SceneNode & typeof child, placed };
+  };
+
+  it("leaves a flowing grid child's cell to its layer order, captured and restored alike", () => {
+    const flowing = { layoutMode: 'GRID', gridItemsPositioning: 'ROW_AUTO_FLOW' };
+    const { child, placed } = gridChild(flowing);
+    // Every op snapshots before the first one runs: an earlier reorder leaves this cell stale.
+    const snapshot = captureGeometry(child);
+    expect(snapshot.grid).toBeNull();
+    child.gridColumnAnchorIndex = 2;
+    expect(() => restoreGeometry(child, snapshot)).not.toThrow();
+
+    // Captured under MANUAL, restored while the grid flows (an op switched it): still not written.
+    const parent: Record<string, unknown> = { layoutMode: 'GRID', gridItemsPositioning: 'MANUAL' };
+    const pinned = gridChild(parent);
+    const manual = captureGeometry(pinned.child);
+    expect(manual.grid).toEqual({ row: 0, column: 1 });
+    parent.gridItemsPositioning = 'ROW_AUTO_FLOW';
+    pinned.child.gridColumnAnchorIndex = 2;
+    expect(() => restoreGeometry(pinned.child, manual)).not.toThrow();
+    // Back under MANUAL, the cell is written.
+    parent.gridItemsPositioning = 'MANUAL';
+    restoreGeometry(pinned.child, manual);
+    expect(pinned.placed).toEqual([[0, 1]]);
+    expect(placed).toEqual([]);
+  });
+
   it('writes bounds, positioning, the sizing primitives, then the size and transform', () => {
     const log: string[] = [];
     const state: Record<string, unknown> = {

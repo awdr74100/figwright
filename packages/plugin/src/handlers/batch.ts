@@ -611,6 +611,8 @@ const GRID_PROPS = [
   'gridRowGap',
   'gridColumnGap',
 ];
+/** How children take cells and whether rows follow them — restored around GRID_PROPS, not in it. */
+const GRID_MODES = ['gridItemsPositioning', 'gridAutoTracks'];
 const AUTO_LAYOUT_BINDINGS = [
   'paddingTop',
   'paddingRight',
@@ -621,6 +623,68 @@ const AUTO_LAYOUT_BINDINGS = [
   'gridRowGap',
   'gridColumnGap',
 ];
+
+/**
+ * Put a grid's columns back, and enough rows to hold every child where it is — before the children
+ * go back to their cells. Figma refuses any row-count write while gridAutoTracks is ROWS (measured,
+ * even of the current value), so a ROWS grid drops to NONE here and gets ROWS back in finishGrid;
+ * switching NONE → ROWS trims the rows to what the children need, at least one (measured, empty
+ * grid included), which is the state a ROWS grid is always in. A column cut on a MANUAL ROWS grid
+ * re-flows the children into new rows and putting the columns back does not return them (measured),
+ * so the rows can only shrink once the children have moved back up. ROW_AUTO_FLOW goes back first
+ * so the columns re-flow the children rather than hit an occupied cell.
+ */
+const restoreGridTracks = (frame: FrameNode, grid: Bag): void => {
+  const bag = frame as unknown as Bag;
+  if (bag.gridAutoTracks === 'ROWS' && 'gridAutoTracks' in grid) {
+    writeIfDifferent(frame, 'gridAutoTracks', 'NONE');
+  }
+  if (grid.gridItemsPositioning === 'ROW_AUTO_FLOW') {
+    writeIfDifferent(frame, 'gridItemsPositioning', 'ROW_AUTO_FLOW');
+  }
+  for (const k of ['gridColumnCount', 'gridColumnSizes', 'gridRowGap', 'gridColumnGap']) {
+    if (k in grid) writeIfDifferent(frame, k, grid[k]);
+  }
+  if (bag.gridAutoTracks !== 'ROWS' && (grid.gridRowCount as number) > (bag.gridRowCount as number))
+    writeIfDifferent(frame, 'gridRowCount', grid.gridRowCount);
+};
+
+/**
+ * After the children are back: the row count (now free to shrink) and row sizes, then the placement
+ * modes. MANUAL comes back after ROW_AUTO_FLOW's re-flow; Figma then returns each child to the cell
+ * it held under MANUAL while that cell survived (measured, through a swap of two children).
+ */
+const finishGrid = (frame: FrameNode, grid: Bag): void => {
+  const bag = frame as unknown as Bag;
+  if (bag.gridAutoTracks !== 'ROWS') {
+    for (const k of ['gridRowCount', 'gridRowSizes'])
+      if (k in grid) writeIfDifferent(frame, k, grid[k]);
+  }
+  for (const k of GRID_MODES) if (k in grid) writeIfDifferent(frame, k, grid[k]);
+};
+
+/**
+ * Children of a MANUAL grid go back cell by cell, and one can be headed for a cell another still
+ * holds. Retry the ones that fail while any pass makes progress; a cycle with no free cell between
+ * them still fails, and that error is the one reported.
+ */
+const restoreChildren = (children: (SceneNode | null)[], snapshots: GeometrySnapshot[]): void => {
+  let pending = children.flatMap((child, i) => (child === null ? [] : [i]));
+  let lastError: unknown;
+  while (pending.length > 0) {
+    const failed: number[] = [];
+    for (const i of pending) {
+      try {
+        restoreGeometry(children[i]!, snapshots[i]!);
+      } catch (err) {
+        failed.push(i);
+        lastError = err;
+      }
+    }
+    if (failed.length === pending.length) throw lastError;
+    pending = failed;
+  }
+};
 
 interface AutoLayoutState {
   id: string;
@@ -652,6 +716,7 @@ const autoLayoutInverse: BatchInverse = {
     if (frame.layoutMode === 'GRID') {
       // Track sizes are live objects with setters; keep plain copies.
       for (const k of GRID_PROPS) grid[k] = toPlainJson(bag[k]);
+      for (const k of GRID_MODES) if (k in frame) grid[k] = bag[k];
     }
     const state: AutoLayoutState = {
       id,
@@ -674,13 +739,18 @@ const autoLayoutInverse: BatchInverse = {
     // that uses them, set the mode first; back to NONE, write them while the mode still allows it.
     if (s.mode !== 'NONE') writeIfDifferent(frame, 'layoutMode', s.mode);
     for (const [k, v] of Object.entries(s.values)) writeIfDifferent(frame, k, v);
-    for (const [k, v] of Object.entries(s.grid)) writeIfDifferent(frame, k, v);
+    restoreGridTracks(frame, s.grid);
     if (s.mode === 'NONE') writeIfDifferent(frame, 'layoutMode', 'NONE');
     restoreGeometry(frame, s.frame);
     const children = await Promise.all(s.children.map(async c => live(figmaCtx, c.id)));
-    children.forEach((child, i) => {
-      if (child !== null) restoreGeometry(child as SceneNode, s.children[i]!);
-    });
+    restoreChildren(children as (SceneNode | null)[], s.children);
+    finishGrid(frame, s.grid);
+    // Back under MANUAL, the cells Figma remembered are not all there: a column cut while the grid
+    // flowed drops the memory of every child it displaced (measured: such a child came back with
+    // no cell). The snapshot holds each one's cell, so place the children once more.
+    if (s.grid.gridItemsPositioning === 'MANUAL') {
+      restoreChildren(children as (SceneNode | null)[], s.children);
+    }
     rebind(frame, s.bindings);
     return undefined;
   },
