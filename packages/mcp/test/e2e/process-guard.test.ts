@@ -33,13 +33,25 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process guard (built dist)', () => {
     });
     let stdout = '';
     let stderr = '';
+    const responses = new Map<number, unknown>();
+    let pendingLine = '';
     child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString('utf8');
+      const text = d.toString('utf8');
+      stdout += text;
+      // A large response (tools/list is ~160 KB) arrives in several chunks, so only a completed
+      // line is parsed — the same framing mcp-wire.test.ts reads.
+      pendingLine += text;
+      for (let nl = pendingLine.indexOf('\n'); nl !== -1; nl = pendingLine.indexOf('\n')) {
+        const line = pendingLine.slice(0, nl).trim();
+        pendingLine = pendingLine.slice(nl + 1);
+        if (line === '') continue;
+        const msg = JSON.parse(line) as { id?: number };
+        if (msg.id !== undefined) responses.set(msg.id, msg);
+      }
     });
     child.stderr.on('data', (d: Buffer) => {
       stderr += d.toString('utf8');
     });
-    const responses = new Map<number, unknown>();
     const send = async (id: number, method: string, params: object = {}): Promise<unknown> => {
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
       for (let waited = 0; waited < 10_000; waited += 50) {
@@ -47,11 +59,6 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process guard (built dist)', () => {
           throw new Error(
             `server exited (${child.exitCode ?? child.signalCode})\nstderr:\n${stderr}`,
           );
-        }
-        for (const line of stdout.split('\n')) {
-          if (line.trim() === '') continue;
-          const msg = JSON.parse(line) as { id?: number };
-          if (msg.id !== undefined) responses.set(msg.id, msg);
         }
         if (responses.has(id)) return responses.get(id);
         // eslint-disable-next-line no-await-in-loop -- poll the child's output
