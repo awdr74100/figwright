@@ -902,6 +902,26 @@ describe('serializeFlat — strokes / effects / auto layout', () => {
     expect(out.layout?.primaryAxisAlignItems).toBeUndefined();
   });
 
+  it('reads the non-default GRID placement modes and leaves the defaults out', () => {
+    const grid = (positioning: string, autoTracks: string) =>
+      serializeFlatSync(
+        fake({
+          type: 'FRAME',
+          layoutMode: 'GRID',
+          gridColumnCount: 3,
+          gridItemsPositioning: positioning,
+          gridAutoTracks: autoTracks,
+        }),
+      ).layout;
+    expect(grid('ROW_AUTO_FLOW', 'ROWS')).toMatchObject({
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+      gridAutoTracks: 'ROWS',
+    });
+    const defaults = grid('MANUAL', 'NONE');
+    expect(defaults?.gridItemsPositioning).toBeUndefined();
+    expect(defaults?.gridAutoTracks).toBeUndefined();
+  });
+
   it('omits layout when layoutMode is NONE or absent', () => {
     expect(serializeFlatSync(fake({ type: 'FRAME', layoutMode: 'NONE' })).layout).toBeUndefined();
     expect(serializeFlatSync(fake({ type: 'RECTANGLE' })).layout).toBeUndefined();
@@ -973,7 +993,7 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
     });
   });
 
-  it('omits gridChild for an auto-flowed cell (anchor -1, default span / align)', () => {
+  it('omits gridChild for a child with no cell (anchor -1, default span / align)', () => {
     const out = serializeFlatSync(
       fake({
         parent: { id: '1:1', layoutMode: 'GRID' },
@@ -986,6 +1006,37 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
       }),
     );
     expect(out.gridChild).toBeUndefined();
+  });
+
+  it('drops the anchors Figma reports for a child of a ROW_AUTO_FLOW grid, keeping span and align', () => {
+    // Measured: a flowing grid reports each child's landed cell (0,0 / 0,1 / …), never -1.
+    const parent = { id: '1:1', layoutMode: 'GRID', gridItemsPositioning: 'ROW_AUTO_FLOW' };
+    const child = (extra: Record<string, unknown>) =>
+      serializeFlatSync(
+        fake({
+          parent,
+          gridRowAnchorIndex: 1,
+          gridColumnAnchorIndex: 2,
+          gridRowSpan: 1,
+          gridColumnSpan: 1,
+          ...extra,
+        }),
+      ).gridChild;
+    expect(child({})).toBeUndefined();
+    expect(child({ gridColumnSpan: 2, gridChildVerticalAlign: 'CENTER' })).toEqual({
+      columnSpan: 2,
+      verticalAlign: 'CENTER',
+    });
+    // The same cell under MANUAL is a pinned placement.
+    expect(
+      serializeFlatSync(
+        fake({
+          parent: { ...parent, gridItemsPositioning: 'MANUAL' },
+          gridRowAnchorIndex: 1,
+          gridColumnAnchorIndex: 2,
+        }),
+      ).gridChild,
+    ).toEqual({ rowAnchorIndex: 1, columnAnchorIndex: 2 });
   });
 
   it('omits gridChild when the parent is not a GRID', () => {

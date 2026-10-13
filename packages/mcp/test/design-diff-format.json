@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "fields": [
     "globalVars",
     "globalVars.styles",
@@ -181,11 +181,13 @@
     "nodes[].layout.counterAxisAlignContent",
     "nodes[].layout.counterAxisAlignItems",
     "nodes[].layout.counterAxisSpacing",
+    "nodes[].layout.gridAutoTracks",
     "nodes[].layout.gridColumnCount",
     "nodes[].layout.gridColumnGap",
     "nodes[].layout.gridColumnSizes",
     "nodes[].layout.gridColumnSizes[].type",
     "nodes[].layout.gridColumnSizes[].value",
+    "nodes[].layout.gridItemsPositioning",
     "nodes[].layout.gridRowCount",
     "nodes[].layout.gridRowGap",
     "nodes[].layout.gridRowSizes",

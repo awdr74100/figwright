@@ -241,6 +241,8 @@ const serializeAutoLayout = (
     gridColumnCount?: number;
     gridRowGap?: number;
     gridColumnGap?: number;
+    gridItemsPositioning?: string;
+    gridAutoTracks?: string;
     gridRowSizes?: unknown;
     gridColumnSizes?: unknown;
   };
@@ -257,6 +259,10 @@ const serializeAutoLayout = (
     const { gridRowCount, gridColumnCount, gridRowGap, gridColumnGap } = n;
     if (typeof gridRowCount === 'number') out.gridRowCount = gridRowCount;
     if (typeof gridColumnCount === 'number') out.gridColumnCount = gridColumnCount;
+    // Only the non-default modes carry signal: children that flow into cells by layer order, and
+    // rows that come and go with them. Absent = MANUAL placement and a fixed row count.
+    if (n.gridItemsPositioning === 'ROW_AUTO_FLOW') out.gridItemsPositioning = 'ROW_AUTO_FLOW';
+    if (n.gridAutoTracks === 'ROWS') out.gridAutoTracks = 'ROWS';
     if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
     if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
     const rowSizes = serializeGridTracks(n.gridRowSizes);
@@ -297,8 +303,14 @@ const serializeAutoLayout = (
   return out;
 };
 
-/** A node's placement inside a GRID parent → `gridChild` (anchor / span / per-cell align). */
-const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined => {
+/**
+ * A node's placement inside a GRID parent → `gridChild` (anchor / span / per-cell align). Under
+ * ROW_AUTO_FLOW the anchors are left out: Figma still reports the cell each child landed in
+ * (measured: 0,0 / 0,1 / 0,2 / 1,0 …, never -1), but layer order put it there, and handing it on
+ * would read as a pinned placement — codegen would freeze every item of a flowing list to its
+ * cell.
+ */
+const serializeGridChild = (node: SceneNode, flowed: boolean): SerializedGridChild | undefined => {
   const n = node as SceneNode & {
     gridRowAnchorIndex?: number;
     gridColumnAnchorIndex?: number;
@@ -308,11 +320,11 @@ const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined =>
     gridChildVerticalAlign?: string;
   };
   const out: SerializedGridChild = {};
-  // anchor -1 = auto-flowed (no explicit cell) → omit; >= 0 = pinned to a specific row/column.
-  if (typeof n.gridRowAnchorIndex === 'number' && n.gridRowAnchorIndex >= 0) {
+  // anchor -1 = no cell → omit; >= 0 under MANUAL = pinned to a specific row/column.
+  if (!flowed && typeof n.gridRowAnchorIndex === 'number' && n.gridRowAnchorIndex >= 0) {
     out.rowAnchorIndex = n.gridRowAnchorIndex;
   }
-  if (typeof n.gridColumnAnchorIndex === 'number' && n.gridColumnAnchorIndex >= 0) {
+  if (!flowed && typeof n.gridColumnAnchorIndex === 'number' && n.gridColumnAnchorIndex >= 0) {
     out.columnAnchorIndex = n.gridColumnAnchorIndex;
   }
   if (typeof n.gridRowSpan === 'number' && n.gridRowSpan !== 1) out.rowSpan = n.gridRowSpan;
@@ -325,7 +337,7 @@ const serializeGridChild = (node: SceneNode): SerializedGridChild | undefined =>
   if (typeof n.gridChildVerticalAlign === 'string' && n.gridChildVerticalAlign !== 'AUTO') {
     out.verticalAlign = n.gridChildVerticalAlign;
   }
-  // A plain auto-flowed cell (anchor -1, span 1, align AUTO) carries no placement → omit entirely.
+  // A plain flowed cell (no anchor, span 1, align AUTO) carries no placement → omit entirely.
   return Object.keys(out).length > 0 ? out : undefined;
 };
 
@@ -691,7 +703,9 @@ const enrichWithMixins = (
     }
     // Inside a GRID parent the child also carries grid placement (anchor / span / per-cell align).
     if (parentLayoutMode === 'GRID') {
-      const gc = serializeGridChild(node);
+      const flowed =
+        (parent as { gridItemsPositioning?: unknown }).gridItemsPositioning === 'ROW_AUTO_FLOW';
+      const gc = serializeGridChild(node, flowed);
       if (gc !== undefined) out.gridChild = gc;
     }
   } else if ('constraints' in node) {

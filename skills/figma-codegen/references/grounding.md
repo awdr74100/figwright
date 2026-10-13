@@ -208,11 +208,21 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   Don't collapse a wrapping flex to a single-axis `gap` — the track gap is its own value. `mode: 'GRID'` → `display:grid` with
   `gridRowCount`/`gridColumnCount` → `grid-template-rows`/`grid-template-columns: repeat(N, 1fr)`,
   `gridRowGap`/`gridColumnGap` → `gap`, and optional `gridRowSizes`/`gridColumnSizes` tracks
-  (`FIXED`→px, `FLEX`→fr) — **emit a real CSS grid, don't flatten it to stacked flex**. A grid child
+  (`FIXED`→px, `FLEX`→fr, `HUG`→`auto` — content-sized, measured identical) — **emit a real CSS grid,
+  don't flatten it to stacked flex**. A grid child
   carries `gridChild` only when it's pinned or spanning (`rowAnchorIndex`/`columnAnchorIndex` →
   `grid-row`/`grid-column` anchor+1, `rowSpan`/`columnSpan` → span N, `horizontalAlign`/
   `verticalAlign` → `justify-self`/`align-self`); a child with **no** `gridChild` is auto-flowed — let
-  the grid place it. A node's own `layoutSizingHorizontal`/`Vertical` (`FILL`→`flex-1`/stretch,
+  the grid place it. `gridItemsPositioning: 'ROW_AUTO_FLOW'` marks a grid whose children flow into
+  cells by layer order (none of them carries an anchor): emit no per-item placement and render a
+  repeated item from data. `gridAutoTracks: 'ROWS'` means the rows follow the items, and Figma grows
+  the frame by every row it adds — even at a `FIXED` height — while a `FLEX` row keeps the height it
+  renders at (all measured). So don't fix the grid's height: list the rows in `grid-template-rows`
+  (`FIXED`→px, `HUG`→`auto`, `FLEX`→the px it renders at: the frame's height minus padding, gaps and
+  the other rows, split by the `FLEX` values) and give `grid-auto-rows` the **last** row's track, the
+  one Figma copies into each added row. Measured against Figma renders: identical at the designed item
+  count, and with three items more it still matches where `1fr` rows in the fixed height squeezed every
+  row. Absent, placement is `MANUAL` and the row count fixed. A node's own `layoutSizingHorizontal`/`Vertical` (`FILL`→`flex-1`/stretch,
   `HUG`→fit-content, `FIXED`→explicit) + `layoutGrow` + `layoutAlign` decide how it fills its parent.
   A `FIXED` size is real intent, not the measured content size — emit it, don't let the element
   collapse to its content (e.g. a shadcn `Button` defaults to content width; a `FIXED` 220px button

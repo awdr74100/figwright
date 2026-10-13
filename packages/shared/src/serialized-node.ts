@@ -317,6 +317,9 @@ export const SerializedAutoLayoutSchema = z.object({
   // GRID only
   gridRowCount: z.number().optional(),
   gridColumnCount: z.number().optional(),
+  // Present only when non-default: absent = MANUAL placement / a fixed row count.
+  gridItemsPositioning: z.enum(['MANUAL', 'ROW_AUTO_FLOW']).optional(),
+  gridAutoTracks: z.enum(['NONE', 'ROWS']).optional(),
   gridRowGap: z.number().optional(),
   gridColumnGap: z.number().optional(),
   gridRowSizes: z.array(SerializedGridTrackSchema).optional(),
