@@ -102,6 +102,13 @@ Library components need no import step: `create_instance` takes their `component
   gapped). `create_frame`, then `set_auto_layout` (`HORIZONTAL` / `VERTICAL` / `GRID`) with
   padding / itemSpacing / alignment. This is how the design stays responsive and matches how codegen
   reads it back (`flex` / `grid`).
+- **A CSS grid of repeated items flows; only explicit placement is `MANUAL`.** `grid-cols-3` over a
+  list (cards, a gallery, a `.map()`) is `GRID` with `gridColumnCount`, `gridItemsPositioning:
+  'ROW_AUTO_FLOW'` and `gridAutoTracks: 'ROWS'` (no `gridRowCount` — Figma owns it then), so the Figma
+  grid re-flows when an item is added or removed and codegen reads it back as a list, not as one
+  pinned cell per item. Keep the default `MANUAL` only when the code places items itself
+  (`grid-row` / `grid-column` / `grid-template-areas`). A grid that was born flowing cannot be
+  switched to `MANUAL` — its children never held a cell, and the tool refuses rather than strand them.
 - **Absolute `x`/`y` is only for where a top-level container sits on the canvas** — never to position
   children that belong in a layout. Hand-placing laid-out children is the cardinal write miss
   (it looks right, then breaks the moment content changes). Set those exact coordinates with

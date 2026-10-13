@@ -22,6 +22,22 @@ type AutoLayoutTarget = {
   gridColumnCount: number;
   gridRowGap: number;
   gridColumnGap: number;
+  gridItemsPositioning: string;
+  gridAutoTracks: string;
+  children: readonly SceneNode[];
+};
+
+/** A child Figma left without a cell: anchor -1 on either axis, outside an absolute escape. */
+const withoutCell = (child: SceneNode): boolean => {
+  const c = child as SceneNode & {
+    gridRowAnchorIndex?: number;
+    gridColumnAnchorIndex?: number;
+    layoutPositioning?: string;
+  };
+  return (
+    c.layoutPositioning !== 'ABSOLUTE' &&
+    ((c.gridRowAnchorIndex ?? 0) < 0 || (c.gridColumnAnchorIndex ?? 0) < 0)
+  );
 };
 
 export const createSetAutoLayoutHandler =
@@ -58,6 +74,43 @@ export const createSetAutoLayoutHandler =
       }
     }
 
+    // While gridAutoTracks is ROWS, Figma owns the row count and throws on any write to it — even
+    // of the value it already has (measured). A fresh GRID starts at NONE (measured).
+    if (p.layoutMode === 'GRID' && typeof p.gridRowCount === 'number') {
+      const currentAutoTracks = target.layoutMode === 'GRID' ? target.gridAutoTracks : 'NONE';
+      if ((p.gridAutoTracks ?? currentAutoTracks) === 'ROWS') {
+        throw new Error(
+          'set_auto_layout: gridRowCount is managed by Figma while gridAutoTracks is ROWS — ' +
+            'omit it, or pass gridAutoTracks: "NONE" to set the row count yourself',
+        );
+      }
+    }
+
+    // A flowing grid back to MANUAL: Figma returns each child to the cell it held the last time the
+    // grid was MANUAL — and leaves a child that never held one, or whose cell no longer exists,
+    // with no cell at all (measured: a grid that was born flowing lost every child's cell and
+    // collapsed to one row; children overlapped). That cannot be checked beforehand, so it is tried
+    // before anything else is written, and undone exactly when it fails: under ROW_AUTO_FLOW the
+    // cells are a function of layer order alone.
+    if (
+      p.layoutMode === 'GRID' &&
+      p.gridItemsPositioning === 'MANUAL' &&
+      target.layoutMode === 'GRID' &&
+      target.gridItemsPositioning === 'ROW_AUTO_FLOW'
+    ) {
+      target.gridItemsPositioning = 'MANUAL';
+      const lost = target.children.filter(withoutCell).length;
+      if (lost > 0) {
+        target.gridItemsPositioning = 'ROW_AUTO_FLOW';
+        throw new Error(
+          `set_auto_layout: switching ${node.id} to MANUAL would leave ${lost} of its ` +
+            `${target.children.length} children without a cell — Figma only puts a child back ` +
+            'in a cell it held before the grid flowed, and only while that cell still exists. ' +
+            'Nothing was changed; keep ROW_AUTO_FLOW',
+        );
+      }
+    }
+
     // Set the mode first: grid counts / gaps only become writable once layoutMode is GRID. Only when
     // it changes — assigning GRID to a frame that is already GRID resets it to Figma's default grid
     // (measured: a 3-column grid came back with 2 columns and every child re-placed, no error).
@@ -69,6 +122,12 @@ export const createSetAutoLayoutHandler =
         if (typeof p[key] === 'number') target[key] = p[key] as number;
       }
       if (p.layoutMode === 'GRID') {
+        // The modes go around the counts: NONE and ROW_AUTO_FLOW before them, so the row count is
+        // writable and a column cut re-flows the children (measured) instead of hitting an occupied
+        // cell; ROWS after them. MANUAL was settled above, before anything else.
+        if (p.gridAutoTracks === 'NONE') target.gridAutoTracks = 'NONE';
+        if (p.gridItemsPositioning === 'ROW_AUTO_FLOW')
+          target.gridItemsPositioning = 'ROW_AUTO_FLOW';
         for (const key of [
           'gridRowCount',
           'gridColumnCount',
@@ -77,6 +136,7 @@ export const createSetAutoLayoutHandler =
         ] as const) {
           if (typeof p[key] === 'number') target[key] = p[key] as number;
         }
+        if (p.gridAutoTracks === 'ROWS') target.gridAutoTracks = 'ROWS';
       } else {
         if (typeof p.itemSpacing === 'number') target.itemSpacing = p.itemSpacing;
         if (typeof p.primaryAxisAlignItems === 'string')

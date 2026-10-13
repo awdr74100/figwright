@@ -1,5 +1,5 @@
 {
-  "minPluginVersion": "0.6.1",
+  "minPluginVersion": "0.7.0",
   "tools": {
     "ping": [],
     "get_selection": [],
@@ -184,8 +184,10 @@
       "counterAxisAlignContent",
       "counterAxisAlignItems",
       "counterAxisSpacing",
+      "gridAutoTracks",
       "gridColumnCount",
       "gridColumnGap",
+      "gridItemsPositioning",
       "gridRowCount",
       "gridRowGap",
       "itemReverseZIndex",

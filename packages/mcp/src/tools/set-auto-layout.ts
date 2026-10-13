@@ -12,7 +12,10 @@ export const setAutoLayoutTool: ToolSpec = {
     'for the wrapped cross axis — the CSS row-gap (column-gap when VERTICAL) / align-content — and ' +
     'itemReverseZIndex / ' +
     'strokesIncludedInLayout for paint order and stroke-in-layout); GRID enables CSS-Grid-style ' +
-    'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap). ' +
+    'layout (padding / gridRowCount / gridColumnCount / gridRowGap / gridColumnGap, plus ' +
+    'gridItemsPositioning / gridAutoTracks for children that flow into cells by order and rows ' +
+    'that grow with them). Setting GRID on a frame that is already a grid keeps its tracks and ' +
+    'placements. ' +
     'Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string(),
@@ -70,6 +73,22 @@ export const setAutoLayoutTool: ToolSpec = {
     gridColumnCount: z.number().int().positive().optional(),
     gridRowGap: z.number().optional(),
     gridColumnGap: z.number().optional(),
+    gridItemsPositioning: z
+      .enum(['MANUAL', 'ROW_AUTO_FLOW'])
+      .optional()
+      .describe(
+        'How children take cells: MANUAL (the default) pins each child to its own cell; ' +
+          'ROW_AUTO_FLOW places them by layer order, left to right then top to bottom ' +
+          '(CSS grid-auto-flow: row) — a list rendered from data. GRID only',
+      ),
+    gridAutoTracks: z
+      .enum(['NONE', 'ROWS'])
+      .optional()
+      .describe(
+        'NONE (the default) keeps gridRowCount; ROWS adds and removes rows as children come and ' +
+          'go (CSS grid-auto-rows), and Figma then owns the row count, so gridRowCount is refused ' +
+          'unless this call sets NONE. GRID only',
+      ),
   }),
   kind: 'write',
 };

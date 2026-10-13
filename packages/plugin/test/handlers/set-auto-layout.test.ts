@@ -240,4 +240,99 @@ describe('set_auto_layout — GRID placement modes', () => {
     expect(node.gridColumnCount).toBe(3);
     expect(node.gridRowGap).toBe(16);
   });
+
+  it('refuses gridRowCount under ROWS before writing anything', async () => {
+    const node = makeGrid({ positioning: 'MANUAL', autoTracks: 'ROWS' });
+    const handler = createSetAutoLayoutHandler(fakeFigma({ '1:1': node }));
+    await expect(
+      handler({ nodeId: '1:1', layoutMode: 'GRID', paddingTop: 9, gridRowCount: 4 }),
+    ).rejects.toThrow(/managed by Figma while gridAutoTracks is ROWS/);
+    // ROWS asked for in the same call is the same contradiction, on a frame not yet a grid too.
+    await expect(
+      createSetAutoLayoutHandler(fakeFigma({ '1:1': makeFrame() }))({
+        nodeId: '1:1',
+        layoutMode: 'GRID',
+        gridAutoTracks: 'ROWS',
+        gridRowCount: 4,
+      }),
+    ).rejects.toThrow(/gridAutoTracks is ROWS/);
+    expect(node.paddingTop).toBe(0);
+    expect(node.log).toEqual([]);
+  });
+
+  it('writes NONE and ROW_AUTO_FLOW before the counts, ROWS after them', async () => {
+    const rows = makeGrid({ positioning: 'MANUAL', autoTracks: 'ROWS' });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': rows }))({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridAutoTracks: 'NONE',
+      gridRowCount: 4,
+    });
+    expect(rows.log).toEqual(['gridAutoTracks=NONE', 'gridRowCount=4']);
+
+    const manual = makeGrid({ positioning: 'MANUAL', autoTracks: 'NONE' });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': manual }))({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridItemsPositioning: 'ROW_AUTO_FLOW',
+      gridAutoTracks: 'ROWS',
+      gridColumnCount: 2,
+    });
+    expect(manual.log).toEqual([
+      'gridItemsPositioning=ROW_AUTO_FLOW',
+      'gridColumnCount=2',
+      'gridAutoTracks=ROWS',
+    ]);
+  });
+
+  it('switches a flowing grid to MANUAL when Figma gives every child its cell back', async () => {
+    const node = makeGrid({
+      positioning: 'ROW_AUTO_FLOW',
+      autoTracks: 'NONE',
+      remembered: [
+        [0, 1],
+        [0, 0],
+        [0, 2],
+      ],
+    });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridItemsPositioning: 'MANUAL',
+    });
+    expect(node.gridItemsPositioning).toBe('MANUAL');
+    expect(node.children.map(c => c.gridColumnAnchorIndex)).toEqual([1, 0, 2]);
+  });
+
+  it('leaves the placement mode alone when the call is not for a GRID', async () => {
+    const node = makeGrid({ positioning: 'ROW_AUTO_FLOW', autoTracks: 'NONE' });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      layoutMode: 'VERTICAL',
+      gridItemsPositioning: 'MANUAL',
+    });
+    expect(node.log).toEqual(['layoutMode=VERTICAL']);
+  });
+
+  it('refuses MANUAL and goes back to ROW_AUTO_FLOW when a child would be left without a cell', async () => {
+    const node = makeGrid({
+      positioning: 'ROW_AUTO_FLOW',
+      autoTracks: 'NONE',
+      remembered: [[0, 0], undefined, [0, 1]],
+    });
+    await expect(
+      createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        layoutMode: 'GRID',
+        gridItemsPositioning: 'MANUAL',
+        paddingTop: 9,
+        gridColumnCount: 4,
+      }),
+    ).rejects.toThrow(/leave 1 of its 3 children without a cell/);
+    expect(node.gridItemsPositioning).toBe('ROW_AUTO_FLOW');
+    expect(node.children.map(c => c.gridColumnAnchorIndex)).toEqual([0, 1, 2]);
+    // Tried before anything else: nothing but the round trip was written.
+    expect(node.log).toEqual(['gridItemsPositioning=MANUAL', 'gridItemsPositioning=ROW_AUTO_FLOW']);
+    expect(node.paddingTop).toBe(0);
+  });
 });
