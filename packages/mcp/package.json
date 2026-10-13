@@ -47,13 +47,13 @@
     "ignore": "^7.0.12",
     "oxc-parser": "^0.153.0",
     "ws": "^8.22.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@figwright/shared": "workspace:*",
     "@types/ws": "^8.18.2",
     "publint": "^0.3.25",
-    "tsdown": "^0.23.0"
+    "tsdown": "^0.23.1"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
