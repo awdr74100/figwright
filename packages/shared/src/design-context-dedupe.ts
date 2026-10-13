@@ -112,6 +112,15 @@ export interface SimplifiedPaint {
   cssAngle?: number;
   /** IMAGE/VIDEO object-fit equivalent: FILL=cover, FIT=contain, CROP, TILE=repeat. */
   scaleMode?: string;
+  /** CROP: the layer box → image space matrix, i.e. which part of the image shows. */
+  imageTransform?: number[][];
+  /** CROP: ready-to-emit transform for an `<img>` filling its box from the top-left. */
+  cssTransform?: string;
+  /**
+   * The paint's own opacity, when not 1, for paints with no colour to fold it into (IMAGE, VIDEO,
+   * PATTERN, SHADER). SOLID and gradients carry it in their hex alpha instead.
+   */
+  opacity?: number;
   /** In-fill colour grading (exposure/contrast/…): export the composited render, not the original. */
   filtersApplied?: true;
   /** PATTERN tiling: the source tile node + how it repeats. See grounding.md "Pattern fills". */
@@ -132,9 +141,11 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
   if (paint.type === 'SOLID') {
     out.color = toHex(paint.color, paint.opacity);
   } else if ('gradientStops' in paint) {
+    // The paint's opacity multiplies every stop's alpha, the way SOLID folds it into its hex —
+    // measured against Figma's render: identical, where the stops alone were off on every pixel.
     out.gradientStops = paint.gradientStops.map((s: SerializedColorStop) => ({
       position: s.position,
-      color: toHex(s.color, s.color.a),
+      color: toHex(s.color, s.color.a * paint.opacity),
     }));
     // Carry the axis matrix too — without it the gradient direction/angle is lost and the LLM can
     // only guess (or flatten the gradient to a solid colour, the classic miss).
@@ -144,6 +155,10 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     if (paint.cssAngle !== undefined) out.cssAngle = paint.cssAngle;
   } else if ('scaleMode' in paint && paint.scaleMode !== undefined) {
     out.scaleMode = paint.scaleMode;
+    if ('imageTransform' in paint && paint.imageTransform !== undefined)
+      out.imageTransform = paint.imageTransform;
+    if ('cssTransform' in paint && paint.cssTransform !== undefined)
+      out.cssTransform = paint.cssTransform;
     if ('filtersApplied' in paint && paint.filtersApplied === true) out.filtersApplied = true;
   } else if (paint.type === 'PATTERN') {
     // The source tile + its repeat geometry — without it a pattern fill is just `{ type: 'PATTERN' }`
@@ -159,6 +174,11 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     if (paint.shaderProperties !== undefined) {
       out.shaderProperties = simplifyShaderProperties(paint.shaderProperties);
     }
+  }
+  // A paint with no colour to fold its opacity into carries it as a field — dropped, a half-faded
+  // photo or texture ships at full strength (measured: every pixel off; with it, none).
+  if (paint.type !== 'SOLID' && !('gradientStops' in paint) && paint.opacity !== 1) {
+    out.opacity = paint.opacity;
   }
   if (paint.visible === false) out.visible = false;
   return out;

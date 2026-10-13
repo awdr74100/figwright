@@ -151,6 +151,17 @@ const OtherPaintSchema = z.object({
   opacity: z.number(),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
   /**
+   * CROP only: the 2×3 matrix mapping the layer's 0–1 box into the image's 0–1 space — which part
+   * of the image shows. Without it a crop is indistinguishable from a centred cover.
+   */
+  imageTransform: z.array(z.array(z.number())).optional(),
+  /**
+   * CROP only: the CSS transform that reproduces the crop on an `<img>` filling an overflow-hidden
+   * box from its top-left (`transform-origin: 0 0`). Absent when the matrix cannot be inverted, or
+   * when it rotates the image and the owner's size (which the rotation depends on) is unknown.
+   */
+  cssTransform: z.string().optional(),
+  /**
    * True when the fill carries non-zero image adjustments (exposure / contrast / saturation /
    * temperature / tint / highlights / shadows). The original bytes (save_image_fills) do NOT
    * include them, so an adjusted image must ship as the composited render (get_screenshot), or the

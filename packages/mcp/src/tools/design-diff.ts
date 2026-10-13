@@ -26,9 +26,11 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * test/design-diff-format.test.ts now fails when the captured shape changes, so the next one is a
  * decision rather than an oversight. v4: a grid's gridItemsPositioning / gridAutoTracks, and no
  * cell anchors on the children of a ROW_AUTO_FLOW grid — a v3 baseline would report every flowing
- * child's anchors as removed.
+ * child's anchors as removed. v5: a CROP fill's imageTransform / cssTransform, and a gradient's
+ * stops with the paint's own opacity folded into their hex — a v4 baseline would report every crop,
+ * and every gradient whose paint isn't fully opaque, as changed.
  */
-export const SNAPSHOT_FORMAT_VERSION = 4;
+export const SNAPSHOT_FORMAT_VERSION = 5;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

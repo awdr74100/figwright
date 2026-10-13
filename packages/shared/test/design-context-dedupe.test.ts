@@ -121,6 +121,108 @@ describe('dedupeStyles', () => {
     expect(globalVars.styles[nodes[0]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
   });
 
+  it("folds a gradient paint's opacity into each stop, as SOLID folds it into its hex", () => {
+    // Measured against Figma's render: the stops times the paint's opacity matched; the stops alone
+    // were off on every pixel.
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [
+          {
+            type: 'GRADIENT_LINEAR',
+            visible: true,
+            opacity: 0.5,
+            gradientStops: [
+              { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+              { position: 1, color: { r: 0, g: 0, b: 1, a: 0.8 } },
+            ],
+            gradientTransform: [
+              [1, 0, 0],
+              [0, 1, 0],
+            ],
+          },
+        ],
+      },
+    ] as never);
+    const [paint] = globalVars.styles[nodes[0]!.fill!] as {
+      gradientStops: unknown;
+      opacity?: number;
+    }[];
+    expect(paint!.gradientStops).toEqual([
+      { position: 0, color: '#FF000080' },
+      { position: 1, color: '#0000FF66' },
+    ]);
+    // The opacity lives in the stops, so it is not repeated as a field.
+    expect(paint).not.toHaveProperty('opacity');
+  });
+
+  it("carries the paint's own opacity on paints with no colour to fold it into", () => {
+    const image = (opacity: number) => ({
+      type: 'IMAGE',
+      visible: true,
+      opacity,
+      scaleMode: 'FILL',
+    });
+    const { nodes, globalVars } = dedupeStyles([
+      { id: 'a', name: 'a', type: 'RECTANGLE', fills: [image(0.5)] },
+      { id: 'b', name: 'b', type: 'RECTANGLE', fills: [image(1)] },
+      {
+        id: 'c',
+        name: 'c',
+        type: 'RECTANGLE',
+        fills: [{ type: 'SOLID', visible: true, opacity: 0.5, color: { r: 1, g: 0, b: 0 } }],
+      },
+    ] as never);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      { type: 'IMAGE', scaleMode: 'FILL', opacity: 0.5 },
+    ]);
+    // Fully opaque stays lean, and SOLID keeps carrying it in the hex alone.
+    expect(globalVars.styles[nodes[1]!.fill!]).toEqual([{ type: 'IMAGE', scaleMode: 'FILL' }]);
+    expect(globalVars.styles[nodes[2]!.fill!]).toEqual([{ type: 'SOLID', color: '#FF000080' }]);
+  });
+
+  it('carries a CROP fill’s matrix and its ready CSS, keeping different crops apart', () => {
+    const crop = (c: number, css: string) => ({
+      type: 'IMAGE',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'CROP',
+      imageTransform: [
+        [0.5, 0, c],
+        [0, 0.5, 0.25],
+      ],
+      cssTransform: css,
+    });
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'a',
+        name: 'a',
+        type: 'RECTANGLE',
+        fills: [crop(0.25, 'translate(-50%, -50%) scale(2, 2)')],
+      },
+      {
+        id: 'b',
+        name: 'b',
+        type: 'RECTANGLE',
+        fills: [crop(0, 'translate(0%, -50%) scale(2, 2)')],
+      },
+    ] as never);
+    expect(nodes[0]!.fill).not.toBe(nodes[1]!.fill);
+    expect(globalVars.styles[nodes[0]!.fill!]).toEqual([
+      {
+        type: 'IMAGE',
+        scaleMode: 'CROP',
+        imageTransform: [
+          [0.5, 0, 0.25],
+          [0, 0.5, 0.25],
+        ],
+        cssTransform: 'translate(-50%, -50%) scale(2, 2)',
+      },
+    ]);
+  });
+
   it('carries filtersApplied on an IMAGE fill (the export-the-composited-render signal)', () => {
     // The signal the LLM actually reads lives in globalVars (the simplified paint), not the raw
     // fill — so an in-fill colour grade must survive simplifyPaint, or codegen ships the original

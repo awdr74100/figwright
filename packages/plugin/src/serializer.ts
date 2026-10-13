@@ -194,9 +194,15 @@ export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): 
   // so exported images get the right fit instead of being stretched. filtersApplied
   // flags in-fill colour grading, which the original bytes (save_image_fills) do NOT include — the
   // signal to export the composited render instead.
-  const scaleMode = 'scaleMode' in paint ? (paint as { scaleMode?: string }).scaleMode : undefined;
-  const filtered =
-    'filters' in paint && hasImageAdjustments((paint as { filters?: unknown }).filters);
+  const media = paint as { scaleMode?: string; filters?: unknown; imageTransform?: Transform };
+  const scaleMode = media.scaleMode;
+  const filtered = 'filters' in paint && hasImageAdjustments(media.filters);
+  // A CROP says which part of the image the layer shows, and only its imageTransform says which:
+  // without it a crop reads as a centred cover, measured 97–100% of pixels off. The matrix means
+  // nothing in the other modes, so it stays out of them.
+  const crop =
+    scaleMode === 'CROP' && Array.isArray(media.imageTransform) ? media.imageTransform : undefined;
+  const cssTransform = crop === undefined ? undefined : cssCropTransform(crop, ownerSize);
   return {
     type: paint.type,
     visible,
@@ -204,8 +210,40 @@ export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): 
     ...(scaleMode === undefined
       ? {}
       : { scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE' }),
+    ...(crop === undefined ? {} : { imageTransform: crop.map(row => row.map(round6)) }),
+    ...(cssTransform === undefined ? {} : { cssTransform }),
     ...(filtered ? { filtersApplied: true } : {}),
   };
+};
+
+/** Six decimals: exact past what a render can show, and rid of Figma's float32 noise (0.6000000238). */
+const round6 = (v: number): number => Math.round(v * 1e6) / 1e6;
+const round4 = (v: number): number => Math.round(v * 1e4) / 1e4;
+
+/**
+ * A CROP fill's imageTransform as the CSS that reproduces it. The matrix maps the layer's 0–1 box
+ * into the image's 0–1 space (u = a·x + b·y + c, v = d·x + e·y + f), so the image is drawn through
+ * its inverse: an `<img>` filling the box, `transform-origin: 0 0`, then this transform. Without a
+ * rotation that is a translate and a scale, and needs no size; with one, the off-diagonal terms
+ * scale by the box's aspect ratio, so it needs the owner. Measured against Figma's render with a
+ * pixel-aligned crop, zoomed in, zoomed out (part of the box empty) and offset: 0 pixels differ.
+ */
+const cssCropTransform = (
+  transform: Transform,
+  ownerSize: PaintOwnerSize | null,
+): string | undefined => {
+  const [[a, b, c], [d, e, f]] = transform;
+  const det = a * e - b * d;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-9) return undefined;
+  const [i11, i12, i21, i22] = [e / det, -b / det, -d / det, a / det];
+  const tx = round4(-(i11 * c + i12 * f) * 100);
+  const ty = round4(-(i21 * c + i22 * f) * 100);
+  const translate = `translate(${tx}%, ${ty}%)`;
+  if (b === 0 && d === 0) return `${translate} scale(${round4(i11)}, ${round4(i22)})`;
+  if (ownerSize === null || ownerSize.width <= 0 || ownerSize.height <= 0) return undefined;
+  const ratio = ownerSize.width / ownerSize.height;
+  const m = [i11, i21 / ratio, i12 * ratio, i22].map(round4).join(', ');
+  return `${translate} matrix(${m}, 0, 0)`;
 };
 
 /** GridTrackSize[] (gridRow/ColumnSizes) → `{ type, value }[]` (FLEX = fr fraction, FIXED = px). */

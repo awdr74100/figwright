@@ -151,8 +151,9 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Gradient fills.** A fill of type `GRADIENT_LINEAR` / `GRADIENT_RADIAL` / `GRADIENT_ANGULAR` /
   `GRADIENT_DIAMOND` carries `gradientStops` (`{ position 0–1, color hex }`) and `gradientTransform`
   (the 2×3 axis matrix). **Emit a real CSS gradient — don't flatten it to a solid colour.** Map the
-  stops directly (`linear-gradient(<angle>, #A 0%, #B 100%)`, `radial-gradient(...)`). A
-  `GRADIENT_LINEAR` also carries **`cssAngle`** — the ready-to-emit degrees for
+  stops directly (`linear-gradient(<angle>, #A 0%, #B 100%)`, `radial-gradient(...)`). Each stop's
+  hex already carries the paint's own opacity, the way a `SOLID` hex does, so emit it as is and don't
+  add an `opacity` for the paint. A `GRADIENT_LINEAR` also carries **`cssAngle`** — the ready-to-emit degrees for
   `linear-gradient(<cssAngle>deg, …)`. **Use it verbatim; never re-derive the angle from
   `gradientTransform`.** The angle is not a property of the matrix alone: Figma positions the ramp in
   the node's _normalized_ space, so the same matrix is a different angle on a differently shaped node
@@ -164,8 +165,21 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   writing a paint back ignores it, so a gradient's direction is changed through
   `gradientTransform`, never by editing `cssAngle`.
 - **Image fit.** An `IMAGE` (or `VIDEO`) fill carries `scaleMode` — the object-fit equivalent:
-  `FILL` → `object-cover`, `FIT` → `object-contain`, `CROP` → `cover` + a position, `TILE` →
-  `background-repeat: repeat`. Apply it to the exported image so it isn't stretched or letterboxed.
+  `FILL` → `object-cover`, `FIT` → `object-contain`, `TILE` → `background-repeat: repeat`. Apply it
+  to the exported image so it isn't stretched or letterboxed. An image, video, pattern or shader paint
+  that isn't fully opaque also carries its own **`opacity`** (0–1, separate from the node's): put it
+  on that layer alone, the `<img>` or the layer carrying the background, not the whole element.
+- **Image crop.** `CROP` is not a cover. It shows a chosen part of the image, which may be zoomed
+  past cover, stretched to new proportions, rotated, or smaller than the layer and leave part of it
+  empty. The fill carries **`cssTransform`**, ready to emit: put the original bytes
+  (`save_image_fills`) in an `overflow: hidden` box as an `<img>` at `left: 0; top: 0`,
+  `width: 100%; height: 100%`, `max-width: none`, `transform-origin: 0 0`, and give it
+  `transform: <cssTransform>` **verbatim**. The raw matrix is there too, as `imageTransform` (the
+  layer's 0–1 box → the image's 0–1 space), but don't re-derive the CSS from it. Rendered against
+  Figma, a pixel-aligned crop matched exactly. Others came within the same 2–6% of pixels that any
+  scaled image differs by between the two renderers, where `object-fit: cover` was 97–100% off.
+  When `cssTransform` is absent, the crop can't be expressed this way (a rotated crop on a paint style
+  with no size): export the composited render instead.
 - **Pattern fills.** A `PATTERN` fill tiles a source node (`sourceNodeId`) across the element — it is
   **not** a flat colour. Export that tile with `get_screenshot` on `sourceNodeId`, then: for
   `tileType: RECTANGULAR`, use `background-image` + `background-repeat: repeat` with a

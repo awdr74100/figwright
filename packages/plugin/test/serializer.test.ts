@@ -344,6 +344,103 @@ describe('serializeFlat', () => {
     expect(out.fills).toEqual([{ type: 'IMAGE', visible: true, opacity: 1, scaleMode: 'FILL' }]);
   });
 
+  it('carries a CROP fill’s matrix and the CSS that reproduces it, and nothing for other modes', () => {
+    const image = (
+      scaleMode: string,
+      imageTransform: number[][],
+      size = { width: 200, height: 200 },
+    ) =>
+      serializeFlatSync(
+        fake({
+          ...size,
+          fills: [{ type: 'IMAGE', visible: true, opacity: 1, scaleMode, imageTransform }],
+        }),
+      ).fills?.[0];
+    // Live-measured crops (zoomed in; offset with Figma's float32 noise). Rendered as emitted, the
+    // pixel-aligned ones matched Figma exactly.
+    expect(
+      image('CROP', [
+        [0.5, 0, 0.25],
+        [0, 0.5, 0.25],
+      ]),
+    ).toMatchObject({
+      imageTransform: [
+        [0.5, 0, 0.25],
+        [0, 0.5, 0.25],
+      ],
+      cssTransform: 'translate(-50%, -50%) scale(2, 2)',
+    });
+    expect(
+      image('CROP', [
+        [0.6000000238418579, 0, 0.4000000059604645],
+        [0, 0.800000011920929, 0],
+      ]),
+    ).toMatchObject({
+      imageTransform: [
+        [0.6, 0, 0.4],
+        [0, 0.8, 0],
+      ],
+      cssTransform: 'translate(-66.6667%, 0%) scale(1.6667, 1.25)',
+    });
+    // A rotated crop: its off-diagonal terms scale by the owner's aspect ratio.
+    const rotated = [
+      [0.5, 0.2, 0.1],
+      [-0.2, 0.5, 0.3],
+    ];
+    expect(image('CROP', rotated)).toMatchObject({
+      cssTransform: 'translate(3.4483%, -58.6207%) matrix(1.7241, 0.6897, -0.6897, 1.7241, 0, 0)',
+    });
+    // Rendered on a live 400×200 crop: within the 2-renderer resampling floor; without the aspect
+    // correction, every pixel was off.
+    expect(image('CROP', rotated, { width: 400, height: 200 })).toMatchObject({
+      cssTransform: 'translate(3.4483%, -58.6207%) matrix(1.7241, 0.3448, -1.3793, 1.7241, 0, 0)',
+    });
+    // A matrix with no inverse has no CSS, but the matrix itself still reads.
+    expect(
+      image('CROP', [
+        [0, 0, 0.5],
+        [0, 0, 0.5],
+      ]),
+    ).not.toHaveProperty('cssTransform');
+    // The other modes carry the identity Figma keeps, which means nothing there.
+    for (const mode of ['FILL', 'FIT', 'TILE']) {
+      const out = image(mode, [
+        [1, 0, 0],
+        [0, 1, 0],
+      ]);
+      expect(out).not.toHaveProperty('imageTransform');
+      expect(out).not.toHaveProperty('cssTransform');
+    }
+  });
+
+  it('drops a rotated crop’s CSS where there is no owner to take the aspect ratio from', () => {
+    const paint = {
+      type: 'IMAGE',
+      visible: true,
+      opacity: 1,
+      scaleMode: 'CROP',
+      imageTransform: [
+        [0.5, 0.2, 0.1],
+        [-0.2, 0.5, 0.3],
+      ],
+    } as unknown as Paint;
+    const out = serializePaint(paint, null);
+    expect(out).toHaveProperty('imageTransform');
+    expect(out).not.toHaveProperty('cssTransform');
+    // An unrotated crop needs no size.
+    const flat = serializePaint(
+      {
+        ...paint,
+        imageTransform: [
+          [0.5, 0, 0.25],
+          [0, 0.5, 0.25],
+        ],
+      } as unknown as Paint,
+      null,
+    );
+    expect(flat).toMatchObject({ cssTransform: 'translate(-50%, -50%) scale(2, 2)' });
+  });
+
   it('flags an IMAGE fill with non-zero adjustments; untouched filters stay clean', () => {
     // Adjusted: the original bytes don't carry the grading → export the composited render instead.
     const graded = serializeFlatSync(
