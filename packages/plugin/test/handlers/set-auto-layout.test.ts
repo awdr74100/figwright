@@ -155,3 +155,89 @@ describe('set_auto_layout handler', () => {
     expect(node.itemSpacing).toBe(-8);
   });
 });
+
+/**
+ * A GRID frame that behaves the way Figma was measured to: assigning GRID to a grid resets it to
+ * the default two columns, the row count refuses every write under ROWS, and leaving ROW_AUTO_FLOW
+ * returns each child to the cell it last held under MANUAL — or to no cell (-1) when it never had
+ * one.
+ */
+const makeGrid = (init: {
+  positioning: 'MANUAL' | 'ROW_AUTO_FLOW';
+  autoTracks: 'NONE' | 'ROWS';
+  remembered?: ([number, number] | undefined)[];
+}) => {
+  const log: string[] = [];
+  const children = (init.remembered ?? [undefined, undefined, undefined]).map((_, i) => ({
+    id: `c${i}`,
+    gridRowAnchorIndex: 0,
+    gridColumnAnchorIndex: i,
+  }));
+  let layoutMode = 'GRID';
+  let positioning: string = init.positioning;
+  let autoTracks: string = init.autoTracks;
+  let rows = 1;
+  let columns = 3;
+  const node = {
+    ...makeFrame(),
+    children,
+    log,
+    get layoutMode() {
+      return layoutMode;
+    },
+    set layoutMode(v: string) {
+      log.push(`layoutMode=${v}`);
+      if (v === 'GRID') columns = 2;
+      layoutMode = v;
+    },
+    get gridRowCount() {
+      return rows;
+    },
+    set gridRowCount(v: number) {
+      if (autoTracks === 'ROWS') throw new Error('cannot set grid row count manually');
+      log.push(`gridRowCount=${v}`);
+      rows = v;
+    },
+    get gridColumnCount() {
+      return columns;
+    },
+    set gridColumnCount(v: number) {
+      log.push(`gridColumnCount=${v}`);
+      columns = v;
+    },
+    get gridAutoTracks() {
+      return autoTracks;
+    },
+    set gridAutoTracks(v: string) {
+      log.push(`gridAutoTracks=${v}`);
+      autoTracks = v;
+    },
+    get gridItemsPositioning() {
+      return positioning;
+    },
+    set gridItemsPositioning(v: string) {
+      log.push(`gridItemsPositioning=${v}`);
+      positioning = v;
+      children.forEach((c, i) => {
+        const cell = v === 'MANUAL' ? init.remembered?.[i] : [0, i];
+        c.gridRowAnchorIndex = cell?.[0] ?? -1;
+        c.gridColumnAnchorIndex = cell?.[1] ?? -1;
+      });
+    },
+  };
+  return node;
+};
+
+describe('set_auto_layout — GRID placement modes', () => {
+  it('leaves the mode of a frame that is already a GRID alone, so its tracks survive', async () => {
+    const node = makeGrid({ positioning: 'MANUAL', autoTracks: 'NONE' });
+    await createSetAutoLayoutHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      layoutMode: 'GRID',
+      gridRowGap: 16,
+    });
+    expect(node.log).not.toContain('layoutMode=GRID');
+    expect(node.gridColumnCount).toBe(3);
+    expect(node.gridRowGap).toBe(16);
+  });
+});

@@ -58,8 +58,10 @@ export const createSetAutoLayoutHandler =
       }
     }
 
-    // Set the mode first: grid counts / gaps only become writable once layoutMode is GRID.
-    target.layoutMode = p.layoutMode;
+    // Set the mode first: grid counts / gaps only become writable once layoutMode is GRID. Only when
+    // it changes — assigning GRID to a frame that is already GRID resets it to Figma's default grid
+    // (measured: a 3-column grid came back with 2 columns and every child re-placed, no error).
+    if (target.layoutMode !== p.layoutMode) target.layoutMode = p.layoutMode;
 
     if (p.layoutMode !== 'NONE') {
       // padding is common to HORIZONTAL / VERTICAL / GRID
