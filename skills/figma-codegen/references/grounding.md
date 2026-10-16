@@ -195,6 +195,42 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   shader's own parameter identifier, which can differ from the label in Figma's panel (`warp` shows
   as "Flow"), and a dropdown parameter is only its NUMBER index — don't present either as what the
   designer sees.
+- **Noise effects.** A `NOISE` effect is grain drawn over the node: a smooth noise field cut at a
+  threshold into blobs, in design px (it scales with the element, not the screen). Render it as an
+  SVG filter laid over the node (`position: absolute; inset: 0; pointer-events: none`, inside the
+  node's clip), sized in CSS px with no `viewBox`, so the filter's units are Figma's:
+
+  ```html
+  <svg width="100%" height="100%" aria-hidden="true">
+    <filter id="grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="{1.1/x} {1.1/y}" numOctaves="2" result="n" />
+      <feColorMatrix in="n" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1 0 0 0 0" />
+      <feComponentTransfer result="mask">
+        <feFuncA type="linear" slope="40" intercept="{-40 × t}" />
+      </feComponentTransfer>
+      <feFlood flood-color="{color}" />
+      <feComposite in2="mask" operator="in" />
+    </filter>
+    <rect width="100%" height="100%" filter="url(#grain)" />
+  </svg>
+  ```
+
+  `x`/`y` are `noiseSizeVector`, `t = 0.81 − 0.33 × density`, and `flood-color` is `color` with its
+  alpha. `DUOTONE` also paints the field's other end in `secondaryColor`: a second mask from
+  `values="… -1 0 0 0 1"` (the inverted field) with the same transfer, flooded with
+  `secondaryColor`, merged over the first. `MULTITONE` grains are many random colours, so flood a
+  second, coarser `feTurbulence` (`baseFrequency` halved, `numOctaves="1"`) through
+  `feColorMatrix type="saturate" values="3"` and alpha `opacity` instead of a colour.
+
+  Measured against Figma's own render, this keeps the overall tone within about 3% and the grain's
+  size and stretch, where the usual web grain snippet (`baseFrequency="0.65" numOctaves="3"`) is as
+  far from Figma as no noise at all. The grain itself is random, so it never matches pixel for
+  pixel. Three limits to say rather than hide: a `noiseSizeVector` of 2 or less is sub-pixel speckle
+  in Figma, which this reproduces as tone only; `MULTITONE` below full density renders lighter than
+  Figma's; and a `density` above 1 only comes from a number variable bound to it, which Figma
+  renders as a flat tint of the grain colour — emit that tint, not grain. Figma's API doesn't report
+  a noise effect's blend mode, so the grain is always laid on normally.
+
 - **Containers first — the tree's nesting is the markup's nesting.** Emit **one container element per
   frame** and keep the parent/child relationships the payload gives you. Never flatten a section's
   frames into a flat run of siblings: the frame that disappears is the one that owned the `padding`

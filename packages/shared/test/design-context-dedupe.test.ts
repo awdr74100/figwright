@@ -400,6 +400,72 @@ describe('dedupeStyles', () => {
     ]);
   });
 
+  it('hoists noise effects with every setting, both colours as hex', () => {
+    const n: DesignContextNode = {
+      id: 'grain',
+      name: 'grain',
+      type: 'FRAME',
+      effects: [
+        {
+          type: 'NOISE',
+          visible: true,
+          noiseType: 'DUOTONE',
+          noiseSizeVector: { x: 0.5, y: 0.5 },
+          density: 1,
+          color: { r: 0, g: 0, b: 0, a: 0.25 },
+          secondaryColor: { r: 1, g: 1, b: 1, a: 0.25 },
+        },
+        {
+          type: 'NOISE',
+          visible: true,
+          noiseType: 'MULTITONE',
+          noiseSizeVector: { x: 4.5, y: 4.5 },
+          density: 1,
+          opacity: 0.7,
+        },
+      ],
+    };
+    const { nodes, globalVars } = dedupeStyles([n]);
+
+    expect(globalVars.styles[nodes[0]!.effect!]).toEqual([
+      {
+        type: 'NOISE',
+        noiseType: 'DUOTONE',
+        noiseSizeVector: { x: 0.5, y: 0.5 },
+        density: 1,
+        color: '#00000040',
+        secondaryColor: '#FFFFFF40',
+      },
+      {
+        type: 'NOISE',
+        noiseType: 'MULTITONE',
+        noiseSizeVector: { x: 4.5, y: 4.5 },
+        density: 1,
+        opacity: 0.7,
+      },
+    ]);
+  });
+
+  it('keeps two noises that differ only in grain height apart', () => {
+    const grain = (y: number): DesignContextNode => ({
+      id: `g${y}`,
+      name: `g${y}`,
+      type: 'FRAME',
+      effects: [
+        {
+          type: 'NOISE',
+          visible: true,
+          noiseType: 'MONOTONE',
+          noiseSizeVector: { x: 5, y },
+          density: 0.6,
+          color: { r: 0, g: 0, b: 0, a: 0.25 },
+        },
+      ],
+    });
+    const { nodes } = dedupeStyles([grain(5), grain(10)]);
+    expect(nodes[0]?.effect).not.toBe(nodes[1]?.effect);
+  });
+
   it('deduplicates identical styles to one entry shared by many refs (the 100-buttons case)', () => {
     const items = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].map(id =>
       textNode(id, 'Noto Sans JP', 'Regular', 16),

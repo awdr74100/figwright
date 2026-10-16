@@ -192,10 +192,15 @@ interface SimplifiedEffect {
   spread?: number;
   shaderId?: string;
   shaderProperties?: SimplifiedShaderProperty[];
+  noiseType?: string;
+  noiseSizeVector?: { x: number; y: number };
+  density?: number;
+  secondaryColor?: string;
+  opacity?: number;
   visible?: false;
 }
 
-/** Structured shadow/blur: color → hex, drops the always-true `visible`. */
+/** Structured shadow/blur/noise: colours → hex, drops the always-true `visible`. */
 const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
   const out: SimplifiedEffect = { type: e.type };
   if (e.color !== undefined) out.color = toHex(e.color, e.color.a);
@@ -206,6 +211,13 @@ const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
   if (e.shaderProperties !== undefined) {
     out.shaderProperties = simplifyShaderProperties(e.shaderProperties);
   }
+  if (e.noiseType !== undefined) out.noiseType = e.noiseType;
+  if (e.noiseSizeVector !== undefined) out.noiseSizeVector = e.noiseSizeVector;
+  if (e.density !== undefined) out.density = e.density;
+  if (e.secondaryColor !== undefined) {
+    out.secondaryColor = toHex(e.secondaryColor, e.secondaryColor.a);
+  }
+  if (e.opacity !== undefined) out.opacity = e.opacity;
   if (e.visible === false) out.visible = false;
   return out;
 };

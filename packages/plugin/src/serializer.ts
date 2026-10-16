@@ -1112,12 +1112,51 @@ export const serializeEffect = (effect: Effect): SerializedEffect => {
       ...(bound === undefined ? {} : { boundVariables: bound }),
     };
   }
-  // Blurs / textures carry radius; a shader carries its id + values; noise / glass carry only type +
-  // visible.
+  // Blurs / textures carry radius; a shader carries its id + values; noise carries its own fields;
+  // glass carries only type + visible.
   const out: SerializedEffect = { type: effect.type, visible: effect.visible };
   if ('radius' in effect && typeof effect.radius === 'number') out.radius = effect.radius;
   if (effect.type === 'SHADER') Object.assign(out, serializeShader(effect));
+  if (effect.type === 'NOISE') Object.assign(out, serializeNoise(effect));
   if (bound !== undefined) out.boundVariables = bound;
+  return out;
+};
+
+const rgbaOf = (c: RGBA): NonNullable<SerializedEffect['color']> => ({
+  r: c.r,
+  g: c.g,
+  b: c.b,
+  a: c.a,
+});
+
+/**
+ * A noise effect's settings, read the way the Noise panel shows them. Four readings of the live
+ * object depart from the typings:
+ *
+ * - `noiseSize` is the X alone; the Y is only in `noiseSizeVector`, so with X 5 / Y 10 the scalar
+ *   reads 5. The vector is the size; the scalar stands in only where no vector is reported.
+ * - A MULTITONE effect still reports a `color`, but the panel has no colour row for it and the value
+ *   does not move when the panel's opacity does — a leftover, not a setting, so it is left out
+ *   rather than handed on as if the designer had chosen it.
+ * - `blendMode` is declared, but no noise object carries it, not even after a blend mode is picked
+ *   from the panel, and Figma rejects the key when an effect is written. It cannot be read, so it
+ *   is not emitted.
+ * - A variable the panel binds to a noise field leaves the effect's own `boundVariables` empty; only
+ *   the node's `boundVariables.effects` names it, so which field it drives cannot be told here.
+ */
+const serializeNoise = (noise: NoiseEffect): Partial<SerializedEffect> => {
+  const vector = (noise as { noiseSizeVector?: Vector }).noiseSizeVector;
+  const out: Partial<SerializedEffect> = {
+    noiseType: noise.noiseType,
+    noiseSizeVector:
+      vector === undefined
+        ? { x: noise.noiseSize, y: noise.noiseSize }
+        : { x: vector.x, y: vector.y },
+    density: noise.density,
+  };
+  if (noise.noiseType === 'MULTITONE') out.opacity = noise.opacity;
+  else out.color = rgbaOf(noise.color);
+  if (noise.noiseType === 'DUOTONE') out.secondaryColor = rgbaOf(noise.secondaryColor);
   return out;
 };
 

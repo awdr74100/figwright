@@ -227,9 +227,9 @@ export type SerializedFontName = z.infer<typeof SerializedFontNameSchema>;
 
 /**
  * Bounded effect wire-format: shadows carry color / offset / spread; blurs & textures carry radius;
- * a shader carries its id + property values; noise / glass carry only type + visible. `type` is the
- * Figma effect type literal. (Lives here, not in styles.ts, so both node serialization and style
- * serialization can share it.)
+ * a shader carries its id + property values; noise carries its kind, grain, density and colours;
+ * glass carries only type + visible. `type` is the Figma effect type literal. (Lives here, not in
+ * styles.ts, so both node serialization and style serialization can share it.)
  */
 export const SerializedEffectSchema = z.object({
   type: z.string(),
@@ -246,6 +246,22 @@ export const SerializedEffectSchema = z.object({
   /** SHADER effects only — see the SHADER paint; the same two fields, with the same meaning. */
   shaderId: z.string().optional(),
   shaderProperties: z.array(SerializedShaderPropertySchema).optional(),
+  /**
+   * NOISE effects only. MONOTONE grains in `color`; DUOTONE in `color` and `secondaryColor`;
+   * MULTITONE has no colour setting, so it carries no `color` — only `opacity`.
+   */
+  noiseType: z.enum(['MONOTONE', 'DUOTONE', 'MULTITONE']).optional(),
+  /** NOISE only: grain size on each axis, the panel's Noise size X / Y. */
+  noiseSizeVector: z.object({ x: z.number(), y: z.number() }).optional(),
+  /**
+   * NOISE only: grain density, 0–1 for the panel's 0–100%. A value above 1 can only come from a
+   * number variable bound to it, and renders as a solid tint of the grain colour.
+   */
+  density: z.number().optional(),
+  /** DUOTONE noise only: the second grain colour. */
+  secondaryColor: SerializedRGBASchema.optional(),
+  /** MULTITONE noise only: the grains' opacity, 0–1. */
+  opacity: z.number().optional(),
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
