@@ -276,7 +276,7 @@ export const SerializedEffectSchema = z.object({
   /**
    * DROP_SHADOW only, present only when true: the shadow also shows through the node's translucent
    * areas. A plain CSS `box-shadow` draws only outside the box (measured identical to Figma's
-   * default); this needs the shadow as a box underneath the node instead.
+   * `false`); this needs the shadow as a box underneath the node instead.
    */
   showShadowBehindNode: z.literal(true).optional(),
   /** Shadows only, present only when not NORMAL: the blend mode the shadow is composited with. */

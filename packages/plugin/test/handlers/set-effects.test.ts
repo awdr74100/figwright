@@ -42,9 +42,41 @@ describe('set_effects handler', () => {
         offset: { x: 0, y: 2 },
         spread: 0,
         blendMode: 'NORMAL',
+        // Stated, not left out: Figma stores an omitted one as true (measured), and a CSS box-shadow
+        // is false.
+        showShadowBehindNode: false,
       },
     ]);
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
+  it("writes a drop shadow as Figma's showShadowBehindNode false unless it says true", async () => {
+    const node = { id: '1:1', effects: [] as unknown };
+    await createSetEffectsHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      effects: [
+        dropShadow,
+        { ...dropShadow, showShadowBehindNode: true },
+        { ...dropShadow, showShadowBehindNode: false },
+      ],
+    });
+    expect((node.effects as DropShadowEffect[]).map(e => e.showShadowBehindNode)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it('carries a shadow blend mode, normal when none is given, and never puts the flag on an inner shadow', async () => {
+    const node = { id: '1:1', effects: [] as unknown };
+    const inner = { ...dropShadow, type: 'INNER_SHADOW' };
+    await createSetEffectsHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      effects: [{ ...dropShadow, blendMode: 'MULTIPLY' }, inner, { ...inner, blendMode: 'SCREEN' }],
+    });
+    const out = node.effects as Record<string, unknown>[];
+    expect(out.map(e => e.blendMode)).toEqual(['MULTIPLY', 'NORMAL', 'SCREEN']);
+    expect(out.slice(1).some(e => 'showShadowBehindNode' in e)).toBe(false);
   });
 
   it('throws on missing node, bad input, or shadow without color/offset', async () => {

@@ -73,7 +73,9 @@ of radius `r` the way CSS draws `blur(r × 0.43)`, and a shadow of radius `r` th
 draws a blur of `r × 0.85`. So a value read off code converts the other way: `filter: blur(4px)` or
 `backdrop-filter: blur(4px)` is `set_effects` radius `4 ÷ 0.43 ≈ 9.3`, and a `box-shadow` blur of
 `8px` is radius `8 ÷ 0.85 ≈ 9.4`; offsets and spread go across as they are. Copying the CSS number
-straight in paints a blur about half as strong as the code's.
+straight in paints a blur about half as strong as the code's. A `box-shadow` needs nothing else:
+`set_effects` writes a drop shadow with `showShadowBehindNode: false`, which is what CSS draws (the
+shadow stays outside a translucent box), unless you pass `true`.
 
 ## Reference tokens, not literals
 

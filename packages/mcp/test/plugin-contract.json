@@ -246,6 +246,7 @@
     "clone_node": ["nodeId", "requestId"],
     "set_effects": [
       "effects",
+      "effects[].blendMode",
       "effects[].boundVariables",
       "effects[].color",
       "effects[].color.a",
@@ -257,6 +258,7 @@
       "effects[].offset.x",
       "effects[].offset.y",
       "effects[].radius",
+      "effects[].showShadowBehindNode",
       "effects[].spread",
       "effects[].type",
       "effects[].visible",
@@ -309,6 +311,7 @@
     "create_effect_style": [
       "description",
       "effects",
+      "effects[].blendMode",
       "effects[].boundVariables",
       "effects[].color",
       "effects[].color.a",
@@ -320,6 +323,7 @@
       "effects[].offset.x",
       "effects[].offset.y",
       "effects[].radius",
+      "effects[].showShadowBehindNode",
       "effects[].spread",
       "effects[].type",
       "effects[].visible",
@@ -388,6 +392,7 @@
     "update_effect_style": [
       "description",
       "effects",
+      "effects[].blendMode",
       "effects[].boundVariables",
       "effects[].color",
       "effects[].color.a",
@@ -399,6 +404,7 @@
       "effects[].offset.x",
       "effects[].offset.y",
       "effects[].radius",
+      "effects[].showShadowBehindNode",
       "effects[].spread",
       "effects[].type",
       "effects[].visible",

@@ -73,21 +73,35 @@ export const toDocumentRgba = (
   a: c.a,
 });
 
-/** Wire effect → Figma Effect. Shadows need color + offset; blurs need radius. */
+/**
+ * Wire effect → Figma Effect. Shadows need color + offset; blurs need radius.
+ *
+ * A drop shadow always states `showShadowBehindNode`. Left out, Figma stores `true` — the shadow
+ * then shows through the node's translucent areas — though the typings say it defaults to `false`
+ * (measured: written without it, a shadow behind a 30%-opaque box drew through it). A CSS
+ * `box-shadow` never draws there, which is Figma's `false`, and a read carries the field only when
+ * it is `true`, so a shadow taken from code, or read and written back, means `false` unless it says
+ * otherwise. A shadow's blend mode carries over the same way, normal when none is given.
+ */
 export const toFigmaEffect = (e: SerializedEffect, figmaCtx: typeof figma): Effect => {
   if (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') {
     if (e.color === undefined || e.offset === undefined) {
       throw new TypeError(`${e.type} requires color and offset`);
     }
-    return {
+    const shadow: Record<string, unknown> = {
       type: e.type,
       visible: e.visible,
       radius: e.radius ?? 0,
       color: toDocumentRgba(figmaCtx, e.color, e.type),
       offset: { x: e.offset.x, y: e.offset.y },
       spread: e.spread ?? 0,
-      blendMode: 'NORMAL',
-    } as Effect;
+      blendMode: typeof e.blendMode === 'string' ? e.blendMode : 'NORMAL',
+    };
+    if (e.type === 'DROP_SHADOW') {
+      shadow.showShadowBehindNode =
+        (e as { showShadowBehindNode?: unknown }).showShadowBehindNode === true;
+    }
+    return shadow as unknown as Effect;
   }
   if (e.type === 'LAYER_BLUR' || e.type === 'BACKGROUND_BLUR') {
     return { type: e.type, visible: e.visible, radius: e.radius ?? 0 } as Effect;

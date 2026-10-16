@@ -83,7 +83,7 @@ the obvious ones. These are ordered by how easily they're silently dropped.
     `aria-hidden` copy of that content stacked over it. Rendered against Figma: 0.9–2.9/255. An
     effect style carries no `cssLayers` (no node to size it on), only the ramp.
   - **`showShadowBehindNode: true`** (drop shadows only): the shadow also shows through the node's
-    translucent areas. `box-shadow` draws only outside the box — exactly Figma's default — so draw
+    translucent areas. `box-shadow` draws only outside the box — exactly Figma's `false` — so draw
     this one as a box underneath the node instead: the shadow colour, moved by the offset, grown by
     the spread on every side, `filter: blur(radius × 0.43)`. A shadow `blendMode` has no
     `box-shadow` equivalent; keep the plain shadow unless the blend is the point.

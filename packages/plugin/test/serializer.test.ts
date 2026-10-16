@@ -2170,7 +2170,7 @@ describe('serializeEffect', () => {
       expect(out).toMatchObject({ showShadowBehindNode: true, blendMode: 'MULTIPLY' });
     });
 
-    // A plain box-shadow already draws Figma's default, so the default adds nothing to the output.
+    // A plain box-shadow already draws Figma's false, so false adds nothing to the output.
     it('reads a default shadow exactly as before', () => {
       const out = serializeEffect(
         {

@@ -9,7 +9,8 @@ export const setEffectsTool: ToolSpec = {
   name: SET_EFFECTS_TOOL_NAME,
   description:
     "Set a node's effects. Shadows (DROP_SHADOW / INNER_SHADOW) need color + offset; blurs need " +
-    'radius. Returns { ok, nodeId }.',
+    'radius. A drop shadow is written with showShadowBehindNode false unless it says true — what a ' +
+    'CSS box-shadow draws. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Figma node id to apply effects to'),
     effects: z.array(effectItemSchema).describe('Effects to apply'),

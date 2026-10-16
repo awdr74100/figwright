@@ -34,6 +34,19 @@ export const effectItemSchema = z
       .describe('Shadow offset in px. Required for shadows.')
       .optional(),
     spread: z.number().optional(),
+    showShadowBehindNode: z
+      .boolean()
+      .describe(
+        "DROP_SHADOW only: also draw the shadow through the node's translucent areas. Omit for false, " +
+          'which is what a CSS box-shadow draws; a shadow read from Figma carries it only when true.',
+      )
+      .optional(),
+    blendMode: z
+      .string()
+      .describe(
+        'Shadows only: the blend mode the shadow is composited with, e.g. "MULTIPLY". Omit for NORMAL.',
+      )
+      .optional(),
     boundVariables: boundVariablesSchema
       .describe(
         'Bindable fields: color (COLOR variable) and radius / spread / offsetX / offsetY (FLOAT).',
