@@ -1,4 +1,4 @@
-import './bigint-shim.js';
+import './shims.js';
 import { createPluginContextEvent, SELECTION_DETAIL_LIMIT } from '../protocol/bridge.js';
 import { parsePanelControl } from '../protocol/panel-control.js';
 import { resumeHostYield } from './cooperative.js';
