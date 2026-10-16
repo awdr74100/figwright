@@ -9,7 +9,9 @@ export const getMetadataTool: ToolSpec = {
   description:
     'Return file metadata: fileName, current page, all page references, and which editor the file ' +
     'is open in (editorType / mode) — "dev" is read-only and "figjam" has no components, ' +
-    'variables or styles.',
+    'variables or styles — and colorProfile, the space its colours are stored in (SRGB / ' +
+    'DISPLAY_P3 / LEGACY): in a DISPLAY_P3 file every r/g/b is P3, so a colour written from code ' +
+    'takes space: "SRGB".',
   inputSchema: z.object({}),
   kind: 'read',
 };

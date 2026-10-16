@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { boundVariablesSchema } from './binding-schema.js';
+import { colorSpaceSchema } from './color-space-schema.js';
 
 // Shared Zod paint schema, reused by set_fills / set_strokes / create_paint_style /
 // update_paint_style so the SOLID + gradient shape can't drift between them. Loose (only `type` is
@@ -12,8 +13,19 @@ import { boundVariablesSchema } from './binding-schema.js';
 // arguments on purpose — it is not an input, and declaring it would register a plugin-facing
 // argument that no plugin version will ever honour.
 
-const rgb = z.object({ r: z.number(), g: z.number(), b: z.number() });
-const rgba = z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number() });
+const rgb = z.object({
+  r: z.number(),
+  g: z.number(),
+  b: z.number(),
+  space: colorSpaceSchema.optional(),
+});
+const rgba = z.object({
+  r: z.number(),
+  g: z.number(),
+  b: z.number(),
+  a: z.number(),
+  space: colorSpaceSchema.optional(),
+});
 
 /** One paint: SOLID (color) or a gradient (gradientStops + gradientTransform). */
 export const paintItemSchema = z

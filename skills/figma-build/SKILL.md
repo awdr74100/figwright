@@ -106,6 +106,8 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
 - **Reference tokens, not literals.** Colour via `bind_variable_to_paint`, scalars via
   `bind_variable_to_node`, shared looks via `apply_style_to_node` — never hardcode hex/px when a
   token exists (`get_variable_defs` tells you what does).
+- **A colour from code is sRGB — say so.** Write it with `space: "SRGB"` beside its r/g/b, or a
+  Display P3 file paints it more saturated than the code (`references/write-rules.md`).
 - **Auto-layout for related children**, absolute coordinates only for top-level placement.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from
   the matching components, don't reproduce it from primitives.

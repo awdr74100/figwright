@@ -2,17 +2,18 @@ import type { MutateResult, SerializedPaint } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
+import { toDocumentRgb, toDocumentRgba } from './convert.js';
 
 /**
  * Convert a serialized paint back to a Figma Paint. SOLID and the four gradient types are supported
  * (gradients round-trip serializePaint's gradientStops + gradientTransform). IMAGE/VIDEO/PATTERN
  * are not writable here — set_image_fill puts an image into a fill, import_image places a new one.
  */
-export const toFigmaPaint = (paint: SerializedPaint): Paint => {
+export const toFigmaPaint = (paint: SerializedPaint, figmaCtx: typeof figma): Paint => {
   if (paint.type === 'SOLID') {
     return {
       type: 'SOLID',
-      color: { r: paint.color.r, g: paint.color.g, b: paint.color.b },
+      color: toDocumentRgb(figmaCtx, paint.color, 'SOLID'),
       opacity: paint.opacity,
       visible: paint.visible,
     };
@@ -33,7 +34,7 @@ export const toFigmaPaint = (paint: SerializedPaint): Paint => {
       type: paint.type,
       gradientStops: paint.gradientStops.map(s => ({
         position: s.position,
-        color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a },
+        color: toDocumentRgba(figmaCtx, s.color, paint.type),
       })),
       gradientTransform: paint.gradientTransform as unknown as Transform,
       opacity: paint.opacity,

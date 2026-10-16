@@ -4,6 +4,7 @@ import { ResolvedTokenSchema } from './design-context.js';
 // SerializedEffect / SerializedLayoutGrid / SerializedLineHeight / SerializedLetterSpacing now live
 // in serialized-node.ts (shared by node + style serialization) and reach consumers via the barrel.
 import {
+  DisplayP3MarkerSchema,
   SerializedBindingsSchema,
   SerializedEffectSchema,
   SerializedFontNameSchema,
@@ -58,6 +59,8 @@ export const SerializedGridStyleSchema = z.object({
 export type SerializedGridStyle = z.infer<typeof SerializedGridStyleSchema>;
 
 export const GetStylesResultSchema = z.object({
+  /** See {@link DisplayP3MarkerSchema}: every colour below is P3 when present. */
+  colorProfile: DisplayP3MarkerSchema.optional(),
   paints: z.array(SerializedPaintStyleSchema),
   texts: z.array(SerializedTextStyleSchema),
   effects: z.array(SerializedEffectStyleSchema),

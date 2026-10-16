@@ -1,6 +1,7 @@
 {
   "version": 6,
   "fields": [
+    "colorProfile",
     "globalVars",
     "globalVars.styles",
     "hint",

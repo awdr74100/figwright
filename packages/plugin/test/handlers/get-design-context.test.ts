@@ -43,6 +43,29 @@ const fakeFigma = (opts: {
   }) as unknown as typeof figma;
 
 describe('get_design_context handler', () => {
+  // Every colour in a Display P3 file is P3 channels, so the result says so — first, so a reader
+  // learns it before meeting the first hex — and says nothing for the files where hex is hex.
+  it.each([
+    ['DISPLAY_P3', true],
+    ['SRGB', false],
+    ['LEGACY', false],
+    [undefined, false],
+  ] as const)('marks a %s document as P3: %s', async (profile, marked) => {
+    const figmaCtx = fakeFigma({ selection: [node({ id: 'r' })] });
+    if (profile !== undefined) {
+      (figmaCtx as unknown as { root: object }).root = { documentColorProfile: profile };
+    }
+    for (const detail of ['full', 'compact'] as const) {
+      const result = (await createGetDesignContextHandler(figmaCtx)({ detail })) as Record<
+        string,
+        unknown
+      >;
+      expect(result.colorProfile).toBe(marked ? 'DISPLAY_P3' : undefined);
+      expect('colorProfile' in result).toBe(marked);
+      expect(Object.keys(result)[0]).toBe(marked ? 'colorProfile' : 'nodes');
+    }
+  });
+
   it.each([0, 0.6])(
     'keeps corner smoothing %s on a deduped instance child override',
     async value => {

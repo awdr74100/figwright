@@ -99,7 +99,7 @@ export const toFigmaPaintsBound = async (
   const table = await resolveVariables(figmaCtx, [...idsIn(paints), ...stopBindings], where);
 
   return paints.map(src => {
-    const paint = toFigmaPaint(src);
+    const paint = toFigmaPaint(src, figmaCtx);
     if (src.type === 'SOLID' && src.boundVariables !== undefined) {
       let bound = paint as SolidPaint;
       for (const [field, id] of Object.entries(src.boundVariables)) {
@@ -130,7 +130,7 @@ export const toFigmaEffectsBound = async (
 ): Promise<Effect[]> => {
   const table = await resolveVariables(figmaCtx, idsIn(effects), where);
   return effects.map(src => {
-    let effect = toFigmaEffect(src);
+    let effect = toFigmaEffect(src, figmaCtx);
     for (const [field, id] of Object.entries(src.boundVariables ?? {})) {
       effect = figmaCtx.variables.setBoundVariableForEffect(
         effect,

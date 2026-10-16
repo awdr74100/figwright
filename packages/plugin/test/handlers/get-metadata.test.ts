@@ -73,4 +73,19 @@ describe('get_metadata handler', () => {
 
     expect(result.mode).toBe('default');
   });
+
+  // In a Display P3 file every colour is P3 channels: the agent needs to know before it reads one.
+  it('reports the document colour profile', async () => {
+    const figmaCtx = fakeFigma({ fileName: 'Wide', currentPageId: 'p-1', pages });
+    (figmaCtx.root as { documentColorProfile?: string }).documentColorProfile = 'DISPLAY_P3';
+    const result = (await createGetMetadataHandler(figmaCtx)(undefined)) as GetMetadataResult;
+    expect(result.colorProfile).toBe('DISPLAY_P3');
+  });
+
+  it('leaves the colour profile out where the editor reports none', async () => {
+    const result = (await createGetMetadataHandler(
+      fakeFigma({ fileName: 'Old', currentPageId: 'p-1', pages }),
+    )(undefined)) as GetMetadataResult;
+    expect(result).not.toHaveProperty('colorProfile');
+  });
 });

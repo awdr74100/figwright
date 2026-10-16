@@ -55,7 +55,10 @@ export const createSetVariableValueHandler =
       throw new Error(`set_variable_value: variable ${p.variableId} not found`);
     }
     const value = coerceToResolvedType(p.value, variable.resolvedType);
-    variable.setValueForMode(p.modeId, toFigmaVariableValue(value as SerializedVariableValue));
+    variable.setValueForMode(
+      p.modeId,
+      toFigmaVariableValue(value as SerializedVariableValue, figmaCtx),
+    );
 
     const result: VariableResult = { ok: true, variableId: variable.id, name: variable.name };
     return result;

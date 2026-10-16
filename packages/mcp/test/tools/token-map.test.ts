@@ -68,6 +68,23 @@ describe('handleTokenMap', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  // In a Display P3 file every Figma value is P3, so a value match is equal numbers in different
+  // spaces: the result says so first, and says nothing for an sRGB file.
+  it('leads with the colour profile of a P3 document, and only then', async () => {
+    const p3: ToolDispatcher = async tool => {
+      if (tool === GET_VARIABLE_DEFS_TOOL_NAME) return { colorProfile: 'DISPLAY_P3', ...defs };
+      if (tool === GET_STYLES_TOOL_NAME) return emptyStyles;
+      throw new Error(`unexpected dispatch: ${tool}`);
+    };
+    const marked = await handleTokenMap(p3, { rootDir: dir });
+    expect(Object.keys(marked)[0]).toBe('colorProfile');
+    expect(marked.colorProfile).toBe('DISPLAY_P3');
+    expect(marked.mappings.find(m => m.figmaName === 'Primary/500')?.candidate?.ref).toBe(
+      'primary-500',
+    );
+    expect(await handleTokenMap(dispatch, { rootDir: dir })).not.toHaveProperty('colorProfile');
+  });
+
   it('detects the v4 @theme source, maps Primary/500, flags the unmatched token', async () => {
     const result = await handleTokenMap(dispatch, { rootDir: dir });
     expect(result.tokenSource).toBe('src/app.css');

@@ -52,6 +52,20 @@ the model made up. Every value should trace to a source. In priority order:
    "designed". And prefer HUG/FILL sizing (below) so the layout computes sizes for you: the fewer raw
    width/height numbers you invent, the fewer chances to get them wrong.
 
+### A colour from code is sRGB: say so when you write it
+
+Figma stores every colour in the file's own colour space, and a **Display P3** file
+(`get_metadata` → `colorProfile: "DISPLAY_P3"`) holds P3 channels. A CSS hex, `rgb()` or design
+token is sRGB, so written as raw r/g/b into a P3 file it paints a visibly more saturated colour than
+the code renders (measured: `#CC6633` written raw came out 20/255 off; with its space named, 1/255).
+So every colour you take from code carries `space: "SRGB"` next to its r/g/b — on `set_fills` /
+`set_strokes` / `set_text_range` paints and their gradient stops, `set_effects` shadows, paint and
+effect styles, and `set_variable_value` colours. In an sRGB file it changes nothing, so add it
+whenever the colour came from code, without checking the profile first. Leave it off a colour you
+read from Figma and are writing back: reads already report the file's own channels. `import_svg`
+handles its markup's colours itself; a motion keyframe colour takes no `space` and is document
+channels.
+
 ## Reference tokens, not literals
 
 Never hardcode a hex/px when the file has a token for it (`get_variable_defs` tells you what does).

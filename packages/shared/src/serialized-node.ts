@@ -3,6 +3,17 @@ import { z } from 'zod';
 export const MIXED = 'mixed' as const;
 export type Mixed = typeof MIXED;
 
+/**
+ * Leads a colour-carrying read from a Display P3 document, and is absent otherwise. Every colour in
+ * such a document — fills, strokes, gradient stops, effects, text runs and variable values, as
+ * r/g/b or as hex — is a P3 colour, not sRGB: `#CC6633` there paints what CSS writes as
+ * `color(display-p3 0.8 0.4 0.2)`, and emitted as a plain hex it renders visibly duller (measured
+ * up to 102/255 off on a saturated green). An sRGB or unmanaged document's hex is the plain hex it
+ * reads as, so it carries no marker. Writes take the same channels back; a colour taken from code
+ * names `space: 'SRGB'` instead.
+ */
+export const DisplayP3MarkerSchema = z.literal('DISPLAY_P3');
+
 export const SerializedColorSchema = z.object({
   r: z.number(),
   g: z.number(),
@@ -800,6 +811,14 @@ export const GetMetadataResultSchema = z.object({
    * the way into a task.
    */
   editorType: z.string(),
+  /**
+   * `figma.root.documentColorProfile` — the space every colour in the file is stored in: `SRGB`,
+   * `DISPLAY_P3`, or `LEGACY` (a file from before colour management, whose colours read as sRGB).
+   * In a `DISPLAY_P3` file a colour's r/g/b and hex are P3 channels, so CSS needs `color(display-p3
+   * …)` for them, and a colour written from code names `space: 'SRGB'`. Absent where the editor
+   * does not report one.
+   */
+  colorProfile: z.string().optional(),
   /** `figma.mode` — `default` for a normal run, `inspect` inside Dev Mode's Inspect panel. */
   mode: z.string(),
 });

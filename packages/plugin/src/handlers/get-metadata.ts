@@ -1,6 +1,7 @@
 import type { GetMetadataResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { documentColorProfile } from './color-profile.js';
 
 export const createGetMetadataHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -13,5 +14,7 @@ export const createGetMetadataHandler =
       editorType: figmaCtx.editorType,
       mode: figmaCtx.mode ?? 'default',
     };
+    const profile = documentColorProfile(figmaCtx);
+    if (profile !== undefined) result.colorProfile = profile;
     return result;
   };

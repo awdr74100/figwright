@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { SimplifiedPaint } from './design-context-dedupe.js';
 import {
+  DisplayP3MarkerSchema,
   MIXED,
   SerializedAnnotationSchema,
   SerializedAutoLayoutSchema,
@@ -774,5 +775,7 @@ export const GetDesignContextResultSchema = z.object({
   projectTokens: z.record(z.string(), ProjectTokenAnnotationSchema).optional(),
   /** Simplification metrics; full detail only. */
   metrics: DesignContextMetricsSchema.optional(),
+  /** See {@link DisplayP3MarkerSchema}; the first key when present. */
+  colorProfile: DisplayP3MarkerSchema.optional(),
 });
 export type GetDesignContextResult = z.infer<typeof GetDesignContextResultSchema>;

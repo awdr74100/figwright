@@ -20,7 +20,9 @@ const rgba = z
     b: z.number().min(0).max(1),
     a: z.number().min(0).max(1),
   })
-  .describe('Color as RGBA channels 0–1');
+  .describe(
+    "Color as RGBA channels 0–1, in the document's colour space (a keyframe colour takes no `space`)",
+  );
 
 // MotionEasing.type — 14 presets. Named presets (EASE_*, GENTLE/QUICK/BOUNCY/SLOW, LINEAR, HOLD) need
 // no extra params; CUSTOM_CUBIC_BEZIER pairs with easingFunctionCubicBezier, CUSTOM_SPRING with a

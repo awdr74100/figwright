@@ -287,4 +287,16 @@ describe('get_variable_defs handler', () => {
     expect(result.variables[1]?.scopes).toEqual(['CORNER_RADIUS']);
     expect(result.variables[2]?.scopes).toEqual(['FRAME_FILL', 'SHAPE_FILL']);
   });
+
+  // A Display P3 file's COLOR values are P3 channels: the result says so before the first one.
+  it.each([
+    ['DISPLAY_P3', true],
+    ['SRGB', false],
+  ] as const)('leads a %s document with the P3 marker: %s', async (profile, marked) => {
+    const figmaCtx = fakeFigma([], []);
+    (figmaCtx as unknown as { root: object }).root = { documentColorProfile: profile };
+    const result = (await createGetVariableDefsHandler(figmaCtx)(undefined)) as object;
+    expect(Object.keys(result)[0]).toBe(marked ? 'colorProfile' : 'collections');
+    expect('colorProfile' in result).toBe(marked);
+  });
 });

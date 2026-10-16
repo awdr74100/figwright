@@ -32,6 +32,9 @@ export const getDesignContextTool: ToolSpec = {
     'A node carrying variableModes ({ color: "Dark" }) renders in that variable mode: its values ' +
     "are that mode's but its token names are the default's, so keep the token refs and scope the " +
     "subtree in the project's theme mechanism (a root lists the modes it inherits too). " +
+    'A result led by colorProfile: "DISPLAY_P3" comes from a Display P3 file, where every hex and ' +
+    'r/g/b is a P3 colour: emit a raw one as color(display-p3 r g b), not the plain hex, which ' +
+    'renders visibly duller. ' +
     'A tree too large to return whole comes back as a sectionPlan instead ({ sections: [{ nodeId, ' +
     'name, nodes, … }] } + a note): do not retry unscoped — call again per section nodeId at ' +
     'detail full and build section by section. On a full result, raw color values that exactly ' +

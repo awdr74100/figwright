@@ -43,6 +43,13 @@ const inputSchema = z.object({
 });
 
 export interface TokenMapResult {
+  /**
+   * `'DISPLAY_P3'` when the document is a Display P3 file, whose variable values — every figmaValue
+   * and figmaModes hex below — are P3 colours; absent otherwise. A value match against a project
+   * token then means equal numbers in different spaces: the token still wins, but the design
+   * renders more saturated than it.
+   */
+  colorProfile?: 'DISPLAY_P3';
   mappings: TokenMapping[];
   /** Figma token names with no project token candidate ≥ 0.5 — the gap to define. */
   unmapped: string[];
@@ -114,7 +121,9 @@ export const tokenMapTool: ToolSpec = {
     'of re-guessing an ambiguous or value-only match. A row whose ref no longer resolves to a ' +
     'project token is reported in staleOverrides and degrades to the normal join. Returns { mappings ' +
     '(candidate + confidence + status + matchedBy + builtin), unmapped, staleOverrides, tokenSource, ' +
-    'profile }.',
+    'profile }, led by colorProfile: "DISPLAY_P3" in a Display P3 file — its Figma values are P3 ' +
+    'colours there, so a value match is equal numbers in different spaces: keep the token, but ' +
+    'the design renders more saturated than it.',
   inputSchema,
   kind: 'local',
   // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
@@ -175,6 +184,8 @@ export const handleTokenMap = async (
     }));
 
   return {
+    // The variables' values (and so every figmaValue / figmaModes below) are P3 in a P3 document.
+    ...(defs.colorProfile === undefined ? {} : { colorProfile: defs.colorProfile }),
     mappings,
     unmapped,
     themedCollections,

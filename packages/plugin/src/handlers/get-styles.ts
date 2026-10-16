@@ -15,6 +15,7 @@ import {
   serializeLayoutGrid,
   serializePaint,
 } from '../serializer.js';
+import { displayP3Marker } from './color-profile.js';
 
 const serializeLineHeight = (lh: LineHeight): SerializedLineHeight =>
   lh.unit === 'AUTO' ? { unit: 'AUTO' } : { unit: lh.unit, value: lh.value };
@@ -96,6 +97,7 @@ export const createGetStylesHandler =
     ]);
 
     const result: GetStylesResult = {
+      ...displayP3Marker(figmaCtx),
       paints: paintStyles.map(s => ({
         id: s.id,
         name: s.name,

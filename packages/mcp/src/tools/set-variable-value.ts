@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { colorSpaceSchema } from './color-space-schema.js';
 import { variableEasingSchema } from './motion-schemas.js';
 import type { ToolSpec } from './spec.js';
 
@@ -16,14 +17,26 @@ const variableValue = z
     z.boolean(),
     z.number(),
     z.string(),
-    z.looseObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
+    z.looseObject({
+      r: z.number(),
+      g: z.number(),
+      b: z.number(),
+      a: z.number().optional(),
+      space: colorSpaceSchema.optional(),
+    }),
     z.looseObject({ type: z.literal('VARIABLE_ALIAS'), id: z.string() }),
     // A composed color (plugin-typings 1.139): a color and its opacity authored separately, with an
     // alias on at least one half. It nests the keys the members around it are keyed by rather than
     // carrying them, so it cannot be swallowed by either and its position is not load-bearing.
     z.looseObject({
       color: z.union([
-        z.looseObject({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }),
+        z.looseObject({
+          r: z.number(),
+          g: z.number(),
+          b: z.number(),
+          a: z.number().optional(),
+          space: colorSpaceSchema.optional(),
+        }),
         z.looseObject({ type: z.literal('VARIABLE_ALIAS'), id: z.string() }),
       ]),
       opacity: z.union([
@@ -36,7 +49,7 @@ const variableValue = z
     variableEasingSchema,
   ])
   .describe(
-    'boolean | number | string | { r,g,b,a } | { type:"VARIABLE_ALIAS", id } | ' +
+    'boolean | number | string | { r,g,b,a, space? } | { type:"VARIABLE_ALIAS", id } | ' +
       '{ color, opacity } composed color | { type: easing }',
   );
 
@@ -45,8 +58,10 @@ export const setVariableValueTool: ToolSpec = {
   description:
     "Set a variable's value for one mode (modeId comes from the variable's collection). value must " +
     'match the variable resolvedType: a boolean, a number (FLOAT), a string, a color { r, g, b, a } ' +
-    '(0–1), an alias { type: "VARIABLE_ALIAS", id } pointing at another variable, or a composed ' +
-    'color { color, opacity } that pairs a color with a separate opacity — each half either a ' +
+    '(0–1, in the document\'s colour space unless `space` names another — pass "SRGB" for a ' +
+    'colour taken from code), an alias { type: "VARIABLE_ALIAS", id } pointing at another ' +
+    'variable, or a composed color { color, opacity } that pairs a color with a separate opacity — ' +
+    'each half either a ' +
     'concrete value or an alias, with at least one of the two an alias. An EASING variable takes a ' +
     'Motion easing, a TIMING variable a number of seconds. Create the variable first with ' +
     'create_variable. Returns { ok, variableId, name }.',

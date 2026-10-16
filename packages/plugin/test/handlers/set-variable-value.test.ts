@@ -233,4 +233,21 @@ describe('set_variable_value handler', () => {
     });
     expect(setValueForMode).toHaveBeenCalledWith('M:0', { r: 1, g: 0, b: 0, a: 1 });
   });
+
+  it("converts a colour value that names its space, through Figma's util", async () => {
+    const setValueForMode = vi.fn<() => void>();
+    const variable = { id: 'V:0', name: 'color/brand', resolvedType: 'COLOR', setValueForMode };
+    const figmaCtx = {
+      root: { documentColorProfile: 'DISPLAY_P3' },
+      variables: { getVariableByIdAsync: async () => variable },
+      // Figma's conversion tags its result; setValueForMode refuses the tag, so it must not arrive.
+      util: { rgb: () => ({ r: 0.75, g: 0.42, b: 0.25, sourceColor: { space: 'SRGB' } }) },
+    } as unknown as typeof figma;
+    await createSetVariableValueHandler(figmaCtx)({
+      variableId: 'V:0',
+      modeId: 'M:0',
+      value: { r: 0.8, g: 0.4, b: 0.2, a: 1, space: 'SRGB' },
+    });
+    expect(setValueForMode).toHaveBeenCalledWith('M:0', { r: 0.75, g: 0.42, b: 0.25, a: 1 });
+  });
 });

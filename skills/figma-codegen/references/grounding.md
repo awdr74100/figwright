@@ -8,6 +8,18 @@ per-property fidelity catalog, and how to ground a page too big for one call.
 
 ## Reading the tree
 
+- **`colorProfile: "DISPLAY_P3"` means every colour in the payload is a P3 colour.** It is the first
+  key of a result from a Display P3 file, and absent otherwise. There, a hex (and any r/g/b) is P3
+  channels: `#CC6633` is what CSS writes as `color(display-p3 0.8 0.4 0.2)`, and emitted as the
+  plain hex it renders visibly duller — measured against Figma's own render, the plain hex was up to
+  102/255 off on a saturated green and 20/255 on an orange, `color(display-p3 …)` within 1/255. So
+  emit a raw colour as `color(display-p3 r g b)` with each channel the hex pair ÷ 255, rounded to 3
+  decimals (`/ a` for the alpha of an 8-digit hex, e.g. `color(display-p3 0 0 0 / 0.25)`; Tailwind
+  `bg-[color(display-p3_0.8_0.4_0.2)]`) — fills, strokes, gradient stops and shadows alike. A token
+  still wins: when the colour is a bound variable, or `projectTokens` / `token_map` match it to a
+  project token, emit the token (the designer most likely meant the brand colour, and the file just
+  happens to be P3) and say in your report that the design renders more saturated than that token
+  does. Without `colorProfile`, a hex is the plain sRGB hex it reads as.
 - **Keep `dedupeComponents: true`, and do not depth-limit a tree you intend to build from.** Dedupe
   shows the **first** instance of each repeated component in full and collapses the rest to a
   `"deduped": true` stub — a 100-instance screen stays readable while every distinct component keeps

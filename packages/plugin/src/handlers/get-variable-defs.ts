@@ -9,6 +9,7 @@ import {
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeCodeSyntax } from '../serializer.js';
+import { displayP3Marker } from './color-profile.js';
 
 const serializeMotionEasing = (easing: MotionEasing): SerializedMotionEasing => {
   const out: SerializedMotionEasing = { type: easing.type };
@@ -76,6 +77,7 @@ export const createGetVariableDefsHandler =
     ]);
 
     const result: GetVariableDefsResult = {
+      ...displayP3Marker(figmaCtx),
       collections: collections.map(c => ({
         id: c.id,
         name: c.name,

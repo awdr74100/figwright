@@ -17,7 +17,9 @@ export const getStylesTool: ToolSpec = {
     '{ name, type, codeSyntax? } (ids stay the key because variable names collide across ' +
     'collections); it is omitted when nothing in the document is bound. This lists local styles, ' +
     'not all shared styles used by imported instances. To use a published style in another file, ' +
-    'pass its key to import_style in that target file and use the returned styleId.',
+    'pass its key to import_style in that target file and use the returned styleId. A result led ' +
+    'by colorProfile: "DISPLAY_P3" comes from a Display P3 file: its colours are P3, so emit one ' +
+    'as color(display-p3 r g b), not the plain hex.',
   inputSchema: z.object({}),
   kind: 'read',
 };

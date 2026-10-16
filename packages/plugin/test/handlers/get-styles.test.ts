@@ -451,4 +451,16 @@ describe('get_styles handler — variable bindings', () => {
     });
     expect(result).not.toHaveProperty('variables');
   });
+
+  // A Display P3 file's style colours are P3 channels: the result says so before the first one.
+  it.each([
+    ['DISPLAY_P3', true],
+    ['SRGB', false],
+  ] as const)('leads a %s document with the P3 marker: %s', async (profile, marked) => {
+    const figmaCtx = fakeFigma();
+    (figmaCtx as unknown as { root: object }).root = { documentColorProfile: profile };
+    const result = (await createGetStylesHandler(figmaCtx)(undefined)) as object;
+    expect(Object.keys(result)[0]).toBe(marked ? 'colorProfile' : 'paints');
+    expect('colorProfile' in result).toBe(marked);
+  });
 });

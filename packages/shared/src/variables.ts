@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { SerializedRGBASchema, SerializedVariableAliasSchema } from './serialized-node.js';
+import {
+  DisplayP3MarkerSchema,
+  SerializedRGBASchema,
+  SerializedVariableAliasSchema,
+} from './serialized-node.js';
 
 /**
  * A COLOR variable value: RGBA plus a convenience `hex` (#RRGGBB / #RRGGBBAA, alpha only when < 1)
@@ -121,6 +125,8 @@ export const SerializedVariableSchema = z.object({
 export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 
 export const GetVariableDefsResultSchema = z.object({
+  /** See {@link DisplayP3MarkerSchema}: every COLOR value below is P3 when present. */
+  colorProfile: DisplayP3MarkerSchema.optional(),
   collections: z.array(SerializedVariableCollectionSchema),
   variables: z.array(SerializedVariableSchema),
 });

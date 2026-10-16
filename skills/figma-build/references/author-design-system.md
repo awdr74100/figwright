@@ -17,8 +17,9 @@ Build the collection top-down — the collection hands you the mode id you need 
    structure the picker and `get_variable_defs` show back.
 3. **`set_variable_value`** (`variableId`, `modeId`, `value`) per mode. `value` shape follows the
    type: a number for `FLOAT`, a string for `STRING`, a boolean for `BOOLEAN`, `{ r, g, b, a }`
-   (0–1) for `COLOR`, or `{ type: "VARIABLE_ALIAS", id }` to alias another variable (semantic token
-   → primitive token).
+   (0–1) for `COLOR` — add `space: "SRGB"` when the colour comes from code (see the colour-space
+   rule in [`write-rules.md`](./write-rules.md)) — or `{ type: "VARIABLE_ALIAS", id }` to alias
+   another variable (semantic token → primitive token).
 4. **`set_variable_code_syntax`** (`variableId`, `codeSyntax: { WEB: "--color-primary" }`) — when
    the variable comes **from an existing code token** (a CSS custom property, a Tailwind theme key),
    declare that source name here. It closes the round-trip: future codegen reads it back as the

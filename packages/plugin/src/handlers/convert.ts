@@ -9,11 +9,72 @@ import type {
   SerializedVariableValue,
 } from '@figwright/shared';
 
+import { documentColorProfile } from './color-profile.js';
+
 // Inverse of serializer.ts — turn the wire-format back into Figma API objects for write tools.
 // (serializer.ts owns the Figma → wire direction; these are the matching wire → Figma helpers.)
 
+/** The colour spaces a write may name its channels in. */
+const COLOR_SPACES = ['SRGB', 'DISPLAY_P3'] as const;
+
+/**
+ * A colour as a write tool receives it. Figma stores every colour in the document's own colour
+ * space — a Display P3 file holds P3 channels — and reads report them that way, so a colour written
+ * without `space` is taken as document channels and round-trips unchanged. `space` says the
+ * channels are in another space instead: a colour taken from code is sRGB, and written raw into a
+ * P3 file it would paint a more saturated colour than the code shows.
+ */
+interface WireColor {
+  r: number;
+  g: number;
+  b: number;
+  space?: unknown;
+}
+
+/**
+ * Wire colour → the document's channels. A colour that names no space passes through as it is, and
+ * so does one already in the document's space — so an sRGB or unmanaged file writes exactly the
+ * channels it always did, whatever `space` says, with nothing left to Figma's conversion
+ * arithmetic. Only a colour in the other space is handed to Figma's conversion, which maps it into
+ * the document's profile and records the space as the colour's `sourceColor`. The document is read
+ * only once a colour names a space.
+ */
+export const toDocumentRgb = (figmaCtx: typeof figma, c: WireColor, where: string): RGB => {
+  if (c.space === undefined) return { r: c.r, g: c.g, b: c.b };
+  if (!COLOR_SPACES.includes(c.space as (typeof COLOR_SPACES)[number])) {
+    throw new TypeError(
+      `${where}: color space must be one of ${COLOR_SPACES.join(' / ')} — got ${String(c.space)}`,
+    );
+  }
+  const space = c.space as (typeof COLOR_SPACES)[number];
+  // An unmanaged (LEGACY) file reads its colours as sRGB, like one with no profile at all.
+  const documentSpace = documentColorProfile(figmaCtx) === 'DISPLAY_P3' ? 'DISPLAY_P3' : 'SRGB';
+  if (space === documentSpace) return { r: c.r, g: c.g, b: c.b };
+  return figmaCtx.util.rgb({ space, r: c.r, g: c.g, b: c.b });
+};
+
+/**
+ * {@link toDocumentRgb} reduced to bare channels, for a variable value: `setValueForMode` rejects
+ * the `sourceColor` Figma's conversion attaches ("Unrecognized key(s) in object: 'sourceColor'"),
+ * where a paint or an effect keeps it.
+ */
+const toDocumentChannels = (figmaCtx: typeof figma, c: WireColor, where: string): RGB => {
+  const { r, g, b } = toDocumentRgb(figmaCtx, c, where);
+  return { r, g, b };
+};
+
+/** {@link toDocumentRgb} for a colour that carries alpha, which no colour space changes. */
+export const toDocumentRgba = (
+  figmaCtx: typeof figma,
+  c: WireColor & { a: number },
+  where: string,
+): RGBA => ({
+  ...toDocumentRgb(figmaCtx, c, where),
+  a: c.a,
+});
+
 /** Wire effect → Figma Effect. Shadows need color + offset; blurs need radius. */
-export const toFigmaEffect = (e: SerializedEffect): Effect => {
+export const toFigmaEffect = (e: SerializedEffect, figmaCtx: typeof figma): Effect => {
   if (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') {
     if (e.color === undefined || e.offset === undefined) {
       throw new TypeError(`${e.type} requires color and offset`);
@@ -22,7 +83,7 @@ export const toFigmaEffect = (e: SerializedEffect): Effect => {
       type: e.type,
       visible: e.visible,
       radius: e.radius ?? 0,
-      color: { r: e.color.r, g: e.color.g, b: e.color.b, a: e.color.a },
+      color: toDocumentRgba(figmaCtx, e.color, e.type),
       offset: { x: e.offset.x, y: e.offset.y },
       spread: e.spread ?? 0,
       blendMode: 'NORMAL',
@@ -109,7 +170,10 @@ export const toFigmaLineHeight = (lh: SerializedLineHeight): LineHeight => {
  * rather than casting past it means the agent is told what to send instead, at the tool boundary,
  * rather than meeting an opaque refusal from Figma.
  */
-const toFigmaComposedColor = (value: SerializedVariableComposedColor): VariableComposedColor => {
+const toFigmaComposedColor = (
+  value: SerializedVariableComposedColor,
+  figmaCtx: typeof figma,
+): VariableComposedColor => {
   const opacity =
     typeof value.opacity === 'number'
       ? value.opacity
@@ -121,22 +185,33 @@ const toFigmaComposedColor = (value: SerializedVariableComposedColor): VariableC
           'a concrete color at a concrete opacity is just { r, g, b, a }',
       );
     }
-    const { r, g, b, a } = value.color;
-    return { color: { r, g, b, a }, opacity };
+    const { a } = value.color;
+    return {
+      color: { ...toDocumentChannels(figmaCtx, value.color, 'set_variable_value'), a },
+      opacity,
+    } as VariableComposedColor;
   }
   return { color: { type: 'VARIABLE_ALIAS', id: value.color.id }, opacity };
 };
 
 /** Wire variable value → Figma VariableValue (alias / color / composed color / easing / primitive). */
-export const toFigmaVariableValue = (value: SerializedVariableValue): VariableValue => {
+export const toFigmaVariableValue = (
+  value: SerializedVariableValue,
+  figmaCtx: typeof figma,
+): VariableValue => {
   if (typeof value === 'object' && value !== null) {
-    if ('r' in value) return { r: value.r, g: value.g, b: value.b, a: value.a };
+    if ('r' in value) {
+      return {
+        ...toDocumentChannels(figmaCtx, value, 'set_variable_value'),
+        a: value.a,
+      } as VariableValue;
+    }
     // A composed color nests the keys the other branches look for (`r` inside `color`, `id` inside
     // either half) rather than carrying them, so it is recognised by carrying both of its own and
     // neither of theirs. The tool schema's members are loose objects, which keep unknown keys, so a
     // malformed RGBA that also carried a stray `color` would land here if this were tried first —
     // and `'r' in value.color` would then throw on a non-object.
-    if ('color' in value && 'opacity' in value) return toFigmaComposedColor(value);
+    if ('color' in value && 'opacity' in value) return toFigmaComposedColor(value, figmaCtx);
     // Only an alias carries `id`; an EASING value carries its own `type` (EASE_IN / CUSTOM_SPRING /
     // …) instead. Keying on `id` rather than falling through keeps an easing curve from being turned
     // into an alias with `id: undefined`, which Figma would reject.

@@ -17,6 +17,7 @@ import {
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
+import { displayP3Marker } from './color-profile.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
   node.type !== 'DOCUMENT' && node.type !== 'PAGE';
@@ -837,7 +838,8 @@ export const createGetDesignContextHandler =
     }
 
     const nodes = await Promise.all(roots.map(root => buildNode(root, remainingDepth, ctx)));
-    const result: GetDesignContextResult = { nodes };
+    // Only P3 changes what a colour means; an sRGB or unmanaged file's hex is already what CSS reads.
+    const result: GetDesignContextResult = { ...displayP3Marker(figmaCtx), nodes };
 
     // Multi-breakpoint selection → attach the ground-each-frame rule (any detail level; the
     // grounding-free `compact` default is exactly where this is most needed).

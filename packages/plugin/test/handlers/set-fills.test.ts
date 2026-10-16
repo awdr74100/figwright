@@ -153,4 +153,54 @@ describe('set_fills handler', () => {
     ).rejects.toThrow('set_fills: variable V:gone not found');
     expect(node.fills).toBe('UNTOUCHED');
   });
+
+  // A colour taken from code is sRGB; written raw into a Display P3 file it would paint more
+  // saturated than the code. Naming its space hands the conversion to Figma.
+  it("converts a SOLID colour and a gradient stop that name their space, through Figma's util", async () => {
+    const node = { id: '1:1', fills: [] as unknown };
+    const calls: unknown[] = [];
+    const figmaCtx = {
+      ...fakeFigma({ '1:1': node }),
+      root: { documentColorProfile: 'DISPLAY_P3' },
+      util: {
+        rgb: (c: { r: number; g: number; b: number }) => {
+          calls.push(c);
+          return { r: c.r / 2, g: c.g / 2, b: c.b / 2 };
+        },
+      },
+    } as unknown as typeof figma;
+    await createSetFillsHandler(figmaCtx)({
+      nodeId: '1:1',
+      fills: [
+        {
+          type: 'SOLID',
+          visible: true,
+          opacity: 1,
+          color: { r: 0.8, g: 0.4, b: 0.2, space: 'SRGB' },
+        },
+        {
+          type: 'GRADIENT_LINEAR',
+          visible: true,
+          opacity: 1,
+          gradientStops: [
+            { position: 0, color: { r: 1, g: 1, b: 1, a: 0.5, space: 'SRGB' } },
+            { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
+          ],
+          gradientTransform: [
+            [1, 0, 0],
+            [0, 1, 0],
+          ],
+        },
+      ],
+    });
+    expect(calls).toEqual([
+      { space: 'SRGB', r: 0.8, g: 0.4, b: 0.2 },
+      { space: 'SRGB', r: 1, g: 1, b: 1 },
+    ]);
+    const [solid, gradient] = node.fills as [SolidPaint, GradientPaint];
+    expect(solid.color).toEqual({ r: 0.4, g: 0.2, b: 0.1 });
+    expect(gradient.gradientStops[0]?.color).toEqual({ r: 0.5, g: 0.5, b: 0.5, a: 0.5 });
+    // The stop that named no space keeps its channels.
+    expect(gradient.gradientStops[1]?.color).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+  });
 });

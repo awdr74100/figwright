@@ -1,13 +1,20 @@
 import { z } from 'zod';
 
 import { boundVariablesSchema } from './binding-schema.js';
+import { colorSpaceSchema } from './color-space-schema.js';
 
 // Shared Zod effect schema, reused by set_effects / create_effect_style so the shadow + blur shape
 // can't drift between them (they previously copy-pasted the same inline JSON shape). Loose so an
 // effect read back from get_node round-trips into a write. The plugin's toFigmaEffect enforces that
 // shadows carry color + offset and blurs carry radius.
 
-const rgba = z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number() });
+const rgba = z.object({
+  r: z.number(),
+  g: z.number(),
+  b: z.number(),
+  a: z.number(),
+  space: colorSpaceSchema.optional(),
+});
 
 /** One effect: DROP_SHADOW / INNER_SHADOW (color + offset) or LAYER_BLUR / BACKGROUND_BLUR (radius). */
 export const effectItemSchema = z
