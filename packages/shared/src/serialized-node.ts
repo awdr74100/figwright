@@ -313,6 +313,12 @@ export const SerializedEffectSchema = z.object({
    * it.
    */
   cssLayers: z.array(z.string()).optional(),
+  /**
+   * BACKGROUND_BLUR on a node, present only as `false`: Figma draws nothing for it, because the
+   * node has no visible fill with any opacity (none, hidden, or fully transparent — measured; one
+   * at 1% blurs the whole shape). A CSS backdrop-filter would still blur, so emit none.
+   */
+  drawn: z.literal(false).optional(),
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 

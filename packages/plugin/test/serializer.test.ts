@@ -31,6 +31,58 @@ const fake = (overrides: Record<string, unknown> = {}): SceneNode =>
   }) as unknown as SceneNode;
 
 describe('serializeFlat', () => {
+  // Measured: Figma draws a background blur only behind a node with some visible fill. With none,
+  // a hidden one, or only fully transparent ones it draws nothing, while a CSS backdrop-filter
+  // would still blur; at 1% opacity, or a gradient with any non-transparent stop, it blurs the
+  // whole shape.
+  describe('a background blur Figma does not draw', () => {
+    const blur = { type: 'BACKGROUND_BLUR', visible: true, radius: 16, blurType: 'NORMAL' };
+    const solid = (opacity: number, visible = true) => ({
+      type: 'SOLID',
+      visible,
+      opacity,
+      color: { r: 1, g: 1, b: 1 },
+    });
+    const gradient = (a0: number, a1: number) => ({
+      type: 'GRADIENT_LINEAR',
+      visible: true,
+      opacity: 1,
+      gradientTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 1, b: 1, a: a0 } },
+        { position: 1, color: { r: 1, g: 1, b: 1, a: a1 } },
+      ],
+    });
+    const drawnOf = (fills: unknown[], effects: unknown[] = [blur]) =>
+      serializeFlatSync(fake({ fills, effects })).effects?.map(e => e.drawn);
+
+    it.each([
+      ['no fill', []],
+      ['a fully transparent fill', [solid(0)]],
+      ['a hidden fill', [solid(1, false)]],
+      ['a hidden fill and a transparent one', [solid(1, false), solid(0)]],
+      ['a fully transparent gradient', [gradient(0, 0)]],
+    ])('marks it behind %s', (_name, fills) => {
+      expect(drawnOf(fills)).toEqual([false]);
+    });
+
+    it.each([
+      ['a 1% fill', [solid(0.01)]],
+      ['a gradient with one non-transparent stop', [gradient(0, 0.5)]],
+    ])('leaves it unmarked behind %s', (_name, fills) => {
+      expect(drawnOf(fills)).toEqual([undefined]);
+    });
+
+    it('marks only the background blur, and only a visible one', () => {
+      const layer = { type: 'LAYER_BLUR', visible: true, radius: 4 };
+      const hidden = { ...blur, visible: false };
+      expect(drawnOf([], [layer, blur, hidden])).toEqual([undefined, false, undefined]);
+    });
+  });
+
   it.each([0.6, 1])('preserves corner smoothing %s through node serialization', value => {
     expect(serializeFlatSync(fake({ cornerRadius: 12, cornerSmoothing: value }))).toMatchObject({
       cornerRadius: 12,

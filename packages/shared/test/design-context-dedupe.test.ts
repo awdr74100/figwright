@@ -512,6 +512,20 @@ describe('dedupeStyles', () => {
     });
   });
 
+  it('keeps the mark on a background blur Figma does not draw', () => {
+    const { nodes, globalVars } = dedupeStyles([
+      {
+        id: 'n',
+        name: 'n',
+        type: 'FRAME',
+        effects: [{ type: 'BACKGROUND_BLUR', visible: true, radius: 16, drawn: false }],
+      },
+    ]);
+    expect(globalVars.styles[nodes[0]!.effect!]).toEqual([
+      { type: 'BACKGROUND_BLUR', radius: 16, drawn: false },
+    ]);
+  });
+
   it('keeps two noises that differ only in grain height apart', () => {
     const grain = (y: number): DesignContextNode => ({
       id: `g${y}`,

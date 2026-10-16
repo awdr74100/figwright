@@ -5,19 +5,22 @@
  * here, where the node's size is in hand (the offsets are fractions of it, so the ramp's angle
  * depends on the node's proportions, as a linear gradient's does).
  *
- * Measured against Figma renders over a striped backdrop (mean |Δ| on 0–255), on five cases
- * including a non-square node, a diagonal ramp, offsets inside the box and a startRadius above 0:
+ * Measured against Figma renders over a striped backdrop (mean |Δ| on 0–255), on four background
+ * and two layer cases including a non-square node, diagonal ramps, offsets inside the box and a
+ * startRadius above 0:
  *
  * - BACKGROUND_BLUR: four `backdrop-filter` overlays stacked over the node, each faded in along its
- *   quarter of the ramp, 2.1–2.9; one masked overlay, 6.5–18; a uniform blur, 16–35.
- * - LAYER_BLUR: four blurred copies of the content stacked over it, faded in the same way, 1.1; a
- *   uniform blur, 10.7.
+ *   quarter of the ramp, 2.2–2.5; one masked overlay, 6.5–18; a uniform blur, 16–35.
+ * - LAYER_BLUR: four blurred copies of the content stacked over it, faded in the same way, 0.7–1.0; a
+ *   uniform blur, 6–11.
  *
- * Two measured facts shape the steps. A Figma blur radius is a CSS blur of `radius × 0.45` (radii
- * 2–32, background and layer blurs alike). And backdrop filters stack: each overlay blurs what the
- * ones below it already blurred, so blurs add in quadrature, and each overlay adds only the blur
- * still missing — `0.45 · √(t_k² − t_{k−1}²)`. Copies of the content each blur the sharp original,
- * so each takes its full target.
+ * Two measured facts shape the steps. A Figma blur of radius r is a Gaussian of standard deviation
+ * `r × 0.43` — fitted straight off a blurred hard edge at 1x and 2x (0.425–0.44 for radii 4–32,
+ * layer and background blurs alike), and the ratio that best matches renders of content too;
+ * Figma's own CSS export halves the radius, which measured worse. And backdrop filters stack: each
+ * overlay blurs what the ones below it already blurred, so blurs add in quadrature, and each
+ * overlay adds only the blur still missing — `0.43 · √(t_k² − t_{k−1}²)`. Copies of the content
+ * each blur the sharp original, so each takes its full target.
  */
 
 export interface ProgressiveBlurInput {
@@ -29,7 +32,7 @@ export interface ProgressiveBlurInput {
 }
 
 /** A Figma blur radius as a CSS blur standard deviation (measured; see above). */
-export const CSS_BLUR_PER_RADIUS = 0.45;
+export const CSS_BLUR_PER_RADIUS = 0.43;
 
 const STEPS = 4;
 const fixed = (n: number): string => n.toFixed(2);

@@ -24,7 +24,7 @@ export const effectItemSchema = z
     radius: z
       .number()
       .describe(
-        "Figma's radius, not a CSS length: a CSS blur(σ) is radius σ ÷ 0.45, and a box-shadow blur " +
+        "Figma's radius, not a CSS length: a CSS blur(σ) is radius σ ÷ 0.43, and a box-shadow blur " +
           'B is radius B ÷ 0.85 (measured).',
       )
       .optional(),

@@ -61,6 +61,7 @@
     "nodes[].effects[].density",
     "nodes[].effects[].depth",
     "nodes[].effects[].dispersion",
+    "nodes[].effects[].drawn",
     "nodes[].effects[].endOffset",
     "nodes[].effects[].endOffset.x",
     "nodes[].effects[].endOffset.y",

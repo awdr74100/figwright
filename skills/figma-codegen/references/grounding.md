@@ -64,12 +64,17 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   with a shadow in Figma but flat output is the classic miss (e.g. `DROP_SHADOW 0/4/8 #0000000D` →
   `shadow-[0_4px_7px_rgba(0,0,0,0.05)]`). **A Figma radius is not a CSS length — scale it**
   (measured against Figma's own renders): a shadow's blur is `radius × 0.85` in `box-shadow`
-  (offsets and spread as they are), and every blur is `radius × 0.45` in `filter: blur()` /
+  (offsets and spread as they are), and every blur is `radius × 0.43` in `filter: blur()` /
   `backdrop-filter: blur()` — copying the radius makes a blur about twice too strong (at radius 8,
-  33/255 off against 2). A blur's `type` decides the CSS: `LAYER_BLUR` blurs the element itself
+  33/255 off against under 1). Figma is one Gaussian of σ = radius × 0.43 for blurs and shadows
+  alike, fitted off blurred edges at 1x and 2x — and Figma's own Dev Mode CSS is off too (it halves a
+  blur radius and copies a shadow's), so don't copy its numbers. A blur's `type` decides the CSS: `LAYER_BLUR` blurs the element itself
   (`filter: blur`), but `BACKGROUND_BLUR` blurs what shows through from behind
   (`backdrop-filter: blur` — the frosted-glass / glassmorphism pattern, typically paired with a
   semi-transparent fill); emitting it as `filter`, or dropping it, loses the glass look entirely.
+  A `BACKGROUND_BLUR` marked **`drawn: false`** paints nothing in Figma: its node has no visible fill
+  with any opacity, and Figma blurs only behind one (a fill at 1% already blurs the whole shape). A
+  CSS `backdrop-filter` would still blur there, so emit none.
   - **`blurType: "PROGRESSIVE"`** ramps the blur from `startRadius` at `startOffset` to `radius` at
     `endOffset` (fractions of the node) — a header that blurs out toward one edge. A uniform blur is
     the wrong look (16–35/255 off). Emit `cssLayers` as given, bottom first, each its own
@@ -80,11 +85,11 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   - **`showShadowBehindNode: true`** (drop shadows only): the shadow also shows through the node's
     translucent areas. `box-shadow` draws only outside the box — exactly Figma's default — so draw
     this one as a box underneath the node instead: the shadow colour, moved by the offset, grown by
-    the spread on every side, `filter: blur(radius × 0.425)`. A shadow `blendMode` has no
+    the spread on every side, `filter: blur(radius × 0.43)`. A shadow `blendMode` has no
     `box-shadow` equivalent; keep the plain shadow unless the blend is the point.
   - **`GLASS`**: Frost is `radius`; Light (`lightIntensity` / `lightAngle`), `refraction`, `depth`,
     `dispersion` and `splay` bend and tint its edges. Render it as `backdrop-filter:
-    blur(radius × 0.45)` with the node's fill — measured, that matches Figma's centre (1/255) but not
+    blur(radius × 0.43)` with the node's fill — measured, that matches Figma's centre (1/255) but not
     its edges (13/255), where the refraction lives, and plain CSS cannot bend what shows through, so
     say so. Applying glass in Figma also drops the fill's opacity to 20%; the fill already reads
     that way.

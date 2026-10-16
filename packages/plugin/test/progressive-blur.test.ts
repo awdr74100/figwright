@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { cssProgressiveBlurLayers, progressiveMaskLine } from '../src/progressive-blur.js';
 
 // The expected values are the recipe that was rendered in Chrome and measured against Figma's own
-// renders (mean |Δ| 2.1–2.9 for background blurs, 1.1 for a layer blur), recomputed independently.
+// renders (mean |Δ| 2.2–2.5 for background blurs, 0.7–1.0 for layer blurs), recomputed independently.
 
 describe('progressiveMaskLine', () => {
   it.each([
@@ -44,11 +44,11 @@ describe('cssProgressiveBlurLayers', () => {
         { width: 200, height: 200 },
       ),
     ).toEqual([
-      'backdrop-filter: blur(1.80px)',
-      'backdrop-filter: blur(3.12px); mask-image: linear-gradient(0.00deg, transparent 0.00%, black 25.00%)',
-      'backdrop-filter: blur(4.02px); mask-image: linear-gradient(0.00deg, transparent 25.00%, black 50.00%)',
-      'backdrop-filter: blur(4.76px); mask-image: linear-gradient(0.00deg, transparent 50.00%, black 75.00%)',
-      'backdrop-filter: blur(5.40px); mask-image: linear-gradient(0.00deg, transparent 75.00%, black 100.00%)',
+      'backdrop-filter: blur(1.72px)',
+      'backdrop-filter: blur(2.98px); mask-image: linear-gradient(0.00deg, transparent 0.00%, black 25.00%)',
+      'backdrop-filter: blur(3.85px); mask-image: linear-gradient(0.00deg, transparent 25.00%, black 50.00%)',
+      'backdrop-filter: blur(4.55px); mask-image: linear-gradient(0.00deg, transparent 50.00%, black 75.00%)',
+      'backdrop-filter: blur(5.16px); mask-image: linear-gradient(0.00deg, transparent 75.00%, black 100.00%)',
     ]);
   });
 
@@ -66,10 +66,10 @@ describe('cssProgressiveBlurLayers', () => {
       ),
     ).toEqual([
       'filter: none',
-      'filter: blur(1.80px); mask-image: linear-gradient(180.00deg, transparent 0.00%, black 25.00%)',
-      'filter: blur(3.60px); mask-image: linear-gradient(180.00deg, transparent 25.00%, black 50.00%)',
-      'filter: blur(5.40px); mask-image: linear-gradient(180.00deg, transparent 50.00%, black 75.00%)',
-      'filter: blur(7.20px); mask-image: linear-gradient(180.00deg, transparent 75.00%, black 100.00%)',
+      'filter: blur(1.72px); mask-image: linear-gradient(180.00deg, transparent 0.00%, black 25.00%)',
+      'filter: blur(3.44px); mask-image: linear-gradient(180.00deg, transparent 25.00%, black 50.00%)',
+      'filter: blur(5.16px); mask-image: linear-gradient(180.00deg, transparent 50.00%, black 75.00%)',
+      'filter: blur(6.88px); mask-image: linear-gradient(180.00deg, transparent 75.00%, black 100.00%)',
     ]);
   });
 
@@ -86,7 +86,7 @@ describe('cssProgressiveBlurLayers', () => {
     );
     expect(layers).toHaveLength(4);
     expect(layers?.[0]).toBe(
-      'backdrop-filter: blur(1.80px); mask-image: linear-gradient(90.00deg, transparent 0.00%, black 25.00%)',
+      'backdrop-filter: blur(1.72px); mask-image: linear-gradient(90.00deg, transparent 0.00%, black 25.00%)',
     );
   });
 

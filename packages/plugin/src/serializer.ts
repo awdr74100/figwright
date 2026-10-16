@@ -715,6 +715,14 @@ const enrichWithMixins = (
     const effects = (node as { effects: unknown }).effects;
     if (Array.isArray(effects) && effects.length > 0) {
       out.effects = effects.map(e => serializeEffect(e as Effect, ownerSize));
+      // Figma draws a background blur only behind a node with some visible fill: with none, or
+      // only fully transparent ones, it draws nothing at all (measured; its own CSS export still
+      // writes the backdrop-filter). Mark that here, where the node's fills are in hand.
+      if (out.fills !== undefined && out.fills !== MIXED && !out.fills.some(paintIsDrawn)) {
+        for (const effect of out.effects) {
+          if (effect.type === 'BACKGROUND_BLUR' && effect.visible) effect.drawn = false;
+        }
+      }
     }
   }
   if ('layoutMode' in node) {
@@ -1097,6 +1105,19 @@ export const treeTooLargeError = (tool: string, total: number, subject = 'tree')
       'than one tool result can carry. Read it in parts: get_node on one of its children, or ' +
       'get_design_context, which splits a large tree into sections.',
   );
+
+/**
+ * Whether a serialized fill puts any colour on the node: visible, with some opacity, and — for a
+ * gradient — some stop that is not fully transparent. An image, video, pattern or shader fill
+ * counts as drawn.
+ */
+const paintIsDrawn = (paint: SerializedPaint): boolean => {
+  if (!paint.visible || paint.opacity <= 0) return false;
+  if ('gradientStops' in paint && Array.isArray(paint.gradientStops)) {
+    return paint.gradientStops.some(stop => stop.color.a > 0);
+  }
+  return true;
+};
 
 /**
  * `ownerSize` is the node's size, which a progressive blur needs for its ready-made CSS (its ramp

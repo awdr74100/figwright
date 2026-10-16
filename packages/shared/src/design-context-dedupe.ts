@@ -211,6 +211,7 @@ interface SimplifiedEffect {
   startOffset?: { x: number; y: number };
   endOffset?: { x: number; y: number };
   cssLayers?: string[];
+  drawn?: false;
   visible?: false;
 }
 
@@ -229,6 +230,7 @@ const PASSTHROUGH_EFFECT_KEYS = [
   'startOffset',
   'endOffset',
   'cssLayers',
+  'drawn',
 ] as const satisfies readonly (keyof SerializedEffect & keyof SimplifiedEffect)[];
 
 /** Structured effects: colours → hex, drops the always-true `visible`. */
