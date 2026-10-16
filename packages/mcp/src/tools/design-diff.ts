@@ -30,9 +30,12 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * stops with the paint's own opacity folded into their hex — a v4 baseline would report every crop,
  * and every gradient whose paint isn't fully opaque, as changed. v6: a noise effect's noiseType /
  * noiseSizeVector / density / color / secondaryColor / opacity — a v5 baseline holds every noise as
- * bare type + visible, and would report each one as changed.
+ * bare type + visible, and would report each one as changed. v7: a glass effect's light,
+ * refraction, depth, dispersion and splay, a texture's grain and clipping, a progressive blur's
+ * ramp and cssLayers, and a shadow's showShadowBehindNode / blendMode — a v6 baseline holds those
+ * effects without them.
  */
-export const SNAPSHOT_FORMAT_VERSION = 6;
+export const SNAPSHOT_FORMAT_VERSION = 7;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

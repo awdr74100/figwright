@@ -66,6 +66,15 @@ read from Figma and are writing back: reads already report the file's own channe
 handles its markup's colours itself; a motion keyframe colour takes no `space` and is document
 channels.
 
+### A shadow or blur from code: scale its radius
+
+A Figma effect radius is not a CSS length. Measured against Figma's own renders, Figma draws a blur
+of radius `r` the way CSS draws `blur(r × 0.45)`, and a shadow of radius `r` the way `box-shadow`
+draws a blur of `r × 0.85`. So a value read off code converts the other way: `filter: blur(4px)` or
+`backdrop-filter: blur(4px)` is `set_effects` radius `4 ÷ 0.45 ≈ 8.9`, and a `box-shadow` blur of
+`8px` is radius `8 ÷ 0.85 ≈ 9.4`; offsets and spread go across as they are. Copying the CSS number
+straight in paints a blur about half as strong as the code's.
+
 ## Reference tokens, not literals
 
 Never hardcode a hex/px when the file has a token for it (`get_variable_defs` tells you what does).

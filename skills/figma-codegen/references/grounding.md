@@ -62,10 +62,36 @@ the obvious ones. These are ordered by how easily they're silently dropped.
 - **Effects (`effects` / `styleIds.effect`).** Drop/inner shadow or blur. **The easiest fidelity to
   lose**: they come from a _shared effect style_, so they read as one field and quietly vanish. A card
   with a shadow in Figma but flat output is the classic miss (e.g. `DROP_SHADOW 0/4/8 #0000000D` →
-  `shadow-[0_4px_8px_rgba(0,0,0,0.05)]`). A blur's `type` decides the CSS: `LAYER_BLUR` blurs the
-  element itself (`filter: blur`), but `BACKGROUND_BLUR` blurs what shows through from behind
+  `shadow-[0_4px_7px_rgba(0,0,0,0.05)]`). **A Figma radius is not a CSS length — scale it**
+  (measured against Figma's own renders): a shadow's blur is `radius × 0.85` in `box-shadow`
+  (offsets and spread as they are), and every blur is `radius × 0.45` in `filter: blur()` /
+  `backdrop-filter: blur()` — copying the radius makes a blur about twice too strong (at radius 8,
+  33/255 off against 2). A blur's `type` decides the CSS: `LAYER_BLUR` blurs the element itself
+  (`filter: blur`), but `BACKGROUND_BLUR` blurs what shows through from behind
   (`backdrop-filter: blur` — the frosted-glass / glassmorphism pattern, typically paired with a
   semi-transparent fill); emitting it as `filter`, or dropping it, loses the glass look entirely.
+  - **`blurType: "PROGRESSIVE"`** ramps the blur from `startRadius` at `startOffset` to `radius` at
+    `endOffset` (fractions of the node) — a header that blurs out toward one edge. A uniform blur is
+    the wrong look (16–35/255 off). Emit `cssLayers` as given, bottom first, each its own
+    `position: absolute; inset: 0; pointer-events: none` box: for `BACKGROUND_BLUR` overlays over the
+    node's background, for `LAYER_BLUR` the first styles the content and every later one is an
+    `aria-hidden` copy of that content stacked over it. Rendered against Figma: 0.9–2.9/255. An
+    effect style carries no `cssLayers` (no node to size it on), only the ramp.
+  - **`showShadowBehindNode: true`** (drop shadows only): the shadow also shows through the node's
+    translucent areas. `box-shadow` draws only outside the box — exactly Figma's default — so draw
+    this one as a box underneath the node instead: the shadow colour, moved by the offset, grown by
+    the spread on every side, `filter: blur(radius × 0.425)`. A shadow `blendMode` has no
+    `box-shadow` equivalent; keep the plain shadow unless the blend is the point.
+  - **`GLASS`**: Frost is `radius`; Light (`lightIntensity` / `lightAngle`), `refraction`, `depth`,
+    `dispersion` and `splay` bend and tint its edges. Render it as `backdrop-filter:
+    blur(radius × 0.45)` with the node's fill — measured, that matches Figma's centre (1/255) but not
+    its edges (13/255), where the refraction lives, and plain CSS cannot bend what shows through, so
+    say so. Applying glass in Figma also drops the fill's opacity to 20%; the fill already reads
+    that way.
+  - **`TEXTURE`** roughens the edges of everything it covers (`noiseSizeVector` is the grain,
+    `radius` how far it pushes, `clipToShape` keeps it inside the shape — clipped on a plain solid
+    it shows no change). There is no CSS for it: export the composited render where the rough edge
+    matters, and say what was dropped otherwise.
 - **Text / typography.** A TEXT node carries more than `characters` + font — and the rest reads as
   one quiet field each, so it vanishes and the model re-guesses it off the raster. The shared style
   attributes fold into the `textStyle` bundle in `globalVars`: `textCase` (`UPPER`/`LOWER`/`TITLE` →

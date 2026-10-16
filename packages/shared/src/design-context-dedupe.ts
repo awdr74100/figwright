@@ -197,10 +197,41 @@ interface SimplifiedEffect {
   density?: number;
   secondaryColor?: string;
   opacity?: number;
+  showShadowBehindNode?: true;
+  blendMode?: string;
+  clipToShape?: boolean;
+  lightIntensity?: number;
+  lightAngle?: number;
+  refraction?: number;
+  depth?: number;
+  dispersion?: number;
+  splay?: number;
+  blurType?: 'PROGRESSIVE';
+  startRadius?: number;
+  startOffset?: { x: number; y: number };
+  endOffset?: { x: number; y: number };
+  cssLayers?: string[];
   visible?: false;
 }
 
-/** Structured shadow/blur/noise: colours → hex, drops the always-true `visible`. */
+const PASSTHROUGH_EFFECT_KEYS = [
+  'showShadowBehindNode',
+  'blendMode',
+  'clipToShape',
+  'lightIntensity',
+  'lightAngle',
+  'refraction',
+  'depth',
+  'dispersion',
+  'splay',
+  'blurType',
+  'startRadius',
+  'startOffset',
+  'endOffset',
+  'cssLayers',
+] as const satisfies readonly (keyof SerializedEffect & keyof SimplifiedEffect)[];
+
+/** Structured effects: colours → hex, drops the always-true `visible`. */
 const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
   const out: SimplifiedEffect = { type: e.type };
   if (e.color !== undefined) out.color = toHex(e.color, e.color.a);
@@ -218,6 +249,10 @@ const simplifyEffect = (e: SerializedEffect): SimplifiedEffect => {
     out.secondaryColor = toHex(e.secondaryColor, e.secondaryColor.a);
   }
   if (e.opacity !== undefined) out.opacity = e.opacity;
+  // Carried as they are: none is a colour, so nothing to turn into hex.
+  for (const key of PASSTHROUGH_EFFECT_KEYS) {
+    if (e[key] !== undefined) (out as unknown as Record<string, unknown>)[key] = e[key];
+  }
   if (e.visible === false) out.visible = false;
   return out;
 };

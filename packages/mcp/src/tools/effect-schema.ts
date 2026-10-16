@@ -21,7 +21,13 @@ export const effectItemSchema = z
   .object({
     type: z.enum(['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR']),
     visible: z.boolean(),
-    radius: z.number().optional(),
+    radius: z
+      .number()
+      .describe(
+        "Figma's radius, not a CSS length: a CSS blur(σ) is radius σ ÷ 0.45, and a box-shadow blur " +
+          'B is radius B ÷ 0.85 (measured).',
+      )
+      .optional(),
     color: rgba.describe('Shadow color (RGBA 0–1). Required for shadows.').optional(),
     offset: z
       .object({ x: z.number(), y: z.number() })

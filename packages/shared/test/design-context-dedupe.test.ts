@@ -446,6 +446,72 @@ describe('dedupeStyles', () => {
     ]);
   });
 
+  it('hoists glass, texture, progressive-blur and shadow-behind effects with every setting', () => {
+    const effects = [
+      {
+        type: 'GLASS',
+        visible: true,
+        radius: 4,
+        lightIntensity: 0.6,
+        lightAngle: -45,
+        refraction: 0.8,
+        depth: 20,
+        dispersion: 0.3,
+        splay: 0.5,
+      },
+      {
+        type: 'TEXTURE',
+        visible: true,
+        radius: 3,
+        noiseSizeVector: { x: 6, y: 12 },
+        clipToShape: true,
+      },
+      {
+        type: 'BACKGROUND_BLUR',
+        visible: true,
+        radius: 16,
+        blurType: 'PROGRESSIVE' as const,
+        startRadius: 0,
+        startOffset: { x: 0, y: 0.5 },
+        endOffset: { x: 1, y: 0.5 },
+        cssLayers: ['backdrop-filter: blur(1.80px)'],
+      },
+      {
+        type: 'DROP_SHADOW',
+        visible: true,
+        radius: 12,
+        color: { r: 0, g: 0, b: 0, a: 0.5 },
+        offset: { x: 0, y: 8 },
+        spread: 0,
+        showShadowBehindNode: true as const,
+        blendMode: 'MULTIPLY',
+      },
+    ];
+    const { nodes, globalVars } = dedupeStyles([{ id: 'n', name: 'n', type: 'FRAME', effects }]);
+    const [glass, texture, blur, shadow] = globalVars.styles[nodes[0]!.effect!] as Record<
+      string,
+      unknown
+    >[];
+    const { visible: _g, ...glassRest } = effects[0]!;
+    expect(glass).toEqual(glassRest);
+    expect(texture).toEqual({
+      type: 'TEXTURE',
+      radius: 3,
+      noiseSizeVector: { x: 6, y: 12 },
+      clipToShape: true,
+    });
+    expect(blur).toMatchObject({
+      blurType: 'PROGRESSIVE',
+      startRadius: 0,
+      cssLayers: ['backdrop-filter: blur(1.80px)'],
+    });
+    expect(shadow).toMatchObject({
+      color: '#00000080',
+      showShadowBehindNode: true,
+      blendMode: 'MULTIPLY',
+    });
+  });
+
   it('keeps two noises that differ only in grain height apart', () => {
     const grain = (y: number): DesignContextNode => ({
       id: `g${y}`,

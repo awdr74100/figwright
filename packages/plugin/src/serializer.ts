@@ -25,6 +25,7 @@ import {
 
 import { TimeSlice } from './cooperative.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
+import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
@@ -713,7 +714,7 @@ const enrichWithMixins = (
   if ('effects' in node) {
     const effects = (node as { effects: unknown }).effects;
     if (Array.isArray(effects) && effects.length > 0) {
-      out.effects = effects.map(e => serializeEffect(e as Effect));
+      out.effects = effects.map(e => serializeEffect(e as Effect, ownerSize));
     }
   }
   if ('layoutMode' in node) {
@@ -1097,12 +1098,20 @@ export const treeTooLargeError = (tool: string, total: number, subject = 'tree')
       'get_design_context, which splits a large tree into sections.',
   );
 
-export const serializeEffect = (effect: Effect): SerializedEffect => {
+/**
+ * `ownerSize` is the node's size, which a progressive blur needs for its ready-made CSS (its ramp
+ * is in fractions of the node); an effect style has no node and passes `null`, as a paint style
+ * does.
+ */
+export const serializeEffect = (
+  effect: Effect,
+  ownerSize: PaintOwnerSize | null,
+): SerializedEffect => {
   // Shadow bindings (colour / radius / spread / offsetX / offsetY) live on the effect itself; a
   // shadow whose colour is a variable otherwise reads as a hard-coded RGBA (issue #164).
   const bound = collectBindings((effect as { boundVariables?: unknown }).boundVariables);
   if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
-    return {
+    const shadow: SerializedEffect = {
       type: effect.type,
       visible: effect.visible,
       radius: effect.radius,
@@ -1111,16 +1120,34 @@ export const serializeEffect = (effect: Effect): SerializedEffect => {
       spread: effect.spread ?? 0,
       ...(bound === undefined ? {} : { boundVariables: bound }),
     };
+    // Only the departures from what a plain box-shadow already draws: a drop shadow that shows
+    // through the node's translucent areas, and a blend other than normal.
+    if (effect.type === 'DROP_SHADOW' && effect.showShadowBehindNode === true) {
+      shadow.showShadowBehindNode = true;
+    }
+    if (typeof effect.blendMode === 'string' && effect.blendMode !== 'NORMAL') {
+      shadow.blendMode = effect.blendMode;
+    }
+    return shadow;
   }
-  // Blurs / textures carry radius; a shader carries its id + values; noise carries its own fields;
-  // glass carries only type + visible.
+  // Blurs / textures / glass carry radius; a shader carries its id + values; noise, texture, glass
+  // and a progressive blur carry their own fields.
   const out: SerializedEffect = { type: effect.type, visible: effect.visible };
   if ('radius' in effect && typeof effect.radius === 'number') out.radius = effect.radius;
   if (effect.type === 'SHADER') Object.assign(out, serializeShader(effect));
   if (effect.type === 'NOISE') Object.assign(out, serializeNoise(effect));
+  if (effect.type === 'TEXTURE') Object.assign(out, serializeTexture(effect));
+  if (effect.type === 'GLASS') Object.assign(out, serializeGlass(effect));
+  if (effect.type === 'LAYER_BLUR' || effect.type === 'BACKGROUND_BLUR') {
+    Object.assign(out, serializeProgressiveBlur(effect, ownerSize));
+  }
   if (bound !== undefined) out.boundVariables = bound;
   return out;
 };
+
+/** A noise-style size: the vector is the size; the scalar (its X) stands in only without one. */
+const sizeVector = (size: number, vector: Vector | undefined): { x: number; y: number } =>
+  vector === undefined ? { x: size, y: size } : { x: vector.x, y: vector.y };
 
 const rgbaOf = (c: RGBA): NonNullable<SerializedEffect['color']> => ({
   r: c.r,
@@ -1145,18 +1172,72 @@ const rgbaOf = (c: RGBA): NonNullable<SerializedEffect['color']> => ({
  *   the node's `boundVariables.effects` names it, so which field it drives cannot be told here.
  */
 const serializeNoise = (noise: NoiseEffect): Partial<SerializedEffect> => {
-  const vector = (noise as { noiseSizeVector?: Vector }).noiseSizeVector;
   const out: Partial<SerializedEffect> = {
     noiseType: noise.noiseType,
-    noiseSizeVector:
-      vector === undefined
-        ? { x: noise.noiseSize, y: noise.noiseSize }
-        : { x: vector.x, y: vector.y },
+    noiseSizeVector: sizeVector(
+      noise.noiseSize,
+      (noise as { noiseSizeVector?: Vector }).noiseSizeVector,
+    ),
     density: noise.density,
   };
   if (noise.noiseType === 'MULTITONE') out.opacity = noise.opacity;
   else out.color = rgbaOf(noise.color);
   if (noise.noiseType === 'DUOTONE') out.secondaryColor = rgbaOf(noise.secondaryColor);
+  return out;
+};
+
+/**
+ * A texture roughens the edges of everything it covers: `noiseSizeVector` is the grain, `radius`
+ * how far it displaces, and `clipToShape` whether the roughening stays inside the node's shape —
+ * clipped, a plain solid shape shows no change at all (measured).
+ */
+const serializeTexture = (texture: TextureEffect): Partial<SerializedEffect> => ({
+  noiseSizeVector: sizeVector(
+    texture.noiseSize,
+    (texture as { noiseSizeVector?: Vector }).noiseSizeVector,
+  ),
+  clipToShape: texture.clipToShape,
+});
+
+/**
+ * Glass, as its panel shows it: Light (angle in degrees, intensity 0–1), Refraction, Depth,
+ * Dispersion and Splay (0–1 for the panel's 0–100, Depth as is); its Frost is `radius`. `splay` is
+ * on the live object though the typings leave it out. It reads `null` on a glass never given one
+ * (an API write without it), and a number once the panel has set it, 0 included, so it is carried
+ * only as a number.
+ */
+const serializeGlass = (glass: GlassEffect): Partial<SerializedEffect> => {
+  const out: Partial<SerializedEffect> = {
+    lightIntensity: glass.lightIntensity,
+    lightAngle: glass.lightAngle,
+    refraction: glass.refraction,
+    depth: glass.depth,
+    dispersion: glass.dispersion,
+  };
+  const splay = (glass as { splay?: unknown }).splay;
+  if (typeof splay === 'number') out.splay = splay;
+  return out;
+};
+
+/**
+ * A progressive blur ramps from `startRadius` at `startOffset` to `radius` at `endOffset` (offsets
+ * in fractions of the node). A normal blur — every blur written before progressive blurs existed
+ * reads `blurType: 'NORMAL'` — adds nothing, so its output is what it always was.
+ */
+const serializeProgressiveBlur = (
+  blur: BlurEffect,
+  ownerSize: PaintOwnerSize | null,
+): Partial<SerializedEffect> => {
+  if ((blur as { blurType?: unknown }).blurType !== 'PROGRESSIVE') return {};
+  const p = blur as BlurEffectProgressive;
+  const out: Partial<SerializedEffect> = {
+    blurType: 'PROGRESSIVE',
+    startRadius: p.startRadius,
+    startOffset: { x: p.startOffset.x, y: p.startOffset.y },
+    endOffset: { x: p.endOffset.x, y: p.endOffset.y },
+  };
+  const layers = cssProgressiveBlurLayers(p, ownerSize);
+  if (layers !== undefined) out.cssLayers = layers;
   return out;
 };
 

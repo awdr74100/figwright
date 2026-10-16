@@ -35,6 +35,9 @@ export const getDesignContextTool: ToolSpec = {
     'A result led by colorProfile: "DISPLAY_P3" comes from a Display P3 file, where every hex and ' +
     'r/g/b is a P3 colour: emit a raw one as color(display-p3 r g b), not the plain hex, which ' +
     'renders visibly duller. ' +
+    'A Figma effect radius is not CSS: emit a blur as blur(radius × 0.45) and a shadow blur as ' +
+    'radius × 0.85 in box-shadow; a progressive blur (blurType PROGRESSIVE) carries ready cssLayers ' +
+    'to emit as given. ' +
     'A tree too large to return whole comes back as a sectionPlan instead ({ sections: [{ nodeId, ' +
     'name, nodes, … }] } + a note): do not retry unscoped — call again per section nodeId at ' +
     'detail full and build section by section. On a full result, raw color values that exactly ' +

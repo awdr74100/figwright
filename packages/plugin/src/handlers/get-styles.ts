@@ -131,7 +131,8 @@ export const createGetStylesHandler =
         name: s.name,
         key: s.key,
         description: s.description,
-        effects: s.effects.map(serializeEffect),
+        // An effect style belongs to no node, so a progressive blur in it has no ready-made CSS.
+        effects: s.effects.map(e => serializeEffect(e, null)),
       })),
       grids: gridStyles.map(s => ({
         id: s.id,

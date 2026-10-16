@@ -273,6 +273,46 @@ export const SerializedEffectSchema = z.object({
   secondaryColor: SerializedRGBASchema.optional(),
   /** MULTITONE noise only: the grains' opacity, 0–1. */
   opacity: z.number().optional(),
+  /**
+   * DROP_SHADOW only, present only when true: the shadow also shows through the node's translucent
+   * areas. A plain CSS `box-shadow` draws only outside the box (measured identical to Figma's
+   * default); this needs the shadow as a box underneath the node instead.
+   */
+  showShadowBehindNode: z.literal(true).optional(),
+  /** Shadows only, present only when not NORMAL: the blend mode the shadow is composited with. */
+  blendMode: z.string().optional(),
+  /**
+   * TEXTURE only: whether the roughened edges stay inside the node's shape. Its grain is
+   * `noiseSizeVector` and its displacement `radius`.
+   */
+  clipToShape: z.boolean().optional(),
+  /**
+   * GLASS only, as its panel shows them: Light intensity (0–1) and angle (degrees), Refraction,
+   * Dispersion and Splay (0–1), Depth (≥ 1). Its Frost is `radius`.
+   */
+  lightIntensity: z.number().optional(),
+  lightAngle: z.number().optional(),
+  refraction: z.number().optional(),
+  depth: z.number().optional(),
+  dispersion: z.number().optional(),
+  splay: z.number().optional(),
+  /**
+   * LAYER_BLUR / BACKGROUND_BLUR, present only for a progressive blur: the blur ramps from
+   * `startRadius` at `startOffset` to `radius` at `endOffset`, offsets in fractions of the node. A
+   * normal blur carries none of these.
+   */
+  blurType: z.literal('PROGRESSIVE').optional(),
+  startRadius: z.number().optional(),
+  startOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+  endOffset: z.object({ x: z.number(), y: z.number() }).optional(),
+  /**
+   * A progressive blur's ready-to-emit CSS, bottom layer first, each a declaration list — derived
+   * from the node's size, so absent on an effect style. BACKGROUND_BLUR: overlay boxes covering the
+   * node, stacked in this order over its background. LAYER_BLUR: the first styles the node's
+   * content, every later one a copy of that content stacked over it. Read-only: writing ignores
+   * it.
+   */
+  cssLayers: z.array(z.string()).optional(),
 });
 export type SerializedEffect = z.infer<typeof SerializedEffectSchema>;
 
