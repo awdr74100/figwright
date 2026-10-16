@@ -13,9 +13,9 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@lucide/vue": "^1.55.0",
+    "@lucide/vue": "^1.57.0",
     "@vueuse/core": "^15.0.0",
-    "vue": "^3.5.43",
+    "vue": "^3.5.44",
     "zod": "^4.6.7"
   },
   "devDependencies": {
