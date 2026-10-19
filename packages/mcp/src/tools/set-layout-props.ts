@@ -13,7 +13,10 @@ export const setLayoutPropsTool: ToolSpec = {
     'parent, FIXED = keep the current size) are the preferred way to size a frame to its content ' +
     '(HUG) or make a child fill its container (FILL) — reach for these instead of guessing pixel ' +
     'sizes with resize_nodes. layoutAlign (STRETCH = fill the counter axis, INHERIT = default) and ' +
-    'layoutGrow (1 = fill the primary axis, 0 = hug) are the older per-axis equivalents. ' +
+    'layoutGrow (1 = fill the primary axis, 0 = hug) are the older per-axis equivalents. Figma ' +
+    'has no per-child alignment: every child of an auto-layout frame shares the frame’s ' +
+    'counterAxisAlignItems, so to centre one child alone wrap it in its own auto-layout frame, or ' +
+    'make it ABSOLUTE and use align_nodes. ' +
     'layoutPositioning (ABSOLUTE = ignore the flow and position freely, AUTO = participate in ' +
     'layout). minWidth / maxWidth / minHeight / maxHeight set responsive size bounds (→ min-w / ' +
     'max-w); pass null to clear a bound. Bounds apply to auto-layout frames and their direct ' +
@@ -30,10 +33,12 @@ export const setLayoutPropsTool: ToolSpec = {
       .enum(['FIXED', 'HUG', 'FILL'])
       .optional()
       .describe('Vertical sizing: HUG fits content, FILL fills the parent, FIXED keeps height'),
+    // MIN / CENTER / MAX are deprecated by Figma and silently reset to INHERIT on write, so a
+    // call carrying one would answer ok and change nothing — they are not offered.
     layoutAlign: z
-      .enum(['MIN', 'CENTER', 'MAX', 'STRETCH', 'INHERIT'])
+      .enum(['STRETCH', 'INHERIT'])
       .optional()
-      .describe('Counter-axis alignment; STRETCH fills the counter axis'),
+      .describe('STRETCH fills the counter axis; INHERIT follows the parent'),
     layoutGrow: z
       .number()
       .min(0)

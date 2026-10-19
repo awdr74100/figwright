@@ -116,9 +116,13 @@ describe('create_shape handler', () => {
       /do not apply to a LINE/,
     );
     await expect(handler({ shape: 'POLYGON', innerRadius: 0.5 })).rejects.toThrow(/STAR only/);
-    await expect(handler({ shape: 'STAR', pointCount: 2 })).rejects.toThrow(/at least 3/);
-    await expect(handler({ shape: 'STAR', pointCount: 4.5 })).rejects.toThrow(/at least 3/);
-    await expect(handler({ shape: 'STAR', innerRadius: 2 })).rejects.toThrow(/between 0 and 1/);
+    await expect(handler({ shape: 'STAR', pointCount: 2 })).rejects.toThrow(/3 to 60/);
+    await expect(handler({ shape: 'STAR', pointCount: 4.5 })).rejects.toThrow(/3 to 60/);
+    // Figma draws 60 for anything larger, so a larger count is refused rather than misreported.
+    await expect(handler({ shape: 'POLYGON', pointCount: 61 })).rejects.toThrow(/3 to 60/);
+    await expect(handler({ shape: 'STAR', innerRadius: 2 })).rejects.toThrow(/at most 1/);
+    // 0 is a star with no area: Figma draws nothing.
+    await expect(handler({ shape: 'STAR', innerRadius: 0 })).rejects.toThrow(/above 0/);
     await expect(handler({ shape: 'STAR', width: 'wide' })).rejects.toThrow(
       /width must be a number/,
     );

@@ -109,7 +109,8 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
 - **A colour from code is sRGB — say so.** Write it with `space: "SRGB"` beside its r/g/b, or a
   Display P3 file paints it more saturated than the code (`references/write-rules.md`).
 - **Auto-layout for related children**, absolute coordinates only for top-level placement. Centre
-  with the parent's alignment (`primaryAxisAlignItems` / `counterAxisAlignItems` / `layoutAlign`),
+  with the parent's alignment (`primaryAxisAlignItems` / `counterAxisAlignItems`; a child that
+  aligns differently gets its own wrapper frame),
   never by tuning `x`/`y`; `align_nodes` aligns/distributes what has no layout, `set_text_properties`
   takes `textAlignHorizontal` / `textAlignVertical`. Recipes, shapes (`create_shape`,
   `boolean_operation`, `flatten_nodes`) and what the tools still can't draw, in

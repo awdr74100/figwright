@@ -85,7 +85,19 @@ export const createSetLayoutPropsHandler =
       layoutSizingVertical?: string;
     };
 
-    if (typeof p.layoutAlign === 'string') n.layoutAlign = p.layoutAlign;
+    if (typeof p.layoutAlign === 'string') {
+      // Figma dropped per-child alignment: MIN / CENTER / MAX are deprecated and a write is reset to
+      // INHERIT, so it would report ok and change nothing (measured).
+      if (p.layoutAlign !== 'STRETCH' && p.layoutAlign !== 'INHERIT') {
+        throw new TypeError(
+          `set_layout_props: layoutAlign ${p.layoutAlign} no longer does anything in Figma — every ` +
+            `child of an auto-layout frame shares its counterAxisAlignItems. To align one child ` +
+            `alone, wrap it in its own auto-layout frame, or set layoutPositioning ABSOLUTE and ` +
+            `use align_nodes.`,
+        );
+      }
+      n.layoutAlign = p.layoutAlign;
+    }
     if (typeof p.layoutGrow === 'number') n.layoutGrow = p.layoutGrow;
     if (typeof p.layoutPositioning === 'string') n.layoutPositioning = p.layoutPositioning;
     setSizing(n, 'layoutSizingHorizontal', p.layoutSizingHorizontal, p.nodeId);

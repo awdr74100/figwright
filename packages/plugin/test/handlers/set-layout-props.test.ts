@@ -24,6 +24,20 @@ describe('set_layout_props handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  it.each(['MIN', 'CENTER', 'MAX'])(
+    'refuses the deprecated layoutAlign %s, which Figma resets and would report as done',
+    async value => {
+      const node = { id: '1:1', layoutAlign: 'INHERIT', layoutGrow: 0, layoutPositioning: 'AUTO' };
+      await expect(
+        createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({
+          nodeId: '1:1',
+          layoutAlign: value,
+        }),
+      ).rejects.toThrow(/no longer does anything.*align_nodes/s);
+      expect(node.layoutAlign).toBe('INHERIT');
+    },
+  );
+
   it('leaves omitted fields untouched (partial update)', async () => {
     const node = { id: '1:1', layoutAlign: 'STRETCH', layoutGrow: 1, layoutPositioning: 'AUTO' };
     await createSetLayoutPropsHandler(fakeFigma({ '1:1': node }))({

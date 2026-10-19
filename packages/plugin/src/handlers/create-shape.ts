@@ -55,11 +55,16 @@ export const createCreateShapeHandler =
     if (p.shape === 'POLYGON' && innerRadius !== undefined) {
       throw new TypeError('create_shape: innerRadius applies to a STAR only');
     }
-    if (pointCount !== undefined && (!Number.isInteger(pointCount) || pointCount < 3)) {
-      throw new TypeError('create_shape: pointCount must be an integer of at least 3');
+    // Figma silently draws 60 for any larger count (measured), so refuse rather than misreport.
+    if (
+      pointCount !== undefined &&
+      (!Number.isInteger(pointCount) || pointCount < 3 || pointCount > 60)
+    ) {
+      throw new TypeError('create_shape: pointCount must be an integer from 3 to 60');
     }
-    if (innerRadius !== undefined && (innerRadius < 0 || innerRadius > 1)) {
-      throw new TypeError('create_shape: innerRadius must be between 0 and 1');
+    // 0 is a star with no area — Figma accepts it and draws nothing.
+    if (innerRadius !== undefined && (innerRadius <= 0 || innerRadius > 1)) {
+      throw new TypeError('create_shape: innerRadius must be above 0 and at most 1');
     }
 
     let node: LineNode | PolygonNode | StarNode;

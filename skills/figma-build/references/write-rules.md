@@ -130,8 +130,9 @@ styling you would otherwise do next: `fills`, `strokes` (+ `strokeWeight`, `stro
 run through the same handlers as the `set_*` tools, in a fixed order (fills, strokes, radius, auto
 layout, then sizing — HUG needs the layout on, FILL needs the parent), after the node is placed. If
 any step is refused the new layer is removed and the error names the step, so a failed create leaves
-nothing half-styled. Bind variables afterwards (`bind_variable_to_paint` / `bind_variable_to_node`):
-the inline values are literals.
+nothing half-styled. A paint binds its colour in the same call with `boundVariables: { color:
+variableId }`, as it does in `set_fills`; a scalar (`cornerRadius`, padding, gap) is a literal here, so
+bind it afterwards with `bind_variable_to_node`.
 
 ## Auto-layout for related children, absolute only for placement
 
@@ -165,20 +166,20 @@ the inline values are literals.
 Centering is a property of the layout, so pick the recipe by what the source CSS does — never by
 nudging `x`/`y` until it looks centred. `align_nodes` is for what has no layout to lean on.
 
-| Source CSS                                                         | Figma                                                                                                                        |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `display:flex; justify-content:center`                             | `set_auto_layout` `primaryAxisAlignItems: 'CENTER'`                                                                          |
-| `align-items:center`                                               | `set_auto_layout` `counterAxisAlignItems: 'CENTER'`                                                                          |
-| `justify-content:center; align-items:center` (true centre)         | both of the above on the same frame                                                                                          |
-| one child centred in a column/row (`align-self:center`, `mx-auto`) | `set_layout_props` `layoutAlign: 'CENTER'` on that child (hug it first, so there is room to centre in)                       |
-| `justify-content:space-between / space-around / space-evenly`      | `primaryAxisAlignItems: 'SPACE_BETWEEN' / 'SPACE_AROUND' / 'SPACE_EVENLY'`                                                   |
-| `text-align: center / right / justify`                             | `set_text_properties` `textAlignHorizontal: 'CENTER' / 'RIGHT' / 'JUSTIFIED'`                                                |
-| text centred vertically in a fixed-height box                      | `set_text_properties` `textAlignVertical: 'CENTER'` (only shows in a fixed-height box)                                       |
-| evenly spaced row of absolute items                                | `align_nodes` `distribute: 'HORIZONTAL'` (3+ nodes; outer two stay put)                                                      |
-| `align-items:baseline`                                             | `counterAxisAlignItems: 'BASELINE'`                                                                                          |
-| `place-items:center` on a grid                                     | centre each cell's child with `layoutAlign: 'CENTER'`; the GRID frame itself has no item alignment                           |
-| `position:absolute; inset:0; margin:auto` (overlay)                | `layoutPositioning: 'ABSOLUTE'`, then `align_nodes` `horizontal: 'CENTER', vertical: 'CENTER'`                               |
-| centred in a plain (non-auto-layout) frame                         | `align_nodes` (default `relativeTo: 'PARENT'`); add `set_constraints` `CENTER` only for how it follows a later parent resize |
+| Source CSS                                                         | Figma                                                                                                                                                                                           |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `display:flex; justify-content:center`                             | `set_auto_layout` `primaryAxisAlignItems: 'CENTER'`                                                                                                                                             |
+| `align-items:center`                                               | `set_auto_layout` `counterAxisAlignItems: 'CENTER'`                                                                                                                                             |
+| `justify-content:center; align-items:center` (true centre)         | both of the above on the same frame                                                                                                                                                             |
+| one child centred in a column/row (`align-self:center`, `mx-auto`) | wrap that child in its own auto-layout frame (`layoutSizing*: 'FILL'` across the parent, `counterAxisAlignItems: 'CENTER'`) — Figma has no per-child alignment                                  |
+| `justify-content:space-between / space-around / space-evenly`      | `primaryAxisAlignItems: 'SPACE_BETWEEN' / 'SPACE_AROUND' / 'SPACE_EVENLY'`                                                                                                                      |
+| `text-align: center / right / justify`                             | `set_text_properties` `textAlignHorizontal: 'CENTER' / 'RIGHT' / 'JUSTIFIED'`                                                                                                                   |
+| text centred vertically in a fixed-height box                      | `set_text_properties` `textAlignVertical: 'CENTER'` (only shows in a fixed-height box)                                                                                                          |
+| evenly spaced row of absolute items                                | `align_nodes` `distribute: 'HORIZONTAL'` (3+ nodes; outer two stay put)                                                                                                                         |
+| `align-items:baseline`                                             | `counterAxisAlignItems: 'BASELINE'` (a `HORIZONTAL` frame only; Figma refuses it on a column)                                                                                                   |
+| `place-items:center` on a grid                                     | put each cell's content in a frame that `FILL`s the cell on both axes, with `primaryAxisAlignItems` and `counterAxisAlignItems` `'CENTER'` (no tool sets a grid child's own cell alignment yet) |
+| `position:absolute; inset:0; margin:auto` (overlay)                | `layoutPositioning: 'ABSOLUTE'`, then `align_nodes` `horizontal: 'CENTER', vertical: 'CENTER'`                                                                                                  |
+| centred in a plain (non-auto-layout) frame                         | `align_nodes` (default `relativeTo: 'PARENT'`); add `set_constraints` `CENTER` only for how it follows a later parent resize                                                                    |
 
 Rules that keep this right:
 
@@ -196,14 +197,20 @@ Rules that keep this right:
 - **A node that must be centred inside an auto-layout sibling-flow** (one pinned centre element in a
   row of others) is the one place to go ABSOLUTE; everything else stays in flow.
 - **`set_constraints` is not a "centre now" command.** It records how a node reacts when its parent
-  resizes. It does not move anything, and plain frames only.
+  resizes and does not move anything. It applies to children of a plain frame and to `ABSOLUTE`
+  children of an auto-layout frame; an in-flow child ignores it.
+- **There is no per-child alignment in auto layout.** Every child shares the frame's
+  `counterAxisAlignItems`; `layoutAlign` only takes `STRETCH` / `INHERIT` (Figma deprecated `MIN` /
+  `CENTER` / `MAX` and resets them, so `set_layout_props` refuses them). Give a child that aligns
+  differently its own wrapper frame.
 
 ### Text alignment
 
 `set_text_properties` takes `textAlignHorizontal` (`LEFT` / `CENTER` / `RIGHT` / `JUSTIFIED`) and
-`textAlignVertical` (`TOP` / `CENTER` / `BOTTOM`). Horizontal alignment needs a box wider than the
-longest line — a `HUG`-width text has nothing to align within, so give a centred paragraph a `FILL` or
-fixed width. Vertical alignment only shows in a box taller than its text (fixed height).
+`textAlignVertical` (`TOP` / `CENTER` / `BOTTOM`). Horizontal alignment works within the text box: in a
+`HUG`-width text the lines align to the longest one (a single line has nothing to move), so a paragraph
+centred on its container needs a `FILL` or fixed width. Vertical alignment only shows in a box taller
+than its text (fixed height).
 
 ### Shapes
 
@@ -215,7 +222,6 @@ Figma's own Boolean command, the result takes the fill and effects (or their sty
 operand — the lowest for `SUBTRACT` — and no stroke, so style that operand first or `set_strokes`
 the result. Bake it into one editable path with `flatten_nodes` (which keeps the fill)
 only when the artwork is final — flattening turns text into outlines. Neither runs inside a `batch`.
-A divider is a rectangle's bottom stroke or a `LINE`, never a 1px-tall filled rectangle.
 
 ### Other things the tools do not have
 

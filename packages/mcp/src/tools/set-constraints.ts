@@ -12,8 +12,8 @@ export const setConstraintsTool: ToolSpec = {
     'Set how a node responds when its parent frame is resized, via horizontal and vertical ' +
     'constraints: MIN pins to the left/top, MAX to the right/bottom, CENTER keeps it centered, ' +
     'STRETCH pins both edges (grows with the parent), and SCALE resizes proportionally. Constraints ' +
-    'apply inside plain frames only — auto-layout frames position children by layout rules and ' +
-    'ignore them. Returns { ok, nodeId }.',
+    'apply to children of a plain frame and to ABSOLUTE children of an auto-layout frame; an ' +
+    'in-flow auto-layout child is positioned by the layout and ignores them. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node to constrain'),
     horizontal: constraint.describe('Horizontal behavior when the parent resizes'),

@@ -15,7 +15,7 @@ export const booleanOperationTool: ToolSpec = {
     'SUBTRACT — and no stroke; set_strokes on the result if it needs one. ' +
     'The operands stay inside the result as its children, so it ' +
     'can still be unpicked; use flatten_nodes to bake it into one vector. The nodes must share ' +
-    'a parent, and the result takes their place there. Needs at least 2 nodes. Not allowed ' +
+    'a parent, and the result takes their place there. Needs at least 2 distinct nodes. Not allowed ' +
     'inside a batch. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     operation: z.enum(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']),

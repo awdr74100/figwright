@@ -12,8 +12,8 @@ export const createShapeTool: ToolSpec = {
     '(default: current page). A LINE is a length: `width` is its length (default 100, with the ' +
     'black 1px stroke Figma gives it) and it has no height — pass strokes / strokeWeight here to ' +
     'style it (caps via set_strokes) and tilt it with rotate_nodes. A POLYGON takes `pointCount` ' +
-    '(sides, default 3) and a STAR takes `pointCount` (points, default 5) and `innerRadius` ' +
-    '(0–1, the inner ring as a share of the outer; default 0.38). For rectangles and ellipses ' +
+    '(sides, 3–60, default 3) and a STAR takes `pointCount` (points, 3–60, default 5) and `innerRadius` ' +
+    '(the inner ring as a share of the outer, above 0 and up to 1 — 1 is a regular polygon of twice the points; default 0.38). For rectangles and ellipses ' +
     'use create_rectangle / create_ellipse; to cut or merge shapes use boolean_operation; for ' +
     'arbitrary vector artwork import_svg. fills, strokes and layoutSizing* style it in the same ' +
     'call. Returns { ok, nodeId, name, type }.',
@@ -29,19 +29,22 @@ export const createShapeTool: ToolSpec = {
       .positive()
       .optional()
       .describe('Height in px (POLYGON / STAR only; a LINE has none)'),
+    // Figma caps both at 60 and draws 60 for anything larger without saying so (measured: 100
+    // sides and 200 points both came back as 60), so a larger count is refused, not clamped.
     pointCount: z
       .number()
       .int()
       .min(3)
       .max(60)
       .optional()
-      .describe('Sides of a POLYGON or points of a STAR (at least 3)'),
+      .describe('Sides of a POLYGON or points of a STAR, 3–60'),
+    // 0 is a degenerate star with no area: Figma accepts it and draws nothing (measured).
     innerRadius: z
       .number()
-      .min(0)
+      .gt(0)
       .max(1)
       .optional()
-      .describe('STAR only: inner ring as a share of the outer radius, 0–1'),
+      .describe('STAR only: inner ring as a share of the outer radius, above 0 and up to 1'),
     ...initialStyleShape,
   }),
   kind: 'write',
