@@ -16,7 +16,7 @@ export const createFlattenNodesHandler =
     }
     const { nodes, parent, index } = await resolveSharedParent(
       figmaCtx,
-      p.nodeIds as readonly string[],
+      [...new Set(p.nodeIds as readonly string[])],
       'flatten_nodes',
     );
     const vector = figmaCtx.flatten(nodes, parent, index);

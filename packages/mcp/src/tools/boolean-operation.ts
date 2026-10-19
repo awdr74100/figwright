@@ -10,9 +10,9 @@ export const booleanOperationTool: ToolSpec = {
     'Combine shapes into one editable boolean group: UNION merges them, SUBTRACT cuts the upper ' +
     'layers out of the lowest one (a ring from a circle and a smaller circle; the order is the ' +
     'layer stacking, not the order of nodeIds), INTERSECT keeps only the overlap, EXCLUDE keeps ' +
-    'everything except the overlap. The result is drawn with Figma’s default grey fill and no ' +
-    'stroke, whatever the operands carry (they keep theirs as children) — set_fills / ' +
-    'set_strokes on the result to colour it. ' +
+    'everything except the overlap. Like Figma’s own Boolean command, the result takes the ' +
+    'fill and effects (or the fill / effect style) of the topmost operand — of the lowest for ' +
+    'SUBTRACT — and no stroke; set_strokes on the result if it needs one. ' +
     'The operands stay inside the result as its children, so it ' +
     'can still be unpicked; use flatten_nodes to bake it into one vector. The nodes must share ' +
     'a parent, and the result takes their place there. Needs at least 2 nodes. Not allowed ' +
