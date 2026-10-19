@@ -208,13 +208,13 @@ fixed width. Vertical alignment only shows in a box taller than its text (fixed 
 ### Shapes
 
 `create_shape` makes a `LINE` (its `width` is its length; pass `strokes` / `strokeWeight` in the same
-call, tilt with `rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`, `innerRadius` 0–1).
-Combine shapes with `boolean_operation` (`UNION` / `SUBTRACT` / `INTERSECT` / `EXCLUDE`; the operands
-must share a parent; `SUBTRACT` cuts the upper layers out of the lowest; the result is painted with
-the topmost operand's fill and stroke) and bake the result into one
-editable path with `flatten_nodes` only when the artwork is final — flattening turns text into
-outlines. Neither runs inside a `batch`. A divider is a rectangle's bottom stroke or a `LINE`, never a
-1px-tall filled rectangle.
+call, tilt with `rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`,
+`innerRadius` 0–1). Combine shapes with `boolean_operation` (`UNION` / `SUBTRACT` / `INTERSECT` /
+`EXCLUDE`; the operands must share a parent; `SUBTRACT` cuts the upper layers out of the lowest). The
+result is drawn with Figma's default grey fill and no stroke whatever the operands carry, so
+`set_fills` it afterwards. Bake it into one editable path with `flatten_nodes` (which keeps the fill)
+only when the artwork is final — flattening turns text into outlines. Neither runs inside a `batch`.
+A divider is a rectangle's bottom stroke or a `LINE`, never a 1px-tall filled rectangle.
 
 ### Other things the tools do not have
 
