@@ -1,7 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { resolveSharedParent } from './boolean-operation.js';
+import { resolveSharedParent } from './boolean-nodes.js';
 
 export const createFlattenNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>

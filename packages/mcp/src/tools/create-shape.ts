@@ -14,7 +14,7 @@ export const createShapeTool: ToolSpec = {
     'style it (caps via set_strokes) and tilt it with rotate_nodes. A POLYGON takes `pointCount` ' +
     '(sides, 3–60, default 3) and a STAR takes `pointCount` (points, 3–60, default 5) and `innerRadius` ' +
     '(the inner ring as a share of the outer, above 0 and up to 1 — 1 is a regular polygon of twice the points; default 0.38). For rectangles and ellipses ' +
-    'use create_rectangle / create_ellipse; to cut or merge shapes use boolean_operation; for ' +
+    'use create_rectangle / create_ellipse; to cut or merge shapes use boolean_nodes; for ' +
     'arbitrary vector artwork import_svg. fills, strokes and layoutSizing* style it in the same ' +
     'call. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({

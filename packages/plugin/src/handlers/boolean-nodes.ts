@@ -61,23 +61,21 @@ const carryLook = async (source: SceneNode, result: BooleanOperationNode): Promi
   else if (Array.isArray(effects)) result.effects = effects;
 };
 
-export const createBooleanOperationHandler =
+export const createBooleanNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
     const p = (params ?? {}) as { operation?: unknown; nodeIds?: unknown; name?: unknown };
     if (typeof p.operation !== 'string' || !OPERATIONS.has(p.operation)) {
-      throw new TypeError(
-        'boolean_operation: operation must be UNION, SUBTRACT, INTERSECT or EXCLUDE',
-      );
+      throw new TypeError('boolean_nodes: operation must be UNION, SUBTRACT, INTERSECT or EXCLUDE');
     }
     if (!Array.isArray(p.nodeIds) || p.nodeIds.some(id => typeof id !== 'string')) {
-      throw new TypeError('boolean_operation: nodeIds must be a string[]');
+      throw new TypeError('boolean_nodes: nodeIds must be a string[]');
     }
     const ids = [...new Set(p.nodeIds as readonly string[])];
     if (ids.length < 2) {
-      throw new TypeError('boolean_operation: nodeIds must name at least 2 distinct nodes');
+      throw new TypeError('boolean_nodes: nodeIds must name at least 2 distinct nodes');
     }
-    const { nodes, parent, index } = await resolveSharedParent(figmaCtx, ids, 'boolean_operation');
+    const { nodes, parent, index } = await resolveSharedParent(figmaCtx, ids, 'boolean_nodes');
     // Figma's own Boolean command paints the group with the fill and effects of the topmost
     // operand (the bottom one for SUBTRACT, the shape being cut) — measured in the editor, which
     // also showed the stroke is NOT carried. figma.union & co. leave the default grey instead, so

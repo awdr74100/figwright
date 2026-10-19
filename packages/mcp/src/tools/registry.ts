@@ -18,7 +18,7 @@ import { batchTool } from './batch.js';
 import { bindComponentPropertyTool } from './bind-component-property.js';
 import { bindVariableToNodeTool } from './bind-variable-to-node.js';
 import { bindVariableToPaintTool } from './bind-variable-to-paint.js';
-import { booleanOperationTool } from './boolean-operation.js';
+import { booleanNodesTool } from './boolean-nodes.js';
 import { cloneNodeTool } from './clone-node.js';
 import { combineAsVariantsTool } from './combine-as-variants.js';
 import { componentMapTool } from './component-map.js';
@@ -194,7 +194,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   moveNodesTool,
   alignNodesTool,
   createShapeTool,
-  booleanOperationTool,
+  booleanNodesTool,
   flattenNodesTool,
   setPositionTool,
   resizeNodesTool,

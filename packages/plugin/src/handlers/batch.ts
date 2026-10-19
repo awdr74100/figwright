@@ -1906,7 +1906,7 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
   delete_component_property:
     're-adding a property mints a new id, and the layers bound to the old one lose the binding',
   detach_instance: 'a detached instance is a plain frame that nothing can re-link to its component',
-  boolean_operation:
+  boolean_nodes:
     'a boolean group takes its operands in as children, so undoing it means re-homing each one at its old index; run it outside the batch, then batch the edits around it',
   flatten_nodes:
     'flattening outlines the operands into a new vector and discards them, so there is nothing to restore; run it outside the batch',

@@ -113,7 +113,7 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
   aligns differently gets its own wrapper frame),
   never by tuning `x`/`y`; `align_nodes` aligns/distributes what has no layout, `set_text_properties`
   takes `textAlignHorizontal` / `textAlignVertical`. Recipes, shapes (`create_shape`,
-  `boolean_operation`, `flatten_nodes`) and what the tools still can't draw, in
+  `boolean_nodes`, `flatten_nodes`) and what the tools still can't draw, in
   `references/write-rules.md` "Centering and alignment".
 - **One create call, fully styled.** `create_frame`, `create_rectangle`, `create_ellipse`,
   `create_shape` and `create_text` take `fills`, `strokes`, `layoutSizing*` (frame and rectangle

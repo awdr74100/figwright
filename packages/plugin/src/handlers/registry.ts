@@ -13,7 +13,7 @@ import { createBatchHandler } from './batch.js';
 import { createBindComponentPropertyHandler } from './bind-component-property.js';
 import { createBindVariableToNodeHandler } from './bind-variable-to-node.js';
 import { createBindVariableToPaintHandler } from './bind-variable-to-paint.js';
-import { createBooleanOperationHandler } from './boolean-operation.js';
+import { createBooleanNodesHandler } from './boolean-nodes.js';
 import { createCloneNodeHandler } from './clone-node.js';
 import { createCombineAsVariantsHandler } from './combine-as-variants.js';
 import { createCreateComponentHandler } from './create-component.js';
@@ -147,7 +147,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     move_nodes: createMoveNodesHandler(figmaCtx),
     align_nodes: createAlignNodesHandler(figmaCtx),
     create_shape: createCreateShapeHandler(figmaCtx),
-    boolean_operation: createBooleanOperationHandler(figmaCtx),
+    boolean_nodes: createBooleanNodesHandler(figmaCtx),
     flatten_nodes: createFlattenNodesHandler(figmaCtx),
     resize_nodes: createResizeNodesHandler(figmaCtx),
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),

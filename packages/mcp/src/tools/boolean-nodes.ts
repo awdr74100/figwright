@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 import type { ToolSpec } from './spec.js';
 
-export const BOOLEAN_OPERATION_TOOL_NAME = 'boolean_operation';
+export const BOOLEAN_NODES_TOOL_NAME = 'boolean_nodes';
 
-export const booleanOperationTool: ToolSpec = {
-  name: BOOLEAN_OPERATION_TOOL_NAME,
+export const booleanNodesTool: ToolSpec = {
+  name: BOOLEAN_NODES_TOOL_NAME,
   description:
     'Combine shapes into one editable boolean group: UNION merges them, SUBTRACT cuts the upper ' +
     'layers out of the lowest one (a ring from a circle and a smaller circle; the order is the ' +

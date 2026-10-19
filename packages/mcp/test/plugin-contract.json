@@ -419,7 +419,7 @@
       "x",
       "y"
     ],
-    "boolean_operation": ["name", "nodeIds", "operation", "requestId"],
+    "boolean_nodes": ["name", "nodeIds", "operation", "requestId"],
     "flatten_nodes": ["name", "nodeIds", "requestId"],
     "set_position": ["nodeId", "requestId", "x", "y"],
     "resize_nodes": ["height", "nodeIds", "requestId", "width"],

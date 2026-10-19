@@ -216,7 +216,7 @@ than its text (fixed height).
 
 `create_shape` makes a `LINE` (its `width` is its length; pass `strokes` / `strokeWeight` in the same
 call, tilt with `rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`,
-`innerRadius` 0–1). Combine shapes with `boolean_operation` (`UNION` / `SUBTRACT` / `INTERSECT` /
+`innerRadius` 0–1). Combine shapes with `boolean_nodes` (`UNION` / `SUBTRACT` / `INTERSECT` /
 `EXCLUDE`; the operands must share a parent; `SUBTRACT` cuts the upper layers out of the lowest). As in
 Figma's own Boolean command, the result takes the fill and effects (or their styles) of the topmost
 operand — the lowest for `SUBTRACT` — and no stroke, so style that operand first or `set_strokes`
@@ -227,9 +227,9 @@ only when the artwork is final — flattening turns text into outlines. Neither 
 
 Check this list before promising a design; for each, use the fallback or say so.
 
-| Not available                                 | Fallback                                                                                              |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| freeform pen paths, editing a vector's points | draw it as SVG and `import_svg`; for a shape that is a combination, `boolean_operation` of primitives |
+| Not available                                 | Fallback                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| freeform pen paths, editing a vector's points | draw it as SVG and `import_svg`; for a shape that is a combination, `boolean_nodes` of primitives |
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 
