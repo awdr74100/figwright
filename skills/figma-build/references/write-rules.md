@@ -121,6 +121,18 @@ imported into this file — a library item's key, or its id in the library file,
 Library components need no import step: `create_instance` takes their `componentKey`, which
 `get_local_components` in the library file reports.
 
+## Style in the create call
+
+`create_frame` / `create_rectangle` / `create_ellipse` / `create_text` accept the styling you would
+otherwise do next: `fills`, `strokes` (+ `strokeWeight`, `strokeAlign`), `cornerRadius`,
+`layoutSizingHorizontal` / `layoutSizingVertical`; a frame also takes `autoLayout` (the whole
+`set_auto_layout` object) and `clipsContent`, and text takes the `set_text_properties` fields. They
+run through the same handlers as the `set_*` tools, in a fixed order (fills, strokes, radius, auto
+layout, then sizing — HUG needs the layout on, FILL needs the parent), after the node is placed. If
+any step is refused the new layer is removed and the error names the step, so a failed create leaves
+nothing half-styled. Bind variables afterwards (`bind_variable_to_paint` / `bind_variable_to_node`):
+the inline values are literals.
+
 ## Auto-layout for related children, absolute only for placement
 
 - **Use auto-layout whenever children have a structural relationship** (stacked, side-by-side,
@@ -147,6 +159,67 @@ Library components need no import step: `create_instance` takes their `component
   page that has an explicit column system (the input code's container `grid-cols-12` / max-width +
   gutters), set it as a real layout grid so it round-trips and codegen reads the breakpoint structure
   back. Pass `[]` to clear.
+
+## Centering and alignment: CSS → Figma recipes
+
+Centering is a property of the layout, so pick the recipe by what the source CSS does — never by
+nudging `x`/`y` until it looks centred. `align_nodes` is for what has no layout to lean on.
+
+| Source CSS                                                         | Figma                                                                                                                        |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `display:flex; justify-content:center`                             | `set_auto_layout` `primaryAxisAlignItems: 'CENTER'`                                                                          |
+| `align-items:center`                                               | `set_auto_layout` `counterAxisAlignItems: 'CENTER'`                                                                          |
+| `justify-content:center; align-items:center` (true centre)         | both of the above on the same frame                                                                                          |
+| one child centred in a column/row (`align-self:center`, `mx-auto`) | `set_layout_props` `layoutAlign: 'CENTER'` on that child (hug it first, so there is room to centre in)                       |
+| `justify-content:space-between / space-around / space-evenly`      | `primaryAxisAlignItems: 'SPACE_BETWEEN' / 'SPACE_AROUND' / 'SPACE_EVENLY'`                                                   |
+| `text-align: center / right / justify`                             | `set_text_properties` `textAlignHorizontal: 'CENTER' / 'RIGHT' / 'JUSTIFIED'`                                                |
+| text centred vertically in a fixed-height box                      | `set_text_properties` `textAlignVertical: 'CENTER'` (only shows in a fixed-height box)                                       |
+| evenly spaced row of absolute items                                | `align_nodes` `distribute: 'HORIZONTAL'` (3+ nodes; outer two stay put)                                                      |
+| `align-items:baseline`                                             | `counterAxisAlignItems: 'BASELINE'`                                                                                          |
+| `place-items:center` on a grid                                     | centre each cell's child with `layoutAlign: 'CENTER'`; the GRID frame itself has no item alignment                           |
+| `position:absolute; inset:0; margin:auto` (overlay)                | `layoutPositioning: 'ABSOLUTE'`, then `align_nodes` `horizontal: 'CENTER', vertical: 'CENTER'`                               |
+| centred in a plain (non-auto-layout) frame                         | `align_nodes` (default `relativeTo: 'PARENT'`); add `set_constraints` `CENTER` only for how it follows a later parent resize |
+
+Rules that keep this right:
+
+- **Centre with the parent's alignment, not coordinates.** If you are computing `x`/`y` for something
+  that sits in a flow, the structure is wrong — fix the layout. Where there is no flow to lean on
+  (absolute overlays, free-placed items) use `align_nodes`, never hand arithmetic with `set_position`.
+- **Hug before centring.** A child set to `FILL` on the axis you want to centre on has no slack, so it
+  looks left-aligned. `HUG` it, then centre.
+- **`align_nodes` uses the node's on-canvas bounding box,** so a rotated or `HUG` node is centred by
+  what it really measures. It refuses an in-flow auto-layout child (the layout would reflow it back) and
+  moves nothing when it refuses; a node directly on a page needs `relativeTo: 'SELECTION'`.
+- **A node that must be centred inside an auto-layout sibling-flow** (one pinned centre element in a
+  row of others) is the one place to go ABSOLUTE; everything else stays in flow.
+- **`set_constraints` is not a "centre now" command.** It records how a node reacts when its parent
+  resizes. It does not move anything, and plain frames only.
+
+### Text alignment
+
+`set_text_properties` takes `textAlignHorizontal` (`LEFT` / `CENTER` / `RIGHT` / `JUSTIFIED`) and
+`textAlignVertical` (`TOP` / `CENTER` / `BOTTOM`). Horizontal alignment needs a box wider than the
+longest line — a `HUG`-width text has nothing to align within, so give a centred paragraph a `FILL` or
+fixed width. Vertical alignment only shows in a box taller than its text (fixed height).
+
+### Shapes
+
+`create_shape` makes a `LINE` (its `width` is its length; style with `set_strokes`, tilt with
+`rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`, `innerRadius` 0–1).
+Combine shapes with `boolean_operation` (`UNION` / `SUBTRACT` / `INTERSECT` / `EXCLUDE`; the operands
+must share a parent; `SUBTRACT` cuts the upper layers out of the lowest) and bake the result into one
+editable path with `flatten_nodes` only when the artwork is final — flattening turns text into
+outlines. Neither runs inside a `batch`. A divider is a rectangle's bottom stroke or a `LINE`, never a
+1px-tall filled rectangle.
+
+### Other things the tools do not have
+
+Check this list before promising a design; for each, use the fallback or say so.
+
+| Not available                                 | Fallback                                                                                              |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| freeform pen paths, editing a vector's points | draw it as SVG and `import_svg`; for a shape that is a combination, `boolean_operation` of primitives |
+| a one-call styled frame                       | `create_frame`, then `set_fills` / `set_strokes` / `set_corner_radius` / `set_auto_layout`            |
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 

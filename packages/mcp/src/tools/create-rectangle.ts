@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { initialRadiusShape, initialStyleShape } from './initial-props-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const CREATE_RECTANGLE_TOOL_NAME = 'create_rectangle';
@@ -10,7 +11,8 @@ export const createRectangleTool: ToolSpec = {
     'Create a rectangle, optionally sized/positioned and appended to a parent (default: current ' +
     'page). Useful for solid shapes, dividers, and color blocks; for a container that holds other ' +
     'layers use create_frame; for a bitmap, import_image places one, or set_image_fill puts it ' +
-    'into this rectangle (a rounded thumbnail, an avatar). Returns ' +
+    'into this rectangle (a rounded thumbnail, an avatar). fills, strokes, cornerRadius and ' +
+    'layoutSizing* style it in the same call. Returns ' +
     '{ ok, nodeId, name, type }.',
   inputSchema: z.object({
     parentId: z.string().optional().describe('Container node id; omit for current page'),
@@ -19,6 +21,8 @@ export const createRectangleTool: ToolSpec = {
     y: z.number().optional().describe('Y position in the parent'),
     width: z.number().optional().describe('Width in px'),
     height: z.number().optional().describe('Height in px'),
+    ...initialStyleShape,
+    ...initialRadiusShape,
   }),
   kind: 'write',
 };

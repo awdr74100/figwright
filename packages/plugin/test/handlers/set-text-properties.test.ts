@@ -302,4 +302,41 @@ describe('set_text_properties on a mixed-font node', () => {
     expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Bold' });
     expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Medium' });
   });
+
+  it('sets horizontal and vertical text alignment, loading the font first', async () => {
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+      textAlignHorizontal: 'LEFT',
+      textAlignVertical: 'TOP',
+    };
+    const result = (await createSetTextPropertiesHandler(fakeFigma(node, loadFontAsync))({
+      nodeId: '1:1',
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'BOTTOM',
+    })) as MutateResult;
+
+    expect(node).toMatchObject({ textAlignHorizontal: 'CENTER', textAlignVertical: 'BOTTOM' });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+    expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
+  it('leaves alignment alone when it is not passed, and rejects a non-string value', async () => {
+    const node = {
+      id: '1:1',
+      type: 'TEXT',
+      characters: 'hi',
+      fontName: { family: 'Inter', style: 'Regular' },
+      textAlignHorizontal: 'RIGHT',
+      textAlignVertical: 'CENTER',
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node))({ nodeId: '1:1', fontSize: 14 });
+    expect(node).toMatchObject({ textAlignHorizontal: 'RIGHT', textAlignVertical: 'CENTER' });
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma(node))({ nodeId: '1:1', textAlignHorizontal: 1 }),
+    ).rejects.toThrow(/textAlignHorizontal must be a string/);
+  });
 });

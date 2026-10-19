@@ -26,7 +26,10 @@ export const setTextPropertiesTool: ToolSpec = {
     'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
     'into at "\\n" — the write half of the same fields get_design_context reads), textWrapStyle ' +
     '(BALANCE evens the line lengths of a heading, PRETTY avoids an orphan last word — the same ' +
-    'three values as CSS text-wrap) — these load the required fonts first. Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
+    'three values as CSS text-wrap) — these load the required fonts first. Alignment: ' +
+    'textAlignHorizontal (CSS text-align; JUSTIFIED = justify) and textAlignVertical (where the ' +
+    'text sits in a box taller than it — it only shows with a fixed height, textAutoResize NONE ' +
+    'or WIDTH_AND_HEIGHT hugging leaves no slack). Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
     'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
     'textTruncation is ENDING. Returns { ok, nodeId }.',
   inputSchema: z.object({
@@ -54,6 +57,14 @@ export const setTextPropertiesTool: ToolSpec = {
       .enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS', 'SMALL_CAPS_FORCED'])
       .optional(),
     textDecoration: z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
+    textAlignHorizontal: z
+      .enum(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED'])
+      .optional()
+      .describe('Horizontal alignment of the lines within the text box (CSS text-align)'),
+    textAlignVertical: z
+      .enum(['TOP', 'CENTER', 'BOTTOM'])
+      .optional()
+      .describe('Vertical alignment of the text within a box taller than its content'),
     // Layout / overflow (no font load needed)
     textTruncation: z
       .enum(['DISABLED', 'ENDING'])

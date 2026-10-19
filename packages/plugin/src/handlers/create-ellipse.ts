@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
 export const createCreateEllipseHandler =
@@ -24,6 +25,7 @@ export const createCreateEllipseHandler =
     if (typeof p.y === 'number') ellipse.y = p.y;
 
     await placeNode(figmaCtx, ellipse, p.parentId, 'create_ellipse');
+    await applyInitialProps(figmaCtx, ellipse, params as Record<string, unknown>, 'create_ellipse');
 
     const result: CreateResult = {
       ok: true,

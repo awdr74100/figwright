@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
 export const createCreateFrameHandler =
@@ -24,6 +25,7 @@ export const createCreateFrameHandler =
     if (typeof p.y === 'number') frame.y = p.y;
 
     await placeNode(figmaCtx, frame, p.parentId, 'create_frame');
+    await applyInitialProps(figmaCtx, frame, params as Record<string, unknown>, 'create_frame');
 
     const result: CreateResult = { ok: true, nodeId: frame.id, name: frame.name, type: frame.type };
     return result;

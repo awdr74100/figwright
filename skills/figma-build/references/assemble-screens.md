@@ -7,7 +7,8 @@ mechanics live in `write-rules.md`.
 
 ## 1. Container + auto-layout
 
-`create_frame` for the container, then `set_auto_layout` (`HORIZONTAL` / `VERTICAL` / `GRID`) with the
+`create_frame` for the container — pass `autoLayout`, `fills`, `cornerRadius` and `layoutSizing*` in
+the same call — or, if you need to change an existing frame, `set_auto_layout` (`HORIZONTAL` / `VERTICAL` / `GRID`) with the
 padding / itemSpacing / alignment the source layout implies. Children that stack, sit side-by-side, or
 are gapped belong in auto-layout — only the top-level container is placed with absolute `x`/`y`.
 
@@ -59,7 +60,9 @@ a token for (`write-rules.md` has the three paths).
 
 ## 6. Verify visually — close the loop
 
-`get_screenshot` the built node, fix discrepancies, re-screenshot — the render-and-diff discipline
+Run `audit_layout` on the built node first — it measures clipping, overflow, off-centre children, edge
+near-misses, off-scale spacing and type drift that a screenshot cannot show — then `get_screenshot`
+the built node, fix discrepancies, re-screenshot — the render-and-diff discipline
 codegen uses, in reverse. Check it against the source intent **and** against objective design health,
 which catches problems even when you built from a vague description with no source to compare:
 
@@ -70,6 +73,16 @@ which catches problems even when you built from a vague description with no sour
 
 An `empty: true` export means the node rendered nothing (hidden / off-canvas / no visible content) —
 check it's appended, visible, and on the canvas.
+
+**`{ ok: true }` means the call was accepted, not that it took effect.** A plugin older than the
+server silently ignores arguments it predates, and a layout can override a position you set. So for
+anything that matters — centring, FILL/HUG, absolute placement — confirm in the screenshot, or read the
+node back (`get_node`) and compare the property. If a tool result carries a `pluginSkewNotice`, treat
+every write in it as unverified and tell the user to update the plugin.
+
+Centring is the classic false-success: check the gaps on both sides are equal in the screenshot, and
+if a recipe in `write-rules.md` ("Centering and alignment") could not express the source, say so in
+your summary instead of reporting it done.
 
 ## Large builds: section by section
 

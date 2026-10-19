@@ -1794,6 +1794,15 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
       writeIfDifferent(node, 'y', s.y);
     },
   ),
+  // Align / distribute only translate: undo restores each node's x/y, exactly like move_nodes.
+  align_nodes: nodesSnapshot(
+    'align_nodes',
+    node => ('x' in node && 'y' in node ? { x: node.x, y: node.y } : null),
+    (node, s) => {
+      writeIfDifferent(node, 'x', s.x);
+      writeIfDifferent(node, 'y', s.y);
+    },
+  ),
   resize_nodes: resizeNodesInverse,
   rotate_nodes: nodesSnapshot(
     'rotate_nodes',
@@ -1825,6 +1834,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   create_rectangle: createInverse('create_rectangle'),
   create_text: createInverse('create_text'),
   create_ellipse: createInverse('create_ellipse'),
+  create_shape: createInverse('create_shape'),
   create_component: createComponentInverse,
   create_section: createInverse('create_section'),
   import_image: createInverse('import_image'),
@@ -1896,6 +1906,10 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
   delete_component_property:
     're-adding a property mints a new id, and the layers bound to the old one lose the binding',
   detach_instance: 'a detached instance is a plain frame that nothing can re-link to its component',
+  boolean_operation:
+    'a boolean group takes its operands in as children, so undoing it means re-homing each one at its old index; run it outside the batch, then batch the edits around it',
+  flatten_nodes:
+    'flattening outlines the operands into a new vector and discards them, so there is nothing to restore; run it outside the batch',
   ungroup_nodes: 'ungrouping deletes the group; grouping again makes a new group under a new id',
   remove_animation_style: 're-applying the preset mints a new applied-style id',
   remove_manual_keyframe_track:

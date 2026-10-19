@@ -74,6 +74,10 @@ hardcode width/height), and real fonts (a new TEXT node defaults to Inter). →
 - **Assemble a screen / component from what exists** (the common case): recognise the UI pattern,
   `create_instance` matching components, bind tokens, build incrementally, screenshot-verify each
   step. → **[`references/assemble-screens.md`](./references/assemble-screens.md).**
+- **Build with no design to copy** (a vague description, an empty file, unstyled markup): decide a
+  brief first, snap everything to a type and spacing scale, and run the build → `audit_layout` →
+  screenshot loop section by section. →
+  **[`references/design-quality.md`](./references/design-quality.md).**
 - **Author a new design-system asset** (only when grounding found no equivalent): create
   variables/collections, paint/text styles, or components + variant sets, then switch back to the
   reuse path. → **[`references/author-design-system.md`](./references/author-design-system.md).**
@@ -96,6 +100,13 @@ design health (this catches problems even when you built from a vague descriptio
 compare): nothing clipped or overflowing, edges aligned, spacing consistent (one scale), a clear type
 hierarchy. An `empty: true` export means the node rendered nothing (hidden / off-canvas).
 
+**Measure before you look: `audit_layout`.** It reads geometry, so it finds what a screenshot hides
+or exaggerates — content clipped by or overflowing its parent, a frame still at Figma's default
+`100×100`, a child a pixel or two off-centre, sibling edges that nearly line up, spacing off the 4px
+scale, a flat type hierarchy, raw fills where tokens exist. Call it on the node you built (or with no
+`root` for the selection) after each section, fix every `error`/`warning`, then screenshot for the
+judgement a measurement cannot make.
+
 ## Rules
 
 - **Understand the environment, then build.** Read both the file's design system _and_ the source's
@@ -108,7 +119,17 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
   token exists (`get_variable_defs` tells you what does).
 - **A colour from code is sRGB — say so.** Write it with `space: "SRGB"` beside its r/g/b, or a
   Display P3 file paints it more saturated than the code (`references/write-rules.md`).
-- **Auto-layout for related children**, absolute coordinates only for top-level placement.
+- **Auto-layout for related children**, absolute coordinates only for top-level placement. Centre
+  with the parent's alignment (`primaryAxisAlignItems` / `counterAxisAlignItems` / `layoutAlign`),
+  never by tuning `x`/`y`; `align_nodes` aligns/distributes what has no layout, `set_text_properties`
+  takes `textAlignHorizontal` / `textAlignVertical`. Recipes, and what the tools still can't draw
+  (line/star/boolean shapes), in `references/write-rules.md` "Centering and alignment".
+- **One create call, fully styled.** `create_frame`, `create_rectangle`, `create_ellipse` and
+  `create_text` take `fills`, `strokes`, `cornerRadius`, `layoutSizing*` (a frame also `autoLayout`
+  and `clipsContent`; text its typography incl. `textAlignHorizontal`) — each meaning what it means
+  on its `set_*` tool. Use them instead of a create plus a chain of follow-ups.
+- **`ok: true` is not proof.** Confirm layout-sensitive writes by screenshot or read-back, and report
+  anything the tools could not express instead of claiming it done.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from
   the matching components, don't reproduce it from primitives.
 - **Match the file's conventions** — naming, structure, and the design system's own patterns, the

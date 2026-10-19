@@ -33,7 +33,9 @@ describe('create_text handler', () => {
     const text = makeText();
     const currentPage = { appendChild: vi.fn<(n: unknown) => void>() };
     const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
-    const handler = createCreateTextHandler(fakeFigma(text, currentPage, loadFontAsync));
+    const handler = createCreateTextHandler(
+      fakeFigma(text, currentPage, loadFontAsync, { '2:1': text }),
+    );
     const result = (await handler({ characters: 'Hi', fontSize: 20 })) as CreateResult;
 
     expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });

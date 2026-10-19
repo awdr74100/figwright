@@ -24,6 +24,8 @@ export const createSetTextPropertiesHandler =
       paragraphSpacing?: unknown;
       paragraphIndent?: unknown;
       textWrapStyle?: unknown;
+      textAlignHorizontal?: unknown;
+      textAlignVertical?: unknown;
       textTruncation?: unknown;
       maxLines?: unknown;
       textAutoResize?: unknown;
@@ -44,6 +46,12 @@ export const createSetTextPropertiesHandler =
     }
     if (p.textWrapStyle !== undefined && typeof p.textWrapStyle !== 'string') {
       throw new TypeError('set_text_properties: textWrapStyle must be a string');
+    }
+    if (p.textAlignHorizontal !== undefined && typeof p.textAlignHorizontal !== 'string') {
+      throw new TypeError('set_text_properties: textAlignHorizontal must be a string');
+    }
+    if (p.textAlignVertical !== undefined && typeof p.textAlignVertical !== 'string') {
+      throw new TypeError('set_text_properties: textAlignVertical must be a string');
     }
     if (p.textAutoResize !== undefined && typeof p.textAutoResize !== 'string') {
       throw new TypeError('set_text_properties: textAutoResize must be a string');
@@ -84,6 +92,8 @@ export const createSetTextPropertiesHandler =
       p.paragraphSpacing !== undefined ||
       p.paragraphIndent !== undefined ||
       p.textWrapStyle !== undefined ||
+      p.textAlignHorizontal !== undefined ||
+      p.textAlignVertical !== undefined ||
       p.textAutoResize !== undefined ||
       p.textTruncation !== undefined ||
       p.maxLines !== undefined;
@@ -113,6 +123,10 @@ export const createSetTextPropertiesHandler =
     if (p.paragraphIndent !== undefined) text.paragraphIndent = p.paragraphIndent as number;
     if (p.textWrapStyle !== undefined)
       text.textWrapStyle = p.textWrapStyle as TextNode['textWrapStyle'];
+    if (p.textAlignHorizontal !== undefined)
+      text.textAlignHorizontal = p.textAlignHorizontal as TextNode['textAlignHorizontal'];
+    if (p.textAlignVertical !== undefined)
+      text.textAlignVertical = p.textAlignVertical as TextNode['textAlignVertical'];
 
     if (p.textAutoResize !== undefined)
       text.textAutoResize = p.textAutoResize as TextNode['textAutoResize'];
