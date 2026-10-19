@@ -96,13 +96,6 @@ design health (this catches problems even when you built from a vague descriptio
 compare): nothing clipped or overflowing, edges aligned, spacing consistent (one scale), a clear type
 hierarchy. An `empty: true` export means the node rendered nothing (hidden / off-canvas).
 
-**Measure before you look: `audit_layout`.** It reads geometry, so it finds what a screenshot hides
-or exaggerates — content clipped by or overflowing its parent, a frame still at Figma's default
-`100×100`, a child a pixel or two off-centre, sibling edges that nearly line up — and counts the raw
-fills left where tokens could be bound. Call it on the node you built (or with no `root` for the
-selection) after each section, fix every `error`/`warning`, then screenshot for the judgement a
-measurement cannot make.
-
 ## Rules
 
 - **Understand the environment, then build.** Read both the file's design system _and_ the source's

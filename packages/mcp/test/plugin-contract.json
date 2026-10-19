@@ -7,7 +7,6 @@
     "get_node": ["nodeId"],
     "get_nodes_info": ["nodeIds"],
     "get_metadata": [],
-    "audit_layout": ["maxIssues", "root"],
     "get_pages": [],
     "search_nodes": ["name", "root", "type"],
     "scan_text_nodes": ["root"],

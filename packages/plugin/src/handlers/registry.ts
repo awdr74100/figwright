@@ -8,7 +8,6 @@ import { createAlignNodesHandler } from './align-nodes.js';
 import { createApplyAnimationStyleHandler } from './apply-animation-style.js';
 import { createApplyManualKeyframeTrackHandler } from './apply-manual-keyframe-track.js';
 import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
-import { createAuditLayoutHandler } from './audit-layout.js';
 import { createBatchRenameNodesHandler } from './batch-rename-nodes.js';
 import { createBatchHandler } from './batch.js';
 import { createBindComponentPropertyHandler } from './bind-component-property.js';
@@ -240,7 +239,6 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     search_nodes: createSearchNodesHandler(figmaCtx),
     scan_text_nodes: createScanTextNodesHandler(figmaCtx),
     scan_nodes_by_types: createScanNodesByTypesHandler(figmaCtx),
-    audit_layout: createAuditLayoutHandler(figmaCtx),
     get_styles: createGetStylesHandler(figmaCtx),
     get_variable_defs: createGetVariableDefsHandler(figmaCtx),
     get_local_components: createGetLocalComponentsHandler(figmaCtx),

@@ -13,7 +13,6 @@ import { analyzeProjectTool } from './analyze-project.js';
 import { applyAnimationStyleTool } from './apply-animation-style.js';
 import { applyManualKeyframeTrackTool } from './apply-manual-keyframe-track.js';
 import { applyStyleToNodeTool } from './apply-style-to-node.js';
-import { auditLayoutTool } from './audit-layout.js';
 import { batchRenameNodesTool } from './batch-rename-nodes.js';
 import { batchTool } from './batch.js';
 import { bindComponentPropertyTool } from './bind-component-property.js';
@@ -147,7 +146,6 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getNodeTool,
   getNodesInfoTool,
   getMetadataTool,
-  auditLayoutTool,
   getPagesTool,
   searchNodesTool,
   scanTextNodesTool,
