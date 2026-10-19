@@ -123,9 +123,9 @@ Library components need no import step: `create_instance` takes their `component
 
 ## Style in the create call
 
-`create_frame` / `create_rectangle` / `create_ellipse` / `create_text` accept the styling you would
-otherwise do next: `fills`, `strokes` (+ `strokeWeight`, `strokeAlign`), `cornerRadius`,
-`layoutSizingHorizontal` / `layoutSizingVertical`; a frame also takes `autoLayout` (the whole
+`create_frame` / `create_rectangle` / `create_ellipse` / `create_shape` / `create_text` accept the
+styling you would otherwise do next: `fills`, `strokes` (+ `strokeWeight`, `strokeAlign`),
+`layoutSizingHorizontal` / `layoutSizingVertical`; a frame or rectangle also `cornerRadius`; a frame also takes `autoLayout` (the whole
 `set_auto_layout` object) and `clipsContent`, and text takes the `set_text_properties` fields. They
 run through the same handlers as the `set_*` tools, in a fixed order (fills, strokes, radius, auto
 layout, then sizing — HUG needs the layout on, FILL needs the parent), after the node is placed. If
@@ -187,9 +187,12 @@ Rules that keep this right:
   (absolute overlays, free-placed items) use `align_nodes`, never hand arithmetic with `set_position`.
 - **Hug before centring.** A child set to `FILL` on the axis you want to centre on has no slack, so it
   looks left-aligned. `HUG` it, then centre.
-- **`align_nodes` uses the node's on-canvas bounding box,** so a rotated or `HUG` node is centred by
-  what it really measures. It refuses an in-flow auto-layout child (the layout would reflow it back) and
-  moves nothing when it refuses; a node directly on a page needs `relativeTo: 'SELECTION'`.
+- **`align_nodes` measures what a node covers, in the parent's own axes** (`relativeTo: 'PARENT'`), so
+  a rotated or `HUG` node is centred by what it really occupies and "left" in a rotated frame is that
+  frame's left edge; `SELECTION` and `distribute` measure on the canvas, as Figma's toolbar does. It
+  refuses — before moving anything — an in-flow auto-layout child (the layout would reflow it back), a
+  layer inside an instance (edit the main component), and a node whose ancestor is in the same call
+  (moving the ancestor already carries it). A node directly on a page needs `relativeTo: 'SELECTION'`.
 - **A node that must be centred inside an auto-layout sibling-flow** (one pinned centre element in a
   row of others) is the one place to go ABSOLUTE; everything else stays in flow.
 - **`set_constraints` is not a "centre now" command.** It records how a node reacts when its parent
@@ -204,10 +207,11 @@ fixed width. Vertical alignment only shows in a box taller than its text (fixed 
 
 ### Shapes
 
-`create_shape` makes a `LINE` (its `width` is its length; style with `set_strokes`, tilt with
-`rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`, `innerRadius` 0–1).
+`create_shape` makes a `LINE` (its `width` is its length; pass `strokes` / `strokeWeight` in the same
+call, tilt with `rotate_nodes`), a `POLYGON` (`pointCount` sides) or a `STAR` (`pointCount`, `innerRadius` 0–1).
 Combine shapes with `boolean_operation` (`UNION` / `SUBTRACT` / `INTERSECT` / `EXCLUDE`; the operands
-must share a parent; `SUBTRACT` cuts the upper layers out of the lowest) and bake the result into one
+must share a parent; `SUBTRACT` cuts the upper layers out of the lowest; the result is painted with
+the topmost operand's fill and stroke) and bake the result into one
 editable path with `flatten_nodes` only when the artwork is final — flattening turns text into
 outlines. Neither runs inside a `batch`. A divider is a rectangle's bottom stroke or a `LINE`, never a
 1px-tall filled rectangle.
@@ -219,7 +223,6 @@ Check this list before promising a design; for each, use the fallback or say so.
 | Not available                                 | Fallback                                                                                              |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | freeform pen paths, editing a vector's points | draw it as SVG and `import_svg`; for a shape that is a combination, `boolean_operation` of primitives |
-| a one-call styled frame                       | `create_frame`, then `set_fills` / `set_strokes` / `set_corner_radius` / `set_auto_layout`            |
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 
@@ -248,8 +251,8 @@ Bounds apply to auto-layout frames and their direct children.
 ## Text uses a real font, not the fallback
 
 A new `TEXT` node defaults to a **fallback font (Inter)**, not the design system's font. Set the real
-family/style with `set_text_properties` after creating it (the plugin loads the node's fonts on
-edit). In a file whose typography is driven by `STRING` variables (a `font family` / `weight` token),
+family/style in the `create_text` call itself (`fontName`), or with `set_text_properties` on an
+existing node (the plugin loads the node's fonts on edit). In a file whose typography is driven by `STRING` variables (a `font family` / `weight` token),
 read those off `get_variable_defs` and apply the same family — don't leave headings in Inter.
 
 ## Inline rich text → `set_text_range`, not a separate node per span

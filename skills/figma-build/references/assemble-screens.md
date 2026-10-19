@@ -61,7 +61,7 @@ a token for (`write-rules.md` has the three paths).
 ## 6. Verify visually — close the loop
 
 Run `audit_layout` on the built node first — it measures clipping, overflow, off-centre children, edge
-near-misses, off-scale spacing and type drift that a screenshot cannot show — then `get_screenshot`
+near-misses and raw fills that a screenshot cannot show — then `get_screenshot`
 the built node, fix discrepancies, re-screenshot — the render-and-diff discipline
 codegen uses, in reverse. Check it against the source intent **and** against objective design health,
 which catches problems even when you built from a vague description with no source to compare:

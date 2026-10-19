@@ -6,7 +6,7 @@ import {
   createAuditLayoutHandler,
 } from '../../src/handlers/audit-layout.js';
 
-const OPTS = { spacingUnit: 4, nearMiss: 2 };
+const OPTS = { nearMiss: 2 };
 
 let counter = 0;
 const node = (over: Partial<AuditNode> & { box?: AuditNode['box'] } = {}): AuditNode => {
@@ -20,9 +20,6 @@ const node = (over: Partial<AuditNode> & { box?: AuditNode['box'] } = {}): Audit
     clips: false,
     layoutMode: 'NONE',
     positioning: 'AUTO',
-    padding: null,
-    itemSpacing: null,
-    hasPaint: false,
     hardcodedFill: false,
     fontSize: null,
     fontFamily: null,
@@ -89,45 +86,29 @@ describe('audit_layout checks', () => {
     expect(codes([far])).not.toContain('edge-misaligned');
   });
 
-  it('flags spacing off the unit scale', () => {
-    const f = node({
-      layoutMode: 'VERTICAL',
-      itemSpacing: 10,
-      padding: { top: 16, right: 16, bottom: 16, left: 16 },
-    });
-    f.children = [rect(0, 0, 10, 10)];
-    const issue = auditTree([f], OPTS).issues.find(i => i.code === 'off-scale-spacing');
-    expect(issue?.message).toBe('Spacing not on the 4px scale: itemSpacing 10.');
-    expect(
-      auditTree([f], { ...OPTS, spacingUnit: 2 }).issues.some(i => i.code === 'off-scale-spacing'),
-    ).toBe(false);
-  });
-
-  it('flags uneven padding only on a painted container', () => {
-    const base = {
-      layoutMode: 'HORIZONTAL',
-      padding: { top: 8, right: 24, bottom: 8, left: 12 },
-      children: [rect(0, 0, 10, 10)],
-    };
-    expect(codes([node({ ...base, hasPaint: true })])).toContain('asymmetric-padding');
-    expect(codes([node({ ...base, hasPaint: false })])).not.toContain('asymmetric-padding');
-  });
-
   it('skips invisible nodes and everything under them', () => {
     const hidden = node({ visible: false, clips: true, children: [rect(900, 0, 10, 10)] });
     expect(codes([hidden])).toEqual([]);
     expect(auditTree([hidden], OPTS).stats.scanned).toBe(0);
   });
 
-  it('judges the type system: too many sizes, and a flat hierarchy', () => {
+  it('ignores a hidden child under a visible parent', () => {
+    const hiddenChild = rect(150, 10, 100, 50, { visible: false });
+    const f = node({ clips: true, box: { x: 0, y: 0, width: 200, height: 200 } });
+    f.children = [hiddenChild];
+    expect(codes([f])).toEqual([]);
+    // …and a hidden sibling cannot make a visible one look misaligned either.
+    const g = node({ children: [rect(10, 10, 50, 20), rect(11, 60, 50, 20, { visible: false })] });
+    expect(codes([g])).toEqual([]);
+  });
+
+  it('raises no judgement of taste: spacing scale, padding symmetry or type sizes', () => {
     const text = (size: number) => node({ type: 'TEXT', fontSize: size, fontFamily: 'Inter' });
-    const many = node({ children: [10, 11, 12, 13, 14, 16, 18, 20].map(text) });
-    expect(codes([many])).toContain('too-many-type-sizes');
-    const flat = node({ children: [14, 14, 14, 14, 14].map(text) });
-    expect(codes([flat])).toContain('flat-type-hierarchy');
-    expect(codes([node({ children: [12, 14, 20].map(text) })])).not.toContain(
-      'flat-type-hierarchy',
-    );
+    const f = node({
+      layoutMode: 'VERTICAL',
+      children: [10, 11, 12, 13, 14, 16, 18, 20].map(text),
+    });
+    expect(codes([f])).toEqual([]);
   });
 
   it('counts hardcoded fills and collects the fonts in use', () => {
@@ -140,15 +121,11 @@ describe('audit_layout checks', () => {
     expect([...stats.fontFamilies]).toEqual(['Inter']);
   });
 
-  it('orders errors before warnings before infos', () => {
-    const f = node({
-      clips: true,
-      layoutMode: 'NONE',
-      children: [rect(350, 0, 100, 40)],
-    });
-    const flow = node({ layoutMode: 'VERTICAL', itemSpacing: 5, children: [rect(0, 0, 5, 5)] });
-    const severities = auditTree([flow, f], OPTS).issues.map(i => i.severity);
-    expect(severities).toEqual(['error', 'info']);
+  it('orders errors before warnings', () => {
+    const loose = node({ clips: false, children: [rect(350, 0, 100, 40)] });
+    const clipped = node({ clips: true, children: [rect(350, 0, 100, 40)] });
+    const severities = auditTree([loose, clipped], OPTS).issues.map(i => i.severity);
+    expect(severities).toEqual(['error', 'warning']);
   });
 });
 
@@ -239,5 +216,35 @@ describe('audit_layout handler', () => {
   it('rejects a missing node and a non-string root', async () => {
     await expect(createAuditLayoutHandler(ctx({}))({ root: '9:9' })).rejects.toThrow(/not found/);
     await expect(createAuditLayoutHandler(ctx({}))({ root: 5 })).rejects.toThrow(/node id/);
+  });
+
+  it('audits an instance where it sits but not inside it', async () => {
+    const inner = figmaNode('I2:1;3:2', {
+      type: 'RECTANGLE',
+      absoluteBoundingBox: { x: 900, y: 0, width: 100, height: 40 },
+      fills: [{ type: 'SOLID', visible: true }],
+      fillStyleId: '',
+    });
+    const instance = figmaNode(
+      '2:1',
+      { type: 'INSTANCE', absoluteBoundingBox: { x: 350, y: 0, width: 100, height: 40 } },
+      [inner],
+    );
+    const root = figmaNode('1:1', {}, [instance]);
+    const result = (await createAuditLayoutHandler(ctx({ '1:1': root }))({ root: '1:1' })) as {
+      scanned: number;
+      issues: { code: string; nodeId: string }[];
+      hardcodedFills: number;
+    };
+    expect(result.issues.map(i => [i.code, i.nodeId])).toEqual([['clipped', '2:1']]);
+    expect(result.scanned).toBe(2);
+    expect(result.hardcodedFills).toBe(0);
+  });
+
+  it('refuses the document as a root', async () => {
+    const doc = { id: '0:0', type: 'DOCUMENT', children: [] };
+    await expect(createAuditLayoutHandler(ctx({ '0:0': doc }))({ root: '0:0' })).rejects.toThrow(
+      /pass a page id/,
+    );
   });
 });

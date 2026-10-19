@@ -13,6 +13,8 @@ interface FakeShape {
   height: number;
   pointCount?: number;
   innerRadius?: number;
+  strokes: unknown[];
+  strokeWeight: number;
   removed: boolean;
   resize(w: number, h: number): void;
   remove(): void;
@@ -27,6 +29,8 @@ const shape = (type: string): FakeShape => {
     y: 0,
     width: 100,
     height: type === 'LINE' ? 0 : 100,
+    strokes: [],
+    strokeWeight: 1,
     removed: false,
     resize(w, h) {
       s.width = w;
@@ -52,7 +56,8 @@ const setup = (nodes: Record<string, unknown> = {}) => {
     createPolygon: make('POLYGON'),
     createStar: make('STAR'),
     currentPage: { appendChild: (n: unknown) => appended.push(n) },
-    getNodeByIdAsync: async (id: string) => nodes[id] ?? null,
+    getNodeByIdAsync: async (id: string) => nodes[id] ?? created.find(c => c.id === id) ?? null,
+    root: { documentColorProfile: 'SRGB' },
   } as unknown as typeof figma;
   return { handler: createCreateShapeHandler(ctx), created, appended };
 };
@@ -118,5 +123,25 @@ describe('create_shape handler', () => {
       /width must be a number/,
     );
     expect(created).toHaveLength(0);
+  });
+
+  it('strokes a line in the call that creates it', async () => {
+    const { handler, created } = setup();
+    await handler({
+      shape: 'LINE',
+      width: 120,
+      strokes: [{ type: 'SOLID', color: { r: 0, g: 0, b: 1 } }],
+      strokeWeight: 3,
+    });
+    expect(created[0]).toMatchObject({ strokeWeight: 3, removed: false });
+    expect(created[0]!.strokes).toHaveLength(1);
+  });
+
+  it('removes the new shape when a style step is refused', async () => {
+    const { handler, created } = setup();
+    await expect(handler({ shape: 'STAR', strokeWeight: 2 })).rejects.toThrow(
+      /need strokes.*removed/s,
+    );
+    expect(created[0]!.removed).toBe(true);
   });
 });

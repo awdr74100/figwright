@@ -10,7 +10,9 @@ export const booleanOperationTool: ToolSpec = {
     'Combine shapes into one editable boolean group: UNION merges them, SUBTRACT cuts the upper ' +
     'layers out of the lowest one (a ring from a circle and a smaller circle; the order is the ' +
     'layer stacking, not the order of nodeIds), INTERSECT keeps only the overlap, EXCLUDE keeps ' +
-    'everything except the overlap. The operands stay inside the result as its children, so it ' +
+    'everything except the overlap. The result is painted with the fill and stroke of the ' +
+    'topmost operand, whatever the others carry — style that layer, or set_fills on the result. ' +
+    'The operands stay inside the result as its children, so it ' +
     'can still be unpicked; use flatten_nodes to bake it into one vector. The nodes must share ' +
     'a parent, and the result takes their place there. Needs at least 2 nodes. Not allowed ' +
     'inside a batch. Returns { ok, nodeId, name, type }.',

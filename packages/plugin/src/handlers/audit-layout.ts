@@ -19,16 +19,13 @@ export interface AuditNode {
   clips: boolean;
   layoutMode: string;
   positioning: string;
-  padding: { top: number; right: number; bottom: number; left: number } | null;
-  itemSpacing: number | null;
-  hasPaint: boolean;
   hardcodedFill: boolean;
   fontSize: number | null;
   fontFamily: string | null;
   children: AuditNode[];
 }
 
-export type Severity = 'error' | 'warning' | 'info';
+export type Severity = 'error' | 'warning';
 
 export interface AuditIssue {
   nodeId: string;
@@ -41,7 +38,6 @@ export interface AuditIssue {
 }
 
 export interface AuditOptions {
-  spacingUnit: number;
   /** Largest gap, in px, still read as "meant to line up but didn't". */
   nearMiss: number;
 }
@@ -51,7 +47,6 @@ export interface AuditStats {
   hardcodedFills: number;
   fontFamilies: Set<string>;
   fontSizes: Set<number>;
-  textNodes: number;
 }
 
 const EPS = 0.01;
@@ -68,13 +63,15 @@ const isFreelyPlaced = (parent: AuditNode, child: AuditNode): boolean =>
 
 const checkContainer = (node: AuditNode, issues: AuditIssue[], opts: AuditOptions): void => {
   const { box } = node;
+  // A hidden child renders nothing, so it cannot overflow, sit off-centre or misalign.
+  const children = node.children.filter(c => c.visible);
   const push = (code: string, severity: Severity, message: string, fix: string): void => {
     issues.push({ nodeId: node.id, name: node.name, code, severity, message, fix });
   };
 
   if (
     node.type === 'FRAME' &&
-    node.children.length > 0 &&
+    children.length > 0 &&
     box !== null &&
     Math.abs(box.width - 100) < EPS &&
     Math.abs(box.height - 100) < EPS
@@ -89,7 +86,7 @@ const checkContainer = (node: AuditNode, issues: AuditIssue[], opts: AuditOption
 
   // Overflow / clipping against this container's own box.
   if (box !== null && CONTAINER_TYPES.has(node.type)) {
-    for (const child of node.children) {
+    for (const child of children) {
       if (child.box === null) continue;
       const sides: string[] = [];
       const over = (name: string, by: number): void => {
@@ -115,7 +112,7 @@ const checkContainer = (node: AuditNode, issues: AuditIssue[], opts: AuditOption
 
   // Centering that is off by a hair: the child is clearly meant to be centred.
   if (box !== null) {
-    for (const child of node.children) {
+    for (const child of children) {
       if (child.box === null || !isFreelyPlaced(node, child)) continue;
       const dx = Math.abs(child.box.x + child.box.width / 2 - (box.x + box.width / 2));
       const dy = Math.abs(child.box.y + child.box.height / 2 - (box.y + box.height / 2));
@@ -135,7 +132,7 @@ const checkContainer = (node: AuditNode, issues: AuditIssue[], opts: AuditOption
   }
 
   // Sibling edges that nearly coincide.
-  const placed = node.children.filter(c => c.box !== null && isFreelyPlaced(node, c));
+  const placed = children.filter(c => c.box !== null && isFreelyPlaced(node, c));
   if (placed.length >= 2) {
     const edges: [string, (b: Box) => number][] = [
       ['left', b => b.x],
@@ -162,42 +159,6 @@ const checkContainer = (node: AuditNode, issues: AuditIssue[], opts: AuditOption
       }
     }
   }
-
-  if (isAutoLayout(node)) {
-    const unit = opts.spacingUnit;
-    const values: [string, number | null][] = [
-      ['itemSpacing', node.itemSpacing],
-      ['paddingTop', node.padding?.top ?? null],
-      ['paddingRight', node.padding?.right ?? null],
-      ['paddingBottom', node.padding?.bottom ?? null],
-      ['paddingLeft', node.padding?.left ?? null],
-    ];
-    const off = values.filter(
-      ([, v]) => v !== null && v > 0 && Math.abs(v / unit - Math.round(v / unit)) > EPS,
-    );
-    if (off.length > 0) {
-      push(
-        'off-scale-spacing',
-        'info',
-        `Spacing not on the ${unit}px scale: ${off.map(([k, v]) => `${k} ${v}`).join(', ')}.`,
-        'set_auto_layout with values from the design system (or the 4/8px scale)',
-      );
-    }
-    if (node.hasPaint && node.padding !== null) {
-      const { top, right, bottom, left } = node.padding;
-      if (Math.abs(left - right) > EPS || Math.abs(top - bottom) > EPS) {
-        const parts: string[] = [];
-        if (Math.abs(left - right) > EPS) parts.push(`left ${left} / right ${right}`);
-        if (Math.abs(top - bottom) > EPS) parts.push(`top ${top} / bottom ${bottom}`);
-        push(
-          'asymmetric-padding',
-          'info',
-          `Filled/stroked container has uneven padding (${parts.join('; ')}). Fine if intended.`,
-          'set_auto_layout padding*',
-        );
-      }
-    }
-  }
 };
 
 /**
@@ -214,7 +175,6 @@ export const auditTree = (
     hardcodedFills: 0,
     fontFamilies: new Set(),
     fontSizes: new Set(),
-    textNodes: 0,
   };
 
   const visit = (node: AuditNode): void => {
@@ -222,7 +182,6 @@ export const auditTree = (
     stats.scanned += 1;
     if (node.hardcodedFill) stats.hardcodedFills += 1;
     if (node.type === 'TEXT') {
-      stats.textNodes += 1;
       if (node.fontFamily !== null) stats.fontFamilies.add(node.fontFamily);
       if (node.fontSize !== null) stats.fontSizes.add(node.fontSize);
     }
@@ -231,32 +190,7 @@ export const auditTree = (
   };
   for (const root of roots) visit(root);
 
-  // Type system, judged over everything audited.
-  const first = roots[0];
-  if (first !== undefined) {
-    const sizes = stats.fontSizes.size;
-    if (sizes > 7) {
-      issues.push({
-        nodeId: first.id,
-        name: first.name,
-        code: 'too-many-type-sizes',
-        severity: 'warning',
-        message: `${sizes} different font sizes — a type scale rarely needs more than 6–7.`,
-        fix: 'snap sizes to a scale with set_text_properties fontSize',
-      });
-    } else if (stats.textNodes >= 5 && sizes === 1) {
-      issues.push({
-        nodeId: first.id,
-        name: first.name,
-        code: 'flat-type-hierarchy',
-        severity: 'info',
-        message: `All ${stats.textNodes} text layers share one font size — no visible hierarchy.`,
-        fix: 'give headings, body and captions distinct sizes/weights with set_text_properties',
-      });
-    }
-  }
-
-  const rank: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+  const rank: Record<Severity, number> = { error: 0, warning: 1 };
   issues.sort((a, b) => rank[a.severity] - rank[b.severity]);
   return { issues, stats };
 };
@@ -264,9 +198,6 @@ export const auditTree = (
 // ── Figma → AuditNode ────────────────────────────────────────────────────────
 
 const num = (value: unknown): number | null => (typeof value === 'number' ? value : null);
-
-const hasVisibleFill = (paints: unknown): boolean =>
-  Array.isArray(paints) && paints.some((p: { visible?: boolean }) => p.visible !== false);
 
 const isHardcodedFill = (node: SceneNode): boolean => {
   const fills = (node as { fills?: unknown }).fills;
@@ -293,17 +224,6 @@ const normalize = (node: SceneNode, children: AuditNode[]): AuditNode => {
     clips: n.clipsContent === true,
     layoutMode,
     positioning: typeof n.layoutPositioning === 'string' ? n.layoutPositioning : 'AUTO',
-    padding:
-      layoutMode === 'NONE'
-        ? null
-        : {
-            top: num(n.paddingTop) ?? 0,
-            right: num(n.paddingRight) ?? 0,
-            bottom: num(n.paddingBottom) ?? 0,
-            left: num(n.paddingLeft) ?? 0,
-          },
-    itemSpacing: layoutMode === 'NONE' ? null : num(n.itemSpacing),
-    hasPaint: hasVisibleFill(n.fills) || hasVisibleFill(n.strokes),
     hardcodedFill: isHardcodedFill(node),
     fontSize: num(n.fontSize),
     fontFamily:
@@ -326,7 +246,10 @@ const build = async (
       break;
     }
     budget.left -= 1;
-    const kids = childrenOf(node);
+    // An instance is audited where it sits but not inside: its layout is its main component's, so
+    // an issue there is fixed in the component, and would otherwise repeat once per instance (and
+    // spend the node budget on layers nobody here can edit).
+    const kids = node.type === 'INSTANCE' ? null : childrenOf(node);
     // eslint-disable-next-line no-await-in-loop -- the tree is built depth-first, handing the thread back between slices
     if (slice.due()) await slice.yield();
     // eslint-disable-next-line no-await-in-loop -- see above
@@ -339,22 +262,20 @@ const build = async (
 export const createAuditLayoutHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as {
-      root?: unknown;
-      maxIssues?: unknown;
-      spacingUnit?: unknown;
-    };
+    const p = (params ?? {}) as { root?: unknown; maxIssues?: unknown };
     if (p.root !== undefined && typeof p.root !== 'string') {
       throw new TypeError('audit_layout: root must be a node id');
     }
     const maxIssues = typeof p.maxIssues === 'number' ? Math.max(1, Math.floor(p.maxIssues)) : 60;
-    const spacingUnit = typeof p.spacingUnit === 'number' && p.spacingUnit > 0 ? p.spacingUnit : 4;
 
     let targets: readonly SceneNode[];
     if (typeof p.root === 'string') {
       const node = await figmaCtx.getNodeByIdAsync(p.root);
       if (node === null) throw new Error(`audit_layout: node ${p.root} not found`);
-      if (node.type === 'DOCUMENT' || node.type === 'PAGE') {
+      if (node.type === 'DOCUMENT') {
+        throw new Error('audit_layout: root is the document — pass a page id or a node id');
+      }
+      if (node.type === 'PAGE') {
         targets = (node as PageNode).children;
       } else {
         targets = [node as SceneNode];
@@ -366,14 +287,10 @@ export const createAuditLayoutHandler =
 
     const budget = { left: MAX_NODES, truncated: false };
     const tree = await build(targets, budget, new TimeSlice());
-    const { issues, stats } = auditTree(tree, { spacingUnit, nearMiss: 2 });
+    const { issues, stats } = auditTree(tree, { nearMiss: 2 });
 
-    const counts = { errors: 0, warnings: 0, infos: 0 };
-    for (const issue of issues) {
-      if (issue.severity === 'error') counts.errors += 1;
-      else if (issue.severity === 'warning') counts.warnings += 1;
-      else counts.infos += 1;
-    }
+    const errors = issues.filter(issue => issue.severity === 'error').length;
+    const counts = { errors, warnings: issues.length - errors };
 
     return {
       ok: true,

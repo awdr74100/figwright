@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { initialStyleShape } from './initial-props-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const CREATE_SHAPE_TOOL_NAME = 'create_shape';
@@ -9,12 +10,13 @@ export const createShapeTool: ToolSpec = {
   description:
     'Create a LINE, POLYGON or STAR, optionally sized/positioned and appended to a parent ' +
     '(default: current page). A LINE is a length: `width` is its length (default 100, with the ' +
-    'black 1px stroke Figma gives it) and it has no height — style it with set_strokes ' +
-    '(weight, colour, caps) and tilt it with rotate_nodes. A POLYGON takes `pointCount` ' +
+    'black 1px stroke Figma gives it) and it has no height — pass strokes / strokeWeight here to ' +
+    'style it (caps via set_strokes) and tilt it with rotate_nodes. A POLYGON takes `pointCount` ' +
     '(sides, default 3) and a STAR takes `pointCount` (points, default 5) and `innerRadius` ' +
     '(0–1, the inner ring as a share of the outer; default 0.38). For rectangles and ellipses ' +
     'use create_rectangle / create_ellipse; to cut or merge shapes use boolean_operation; for ' +
-    'arbitrary vector artwork import_svg. Returns { ok, nodeId, name, type }.',
+    'arbitrary vector artwork import_svg. fills, strokes and layoutSizing* style it in the same ' +
+    'call. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     shape: z.enum(['LINE', 'POLYGON', 'STAR']).describe('Which shape to create'),
     parentId: z.string().optional().describe('Container node id; omit for current page'),
@@ -40,6 +42,7 @@ export const createShapeTool: ToolSpec = {
       .max(1)
       .optional()
       .describe('STAR only: inner ring as a share of the outer radius, 0–1'),
+    ...initialStyleShape,
   }),
   kind: 'write',
 };

@@ -116,6 +116,48 @@ describe('create_* initial style', () => {
     expect(order.indexOf('layoutMode:HORIZONTAL')).toBeLessThan(order.indexOf('sizing:HUG'));
   });
 
+  it('keeps an explicit width / height when auto layout would otherwise hug it away', async () => {
+    const make = () => {
+      const s = setup(frameNode, 'FRAME');
+      // What Figma does: enabling auto layout flips the primary axis to HUG.
+      let mode = 'NONE';
+      Object.defineProperty(s.node, 'layoutMode', {
+        get: () => mode,
+        set: (v: string) => {
+          mode = v;
+          if (v === 'HORIZONTAL') s.node.layoutSizingHorizontal = 'HUG';
+        },
+      });
+      return s;
+    };
+    const sized = make();
+    await createCreateFrameHandler(sized.ctx)({
+      width: 300,
+      height: 100,
+      autoLayout: { layoutMode: 'HORIZONTAL' },
+    });
+    expect(sized.node).toMatchObject({
+      layoutSizingHorizontal: 'FIXED',
+      layoutSizingVertical: 'FIXED',
+    });
+
+    // An axis the caller sized explicitly wins; without a size, Figma's hug stands.
+    const hugging = make();
+    await createCreateFrameHandler(hugging.ctx)({
+      width: 300,
+      height: 100,
+      autoLayout: { layoutMode: 'HORIZONTAL' },
+      layoutSizingHorizontal: 'HUG',
+    });
+    expect(hugging.node).toMatchObject({
+      layoutSizingHorizontal: 'HUG',
+      layoutSizingVertical: 'FIXED',
+    });
+    const unsized = make();
+    await createCreateFrameHandler(unsized.ctx)({ autoLayout: { layoutMode: 'HORIZONTAL' } });
+    expect(unsized.node.layoutSizingHorizontal).toBe('HUG');
+  });
+
   it('removes the half-built layer and names the failing step when a style is refused', async () => {
     const { node, ctx } = setup(frameNode, 'FRAME');
     await expect(
@@ -124,11 +166,12 @@ describe('create_* initial style', () => {
     expect(node.remove).toHaveBeenCalled();
   });
 
-  it('refuses strokeWeight without strokes', async () => {
-    const { ctx } = setup(frameNode, 'FRAME');
+  it('refuses strokeWeight without strokes and removes the new layer', async () => {
+    const { node, ctx } = setup(frameNode, 'FRAME');
     await expect(createCreateFrameHandler(ctx)({ strokeWeight: 2 })).rejects.toThrow(
-      /need strokes/,
+      /need strokes.*removed/s,
     );
+    expect(node.remove).toHaveBeenCalled();
   });
 
   it('styles a rectangle the same way', async () => {

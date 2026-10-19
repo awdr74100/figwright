@@ -17,11 +17,14 @@ export const alignNodesTool: ToolSpec = {
     'bounding box they form together (line up a row on a shared top, or on a shared centre). ' +
     'distribute HORIZONTAL / VERTICAL keeps the outermost two nodes where they are and spaces ' +
     'the rest so the gaps between neighbours are equal (needs 3+ nodes; it cannot be combined ' +
-    "with alignment on the same axis). Uses each node's on-canvas bounding box, so a rotated " +
-    'node is centred by what you see. An in-flow child of an auto-layout frame is refused — the ' +
-    "layout owns its position: centre it with the parent's primaryAxisAlignItems / " +
-    'counterAxisAlignItems or its own layoutAlign (set_auto_layout / set_layout_props), or set ' +
-    'layoutPositioning ABSOLUTE first. Validated up front, so a refusal moves nothing. ' +
+    'with alignment on the same axis). Measures what each node covers, so a rotated node is ' +
+    "centred by what you see; PARENT measures in the parent's own axes (left in a rotated frame " +
+    "is that frame's left edge), SELECTION and distribute on the canvas. Refused, before anything " +
+    'moves: an in-flow child of an auto-layout frame — the layout owns its position, so centre it ' +
+    "with the parent's primaryAxisAlignItems / counterAxisAlignItems or its own layoutAlign " +
+    '(set_auto_layout / set_layout_props), or set layoutPositioning ABSOLUTE first; a layer ' +
+    'inside an instance (align the instance, or edit its main component); a node whose ancestor ' +
+    'is in the same call (moving the ancestor already carries it). A repeated id is moved once. ' +
     'Returns { ok, affected }.',
   inputSchema: z.object({
     nodeIds: z.array(z.string()).min(1).describe('Nodes to align / distribute'),

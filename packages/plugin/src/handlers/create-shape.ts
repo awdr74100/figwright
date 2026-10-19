@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
 const SHAPES = new Set(['LINE', 'POLYGON', 'STAR']);
@@ -14,9 +15,10 @@ const optionalNumber = (value: unknown, name: string): number | undefined => {
 };
 
 /**
- * Create a line, polygon or star. Arguments are all checked before a node exists, so a refusal
- * never leaves an orphan on the page. A line is a length — Figma draws it with height 0 — so its
- * height is refused rather than stored as a number that renders as nothing.
+ * Create a line, polygon or star. Its own arguments are all checked before a node exists, and a
+ * style step that is refused removes the node, so a refusal never leaves an orphan on the page. A
+ * line is a length — Figma draws it with height 0 — so its height is refused rather than stored as
+ * a number that renders as nothing.
  */
 export const createCreateShapeHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -82,6 +84,7 @@ export const createCreateShapeHandler =
     if (y !== undefined) node.y = y;
 
     await placeNode(figmaCtx, node, p.parentId, 'create_shape');
+    await applyInitialProps(figmaCtx, node, params as Record<string, unknown>, 'create_shape');
 
     const result: CreateResult = { ok: true, nodeId: node.id, name: node.name, type: node.type };
     return result;

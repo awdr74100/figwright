@@ -54,7 +54,11 @@ export const applyInitialProps = async (
       { nodeId, ...pick(params, ['strokes', 'strokeWeight', 'strokeAlign']) },
     ]);
   } else if (params.strokeWeight !== undefined || params.strokeAlign !== undefined) {
-    throw new TypeError(`${tool}: strokeWeight / strokeAlign need strokes`);
+    node.remove();
+    throw new TypeError(
+      `${tool}: strokeWeight / strokeAlign need strokes — pass the stroke paints too (the new ` +
+        'layer was removed)',
+    );
   }
   if (params.cornerRadius !== undefined) {
     steps.push([
