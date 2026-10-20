@@ -21,6 +21,8 @@ npx skills add awdr74100/figwright/skills
 npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-codegen
 ```
 
+To update installed skills to the latest version, run `npx skills update`.
+
 > **The skills need the `@figwright/mcp` server.** They call Figwright tools (`get_design_context`,
 > `component_map`, …), so install and connect the [MCP server](../packages/mcp) first — a skill on its
 > own has no tools to drive.

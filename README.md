@@ -100,6 +100,20 @@ or, the other direction:
 
 > _Build a pricing section in Figma from this spec._
 
+### Updating
+
+Each release ships the server and the plugin together, so update both. The skills are optional and update the same way you installed them.
+
+**1. Restart the server.** With the `@latest` config above there is nothing to install, because every launch fetches the newest release. A session that is already open keeps the server it started with, so new tools don't appear until you restart it: in Claude Code, run `/mcp`, pick **figwright** and choose **Reconnect** (or restart Claude Code); in other clients, restart the client. Do this in each client you use Figwright from.
+
+If you installed the package instead of using `@latest` (see the [FAQ](#faq)), update it before restarting: `npm i -D @figwright/mcp@latest`, or `npm i -g @figwright/mcp@latest` for a global install.
+
+**2. Replace the plugin.** Download the zip from the [latest release](https://github.com/awdr74100/figwright/releases/latest), unzip it, and copy its `manifest.json` and `dist` into the folder you imported the plugin from, replacing the old ones. Figma runs a development plugin straight from that folder, so you don't import it again. Close the plugin and run it again.
+
+**3. Update the skills.** Run `npx skills update`. Agent sessions you start after that use the new version.
+
+To confirm, open the plugin's **Debug** tab: it lists the server and plugin versions side by side. If the plugin is still too old for the server, the panel header says so, and so does every tool result (see [the FAQ](#faq)).
+
 ## Skills
 
 Agent skills orchestrate Figwright's tools. They are model-invoked: your agent loads one automatically when the task matches its description.
@@ -291,7 +305,7 @@ The server is launched by your MCP client, so it only runs while that client is 
 
 The plugin's **Debug** tab lists both versions side by side, so a mismatch is visible in one place.
 
-Mostly you don't need to look. The two halves update through different channels — the server re-resolves itself on every launch via `npx @latest`, while the plugin is a zip you imported by hand and then stop thinking about — so drifting apart is the normal state here rather than an edge case. It is also a silent one: a handler that predates an argument ignores it without erroring, so a write can report success having done only part of what was asked. When your plugin is old enough for that, the panel says so and tells you how to update, and every tool result tells your agent the result is unverified.
+Mostly you don't need to look. The two halves update through different channels — the server re-resolves itself on every launch via `npx @latest`, while the plugin is a zip you imported by hand and then stop thinking about — so drifting apart is the normal state here rather than an edge case. It is also a silent one: a handler that predates an argument ignores it without erroring, so a write can report success having done only part of what was asked. When your plugin is old enough for that, the panel says so and tells you how to update ([Updating](#updating) has the steps), and every tool result tells your agent the result is unverified.
 
 It stays quiet on a difference that cannot bite — a plugin a version behind a server that changed no arguments is fine — so when the warning does appear it is worth acting on.
 
