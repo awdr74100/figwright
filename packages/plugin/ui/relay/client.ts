@@ -217,7 +217,8 @@ export class RelayClient {
         `no Figwright server on :${this.opts.ports.join(', ')} yet — it connects automatically once ` +
           `the MCP server starts; if it never does, another process may be holding that port`,
     });
-    // A refusal is terminal: the way out is re-importing the plugin, which builds a fresh client.
+    // A refusal is terminal: the way out is replacing the plugin and reopening it, which builds a
+    // fresh client.
     if (!this.stopped && !this.refused) void this.runReconnectLoop();
   }
 

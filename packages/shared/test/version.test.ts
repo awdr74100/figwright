@@ -72,6 +72,9 @@ describe('pluginSkewNotice', () => {
     expect(notice).toMatch(/Update the plugin/);
     expect(notice).not.toMatch(/tell the user/i);
     expect(notice).toContain('releases/latest');
+    // Figma runs a development plugin from the folder it was imported from, so replacing the files
+    // there is the whole update; a second import of the same manifest id is not needed.
+    expect(notice).toContain('manifest.json and dist');
   });
 
   it('opens with the summary, so the two forms cannot drift apart', () => {

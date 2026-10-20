@@ -126,8 +126,8 @@ export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): 
   `${pluginSkewSummary(pluginVersion, serverVersion)} ` +
   'Arguments added after it was built are silently ignored, which is why nothing in the result ' +
   'itself looks wrong. Update the plugin: download the latest release from ' +
-  'https://github.com/awdr74100/figwright/releases/latest and re-import it in Figma ' +
-  '(Plugins → Development → Import plugin from manifest).';
+  'https://github.com/awdr74100/figwright/releases/latest, copy its manifest.json and dist into ' +
+  'the folder the plugin was imported from, and run the plugin again.';
 
 /**
  * The one-line form, for every call after the first in a session.

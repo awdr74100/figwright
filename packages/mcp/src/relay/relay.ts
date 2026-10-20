@@ -465,11 +465,11 @@ export class Relay {
     if (parsed.data.protocolVersion !== PROTOCOL_VERSION) {
       const message =
         `protocol mismatch: server speaks ${PROTOCOL_VERSION}, plugin speaks ${parsed.data.protocolVersion} — ` +
-        'update the older Figwright half so both match (server: @figwright/mcp, plugin: re-import ' +
+        'update the older Figwright half so both match (server: @figwright/mcp, plugin: copy ' +
         // The reopen matters: a refused plugin stops retrying (retrying cannot fix it, and a plugin
         // old enough to be refused is old enough to lack any graceful handling of the refusal), so
         // fixing the *server* side leaves the panel sitting on this message until it is reopened.
-        'the latest release), then reopen this plugin in Figma';
+        'the latest release over the imported folder), then reopen this plugin in Figma';
       this.opts.log(`[relay] rejecting plugin — ${message}`);
       this.sendError(socket, env, ErrorCode.ProtocolMismatch, message, {
         reason: 'protocol',
