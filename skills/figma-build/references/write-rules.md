@@ -233,8 +233,10 @@ exactly.
   commands and minified paths are rewritten into the form Figma stores) — or a `vectorNetwork`
   when the drawing branches or needs per-vertex arrowheads (`strokeCap: 'ARROW_EQUILATERAL'`, …) or
   corner radii. `x` / `y` place the drawing's origin, so a 24-unit icon drawn at `x: 100` keeps its
-  own padding. An open path shows only with `strokes`. A whole SVG file (several layers, its own
-  colours) is still `import_svg`.
+  own padding. An open path shows only with `strokes`; give a pen line round ends with `set_strokes`
+  `strokeCap: 'ROUND'`. A cap set that way goes on every open end, so an arrow cap on a line is a
+  double-headed arrow; for one arrowhead draw the arrow with `vectorNetwork` and put
+  `strokeCap: 'ARROW_EQUILATERAL'` (or `ARROW_LINES`, …) on its end vertex only. A whole SVG file (several layers, its own colours) is still `import_svg`.
 - **Changing a vector's points → `get_vector`, edit, `set_vector`.** Coordinates are the layer's
   own: Figma refits the box to the drawing, so a point drawn left of 0 moves the layer left rather
   than the drawing. Fills, strokes and brushes stay; a width profile is dropped if the new network

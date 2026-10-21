@@ -2708,6 +2708,56 @@ describe('batch inverses for vectors', () => {
     expect(v.relativeTransform).toEqual(at(60, 500));
   });
 
+  it('puts back per-vertex caps that one set_strokes cap overwrote, through the network', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const network = {
+      vertices: [
+        { x: 0, y: 0, strokeCap: 'ROUND' },
+        { x: 10, y: 0, strokeCap: 'ARROW_LINES' },
+      ],
+      segments: [{ start: 0, end: 1 }],
+      regions: [],
+    };
+    const v = node('V', 'VECTOR', page, {
+      strokes: [],
+      strokeJoin: 'MITER',
+      vectorNetwork: network,
+    });
+    v.setVectorNetworkAsync = async (next: typeof network) => {
+      v.vectorNetwork = next;
+    };
+    // One cap for the whole network, as Figma does.
+    Object.defineProperty(v, 'strokeCap', {
+      get: () => {
+        const caps = new Set((v.vectorNetwork as typeof network).vertices.map(p => p.strokeCap));
+        return caps.size === 1 ? [...caps][0] : MIXED;
+      },
+      set: (cap: string) => {
+        const n = v.vectorNetwork as typeof network;
+        v.vectorNetwork = {
+          ...n,
+          vertices: n.vertices.map(p => Object.assign({}, p, { strokeCap: cap })),
+        };
+      },
+      configurable: true,
+    });
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const handler = createBatchHandler(figmaCtx, {
+      set_strokes: createSetStrokesHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_strokes', params: { nodeId: 'V', strokes: [], strokeCap: 'ROUND' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(v.vectorNetwork).toEqual(network);
+  });
+
   it('removes what outline_stroke and create_vector added', async () => {
     const { node, store, figmaCtx } = makeTree();
     const page = node('P0', 'PAGE', null, { absoluteTransform: at(0, 0) });

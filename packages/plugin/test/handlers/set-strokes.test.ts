@@ -103,4 +103,60 @@ describe('set_strokes handler', () => {
       expect.objectContaining({ boundVariables: { color: { type: 'VARIABLE_ALIAS', id: 'V:1' } } }),
     ]);
   });
+
+  it('sets line caps, joins and the miter limit — an arrowhead is a cap', async () => {
+    const node = {
+      id: '1:1',
+      strokes: [] as unknown,
+      strokeCap: 'NONE',
+      strokeJoin: 'MITER',
+      strokeMiterLimit: 4,
+    };
+    await createSetStrokesHandler(fakeFigma({ '1:1': node }))({
+      nodeId: '1:1',
+      strokes: [],
+      strokeCap: 'ARROW_EQUILATERAL',
+      strokeJoin: 'ROUND',
+      strokeMiterLimit: 10,
+    });
+    expect(node).toMatchObject({
+      strokeCap: 'ARROW_EQUILATERAL',
+      strokeJoin: 'ROUND',
+      strokeMiterLimit: 10,
+    });
+  });
+
+  it('refuses a cap on a node with no line ends, before writing anything', async () => {
+    const node = {
+      id: '1:1',
+      type: 'SHAPE_WITH_TEXT',
+      strokes: [] as unknown,
+      strokeJoin: 'MITER',
+    };
+    await expect(
+      createSetStrokesHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        strokes: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 } }],
+        strokeCap: 'ROUND',
+      }),
+    ).rejects.toThrow('a SHAPE_WITH_TEXT has no strokeCap');
+    expect(node.strokes).toEqual([]);
+  });
+
+  it.each([
+    [{ strokeCap: 'ARROW' }, 'strokeCap must be one of'],
+    [{ strokeJoin: 'SHARP' }, 'strokeJoin must be MITER, BEVEL or ROUND'],
+    [{ strokeMiterLimit: 0.5 }, 'between 1 and 16'],
+    [{ strokeMiterLimit: 17 }, 'between 1 and 16'],
+  ])('refuses %j before the paints are written', async (extra, message) => {
+    const node = { id: '1:1', strokes: [] as unknown, strokeCap: 'NONE', strokeMiterLimit: 4 };
+    await expect(
+      createSetStrokesHandler(fakeFigma({ '1:1': node }))({
+        nodeId: '1:1',
+        strokes: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 } }],
+        ...extra,
+      }),
+    ).rejects.toThrow(message);
+    expect(node.strokes).toEqual([]);
+  });
 });

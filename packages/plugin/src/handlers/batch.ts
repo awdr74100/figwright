@@ -650,6 +650,61 @@ const outlineInverse: BatchInverse = {
   },
 };
 
+const strokeProps = propsInverse(
+  'set_strokes',
+  [
+    'strokes',
+    ...STROKE_WEIGHTS.slice(0, 1),
+    'strokeAlign',
+    'dashPattern',
+    'strokeCap',
+    'strokeJoin',
+    'strokeMiterLimit',
+    ...STROKE_WEIGHTS.slice(1),
+  ],
+  { bindings: STROKE_WEIGHTS, resizes: true },
+);
+
+interface StrokesState {
+  props: unknown;
+  /** A vector's network, when its caps or joins differ by vertex: one value overwrites them all. */
+  network: { id: string; value: VectorNetwork } | null;
+}
+
+/**
+ * Set_strokes: the node's stroke fields — and, when the write sets one cap or join on a vector
+ * whose vertices differ (Figma reports `mixed`, which cannot be written back), its network, the
+ * only place those per-vertex values live.
+ */
+const strokesInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const props = await strokeProps.capture(figmaCtx, params);
+    const p = params as { nodeId: string; strokeCap?: unknown; strokeJoin?: unknown };
+    let network: StrokesState['network'] = null;
+    if (p.strokeCap !== undefined || p.strokeJoin !== undefined) {
+      const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
+      if (
+        node?.type === 'VECTOR' &&
+        (typeof node.strokeCap === 'symbol' || typeof node.strokeJoin === 'symbol')
+      ) {
+        network = { id: node.id, value: node.vectorNetwork };
+      }
+    }
+    const state: StrokesState = { props, network };
+    return state;
+  },
+  async undo(figmaCtx, params, captured, result) {
+    const { props, network } = captured as StrokesState;
+    if (network !== null) {
+      const node = (await live(figmaCtx, network.id)) as VectorNode | null;
+      if (node !== null) await node.setVectorNetworkAsync(network.value);
+    }
+    return strokeProps.undo(figmaCtx, params, props, result);
+  },
+  touches: (params, captured) => strokeProps.touches!(params, (captured as StrokesState).props),
+  resizes: (params, captured) => strokeProps.resizes!(params, (captured as StrokesState).props),
+};
+
 interface CombineState extends ReparentState {
   /** Each component's own property ids before it joined the set. */
   properties: { id: string; keys: string[] }[];
@@ -1910,17 +1965,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // values it would otherwise overwrite (mirrors the handlers).
   set_fills: propsInverse('set_fills', ['fills']),
   set_image_fill: propsInverse('set_image_fill', ['fills']),
-  set_strokes: propsInverse(
-    'set_strokes',
-    [
-      'strokes',
-      ...STROKE_WEIGHTS.slice(0, 1),
-      'strokeAlign',
-      'dashPattern',
-      ...STROKE_WEIGHTS.slice(1),
-    ],
-    { bindings: STROKE_WEIGHTS, resizes: true },
-  ),
+  set_strokes: strokesInverse,
   set_opacity: propsInverse('set_opacity', ['opacity']),
   set_visible: propsInverse('set_visible', ['visible'], { resizes: true }),
   set_corner_radius: propsInverse('set_corner_radius', CORNERS),
