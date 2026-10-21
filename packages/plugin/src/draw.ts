@@ -269,24 +269,28 @@ interface Rect {
 }
 
 /**
- * The painted box as an offset from the node's own box (its top-left is 0,0), when the two differ
- * by half a pixel or more on any side; undefined otherwise, or when Figma reports no render (a
- * stroke that is all brush and no paint). Figma's render bounds are cut by a clipping ancestor
- * (measured), and so is an export of the node, so the two still agree there.
+ * The painted box, when it differs from the node's bounding box by half a pixel or more on any
+ * side; undefined otherwise, or when Figma reports no render (a stroke that is all brush and no
+ * paint). It is measured from the node's own x / y — its origin, in its parent's axes — which is
+ * the bounding box's top-left unless the node is rotated or flipped, where the two part (9 px on a
+ * brush stroke turned 9° in a published Figma Draw file): an export is already turned, so it goes
+ * at x + renderBounds.x, y + renderBounds.y as it is. Figma's render bounds are cut by a clipping
+ * ancestor (measured), and so is an export of the node, so the two still agree there.
  */
 export const renderBoundsOf = (
   render: Rect | null | undefined,
   box: Rect | null | undefined,
+  origin: { x: number; y: number } | undefined = box ?? undefined,
 ): SerializedBounds | undefined => {
-  if (render == null || box == null) return undefined;
+  if (render == null || box == null || origin === undefined) return undefined;
   const dx = render.x - box.x;
   const dy = render.y - box.y;
   const dr = render.x + render.width - (box.x + box.width);
   const db = render.y + render.height - (box.y + box.height);
   if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dr), Math.abs(db)) < 0.5) return undefined;
   return {
-    x: round2(dx),
-    y: round2(dy),
+    x: round2(render.x - origin.x),
+    y: round2(render.y - origin.y),
     width: round2(render.width),
     height: round2(render.height),
   };

@@ -269,8 +269,11 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   its own node rather than reusing the first one's asset.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
-  own top-left. An export of the node covers exactly that box, so put the exported asset there, not
-  at `width` / `height` (a dynamic stroke on a 23 px-tall path paints 86 px tall). It can also be
+  own `x` / `y` in its parent's axes. An export of the node covers exactly that box (measured on a
+  published brush kit: 2× exports of its strokes are `renderBounds` × 2 to the pixel), so put the
+  exported asset at `x + renderBounds.x`, `y + renderBounds.y`, not at `width` / `height` (a dynamic
+  stroke on a 23 px-tall path paints 86 px tall). A rotated or flipped node's export is already
+  turned: place it there as it is, without the node's rotation. It can also be
   smaller than the node, where a clipping parent cuts the paint off — the export is cut the same way.
 - **Text on a path (`TEXT_PATH`).** Lettering set along a curve — round a badge, along a wave. It
   carries the run-level half of a TEXT node's typography (`characters`, font, size, `textCase`,

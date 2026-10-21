@@ -254,4 +254,17 @@ describe('Draw field serializers', () => {
       height: 85.86,
     });
   });
+
+  it('measures from the node’s own x / y, which a rotated node’s bounding box does not start at', () => {
+    // A 469 × 59 stroke at (1471.68, 1308) turned −8.86°: its box starts 9.15 px left of its origin.
+    const box = { x: 1462.53, y: 1308, width: 472.79, height: 130.95 };
+    const render = { x: 1471.08, y: 1285.91, width: 455.92, height: 164.46 };
+    expect(renderBoundsOf(render, box)).toMatchObject({ x: 8.55, y: -22.09 });
+    expect(renderBoundsOf(render, box, { x: 1471.68, y: 1308 })).toEqual({
+      x: -0.6,
+      y: -22.09,
+      width: 455.92,
+      height: 164.46,
+    });
+  });
 });

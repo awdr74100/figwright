@@ -897,9 +897,11 @@ const enrichWithMixins = (
     node.type === 'TEXT_PATH' ||
     node.type === 'TRANSFORM_GROUP'
   ) {
+    const at = (node as { absoluteTransform?: Transform }).absoluteTransform;
     const bounds = renderBoundsOf(
       (node as { absoluteRenderBounds?: Rect | null }).absoluteRenderBounds,
       node.absoluteBoundingBox,
+      at === undefined ? undefined : { x: at[0][2], y: at[1][2] },
     );
     if (bounds !== undefined) out.renderBounds = bounds;
   }
