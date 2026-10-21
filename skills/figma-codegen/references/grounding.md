@@ -275,7 +275,9 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   0.3% of Figma; turning by `rotation` alone was 79% off and rotating about CSS's default centre 88%.
   In an auto-layout flow keep the node in the flow and apply `cssTransform` about its centre — a
   flip mirrors it in place; a turn there is approximate, as Figma gives a turned child its bounding
-  box's room.
+  box's room. A `GROUP` carries no `cssTransform` even when turned or flipped: its children already
+  carry it, so never turn a group's wrapper by its `rotation` — that applies it twice, and a flip
+  twice is no flip.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
   own `x` / `y` in its parent's axes. An export of the node covers exactly that box (measured on a

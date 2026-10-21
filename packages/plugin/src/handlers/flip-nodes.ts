@@ -45,6 +45,16 @@ export const createFlipNodesHandler =
     if (missing.length > 0) {
       throw new Error(`flip_nodes: ${missing.join(', ')} not found or cannot be flipped`);
     }
+    // Checked before any flip: Figma refuses a layer's transform inside an instance, and would do
+    // so only after the nodes listed before it had been flipped.
+    const inInstance = ids.filter(id => id.startsWith('I'));
+    if (inInstance.length > 0) {
+      throw new Error(
+        `flip_nodes: ${inInstance.join(', ')} ${inInstance.length === 1 ? 'is' : 'are'} inside an ` +
+          'instance, which cannot override a layer’s transform — flip the instance itself, or the ' +
+          'layer in its main component',
+      );
+    }
     for (const node of nodes as SceneNode[]) {
       node.relativeTransform = flipped(node.relativeTransform, node.width, node.height, axis);
     }

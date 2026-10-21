@@ -2595,6 +2595,31 @@ describe('serializer — variable bindings on paints / effects / grids', () => {
   });
 });
 
+describe('orientation', () => {
+  const mirrored = [
+    [-1, 0, 100],
+    [0, 1, 0],
+  ];
+
+  it('reports a mirrored node, and how to place it', () => {
+    const out = serializeFlatSync(
+      fake({ type: 'RECTANGLE', rotation: -180, relativeTransform: mirrored }),
+    );
+    expect(out).toMatchObject({ flipped: true, cssTransform: 'scaleX(-1)' });
+  });
+
+  it.each(['GROUP', 'TRANSFORM_GROUP'])(
+    'leaves a %s’s turn to its children, which already carry it',
+    type => {
+      const out = serializeFlatSync(
+        fake({ type, rotation: -180, relativeTransform: mirrored, children: [] }),
+      );
+      expect(out.flipped).toBeUndefined();
+      expect(out.cssTransform).toBeUndefined();
+    },
+  );
+});
+
 describe('Figma Draw nodes', () => {
   const at = (x: number, y: number) => [
     [1, 0, x],

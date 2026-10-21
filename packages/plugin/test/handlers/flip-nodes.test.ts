@@ -66,4 +66,36 @@ describe('flip_nodes', () => {
       [0, 1, 0],
     ]);
   });
+
+  it('refuses a layer inside an instance before flipping anything', async () => {
+    const node = {
+      id: 'a',
+      width: 10,
+      height: 10,
+      relativeTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ] as Transform,
+    };
+    const layer = {
+      id: 'I1:2;3:4',
+      width: 5,
+      height: 5,
+      relativeTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ] as Transform,
+    };
+    const nodes: Record<string, unknown> = { a: node, 'I1:2;3:4': layer };
+    const ctx = {
+      getNodeByIdAsync: async (id: string) => nodes[id] ?? null,
+    } as unknown as typeof figma;
+    await expect(
+      createFlipNodesHandler(ctx)({ nodeIds: ['a', 'I1:2;3:4'], axis: 'VERTICAL' }),
+    ).rejects.toThrow('I1:2;3:4 is inside an instance, which cannot override a layer’s transform');
+    expect(node.relativeTransform).toEqual([
+      [1, 0, 0],
+      [0, 1, 0],
+    ]);
+  });
 });

@@ -615,7 +615,10 @@ const enrichWithMixins = (
     if (typeof rotation === 'number') out.rotation = rotation;
   }
   const transform = (node as { relativeTransform?: Transform }).relativeTransform;
-  if (transform !== undefined) {
+  // A group is no coordinate space of its own: its children's transforms already include its turn
+  // or flip (a flipped group's children read flipped too), so the group reporting one as well
+  // would have code that wraps the children apply it twice — and a flip twice is no flip.
+  if (transform !== undefined && node.type !== 'GROUP' && node.type !== 'TRANSFORM_GROUP') {
     const { flipped, cssTransform } = orientationOf(transform);
     if (flipped) out.flipped = true;
     if (cssTransform !== undefined) out.cssTransform = cssTransform;
