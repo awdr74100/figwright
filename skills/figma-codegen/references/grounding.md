@@ -264,6 +264,9 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   width-profile stroke exports as one small SVG path (0.5 KB measured), a brush as a textured one
   that is far smaller as PNG at 2× (a scatter stroke: 21 KB as PNG, 189 KB as SVG). On a frame whose
   children are live content, a plain `border` is only an approximation of such a stroke — say so.
+  Every custom brush reads `brushName: 'CUSTOM'`, so two of them cannot be told apart from their
+  fields: an instance holding such a stroke is never deduped — export each instance's stroke from
+  its own node rather than reusing the first one's asset.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
   own top-left. An export of the node covers exactly that box, so put the exported asset there, not

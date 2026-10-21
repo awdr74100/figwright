@@ -634,6 +634,29 @@ export const motionSummary = (node: SceneNode): MotionSummary | undefined => {
   return out;
 };
 
+/**
+ * Whether a visible brush, wobble or width profile is drawn anywhere in this subtree. An instance's
+ * overrides do not list a changed brush, and every custom brush reads the same ('CUSTOM'), so two
+ * instances that draw different brushes look identical to dedupe — measured on a published brush
+ * kit, where ten cards of one component, each with its own brush, collapsed into the first. Such an
+ * instance is expanded instead, every stroke with its own renderBounds to export from.
+ */
+const hasDrawStroke = (root: SceneNode): boolean => {
+  const stack: SceneNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.visible === false) continue;
+    const complex = (node as { complexStrokeProperties?: { type?: unknown } })
+      .complexStrokeProperties;
+    if (complex !== undefined && complex.type !== 'BASIC') return true;
+    const width = (node as { variableWidthStrokeProperties?: { widthProfile?: unknown } | null })
+      .variableWidthStrokeProperties;
+    if (width != null && width.widthProfile !== 'UNIFORM') return true;
+    if ('children' in node) stack.push(...(node as ChildrenMixin).children);
+  }
+  return false;
+};
+
 /** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
 const buildNode = async (
   node: SceneNode,
@@ -675,7 +698,7 @@ const buildNode = async (
         out.mainComponent = mc;
       }
       if (ctx.dedupe) {
-        if (ctx.seen.has(main.id)) {
+        if (ctx.seen.has(main.id) && !hasDrawStroke(node)) {
           out.deduped = true;
           expandChildren = false;
           const overrides = collectTextOverrides(node);

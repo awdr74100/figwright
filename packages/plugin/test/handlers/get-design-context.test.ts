@@ -113,6 +113,57 @@ describe('get_design_context handler', () => {
     expect(result.nodes[1]?.propertyOverrides).toEqual([{ name: 'Card', opacity: 0.5 }]);
   });
 
+  it.each([
+    [
+      'a custom brush',
+      {
+        complexStrokeProperties: {
+          type: 'BRUSH',
+          brushType: 'STRETCH',
+          brushName: 'CUSTOM',
+          direction: 'FORWARD',
+        },
+      },
+      false,
+    ],
+    [
+      'a width profile',
+      { variableWidthStrokeProperties: { widthProfile: 'TAPER', variableWidthPoints: [] } },
+      false,
+    ],
+    [
+      'a plain stroke',
+      { complexStrokeProperties: { type: 'BASIC' }, variableWidthStrokeProperties: null },
+      true,
+    ],
+    [
+      'a brush on a hidden layer',
+      { visible: false, complexStrokeProperties: { type: 'DYNAMIC' } },
+      true,
+    ],
+  ])('with %s inside, a repeated instance is deduped: %s', async (_label, stroke, deduped) => {
+    // Brush changes are not in an instance's overrides and custom brushes all read 'CUSTOM', so an
+    // instance drawing one cannot be told apart from the first: it is expanded instead.
+    const instance = (id: string) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        getMainComponentAsync: async () => ({ id: 'main' }),
+        children: [
+          node({
+            id: `${id}-frame`,
+            children: [node({ id: `${id}-line`, type: 'VECTOR', ...stroke })],
+          }),
+        ],
+        overrides: [],
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [instance('first'), instance('second')] }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped === true).toBe(deduped);
+    expect(result.nodes[1]?.children === undefined).toBe(deduped);
+  });
+
   it('limits depth and flags truncated nodes', async () => {
     const grandchild = node({ id: 'gc', type: 'RECTANGLE' });
     const child = node({ id: 'c', children: [grandchild] });
