@@ -86,6 +86,7 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.rotation !== undefined && flat.rotation !== 0) out.rotation = flat.rotation;
   if (flat.flipped === true) out.flipped = true;
   if (flat.cssTransform !== undefined) out.cssTransform = flat.cssTransform;
+  if (flat.boundingBox !== undefined) out.boundingBox = flat.boundingBox;
   if (flat.opacity !== undefined && flat.opacity !== 1) out.opacity = flat.opacity;
   if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
     out.cornerRadius = flat.cornerRadius;

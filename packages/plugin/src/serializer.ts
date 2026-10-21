@@ -32,7 +32,7 @@ import {
   serializeVariableWidthStroke,
 } from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
-import { orientationOf } from './orientation.js';
+import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
 
@@ -621,7 +621,10 @@ const enrichWithMixins = (
   if (transform !== undefined && node.type !== 'GROUP' && node.type !== 'TRANSFORM_GROUP') {
     const { flipped, cssTransform } = orientationOf(transform);
     if (flipped) out.flipped = true;
-    if (cssTransform !== undefined) out.cssTransform = cssTransform;
+    if (cssTransform !== undefined) {
+      out.cssTransform = cssTransform;
+      out.boundingBox = boundingBoxOf(transform, node.width, node.height);
+    }
   }
   if ('opacity' in node) {
     const opacity = node.opacity;

@@ -268,3 +268,27 @@ describe('Draw field serializers', () => {
     });
   });
 });
+
+describe('repeat copies of a turned group', () => {
+  it('are written in the parent’s axes, about the group’s origin', () => {
+    // Turned 90° counter-clockwise (Figma's [[0, 1], [-1, 0]]): a step along the group's own x
+    // axis goes up the page.
+    const turned = [
+      [0, 1, 0],
+      [-1, 0, 0],
+    ] as const;
+    const child = { width: 10, height: 10, absoluteTransform: turned };
+    const step = [
+      {
+        type: 'REPEAT',
+        repeatType: 'LINEAR',
+        axis: 'HORIZONTAL',
+        unitType: 'PIXELS',
+        offset: 20,
+        count: 2,
+      },
+    ] as const;
+    expect(repeatTransforms(turned, [child], step)).toEqual(['translate(20px, 0px)']);
+    expect(repeatTransforms(turned, [child], step, turned)).toEqual(['translate(0px, -20px)']);
+  });
+});

@@ -11,6 +11,28 @@ const round2 = (v: number): number => {
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-4;
 
+/**
+ * A turned box's bounding box in its parent's axes, as offsets from its origin (x / y). This is the
+ * room an auto-layout parent gives it — measured: a 100 × 60 node turned 30° takes 116.6 px of a
+ * row and is centred by its 102 px height.
+ */
+export const boundingBoxOf = (
+  [[a, c], [b, d]]: Transform,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } => {
+  const xs = [0, a * width, c * height, a * width + c * height];
+  const ys = [0, b * width, d * height, b * width + d * height];
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    x: round2(minX),
+    y: round2(minY),
+    width: round2(Math.max(...xs) - minX),
+    height: round2(Math.max(...ys) - minY),
+  };
+};
+
 export interface Orientation {
   /** Mirrored: its own axes are reversed relative to its parent's. */
   flipped: boolean;

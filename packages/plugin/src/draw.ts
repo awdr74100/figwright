@@ -128,6 +128,7 @@ export const repeatTransforms = (
   groupTransform: Affine,
   children: readonly RepeatChild[],
   modifiers: readonly SerializedTransformModifier[],
+  axes?: Affine,
 ): string[] | undefined => {
   if (modifiers.length === 0 || children.length === 0) return undefined;
   const toGroup = invert(groupTransform);
@@ -192,7 +193,12 @@ export const repeatTransforms = (
     copies = next;
     if (copies.length - 1 > MAX_REPEAT_TRANSFORMS) return undefined;
   }
-  return copies.slice(1).map(cssOf);
+  if (axes === undefined) return copies.slice(1).map(cssOf);
+  // Each copy moved from the group's own axes into its parent's, about the group's origin — the
+  // frame code draws in: the same box at the group's x / y, with no turn of its own.
+  const back = invert(axes);
+  if (back === null) return undefined;
+  return copies.slice(1).map(copy => cssOf(compose(compose(axes, copy), back)));
 };
 
 const cssOf = (m: Affine): string => {
@@ -307,6 +313,22 @@ export const applyRepeat = (node: TransformGroupNode, raw: unknown, out: RepeatF
   const modifiers = serializeTransformModifiers(raw);
   if (modifiers.length === 0) return;
   out.transformModifiers = modifiers;
-  const transforms = repeatTransforms(node.absoluteTransform, node.children, modifiers);
+  // A turned or flipped group's copies are written in its parent's axes (see repeatTransforms).
+  const [[a, c], [b, d]] = (node.relativeTransform as Transform | undefined) ?? [
+    [1, 0, 0],
+    [0, 1, 0],
+  ];
+  const upright = a === 1 && b === 0 && c === 0 && d === 1;
+  const transforms = repeatTransforms(
+    node.absoluteTransform,
+    node.children,
+    modifiers,
+    upright
+      ? undefined
+      : [
+          [a, c, 0],
+          [b, d, 0],
+        ],
+  );
   if (transforms !== undefined && transforms.length > 0) out.repeatTransforms = transforms;
 };
