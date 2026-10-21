@@ -201,6 +201,41 @@ describe('set_vector', () => {
     expect(log).toEqual(['paths=M 0 0 L 10 0 L 10 5']);
   });
 
+  it('keeps the round ends and joins a line had when its paths are redrawn, not a network', async () => {
+    const make = () => {
+      const node: Record<string, unknown> = {
+        id: 'v',
+        type: 'VECTOR',
+        strokeCap: 'ROUND',
+        strokeJoin: 'ROUND',
+        setVectorNetworkAsync: async () => {
+          node.strokeCap = 'NONE';
+          node.strokeJoin = 'MITER';
+        },
+      };
+      // New vertices come back with Figma's defaults.
+      Object.defineProperty(node, 'vectorPaths', {
+        set: () => {
+          node.strokeCap = 'NONE';
+          node.strokeJoin = 'MITER';
+        },
+      });
+      return node;
+    };
+    const paths = make();
+    await createSetVectorHandler(ctxWith({ v: paths }))({
+      nodeId: 'v',
+      vectorPaths: [{ windingRule: 'NONE', data: 'M 0 0 L 9 9' }],
+    });
+    expect(paths).toMatchObject({ strokeCap: 'ROUND', strokeJoin: 'ROUND' });
+    const network = make();
+    await createSetVectorHandler(ctxWith({ v: network }))({
+      nodeId: 'v',
+      vectorNetwork: { vertices: [{ x: 0, y: 0 }], segments: [] },
+    });
+    expect(network).toMatchObject({ strokeCap: 'NONE', strokeJoin: 'MITER' });
+  });
+
   it('refuses what has no path of its own to redraw', async () => {
     const ctx = ctxWith({ t: { id: 't', type: 'TEXT_PATH' }, e: { id: 'e', type: 'ELLIPSE' } });
     const paths = [{ windingRule: 'NONE', data: 'M 0 0 L 1 1' }];
@@ -259,6 +294,18 @@ const leaf = (id: string, rel: Affine, extra: Record<string, unknown> = {}) => {
   return node;
 };
 
+/** A leaf that also reports where it paints: `paint` offset and size from its absolute origin. */
+const painted = (id: string, rel: Affine, paint: [number, number, number, number], extra = {}) => {
+  const node = leaf(id, rel, extra);
+  Object.defineProperty(node, 'absoluteRenderBounds', {
+    get: () => {
+      const t = node.absoluteTransform as Affine;
+      return { x: t[0][2] + paint[0], y: t[1][2] + paint[1], width: paint[2], height: paint[3] };
+    },
+  });
+  return node;
+};
+
 describe('placeOutline', () => {
   it('puts the outline just above its source, at the spot the stroke was drawn', () => {
     const page = container('0:1', 'PAGE', at(0, 0));
@@ -308,6 +355,57 @@ describe('placeOutline', () => {
     const outline = add(page, leaf('O', at(0, -2), { layoutPositioning: 'AUTO' }));
     placeOutline(source as unknown as SceneNode, outline as unknown as SceneNode);
     expect(outline.layoutPositioning).toBe('ABSOLUTE');
+  });
+
+  it('lines the outline’s paint up with the stroke’s, whatever the transform rule left', () => {
+    const page = container('0:1', 'PAGE', at(0, 0));
+    const frame = add(page, container('F', 'FRAME', at(0, 0))) as ReturnType<typeof container>;
+    const source = add(frame, painted('S', at(100, 50), [-20, -5, 60, 30]));
+    // Figma's outline, its transform somewhere the rule above does not account for.
+    const outline = add(page, painted('O', at(7, 3), [0, 0, 60, 30]));
+    placeOutline(source as unknown as SceneNode, outline as unknown as SceneNode);
+    expect((outline.absoluteRenderBounds as Rect).x).toBeCloseTo(80, 6);
+    expect((outline.absoluteRenderBounds as Rect).y).toBeCloseTo(45, 6);
+  });
+
+  it('leaves an outline whose paint is clipped to another size where the rule put it', () => {
+    const page = container('0:1', 'PAGE', at(0, 0));
+    const frame = add(page, container('F', 'FRAME', at(0, 0))) as ReturnType<typeof container>;
+    const source = add(frame, painted('S', at(100, 50), [-20, -5, 30, 30]));
+    const outline = add(page, painted('O', at(7, 3), [0, 0, 60, 30]));
+    placeOutline(source as unknown as SceneNode, outline as unknown as SceneNode);
+    expect(outline.relativeTransform).toEqual(at(7, 3));
+  });
+
+  it('goes beside a group an auto-layout frame lays out, so the group does not grow and move', () => {
+    const page = container('0:1', 'PAGE', at(0, 0));
+    const column = add(
+      page,
+      container('C', 'FRAME', at(0, 0), { layoutMode: 'VERTICAL' }),
+    ) as ReturnType<typeof container>;
+    const outer = add(column, container('G1', 'GROUP', at(0, 0))) as ReturnType<typeof container>;
+    const inner = add(outer, container('G2', 'GROUP', at(0, 0))) as ReturnType<typeof container>;
+    const source = add(inner, leaf('S', at(10, 10)));
+    const outline = add(page, leaf('O', at(0, 0), { layoutPositioning: 'AUTO' }));
+    placeOutline(source as unknown as SceneNode, outline as unknown as SceneNode);
+    expect(column.children.map(c => c.id)).toEqual(['G1', 'O']);
+    expect(inner.children.map(c => c.id)).toEqual(['S']);
+    expect(outline.layoutPositioning).toBe('ABSOLUTE');
+  });
+
+  it('drops the aspect ratio it inherits from the stroke before it joins a layout', () => {
+    const page = container('0:1', 'PAGE', at(0, 0));
+    const row = add(page, container('A', 'FRAME', at(0, 0), { layoutMode: 'HORIZONTAL' }));
+    const source = add(row as ReturnType<typeof container>, leaf('S', at(0, 0)));
+    const log: string[] = [];
+    const outline = add(page, leaf('O', at(0, 0), { targetAspectRatio: { x: 16, y: 1 } }));
+    outline.unlockAspectRatio = () => {
+      log.push(`unlock, in ${String((outline.parent as { id: string }).id)}`);
+      outline.targetAspectRatio = null;
+    };
+    placeOutline(source as unknown as SceneNode, outline as unknown as SceneNode);
+    expect(log).toEqual(['unlock, in 0:1']);
+    expect(outline.targetAspectRatio).toBeNull();
   });
 });
 

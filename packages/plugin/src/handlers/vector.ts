@@ -277,7 +277,16 @@ export const createSetVectorHandler =
           'VECTOR can be redrawn (flatten_nodes turns a shape into one; a text path keeps its path)',
       );
     }
+    // Caps and joins live on the vertices, so new paths come back with Figma's defaults: a round
+    // pen line redrawn would lose its round ends. One value the whole line had goes back on; a
+    // network carries its own per vertex.
+    const cap = node.strokeCap;
+    const join = node.strokeJoin;
     await draw(node, geometry);
+    if ('paths' in geometry) {
+      if (typeof cap === 'string' && node.strokeCap !== cap) node.strokeCap = cap;
+      if (typeof join === 'string' && node.strokeJoin !== join) node.strokeJoin = join;
+    }
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
   };
@@ -308,6 +317,17 @@ const OUTLINE_ABOVE: ReadonlySet<string> = new Set([
   'TRANSFORM_GROUP',
 ]);
 
+/** Whether an auto-layout parent places this node in its flow (and so moves it when it grows). */
+const isLaidOut = (node: SceneNode): boolean => {
+  const parent = node.parent;
+  return (
+    parent !== null &&
+    'layoutMode' in parent &&
+    parent.layoutMode !== 'NONE' &&
+    (node as { layoutPositioning?: string }).layoutPositioning !== 'ABSOLUTE'
+  );
+};
+
 export const placeOutline = (source: SceneNode, outline: SceneNode): void => {
   const from = source.parent;
   const target =
@@ -318,15 +338,51 @@ export const placeOutline = (source: SceneNode, outline: SceneNode): void => {
   for (let p = from; p !== null && p.type !== 'PAGE'; p = p.parent) {
     if (OUTLINE_ABOVE.has(p.type)) anchor = p as SceneNode;
   }
+  // A group fits itself to its children, and an outline is larger than the line it outlines, so it
+  // grows every group it joins; where the outermost of them is laid out by an auto-layout frame,
+  // that frame then moves the whole group — measured: a published drawing shifted 17 px down. The
+  // outline goes beside that group instead, positioned absolutely, and nothing grows.
+  let group: SceneNode | null = null;
+  for (let p = anchor.parent; p !== null && p.type === 'GROUP'; p = p.parent) group = p;
+  if (group !== null && isLaidOut(group)) anchor = group;
   const parent = anchor.parent as (BaseNode & ChildrenMixin) | null;
   if (parent === null) return;
+  // The outline inherits the source's locked aspect ratio, which is not its own: an auto-layout
+  // parent would squash it to that ratio (a 16:1 brush stroke outlined into a 16:1 sliver).
+  if ('targetAspectRatio' in outline && outline.targetAspectRatio !== null) {
+    outline.unlockAspectRatio();
+  }
   parent.insertChild(parent.children.indexOf(anchor) + 1, outline);
   if ('layoutMode' in parent && parent.layoutMode !== 'NONE' && 'layoutPositioning' in outline) {
     outline.layoutPositioning = 'ABSOLUTE';
   }
   const space = childSpaceOf(outline);
   const back = space === null ? null : invert(space);
-  if (back !== null) outline.relativeTransform = compose(back, target) as Transform;
+  if (back === null) return;
+  outline.relativeTransform = compose(back, target) as Transform;
+  alignPaint(source, outline, back);
+};
+
+/**
+ * The outline paints exactly what the stroke did (measured: exports match to 0.06%), so where both
+ * report the same painted size, line the outline's paint up with the stroke's. This settles what
+ * the transform rule above does not cover — measured in a published Draw file, strokes three groups
+ * deep landed up to 193 px off — without needing that rule. Sizes that differ mean one of the two
+ * is clipped by an ancestor, which says nothing about where the paint is; left as placed.
+ */
+const alignPaint = (source: SceneNode, outline: SceneNode, back: Affine): void => {
+  const want = (source as { absoluteRenderBounds?: Rect | null }).absoluteRenderBounds;
+  const got = (outline as { absoluteRenderBounds?: Rect | null }).absoluteRenderBounds;
+  if (want == null || got == null) return;
+  if (Math.abs(want.width - got.width) > 0.5 || Math.abs(want.height - got.height) > 0.5) return;
+  const dx = want.x - got.x;
+  const dy = want.y - got.y;
+  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+  const [[a, c, e], [b, d, f]] = outline.relativeTransform;
+  outline.relativeTransform = [
+    [a, c, e + back[0][0] * dx + back[0][1] * dy],
+    [b, d, f + back[1][0] * dx + back[1][1] * dy],
+  ];
 };
 
 export const createOutlineStrokeHandler =

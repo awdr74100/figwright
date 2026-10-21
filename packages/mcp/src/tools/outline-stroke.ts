@@ -13,8 +13,10 @@ export const outlineStrokeTool: ToolSpec = {
     'point by point (get_vector / set_vector) or exported as plain vector art. It is filled with ' +
     'the stroke’s paints and keeps the node’s opacity, blend mode and effects; the node’s own ' +
     'fills are not part of it. It lands directly above the node, at the same spot — above the ' +
-    'instance, boolean or repeat group holding the node, which cannot take it, and absolutely ' +
-    'positioned in an auto-layout frame so nothing re-flows. The node itself stays; delete_nodes ' +
+    'instance, boolean or repeat group holding the node, which cannot take it, or beside a group ' +
+    'an auto-layout frame lays out, which would grow to fit it and move — and absolutely ' +
+    'positioned in an auto-layout frame so nothing re-flows or moves. The node itself stays; ' +
+    'delete_nodes ' +
     'it to replace it. A scatter brush outlines into thousands of shapes. Returns { ok, nodeId, ' +
     'name, type } for the outline.',
   inputSchema: z.object({
