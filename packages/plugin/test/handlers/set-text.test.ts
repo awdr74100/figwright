@@ -197,3 +197,17 @@ describe('set_text handler', () => {
     await expect(handler({ nodeId: '1:1' })).rejects.toThrow(/characters/);
   });
 });
+
+describe('set_text on text set along a path', () => {
+  it('edits it like a TEXT node', async () => {
+    const fonts = { loaded: false };
+    const node = makeText('1:1', [['Round', 'a']], fonts);
+    // Set in place: spreading the fake would freeze its `characters` getter into a value.
+    (node as { type: string }).type = 'TEXT_PATH';
+    await createSetTextHandler(fakeFigma({ '1:1': node }, fonts))({
+      nodeId: '1:1',
+      characters: 'Round and round',
+    });
+    expect(node.characters).toBe('Round and round');
+  });
+});

@@ -6,6 +6,8 @@ import {
   MIXED,
   SerializedAnnotationSchema,
   SerializedAutoLayoutSchema,
+  SerializedBoundsSchema,
+  SerializedComplexStrokeSchema,
   SerializedComponentPropertySchema,
   SerializedConstraintsSchema,
   SerializedEffectSchema,
@@ -18,10 +20,15 @@ import {
   SerializedMainComponentSchema,
   SerializedPaintSchema,
   SerializedStyleIdsSchema,
+  SerializedTextPathStartSchema,
+  SerializedTransformModifierSchema,
+  SerializedVariableWidthStrokeSchema,
 } from './serialized-node.js';
 import type {
   SerializedAnnotation,
   SerializedAutoLayout,
+  SerializedBounds,
+  SerializedComplexStroke,
   SerializedComponentProperty,
   SerializedConstraints,
   SerializedEffect,
@@ -33,6 +40,9 @@ import type {
   SerializedMainComponent,
   SerializedPaint,
   SerializedStyleIds,
+  SerializedTextPathStart,
+  SerializedTransformModifier,
+  SerializedVariableWidthStroke,
 } from './serialized-node.js';
 
 export const DETAIL_LEVELS = ['minimal', 'compact', 'full'] as const;
@@ -141,6 +151,16 @@ export interface DesignContextNode {
   strokeCap?: string;
   /** Stroke line join (ROUND / BEVEL); omitted at the MITER default. */
   strokeJoin?: string;
+  /** A Figma Draw brush or dynamic stroke — no CSS border draws it; export the node instead. */
+  complexStrokeProperties?: SerializedComplexStroke;
+  /** A stroke whose width varies along its path — likewise export-only. */
+  variableWidthStrokeProperties?: SerializedVariableWidthStroke;
+  /**
+   * The box a Draw stroke, text on a path or a repeat group actually paints into, from its own
+   * top-left (x / y are offsets) — past the node's box, or short of it where a clipping parent cuts
+   * it off. An export of the node covers exactly this box, so the exported asset goes here.
+   */
+  renderBounds?: SerializedBounds;
   effects?: readonly SerializedEffect[];
   // auto-layout / positioning — surfaced to the main grounding tool (not just get_node) so codegen
   // reads exact padding / gap / justify / align instead of inferring them from geometry. H/V carry
@@ -232,6 +252,12 @@ export interface DesignContextNode {
   // inline bold / link / coloured span that the node-level `mixed` markers flag but can't locate.
   // Present only when the node is actually mixed (so uniform text stays clean).
   segments?: readonly DesignContextTextSegment[];
+  /** TEXT_PATH: where along the path the text starts; omitted at the path's very start. */
+  textPathStartData?: SerializedTextPathStart;
+  /** TRANSFORM_GROUP: how a Figma Draw repeat group repeats its content. */
+  transformModifiers?: readonly SerializedTransformModifier[];
+  /** TRANSFORM_GROUP: the CSS transform of each extra copy, in the group's own coordinates. */
+  repeatTransforms?: readonly string[];
   styleIds?: SerializedStyleIds;
   boundVariables?: Readonly<Record<string, readonly string[]>>;
   /**
@@ -371,6 +397,9 @@ export const DesignContextNodeSchema = z.lazy(() =>
     dashPattern: z.array(z.number()).optional(),
     strokeCap: z.string().optional(),
     strokeJoin: z.string().optional(),
+    complexStrokeProperties: SerializedComplexStrokeSchema.optional(),
+    variableWidthStrokeProperties: SerializedVariableWidthStrokeSchema.optional(),
+    renderBounds: SerializedBoundsSchema.optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     layout: SerializedAutoLayoutSchema.optional(),
     layoutSizingHorizontal: z.string().optional(),
@@ -429,6 +458,9 @@ export const DesignContextNodeSchema = z.lazy(() =>
         }),
       )
       .optional(),
+    textPathStartData: SerializedTextPathStartSchema.optional(),
+    transformModifiers: z.array(SerializedTransformModifierSchema).optional(),
+    repeatTransforms: z.array(z.string()).optional(),
     styleIds: SerializedStyleIdsSchema.optional(),
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     variableModes: z.record(z.string(), z.string()).optional(),
@@ -611,6 +643,12 @@ export const LAYOUT_FIELDS = [
   'clipsContent',
   'overflowDirection',
   'numberOfFixedChildren',
+  // How many times a repeat group draws its content, and where — without them a 12-tick dial
+  // reads as one tick, so the element count itself would be wrong, not just its look.
+  'transformModifiers',
+  'repeatTransforms',
+  // The box a Draw stroke or a text path actually paints into: where an exported asset goes.
+  'renderBounds',
 ] as const satisfies readonly (keyof DesignContextNode)[];
 
 /**

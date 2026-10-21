@@ -16,6 +16,7 @@ import { createBindVariableToPaintHandler } from './bind-variable-to-paint.js';
 import { createBooleanNodesHandler } from './boolean-nodes.js';
 import { createCloneNodeHandler } from './clone-node.js';
 import { createCombineAsVariantsHandler } from './combine-as-variants.js';
+import { createSetComplexStrokeHandler } from './complex-stroke.js';
 import { createCreateComponentHandler } from './create-component.js';
 import { createCreateEffectStyleHandler } from './create-effect-style.js';
 import { createCreateEllipseHandler } from './create-ellipse.js';
@@ -80,6 +81,7 @@ import { createRenamePageHandler } from './rename-page.js';
 import { createRenameVariableHandler } from './rename-variable.js';
 import { createReorderNodesHandler } from './reorder-nodes.js';
 import { createReparentNodesHandler } from './reparent-nodes.js';
+import { createRepeatNodesHandler, createSetRepeatHandler } from './repeat.js';
 import { createResizeNodesHandler } from './resize-nodes.js';
 import { createRotateNodesHandler } from './rotate-nodes.js';
 import { createSaveImageFillsHandler } from './save-image-fills.js';
@@ -111,6 +113,7 @@ import { createSetVariableCodeSyntaxHandler } from './set-variable-code-syntax.j
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
 import { createSwapComponentHandler } from './swap-component.js';
+import { createCreateTextPathHandler, createSetTextPathHandler } from './text-path.js';
 import { createUngroupNodesHandler } from './ungroup-nodes.js';
 import { createUpdateEffectStyleHandler } from './update-effect-style.js';
 import { createUpdateFlowsHandler } from './update-flows.js';
@@ -157,6 +160,12 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     set_blend_mode: createSetBlendModeHandler(figmaCtx),
     set_mask: createSetMaskHandler(figmaCtx),
     set_arc: createSetArcHandler(figmaCtx),
+    // Figma Draw
+    repeat_nodes: createRepeatNodesHandler(figmaCtx),
+    set_repeat: createSetRepeatHandler(figmaCtx),
+    create_text_path: createCreateTextPathHandler(figmaCtx),
+    set_text_path: createSetTextPathHandler(figmaCtx),
+    set_complex_stroke: createSetComplexStrokeHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
     lock_nodes: createSetLockedHandler(figmaCtx, true),

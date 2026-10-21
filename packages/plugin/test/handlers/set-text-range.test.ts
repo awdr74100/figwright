@@ -346,3 +346,31 @@ describe('set_text_range handler', () => {
     expect(text.setRangeFills).not.toHaveBeenCalled();
   });
 });
+
+describe('set_text_range on text set along a path', () => {
+  const onPath = () => ({ ...makeText(), type: 'TEXT_PATH' });
+
+  it('styles the runs a path draws', async () => {
+    const text = onPath();
+    await createSetTextRangeHandler(makeFigma(text))({
+      nodeId: text.id,
+      ranges: [{ start: 0, end: 5, fontSize: 20, textCase: 'UPPER' }],
+    });
+    expect(text.setRangeFontSize).toHaveBeenCalledWith(0, 5, 20);
+    expect(text.setRangeTextCase).toHaveBeenCalledWith(0, 5, 'UPPER');
+  });
+
+  it('refuses what a path takes and never draws, naming it, before any range is written', async () => {
+    const text = onPath();
+    await expect(
+      createSetTextRangeHandler(makeFigma(text))({
+        nodeId: text.id,
+        ranges: [
+          { start: 0, end: 5, fontSize: 20 },
+          { start: 0, end: 2, textDecoration: 'UNDERLINE', boundVariables: { lineHeight: 'V:1' } },
+        ],
+      }),
+    ).rejects.toThrow('is text on a path, which does not draw textDecoration, lineHeight');
+    expect(text.setRangeFontSize).not.toHaveBeenCalled();
+  });
+});

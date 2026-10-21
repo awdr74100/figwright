@@ -102,6 +102,14 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.dashPattern !== undefined) out.dashPattern = flat.dashPattern;
   if (flat.strokeCap !== undefined) out.strokeCap = flat.strokeCap;
   if (flat.strokeJoin !== undefined) out.strokeJoin = flat.strokeJoin;
+  // Figma Draw strokes CSS cannot draw, and the box they actually paint into.
+  if (flat.complexStrokeProperties !== undefined) {
+    out.complexStrokeProperties = flat.complexStrokeProperties;
+  }
+  if (flat.variableWidthStrokeProperties !== undefined) {
+    out.variableWidthStrokeProperties = flat.variableWidthStrokeProperties;
+  }
+  if (flat.renderBounds !== undefined) out.renderBounds = flat.renderBounds;
   if (flat.effects !== undefined) out.effects = flat.effects;
   // Auto-layout / positioning — surfaced here (not just get_node) so codegen reads exact padding /
   // gap / justify / align / grid placement instead of inferring them from x/y/w/h geometry.
@@ -212,6 +220,10 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
       return seg;
     });
   }
+  // Figma Draw: where text on a path starts, and how a repeat group repeats its content.
+  if (flat.textPathStartData !== undefined) out.textPathStartData = flat.textPathStartData;
+  if (flat.transformModifiers !== undefined) out.transformModifiers = flat.transformModifiers;
+  if (flat.repeatTransforms !== undefined) out.repeatTransforms = flat.repeatTransforms;
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
   // globalVars dedup in P3.
@@ -484,8 +496,9 @@ const collectTextOverrides = (instance: SceneNode): { name: string; characters: 
   const out: { name: string; characters: string }[] = [];
   const visit = (n: SceneNode): void => {
     if (n.visible === false) return;
-    if (n.type === 'TEXT') {
-      const chars = (n as TextNode).characters;
+    // Text set along a path is per-instance copy too (a badge's wording overrides like a label's).
+    if (n.type === 'TEXT' || n.type === 'TEXT_PATH') {
+      const chars = (n as TextNode | TextPathNode).characters;
       if (chars !== '') out.push({ name: n.name, characters: chars });
       return;
     }

@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { writePaints } from './paints.js';
 
 type Operation = 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE';
 const OPERATIONS = new Set<string>(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']);
@@ -53,7 +54,7 @@ const carryLook = async (source: SceneNode, result: BooleanOperationNode): Promi
   const fillStyle = styleOf(source, 'fillStyleId');
   const fills = (source as Partial<MinimalFillsMixin>).fills;
   if (fillStyle !== null) await result.setFillStyleIdAsync(fillStyle);
-  else if (Array.isArray(fills)) result.fills = fills;
+  else if (Array.isArray(fills)) await writePaints(result, 'fills', fills);
 
   const effectStyle = styleOf(source, 'effectStyleId');
   const effects = (source as Partial<BlendMixin>).effects;

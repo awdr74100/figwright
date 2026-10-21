@@ -20,7 +20,7 @@ const letterSpacing = z
 export const setTextPropertiesTool: ToolSpec = {
   name: SET_TEXT_PROPERTIES_TOOL_NAME,
   description:
-    "Set a TEXT node's typography and layout/overflow properties. Typography: fontName " +
+    "Set a TEXT node's (or text on a path's) typography and layout/overflow properties. Typography: fontName " +
     "({ family, style?, variationSettings? } — variationSettings carries a variable font's axis " +
     'values, e.g. { wght: 650 }), fontSize, lineHeight, letterSpacing, textCase, textDecoration, ' +
     'paragraphSpacing / paragraphIndent (px between / indenting the paragraphs the text splits ' +
@@ -31,7 +31,10 @@ export const setTextPropertiesTool: ToolSpec = {
     'text sits in a box taller than it — it only shows with a fixed height, textAutoResize NONE ' +
     'or WIDTH_AND_HEIGHT hugging leaves no slack). Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
     'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
-    'textTruncation is ENDING. Returns { ok, nodeId }.',
+    'textTruncation is ENDING. Text on a path (TEXT_PATH) takes fontName, fontSize, ' +
+    'letterSpacing, textCase and the two alignments — on a path textAlignHorizontal anchors the ' +
+    'text at its start point and textAlignVertical picks the side of the path; the line, ' +
+    'paragraph, decoration and box fields are refused there. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id'),
     // Typography (font load happens automatically when any of these is set)

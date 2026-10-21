@@ -2,11 +2,12 @@ import type { BatchNodeResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { replaceRange } from './text-edit.js';
+import type { TextLike } from './text-like.js';
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Load every font used by a (possibly mixed) text node so its characters can be mutated. */
-const loadAllFonts = async (figmaCtx: typeof figma, text: TextNode): Promise<void> => {
+const loadAllFonts = async (figmaCtx: typeof figma, text: TextLike): Promise<void> => {
   const fonts =
     text.fontName === figmaCtx.mixed && text.characters.length > 0
       ? text.getRangeAllFontNames(0, text.characters.length)
@@ -15,7 +16,7 @@ const loadAllFonts = async (figmaCtx: typeof figma, text: TextNode): Promise<voi
 };
 
 export interface FindReplacePlan {
-  matches: TextNode[];
+  matches: TextLike[];
   find: string;
   replace: string;
   caseSensitive: boolean;
@@ -55,6 +56,10 @@ export const findReplacePlan = async (
 
   const caseSensitive = p.caseSensitive === true;
   const needle = caseSensitive ? p.find : p.find.toLowerCase();
+  // TEXT only. Text set along a path is not searched: findAllWithCriteria refuses TEXT_PATH as a
+  // type, and finding one any other way is a walk of the whole scope — measured several times the
+  // native search even on a small page, and seconds on a large one, paid by every call for a rare
+  // node. scan_text_nodes lists them (it walks anyway); set_text edits one.
   const textNodes = (
     root as unknown as { findAllWithCriteria: (c: { types: ['TEXT'] }) => TextNode[] }
   ).findAllWithCriteria({ types: ['TEXT'] });

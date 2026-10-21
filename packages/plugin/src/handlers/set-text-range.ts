@@ -3,6 +3,7 @@ import type { MutateResult, SerializedLineHeight, SerializedPaint } from '@figwr
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
+import { isTextLike, NOT_ON_A_PATH, unsupportedOnPath } from './text-like.js';
 
 interface RangeInput {
   start: number;
@@ -44,13 +45,34 @@ export const createSetTextRangeHandler =
     }
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-    if (node === null || node.type !== 'TEXT') {
-      throw new Error(`set_text_range: node ${p.nodeId} is not a TEXT node`);
+    if (!isTextLike(node)) {
+      throw new Error(`set_text_range: node ${p.nodeId} is not a TEXT node or text on a path`);
     }
-    const text = node as TextNode;
-    const len = text.characters.length;
+    const len = node.characters.length;
 
     const ranges = p.ranges as RangeInput[];
+    // Text on a path accepts these per run and never draws them (measured), so they are refused up
+    // front instead of answering ok for a change nobody will see.
+    if (node.type === 'TEXT_PATH') {
+      const missing = new Set<string>();
+      for (const r of ranges) {
+        for (const field of unsupportedOnPath(r as unknown as Record<string, unknown>)) {
+          missing.add(field);
+        }
+        for (const field of Object.keys(r.boundVariables ?? {})) {
+          if (NOT_ON_A_PATH.has(field)) missing.add(field);
+        }
+      }
+      if (missing.size > 0) {
+        throw new Error(
+          `set_text_range: ${p.nodeId} is text on a path, which does not draw ` +
+            `${[...missing].join(', ')}`,
+        );
+      }
+    }
+    // Every per-run setter used below exists on both node types; the ones a path lacks were
+    // refused above.
+    const text = node as TextNode;
     // Validate every range up front so a bad range fails before any partial mutation.
     for (const r of ranges) {
       if (typeof r.start !== 'number' || typeof r.end !== 'number') {

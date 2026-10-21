@@ -9,6 +9,8 @@ import {
   same,
   type TextSnapshot,
 } from './batch-snapshot.js';
+import { writePaints } from './paints.js';
+import { isTextLike } from './text-like.js';
 
 /**
  * Instance override guard.
@@ -202,7 +204,7 @@ const captureEntry = async (
   const entry: Entry = { id: override.id, fields: [], values: {}, text: null, bindings: {} };
   for (const raw of override.fields) {
     const field = SPELLING[raw] ?? raw;
-    if (node.type === 'TEXT' && TEXT_FIELDS.has(field)) {
+    if (isTextLike(node) && TEXT_FIELDS.has(field)) {
       // eslint-disable-next-line no-await-in-loop -- once per node: the first text field captures it
       if (entry.text === null) entry.text = await captureText(figmaCtx, node);
       if (field !== 'characters' && field !== 'styledTextSegments')
@@ -300,7 +302,7 @@ const reswap = async (
  */
 const reapply = async (figmaCtx: typeof figma, node: BaseNode, entry: Entry): Promise<void> => {
   const bag = node as unknown as Record<string, unknown>;
-  if (entry.text !== null && node.type === 'TEXT') {
+  if (entry.text !== null && isTextLike(node)) {
     if (entry.fields.includes('styledTextSegments')) {
       await restoreText(figmaCtx, node, entry.text);
     } else {
@@ -338,6 +340,9 @@ const reapply = async (figmaCtx: typeof figma, node: BaseNode, entry: Entry): Pr
       if (Object.keys(changed).length > 0) node.setProperties(changed);
     } else if (field === 'reactions') {
       await (node as ReactionMixin).setReactionsAsync(entry.values.reactions as Reaction[]);
+    } else if ((field === 'fills' || field === 'strokes') && Array.isArray(entry.values[field])) {
+      // Through the helper: a paint list holding a PATTERN refuses the synchronous setter.
+      await writePaints(node, field, entry.values[field] as Paint[]);
     } else if (restorable(entry.values[field])) {
       bag[field] = entry.values[field];
     }

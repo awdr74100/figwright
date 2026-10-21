@@ -13,6 +13,7 @@ import { SEGMENT_FIELDS, TEXT_RESTORED_FIELDS } from '../../src/handlers/batch-s
 import { createBatchHandler } from '../../src/handlers/batch.js';
 import { createBindVariableToNodeHandler } from '../../src/handlers/bind-variable-to-node.js';
 import { createCombineAsVariantsHandler } from '../../src/handlers/combine-as-variants.js';
+import { createSetComplexStrokeHandler } from '../../src/handlers/complex-stroke.js';
 import { createCreateComponentHandler } from '../../src/handlers/create-component.js';
 import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createCreatePaintStyleHandler } from '../../src/handlers/create-paint-style.js';
@@ -26,6 +27,7 @@ import { createRenameNodeHandler } from '../../src/handlers/rename-node.js';
 import { createRenameVariableHandler } from '../../src/handlers/rename-variable.js';
 import { createReorderNodesHandler } from '../../src/handlers/reorder-nodes.js';
 import { createReparentNodesHandler } from '../../src/handlers/reparent-nodes.js';
+import { createRepeatNodesHandler, createSetRepeatHandler } from '../../src/handlers/repeat.js';
 import { createSetAutoLayoutHandler } from '../../src/handlers/set-auto-layout.js';
 import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
@@ -41,6 +43,7 @@ import { createSetVariableCodeSyntaxHandler } from '../../src/handlers/set-varia
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';
 import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
 import { createSwapComponentHandler } from '../../src/handlers/swap-component.js';
+import { createSetTextPathHandler } from '../../src/handlers/text-path.js';
 import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
@@ -1675,7 +1678,9 @@ const makeTree = () => {
     if (parent.type === 'COMPONENT_SET')
       child.name = `Component/${String(child.name).split('=')[1]}`;
     if (
-      (parent.type === 'GROUP' || parent.type === 'COMPONENT_SET') &&
+      (parent.type === 'GROUP' ||
+        parent.type === 'TRANSFORM_GROUP' ||
+        parent.type === 'COMPONENT_SET') &&
       parent.children!.length === 0
     ) {
       parent.removed = true;
@@ -1717,7 +1722,7 @@ const makeTree = () => {
       },
       ...extra,
     };
-    if (['FRAME', 'GROUP', 'PAGE', 'COMPONENT_SET'].includes(type)) {
+    if (['FRAME', 'GROUP', 'TRANSFORM_GROUP', 'PAGE', 'COMPONENT_SET'].includes(type)) {
       n.children = [];
       n.layoutMode ??= 'NONE';
       n.insertChild = (i: number, c: TreeNode) => place(n, c, i);
@@ -1734,6 +1739,12 @@ const makeTree = () => {
     variables: { getVariableByIdAsync: async (id: string) => ({ id }) },
     group: (nodes: TreeNode[], parent: TreeNode) => {
       const g = node(`G:${(seq += 1)}`, 'GROUP', parent);
+      for (const n of nodes) place(g, n, g.children!.length);
+      return g;
+    },
+    transformGroup: (nodes: TreeNode[], parent: TreeNode, index: number, modifiers: unknown) => {
+      const g = node(`R:${(seq += 1)}`, 'TRANSFORM_GROUP', null, { transformModifiers: modifiers });
+      place(parent, g, index);
       for (const n of nodes) place(g, n, g.children!.length);
       return g;
     },
@@ -2409,5 +2420,209 @@ describe('batch inverse for update_flows', () => {
       }),
     ).rejects.toThrow(/batch\/update_flows: A is not a page/);
     expect(page.flowStartingPoints).toEqual(before);
+  });
+});
+
+describe('batch inverses for Figma Draw', () => {
+  it('undoes repeat_nodes like group_nodes: content back in place, the repeat group gone', async () => {
+    const { node, store, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const p = node('P', 'FRAME', page);
+    node('a', 'RECTANGLE', p);
+    node('b', 'RECTANGLE', p);
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const handler = createBatchHandler(figmaCtx, {
+      repeat_nodes: createRepeatNodesHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'repeat_nodes',
+            params: { nodeIds: ['a'], modifiers: [{ repeatType: 'RADIAL', count: 8, offset: 50 }] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(ids(p)).toEqual(['a', 'b']);
+    expect([...store.keys()].filter(k => k.startsWith('R:'))).toEqual([]);
+  });
+
+  it('refuses moving the last child out of a repeat group, which Figma then deletes', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const repeat = node('R', 'TRANSFORM_GROUP', page);
+    node('only', 'RECTANGLE', repeat);
+    node('T', 'FRAME', page);
+    const handler = createBatchHandler(figmaCtx, {
+      reparent_nodes: createReparentNodesHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'reparent_nodes', params: { nodeIds: ['only'], newParentId: 'T' } }],
+      }),
+    ).rejects.toThrow(/would empty TRANSFORM_GROUP R/);
+    expect(ids(repeat)).toEqual(['only']);
+  });
+
+  it('puts back a repeat group’s modifiers and a text path’s start', async () => {
+    const modifiers = [
+      {
+        type: 'REPEAT',
+        repeatType: 'LINEAR',
+        axis: 'HORIZONTAL',
+        unitType: 'PIXELS',
+        offset: 4,
+        count: 3,
+      },
+    ];
+    const { figmaCtx, store } = makeFigma({
+      R: { id: 'R', type: 'TRANSFORM_GROUP', transformModifiers: modifiers },
+      T: {
+        id: 'T',
+        type: 'TEXT_PATH',
+        textPathStartData: { segment: 1, position: 0.25 },
+        vectorNetwork: { segments: [{}, {}, {}, {}] },
+      },
+      F: { id: 'F', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      set_repeat: createSetRepeatHandler(figmaCtx),
+      set_text_path: createSetTextPathHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_repeat', params: { nodeId: 'R', modifiers: [] } },
+          { tool: 'set_text_path', params: { nodeId: 'T', startSegment: 3, startPosition: 0 } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2/);
+    expect(store.get('R')!.transformModifiers).toEqual(modifiers);
+    expect(store.get('T')!.textPathStartData).toEqual({ segment: 1, position: 0.25 });
+  });
+
+  const stroked = (complex: unknown, widths: unknown) => {
+    const { figmaCtx, store } = makeFigma({
+      V: {
+        id: 'V',
+        type: 'VECTOR',
+        strokes: [{ type: 'SOLID', visible: true, color: { r: 0, g: 0, b: 0 } }],
+        complexStrokeProperties: complex,
+        variableWidthStrokeProperties: widths,
+      },
+      F: { id: 'F', fills: [] },
+    });
+    const loadBrushesAsync = vi.fn<(kind: string) => Promise<void>>(async () => {});
+    (figmaCtx as unknown as { loadBrushesAsync: unknown }).loadBrushesAsync = loadBrushesAsync;
+    const handler = createBatchHandler(figmaCtx, {
+      set_complex_stroke: createSetComplexStrokeHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    return { store, handler, loadBrushesAsync };
+  };
+
+  it('puts a brush and a preset width profile back — the brush loaded at capture, the preset by name', async () => {
+    const brush = { type: 'BRUSH', brushType: 'STRETCH', brushName: 'NOIR', direction: 'FORWARD' };
+    const taper = {
+      widthProfile: 'TAPER',
+      variableWidthPoints: [
+        { position: 0, width: 0.5 },
+        { position: 1, width: 0.1875 },
+      ],
+    };
+    const t = stroked(brush, taper);
+    await expect(
+      t.handler({
+        ops: [
+          {
+            tool: 'set_complex_stroke',
+            params: {
+              nodeId: 'V',
+              complexStrokeProperties: { type: 'DYNAMIC', frequency: 3 },
+              variableWidthStrokeProperties: { widthProfile: 'EYE' },
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(t.loadBrushesAsync).toHaveBeenCalledWith('STRETCH');
+    expect(t.store.get('V')!.complexStrokeProperties).toEqual(brush);
+    // Written back as the preset alone: the setter refuses a preset handed its own points.
+    expect(t.store.get('V')!.variableWidthStrokeProperties).toEqual({ widthProfile: 'TAPER' });
+  });
+
+  it('refuses a node with a custom brush, which the plugin API cannot set back', async () => {
+    const t = stroked(
+      { type: 'BRUSH', brushType: 'SCATTER', brushName: 'CUSTOM' },
+      { widthProfile: 'UNIFORM', variableWidthPoints: [] },
+    );
+    await expect(
+      t.handler({
+        ops: [
+          {
+            tool: 'set_complex_stroke',
+            params: { nodeId: 'V', complexStrokeProperties: { type: 'BASIC' } },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/has a custom brush, which the plugin API cannot set back/);
+    expect(t.store.get('V')!.complexStrokeProperties).toEqual({
+      type: 'BRUSH',
+      brushType: 'SCATTER',
+      brushName: 'CUSTOM',
+    });
+  });
+
+  it('puts a pattern fill back through the async setter, the only one Figma lets take it', async () => {
+    const pattern = {
+      type: 'PATTERN',
+      sourceNodeId: 'S',
+      tileType: 'RECTANGULAR',
+      scalingFactor: 1,
+    };
+    let fills: unknown[] = [pattern, SOLID(1)];
+    const node: Record<string, unknown> = { id: 'N', type: 'RECTANGLE' };
+    Object.defineProperty(node, 'fills', {
+      get: () => fills,
+      set: (v: unknown[]) => {
+        // Figma's synchronous setter refuses a PATTERN paint, even one read back unchanged.
+        if (v.some(p => (p as { type?: unknown }).type === 'PATTERN')) {
+          throw new Error('in set_fills: Expected [0].type to be one of SOLID, …');
+        }
+        fills = v;
+      },
+      enumerable: true,
+    });
+    node.setFillsAsync = vi.fn<(v: unknown[]) => Promise<void>>(async v => {
+      fills = v;
+    });
+    const { figmaCtx } = makeFigma({ N: node, F: { id: 'F', fills: [] } });
+    const handler = createBatchHandler(figmaCtx, { set_fills: createSetFillsHandler(figmaCtx) });
+    await expect(
+      handler({ ops: [{ tool: 'set_fills', params: { nodeId: 'N', fills: [SOLID(0)] } }, FAIL] }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(fills).toEqual([pattern, SOLID(1)]);
+  });
+
+  it('refuses create_text_path, whose source cannot come back under its id', async () => {
+    const { figmaCtx } = makeFigma({});
+    await expect(
+      createBatchHandler(
+        figmaCtx,
+        {},
+      )({
+        ops: [{ tool: 'create_text_path', params: { nodeId: 'E', characters: 'x' } }],
+      }),
+    ).rejects.toThrow(
+      /'create_text_path' \(index 0\) is not batchable — the source shape is consumed/,
+    );
   });
 });

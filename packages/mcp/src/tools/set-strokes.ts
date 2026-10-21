@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { paintItemSchema } from './paint-schema.js';
+import { fillPaintItemSchema } from './paint-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SET_STROKES_TOOL_NAME = 'set_strokes';
@@ -8,15 +8,16 @@ export const SET_STROKES_TOOL_NAME = 'set_strokes';
 export const setStrokesTool: ToolSpec = {
   name: SET_STROKES_TOOL_NAME,
   description:
-    "Set a node's strokes (SOLID or gradient paints, same shape as set_fills) plus optional " +
+    "Set a node's strokes (SOLID, gradient or PATTERN paints, same shape as set_fills) plus optional " +
     'strokeWeight, strokeAlign (INSIDE / OUTSIDE / CENTER), dashPattern (dashes), and per-side ' +
     'weights (strokeTopWeight / strokeRightWeight / strokeBottomWeight / strokeLeftWeight — for ' +
     'nodes that support individual stroke weights, e.g. a border-bottom-only divider). A per-side ' +
     'weight overrides strokeWeight for that side. Any field may be omitted to leave it unchanged. ' +
+    'Brushes, dynamic strokes and width profiles are set_complex_stroke. ' +
     'Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Figma node id'),
-    strokes: z.array(paintItemSchema).describe('Stroke paints'),
+    strokes: z.array(fillPaintItemSchema).describe('Stroke paints'),
     strokeWeight: z.number().min(0).optional().describe('Uniform stroke thickness in px'),
     strokeAlign: z
       .enum(['INSIDE', 'OUTSIDE', 'CENTER'])

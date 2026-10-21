@@ -223,12 +223,58 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   scaled image differs by between the two renderers, where `object-fit: cover` was 97–100% off.
   When `cssTransform` is absent, the crop can't be expressed this way (a rotated crop on a paint style
   with no size): export the composited render instead.
-- **Pattern fills.** A `PATTERN` fill tiles a source node (`sourceNodeId`) across the element — it is
-  **not** a flat colour. Export that tile with `get_screenshot` on `sourceNodeId`, then: for
-  `tileType: RECTANGULAR`, use `background-image` + `background-repeat: repeat` with a
-  `background-size` derived from `scalingFactor` (and gaps from `spacing`); for the hexagonal tile
-  types (`HORIZONTAL_HEXAGONAL` / `VERTICAL_HEXAGONAL`), use an SVG `<pattern>` with offset rows.
-  Don't flatten it to a solid colour.
+- **Pattern fills.** A `PATTERN` fill tiles a source layer (`sourceNodeId`) across the element — it is
+  **not** a flat colour. Export that layer as the tile (`save_screenshots` on `sourceNodeId`), then
+  with the tile size **t** = the source's size × `scalingFactor` and the period **p** = t × (1 +
+  `spacing`) per axis:
+  - `background-image` the tile in a **p**-sized cell, tile at the cell's top-left (with no
+    `spacing` the cell is the tile itself); `background-size: p`; `background-repeat: repeat`.
+  - `background-position`: `horizontalAlignment` START → `0`, CENTER → `(box − t) / 2`, END →
+    `box − t`, and the same for `verticalAlignment` on y (absent = START). Compute it from **t**,
+    not **p**: the CSS `center` keyword centres the whole cell, which is wrong as soon as there is
+    spacing (measured 90% off).
+  - `HORIZONTAL_HEXAGONAL`: the cell is one period wide and two tall, the second row's tile shifted
+    half a period (draw it at +p/2 and −p/2 so the cell tiles cleanly). `VERTICAL_HEXAGONAL`: two
+    periods wide, the second column shifted half a period (at +p/2 and −p/2 on y).
+  - A negative `spacing` makes tiles overlap: draw the cell as an SVG that lets them.
+
+  Rendered against Figma, this matched on every combination tried (scaling, spacing, each
+  alignment, both hexagonal layouts): 0–2.75% of alpha, all of it antialiasing, no pixel visibly
+  off — where drawing a hexagonal pattern as a plain grid was 60% off. Don't flatten it to a solid
+  colour.
+
+- **Repeat groups (`TRANSFORM_GROUP`).** A Figma Draw repeat group draws its content — its
+  children — several times: a dial's ticks, a row of dots, petals round a centre. Without the
+  repeat, a 12-tick dial is one tick. The node carries `transformModifiers` (how it repeats) and
+  `repeatTransforms`: one CSS transform per **extra** copy, in the group's own coordinates. Draw the
+  content once as it sits in the group, then once more per entry inside a box the group's size at
+  its top-left, `transform-origin: 0 0`, `transform: <entry>` verbatim. Measured against Figma:
+  within 1.4% of alpha, the same as Figma's own SVG export rendered in the browser, where reading a
+  RADIAL `offset` as a radius (as the plugin docs describe it) was 88% off — it is the circle's
+  diameter. Place the content inside that box with `transform: translate()` rather than fractional
+  `left` / `top`: the browser snaps those to whole pixels (up to 13% off on a 6 px tick). A group
+  whose modifiers are all LINEAR is also a plain flex row / column, `gap` = the step between copies
+  minus the content's size along that axis. `repeatTransforms` is left out past 100 copies — then
+  export the group, as you would anyway when it is decorative art. Copies that step backwards (a
+  negative offset) are drawn outside the group's box.
+- **Brush, dynamic and width-profile strokes.** A node carrying `complexStrokeProperties` (a
+  textured STRETCH or SCATTER brush, or a DYNAMIC hand-drawn wobble) or
+  `variableWidthStrokeProperties` (a stroke that thickens and thins along its path) has a stroke no
+  CSS border can draw, and none of them draws a dash pattern. Export the node: a dynamic or
+  width-profile stroke exports as one small SVG path (0.5 KB measured), a brush as a textured one
+  that is far smaller as PNG at 2× (a scatter stroke: 21 KB as PNG, 189 KB as SVG). On a frame whose
+  children are live content, a plain `border` is only an approximation of such a stroke — say so.
+- **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
+  `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
+  own top-left. An export of the node covers exactly that box, so put the exported asset there, not
+  at `width` / `height` (a dynamic stroke on a 23 px-tall path paints 86 px tall). It can also be
+  smaller than the node, where a clipping parent cuts the paint off — the export is cut the same way.
+- **Text on a path (`TEXT_PATH`).** Lettering set along a curve — round a badge, along a wave. It
+  carries the run-level half of a TEXT node's typography (`characters`, font, size, `textCase`,
+  `letterSpacing`, fills, `segments` when mixed) and none of the box-level half (no line height,
+  decoration or auto-resize). Export it — the glyphs come out outlined, so it renders exactly — and
+  give the image `characters` as its accessible name (`aria-label` / `<title>`), placed at
+  `renderBounds`.
 - **Shader fills & effects.** A `SHADER` fill, stroke or effect is procedural — there is no CSS for it,
   so its pixels ship as the composited render (`get_screenshot` on the node), never as a guessed
   gradient or colour. It carries `shaderId` and `shaderProperties` (`{ name, type, value }`, colours

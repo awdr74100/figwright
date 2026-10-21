@@ -21,6 +21,9 @@
  * only what differs from the snapshot, in an order that keeps every write valid.
  */
 
+import { writePaints } from './paints.js';
+import type { TextLike } from './text-like.js';
+
 type Bag = Record<string, unknown>;
 
 const bagOf = (node: unknown): Bag => node as Bag;
@@ -201,7 +204,15 @@ export const captureProps = async (
 
 export const restoreProps = async (node: BaseNode, snapshot: PropsSnapshot): Promise<void> => {
   unbindAdded(node, snapshot.bindings);
-  for (const [prop, value] of Object.entries(snapshot.values)) writeIfDifferent(node, prop, value);
+  for (const [prop, value] of Object.entries(snapshot.values)) {
+    // A paint list holding a PATTERN can only go back through the async setter (see writePaints).
+    if ((prop === 'fills' || prop === 'strokes') && hasPattern(value)) {
+      // eslint-disable-next-line no-await-in-loop -- at most the two paint lists, in snapshot order
+      if (!same(bagOf(node)[prop], value)) await writePaints(node, prop, value as Paint[]);
+    } else {
+      writeIfDifferent(node, prop, value);
+    }
+  }
   await restoreStyleLinks(node, snapshot.styles);
   rebind(node, snapshot.bindings);
 };
@@ -275,7 +286,7 @@ const TEXT_BINDABLE_FIELDS: readonly VariableBindableTextField[] = [
   'paragraphIndent',
 ];
 
-const nodeBoundText = (text: TextNode): string[] => {
+const nodeBoundText = (text: TextLike): string[] => {
   const bound = (text as { boundVariables?: Record<string, unknown> }).boundVariables ?? {};
   return TEXT_BINDABLE_FIELDS.filter(f => bound[f] !== undefined);
 };
@@ -305,7 +316,7 @@ export interface TextSnapshot {
   variables: Record<string, Variable>;
 }
 
-const fontsOf = (figmaCtx: typeof figma, text: TextNode): FontName[] =>
+const fontsOf = (figmaCtx: typeof figma, text: TextLike): FontName[] =>
   text.fontName === figmaCtx.mixed && text.characters.length > 0
     ? [...text.getRangeAllFontNames(0, text.characters.length)]
     : [text.fontName as FontName];
@@ -321,7 +332,7 @@ export const loadFonts = async (
 
 export const captureText = async (
   figmaCtx: typeof figma,
-  text: TextNode,
+  text: TextLike,
 ): Promise<TextSnapshot> => {
   const bag = bagOf(text);
   const node: Bag = {};
@@ -330,7 +341,7 @@ export const captureText = async (
   if (text.characters.length === 0) for (const k of EMPTY_TEXT_PROPS) empty[k] = bag[k];
   const segments =
     text.characters.length > 0
-      ? (text.getStyledTextSegments([...SEGMENT_FIELDS]) as unknown as Segment[])
+      ? ((text as TextNode).getStyledTextSegments([...SEGMENT_FIELDS]) as unknown as Segment[])
       : [];
   // The runs' variables are resolved and their faces loaded HERE, so the restore needs neither
   // call: both are async Figma work that can stall or fail long after the ops have been applied.
@@ -363,30 +374,34 @@ export const captureText = async (
   };
 };
 
-type RangeWriter = (t: TextNode, s: number, e: number, v: never) => void;
-
-/** Raw per-run setters, in the order they are replayed. Null-valued decoration fields are skipped. */
-const RANGE_WRITERS: readonly (readonly [string, RangeWriter])[] = [
-  ['fontName', (t, s, e, v) => t.setRangeFontName(s, e, v)],
-  ['fontSize', (t, s, e, v) => t.setRangeFontSize(s, e, v)],
-  ['textCase', (t, s, e, v) => t.setRangeTextCase(s, e, v)],
-  ['textDecoration', (t, s, e, v) => t.setRangeTextDecoration(s, e, v)],
-  ['textDecorationStyle', (t, s, e, v) => t.setRangeTextDecorationStyle(s, e, v)],
-  ['textDecorationOffset', (t, s, e, v) => t.setRangeTextDecorationOffset(s, e, v)],
-  ['textDecorationThickness', (t, s, e, v) => t.setRangeTextDecorationThickness(s, e, v)],
-  ['textDecorationColor', (t, s, e, v) => t.setRangeTextDecorationColor(s, e, v)],
-  ['textDecorationSkipInk', (t, s, e, v) => t.setRangeTextDecorationSkipInk(s, e, v)],
-  ['lineHeight', (t, s, e, v) => t.setRangeLineHeight(s, e, v)],
-  ['letterSpacing', (t, s, e, v) => t.setRangeLetterSpacing(s, e, v)],
-  ['fills', (t, s, e, v) => t.setRangeFills(s, e, v)],
-  ['listOptions', (t, s, e, v) => t.setRangeListOptions(s, e, v)],
-  ['listSpacing', (t, s, e, v) => t.setRangeListSpacing(s, e, v)],
-  ['indentation', (t, s, e, v) => t.setRangeIndentation(s, e, v)],
-  ['paragraphIndent', (t, s, e, v) => t.setRangeParagraphIndent(s, e, v)],
-  ['paragraphSpacing', (t, s, e, v) => t.setRangeParagraphSpacing(s, e, v)],
-  ['textWrapStyle', (t, s, e, v) => t.setRangeTextWrapStyle(s, e, v)],
-  ['hyperlink', (t, s, e, v) => t.setRangeHyperlink(s, e, v)],
+/**
+ * Per-run fields and the setter that writes each, in the order they are replayed. Called by name:
+ * text on a path lacks some of them, and a setter it lacks is a field it never draws.
+ */
+const RANGE_WRITERS: readonly (readonly [string, string])[] = [
+  ['fontName', 'setRangeFontName'],
+  ['fontSize', 'setRangeFontSize'],
+  ['textCase', 'setRangeTextCase'],
+  ['textDecoration', 'setRangeTextDecoration'],
+  ['textDecorationStyle', 'setRangeTextDecorationStyle'],
+  ['textDecorationOffset', 'setRangeTextDecorationOffset'],
+  ['textDecorationThickness', 'setRangeTextDecorationThickness'],
+  ['textDecorationColor', 'setRangeTextDecorationColor'],
+  ['textDecorationSkipInk', 'setRangeTextDecorationSkipInk'],
+  ['lineHeight', 'setRangeLineHeight'],
+  ['letterSpacing', 'setRangeLetterSpacing'],
+  ['fills', 'setRangeFills'],
+  ['listOptions', 'setRangeListOptions'],
+  ['listSpacing', 'setRangeListSpacing'],
+  ['indentation', 'setRangeIndentation'],
+  ['paragraphIndent', 'setRangeParagraphIndent'],
+  ['paragraphSpacing', 'setRangeParagraphSpacing'],
+  ['textWrapStyle', 'setRangeTextWrapStyle'],
+  ['hyperlink', 'setRangeHyperlink'],
 ];
+
+const hasPattern = (paints: unknown): boolean =>
+  Array.isArray(paints) && paints.some(p => (p as { type?: unknown } | null)?.type === 'PATTERN');
 
 /** Decoration details that read null while the run has no decoration — nothing to write then. */
 const NULLABLE_DETAILS = new Set([
@@ -415,7 +430,7 @@ const perChar = (
  */
 export const restoreText = async (
   figmaCtx: typeof figma,
-  text: TextNode,
+  text: TextLike,
   snapshot: TextSnapshot,
 ): Promise<string | undefined> => {
   // The snapshot's faces were loaded at capture; the node's current ones may be faces the op
@@ -427,13 +442,46 @@ export const restoreText = async (
   if (snapshot.segments.length === 0) {
     for (const [k, v] of Object.entries(snapshot.empty)) writeIfDifferent(text, k, v);
   }
+  // No per-run setter takes a PATTERN paint (measured — setRangeFills refuses it), so patterned
+  // runs go back as the node's fill first, and every other run's own fills then overwrite theirs.
+  // Figma only ever lays a pattern on text node-wide, so patterned runs share one paint list unless
+  // the text was restyled run by run since; then only the first can be put back.
+  const patterned = snapshot.segments.filter(seg => hasPattern(seg.fills));
+  let patternNote: string | undefined;
+  if (patterned.length > 0) {
+    await text.setFillsAsync(patterned[0]!.fills as Paint[]);
+    if (patterned.some(seg => !same(seg.fills, patterned[0]!.fills))) {
+      patternNote = `text ${text.id} had runs with different pattern fills; only the first was put back`;
+    }
+  }
+  const bag = text as unknown as Bag;
   for (const seg of snapshot.segments) {
-    for (const [field, write] of RANGE_WRITERS) {
+    for (const [field, setter] of RANGE_WRITERS) {
       const value = seg[field];
       // A decoration detail reads null while it does not apply; a null hyperlink is "no link" and
       // must be written — rewriting the characters spreads the first run's link to every run.
       if (value === undefined || (value === null && NULLABLE_DETAILS.has(field))) continue;
-      write(text, seg.start, seg.end, value as never);
+      if (field === 'fills' && hasPattern(value)) continue;
+      const write = bag[setter];
+      if (typeof write !== 'function') continue;
+      // On a path, a run field written back unchanged becomes an override of its own — an instance
+      // sublayer gained a `hyperlink` mark from a null written over null (measured) — where on TEXT
+      // it is part of the run styling the restore is reproducing. So a path skips what is already
+      // so, read the way the snapshot was (getRangeHyperlink reads a path's link unreliably).
+      if (text.type === 'TEXT_PATH') {
+        const current = (text as unknown as TextNode).getStyledTextSegments(
+          [field as (typeof SEGMENT_FIELDS)[number]],
+          seg.start,
+          seg.end,
+        ) as unknown as Bag[];
+        if (current.length === 1 && same(current[0]![field], value)) continue;
+      }
+      (write as (start: number, end: number, value: unknown) => void).call(
+        text,
+        seg.start,
+        seg.end,
+        value,
+      );
     }
   }
   // A node-level text binding is recorded apart from the runs it drives: writing every run's raw
@@ -478,7 +526,7 @@ export const restoreText = async (
   }
   for (const k of TEXT_NODE_PROPS) writeIfDifferent(text, k, snapshot.node[k]);
 
-  if (snapshot.segments.length === 0) return undefined;
+  if (snapshot.segments.length === 0) return patternNote;
   // Compared per character: the snapshot's runs split on every field, a fresh read on one, so
   // run boundaries alone would differ even when every character's features match.
   const drifted = !same(
@@ -487,7 +535,7 @@ export const restoreText = async (
   );
   return drifted
     ? `text ${text.id} keeps changed OpenType features (Figma exposes no setter to restore them)`
-    : undefined;
+    : patternNote;
 };
 
 // ── Geometry & placement ─────────────────────────────────────────────────────
@@ -502,9 +550,13 @@ const inFlow = (node: SceneNode): boolean => {
   );
 };
 
-/** A GROUP / BOOLEAN_OPERATION's box is derived from its children; it is never written directly. */
+/**
+ * A GROUP / BOOLEAN_OPERATION / repeat group's box is derived from its children; it is never
+ * written directly. Resizing a repeat group rescales its content, and resizing it back does not
+ * (measured: 20 → 100 → 33.3 px), so its children are what goes back.
+ */
 const derivedBox = (node: BaseNode): boolean =>
-  node.type === 'GROUP' || node.type === 'BOOLEAN_OPERATION';
+  node.type === 'GROUP' || node.type === 'BOOLEAN_OPERATION' || node.type === 'TRANSFORM_GROUP';
 
 const MIN_MAX = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'] as const;
 /** The primitives `layoutSizingHorizontal/Vertical` are shorthand for — written directly. */

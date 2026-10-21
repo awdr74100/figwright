@@ -1,4 +1,5 @@
 import { SEGMENT_FIELDS } from './batch-snapshot.js';
+import type { TextLike } from './text-like.js';
 
 /**
  * Edit a TEXT node's characters without touching the styling of what is not edited.
@@ -18,7 +19,7 @@ import { SEGMENT_FIELDS } from './batch-snapshot.js';
  * caret does.
  */
 export const replaceRange = (
-  text: TextNode,
+  text: TextLike,
   start: number,
   end: number,
   replacement: string,
@@ -58,7 +59,7 @@ const sharedEdges = (a: string, b: string): { prefix: number; suffix: number } =
  * off to a run boundary also keeps an edge from landing between the halves of a surrogate pair,
  * since a run starts on a whole character.
  */
-export const keptEdges = (text: TextNode, next: string): { prefix: number; suffix: number } => {
+export const keptEdges = (text: TextLike, next: string): { prefix: number; suffix: number } => {
   const before = text.characters;
   const { prefix, suffix } = sharedEdges(before, next);
   const starts = text.getStyledTextSegments([...SEGMENT_FIELDS]).map(run => run.start);

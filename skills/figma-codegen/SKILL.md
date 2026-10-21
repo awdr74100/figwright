@@ -37,8 +37,9 @@ Run the grounded tools against the selection, then generate — **trust them ove
    instance's `mainComponent` / `componentProperties`. This is the layout + binding source of truth.
    Keep `dedupeComponents: true` and don't depth-limit a subtree you'll build from.
    → **How to read the tree, the per-node fidelity catalog (effects, per-side borders, stroke align,
-   per-corner radius, blend, masks, gradients, image-fit, auto-layout/grid, aspect-ratio,
-   scroll/sticky, stack & stroke-space), Dev Mode annotations as ground truth, and grounding a page
+   per-corner radius, blend, masks, gradients, image-fit, patterns, Figma Draw repeat groups /
+   brush strokes / text on a path, auto-layout/grid, aspect-ratio, scroll/sticky, stack &
+   stroke-space), Dev Mode annotations as ground truth, and grounding a page
    too big for one call: [`references/grounding.md`](./references/grounding.md).**
 
 2. **`component_map`** → every Figma component grouped to a local code component with a `status`
@@ -206,9 +207,10 @@ animation is a fidelity miss, the same class as dropping a shadow.
 - **Reference tokens, not literals.** Emit a mapped variable's `ref`; reserve raw values for `unmapped`
   gaps, and surface those gaps rather than burying them.
 - **Carry every visual property, don't drop fidelity.** Effects, per-side borders + `strokeAlign`,
-  per-corner radius, blend mode, masks, gradients, image `scaleMode`, and auto-layout/grid spacing are
-  all in the context — translate each (the catalog is in `references/grounding.md`). Dropping any is a
-  grounding miss, not a simplification.
+  per-corner radius, blend mode, masks, gradients, image `scaleMode`, pattern tiling, a repeat group's
+  copies (`repeatTransforms`), and auto-layout/grid spacing are all in the context — translate each
+  (the catalog is in `references/grounding.md`). Dropping any is a grounding miss, not a
+  simplification: a repeat group drawn once is a 12-tick dial with one tick.
 - **Export visual assets, don't fake them.** A grey box or a hand-typed wordmark is a miss.
 - **Match the project, not a house style.** Mirror the existing import style, file layout, and naming.
 - **Spell class names in full; don't assemble them from `&`.** In a language whose `&` concatenates

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { paintItemSchema } from './paint-schema.js';
+import { fillPaintItemSchema } from './paint-schema.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
 
@@ -12,9 +12,12 @@ import { setTextPropertiesTool } from './set-text-properties.js';
  * as it always has.
  */
 export const initialStyleShape = {
-  fills: z.array(paintItemSchema).optional().describe('Fills to apply on creation (as set_fills)'),
+  fills: z
+    .array(fillPaintItemSchema)
+    .optional()
+    .describe('Fills to apply on creation (as set_fills)'),
   strokes: z
-    .array(paintItemSchema)
+    .array(fillPaintItemSchema)
     .optional()
     .describe('Stroke paints to apply on creation (as set_strokes)'),
   strokeWeight: z.number().min(0).optional().describe('Uniform stroke thickness in px'),

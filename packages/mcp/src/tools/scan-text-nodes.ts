@@ -7,7 +7,8 @@ export const SCAN_TEXT_NODES_TOOL_NAME = 'scan_text_nodes';
 export const scanTextNodesTool: ToolSpec = {
   name: SCAN_TEXT_NODES_TOOL_NAME,
   description:
-    'Return every TEXT node within a subtree, each with its characters / fontSize / fontName. ' +
+    'Return every TEXT node within a subtree, each with its characters / fontSize / fontName — ' +
+    'text set along a path (TEXT_PATH) included. ' +
     'Scope with root (a node id); defaults to the current page.',
   inputSchema: z.object({
     root: z.string().describe('Node id to scope the scan; omit for the current page').optional(),

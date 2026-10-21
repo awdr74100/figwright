@@ -1,6 +1,7 @@
 import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { writePaints } from './paints.js';
 
 /**
  * Bind (or unbind) a COLOR variable on a node's fill/stroke paint. Figma keeps fill/stroke colour
@@ -57,7 +58,7 @@ export const createBindVariableToPaintHandler =
     const bound = figmaCtx.variables.setBoundVariableForPaint(paint, 'color', variable);
     const next = [...(paints as Paint[])];
     next[index] = bound;
-    (node as unknown as Record<string, unknown>)[target] = next;
+    await writePaints(node, target, next);
 
     const result: MutateResult = { ok: true, nodeId: node.id };
     return result;

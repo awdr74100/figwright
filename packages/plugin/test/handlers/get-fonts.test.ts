@@ -125,3 +125,16 @@ describe('get_fonts handler', () => {
     expect(result.fonts).toEqual([]);
   });
 });
+
+describe('get_fonts on text set along a path', () => {
+  it('counts a text path’s font like a TEXT node’s', async () => {
+    const path = {
+      id: 'p',
+      name: 'p',
+      type: 'TEXT_PATH',
+      fontName: { family: 'Inter', style: 'Bold' },
+    } as unknown as SceneNode;
+    const result = (await createGetFontsHandler(fakeFigma([path]))(undefined)) as GetFontsResult;
+    expect(result.fonts).toEqual([{ fontName: { family: 'Inter', style: 'Bold' }, count: 1 }]);
+  });
+});

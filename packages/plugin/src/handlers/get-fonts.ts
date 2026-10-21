@@ -39,8 +39,8 @@ export const createGetFontsHandler =
     };
 
     for (const node of walk(figmaCtx.currentPage.children)) {
-      if (node.type !== 'TEXT') continue;
-      const text = node as TextNode;
+      if (node.type !== 'TEXT' && node.type !== 'TEXT_PATH') continue;
+      const text = node as TextNode | TextPathNode;
       if (isFontName(text.fontName)) {
         tally(text.fontName);
       } else {

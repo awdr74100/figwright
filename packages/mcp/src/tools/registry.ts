@@ -32,6 +32,7 @@ import { createPaintStyleTool } from './create-paint-style.js';
 import { createRectangleTool } from './create-rectangle.js';
 import { createSectionTool } from './create-section.js';
 import { createShapeTool } from './create-shape.js';
+import { createTextPathTool } from './create-text-path.js';
 import { createTextStyleTool } from './create-text-style.js';
 import { createTextTool } from './create-text.js';
 import { createVariableCollectionTool } from './create-variable-collection.js';
@@ -88,6 +89,7 @@ import { renamePageTool } from './rename-page.js';
 import { renameVariableTool } from './rename-variable.js';
 import { reorderNodesTool } from './reorder-nodes.js';
 import { reparentNodesTool } from './reparent-nodes.js';
+import { repeatNodesTool } from './repeat-nodes.js';
 import { resizeNodesTool } from './resize-nodes.js';
 import { rotateNodesTool } from './rotate-nodes.js';
 import { saveImageFillsTool } from './save-image-fills.js';
@@ -99,6 +101,7 @@ import { searchNodesTool } from './search-nodes.js';
 import { setArcTool } from './set-arc.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setBlendModeTool } from './set-blend-mode.js';
+import { setComplexStrokeTool } from './set-complex-stroke.js';
 import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
@@ -112,7 +115,9 @@ import { setNodeVariableModeTool } from './set-node-variable-mode.js';
 import { setOpacityTool } from './set-opacity.js';
 import { setPositionTool } from './set-position.js';
 import { setReactionsTool } from './set-reactions.js';
+import { setRepeatTool } from './set-repeat.js';
 import { setStrokesTool } from './set-strokes.js';
+import { setTextPathTool } from './set-text-path.js';
 import { setTextPropertiesTool } from './set-text-properties.js';
 import { setTextRangeTool } from './set-text-range.js';
 import { setTextTool } from './set-text.js';
@@ -196,6 +201,12 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createShapeTool,
   booleanNodesTool,
   flattenNodesTool,
+  // Figma Draw
+  repeatNodesTool,
+  setRepeatTool,
+  createTextPathTool,
+  setTextPathTool,
+  setComplexStrokeTool,
   setPositionTool,
   resizeNodesTool,
   setAutoLayoutTool,

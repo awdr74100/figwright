@@ -1,6 +1,7 @@
 import type { ImageFillResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { writePaints } from './paints.js';
 
 const SCALE_MODES = ['FILL', 'FIT', 'CROP', 'TILE'] as const;
 type ScaleMode = (typeof SCALE_MODES)[number];
@@ -99,7 +100,7 @@ export const createSetImageFillHandler =
     }
     const next = [...fills];
     next.splice(at, at < fills.length ? 1 : 0, paintFor(fills[at], image.hash, scaleMode));
-    target.fills = next;
+    await writePaints(target, 'fills', next);
 
     const written = (target.fills as readonly Paint[])[at];
     if (written?.type !== 'IMAGE' || written.imageHash !== image.hash) {

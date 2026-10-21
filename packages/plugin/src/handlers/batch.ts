@@ -31,6 +31,7 @@ import {
   unbindAdded,
   writeIfDifferent,
 } from './batch-snapshot.js';
+import { resolveSharedParent } from './boolean-nodes.js';
 import { propertyDisplayName, resolveComponentOwner } from './component-property.js';
 import { findReplacePlan } from './find-replace-text.js';
 import {
@@ -40,6 +41,7 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
 /**
@@ -159,8 +161,7 @@ const propsInverse = (
     const state: PropsState = {
       id,
       props: await captureProps(figmaCtx, node, props, opts.bindings ?? props),
-      text:
-        node.type === 'TEXT' && props.includes('fills') ? await captureText(figmaCtx, node) : null,
+      text: isTextLike(node) && props.includes('fills') ? await captureText(figmaCtx, node) : null,
     };
     return state;
   },
@@ -169,7 +170,7 @@ const propsInverse = (
     const node = await live(figmaCtx, id);
     if (node === null) return undefined;
     await restoreProps(node, snapshot);
-    return text === null ? undefined : restoreText(figmaCtx, node as TextNode, text);
+    return text === null ? undefined : restoreText(figmaCtx, node as TextLike, text);
   },
   touches: (_params, captured) => [(captured as PropsState).id],
   ...(opts.resizes === true && {
@@ -205,14 +206,16 @@ const textInverse = (tool: string): BatchInverse => ({
   async capture(figmaCtx, params) {
     const id = stringParam(params, 'nodeId', tool);
     const node = await nodeOf(figmaCtx, id, tool);
-    if (node.type !== 'TEXT') throw new Error(`batch/${tool}: node ${id} is not a TEXT node`);
+    if (!isTextLike(node)) {
+      throw new Error(`batch/${tool}: node ${id} is not a TEXT node or text on a path`);
+    }
     const state: TextState = { id, text: await captureText(figmaCtx, node) };
     return state;
   },
   async undo(figmaCtx, _params, captured) {
     const { id, text } = captured as TextState;
     const node = await live(figmaCtx, id);
-    return node?.type === 'TEXT' ? restoreText(figmaCtx, node, text) : undefined;
+    return isTextLike(node) ? restoreText(figmaCtx, node, text) : undefined;
   },
   touches: (_params, captured) => [(captured as TextState).id],
   resizes: (_params, captured) => [(captured as TextState).id],
@@ -231,7 +234,7 @@ const findReplaceInverse: BatchInverse = {
     /* eslint-disable no-await-in-loop -- font loads and style setters are awaited per node */
     for (const { id, text } of captured as TextState[]) {
       const node = await live(figmaCtx, id);
-      if (node?.type === 'TEXT') notes.push(await restoreText(figmaCtx, node, text));
+      if (isTextLike(node)) notes.push(await restoreText(figmaCtx, node, text));
     }
     /* eslint-enable no-await-in-loop */
     return notesOf(notes);
@@ -488,6 +491,96 @@ const groupInverse: BatchInverse = {
     const { nodes, parent } = await groupTargets(figmaCtx, params);
     return { nodeIds: nodes.map(n => n.id), destinationId: parent.id };
   },
+};
+
+/** The nodes repeat_nodes would wrap, resolved exactly as its handler resolves them. */
+const repeatTargets = async (
+  figmaCtx: typeof figma,
+  params: unknown,
+): Promise<{ nodes: SceneNode[]; parent: BaseNode & ChildrenMixin }> => {
+  const ids = [...new Set(stringsParam(params, 'nodeIds', 'repeat_nodes'))];
+  const { nodes, parent } = await resolveSharedParent(figmaCtx, ids, 'batch/repeat_nodes');
+  return { nodes, parent };
+};
+
+/**
+ * Repeat_nodes, undone like group_nodes: the content goes back where it was and the emptied repeat
+ * group is removed. Ungrouping keeps every child's id and place (measured), so nothing else moves.
+ */
+const repeatInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const { nodes, parent } = await repeatTargets(figmaCtx, params);
+    refuseVariantLeaving('repeat_nodes', nodes, parent.id);
+    const state: ReparentState = { rehome: captureRehome(nodes, [parent]) };
+    return state;
+  },
+  async undo(figmaCtx, _params, captured, result) {
+    await undoRehome(figmaCtx, (captured as ReparentState).rehome);
+    await removeLeftover(figmaCtx, result);
+    return undefined;
+  },
+  resizes: (_params, captured) => parentIds((captured as ReparentState).rehome),
+  moves: async (figmaCtx, params) => {
+    const { nodes, parent } = await repeatTargets(figmaCtx, params);
+    return { nodeIds: nodes.map(n => n.id), destinationId: parent.id };
+  },
+};
+
+interface ComplexStrokeState {
+  id: string;
+  complex: ComplexStrokeProperties;
+  widths: VariableWidthStrokeProperties;
+}
+
+/** A width profile as the setter takes it back: a preset by name alone, CUSTOM with its points. */
+const writableWidths = (w: VariableWidthStrokeProperties): VariableWidthStrokeProperties =>
+  w.widthProfile === 'CUSTOM'
+    ? { widthProfile: 'CUSTOM', variableWidthPoints: w.variableWidthPoints }
+    : { widthProfile: w.widthProfile };
+
+/**
+ * Set_complex_stroke: put both stroke properties back. A brush can only be set once its kind is
+ * loaded, so that happens at capture; a CUSTOM brush cannot be set through the API at all, so a
+ * node carrying one is refused rather than left changed.
+ */
+const complexStrokeInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const tool = 'set_complex_stroke';
+    const id = stringParam(params, 'nodeId', tool);
+    const node = await nodeOf(figmaCtx, id, tool);
+    if (!('complexStrokeProperties' in node)) {
+      throw new Error(`batch/${tool}: node ${id} has no stroke to restyle`);
+    }
+    const target = node as BaseNode & ComplexStrokesMixin;
+    const complex = target.complexStrokeProperties;
+    if (complex.type === 'BRUSH') {
+      if (complex.brushName === 'CUSTOM') {
+        throw new Error(
+          `batch/${tool}: node ${id} has a custom brush, which the plugin API cannot set back — ` +
+            'run this outside the batch',
+        );
+      }
+      await figmaCtx.loadBrushesAsync(complex.brushType);
+    }
+    const state: ComplexStrokeState = {
+      id,
+      complex,
+      widths: target.variableWidthStrokeProperties ?? { widthProfile: 'UNIFORM' },
+    };
+    return state;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, complex, widths } = captured as ComplexStrokeState;
+    const node = (await live(figmaCtx, id)) as (BaseNode & ComplexStrokesMixin) | null;
+    if (node === null) return undefined;
+    // Width first, then the brush — the order the handler writes them in.
+    if (!same(node.variableWidthStrokeProperties, widths)) {
+      node.variableWidthStrokeProperties = writableWidths(widths);
+    }
+    if (!same(node.complexStrokeProperties, complex)) node.complexStrokeProperties = complex;
+    return undefined;
+  },
+  touches: (_params, captured) => [(captured as ComplexStrokeState).id],
 };
 
 interface CombineState extends ReparentState {
@@ -825,7 +918,7 @@ const restoreMixed = async (figmaCtx: typeof figma, s: MixedState): Promise<unkn
   unbindAdded(node, s.bindings);
   if (s.props !== null) await restoreProps(node, s.props);
   if (s.geometry !== null) restoreGeometry(node as SceneNode, s.geometry);
-  const note = s.text === null ? undefined : await restoreText(figmaCtx, node as TextNode, s.text);
+  const note = s.text === null ? undefined : await restoreText(figmaCtx, node as TextLike, s.text);
   rebind(node, s.bindings);
   return note;
 };
@@ -863,7 +956,7 @@ const applyStyleInverse: BatchInverse = {
     const state: MixedState = {
       id,
       props: await captureProps(figmaCtx, node, [prop]),
-      text: node.type === 'TEXT' && prop === 'fills' ? await captureText(figmaCtx, node) : null,
+      text: isTextLike(node) && prop === 'fills' ? await captureText(figmaCtx, node) : null,
       geometry: null,
       bindings: {},
     };
@@ -924,7 +1017,7 @@ const bindToPaintInverse: BatchInverse = {
     const state: MixedState = {
       id,
       props: await captureProps(figmaCtx, node, [target]),
-      text: node.type === 'TEXT' && target === 'fills' ? await captureText(figmaCtx, node) : null,
+      text: isTextLike(node) && target === 'fills' ? await captureText(figmaCtx, node) : null,
       geometry: null,
       bindings: {},
     };
@@ -1825,6 +1918,12 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   reorder_nodes: reorderInverse,
   reparent_nodes: reparentInverse,
   group_nodes: groupInverse,
+  // Figma Draw.
+  repeat_nodes: repeatInverse,
+  // The group's box follows its copies, so the layout around it is guarded.
+  set_repeat: propsInverse('set_repeat', ['transformModifiers'], { resizes: true }),
+  set_text_path: propsInverse('set_text_path', ['textPathStartData']),
+  set_complex_stroke: complexStrokeInverse,
   combine_as_variants: combineInverse,
   // Instances.
   set_instance_properties: instancePropsInverse,
@@ -1910,6 +2009,8 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
     'a boolean group takes its operands in as children, so undoing it means re-homing each one at its old index; run it outside the batch, then batch the edits around it',
   flatten_nodes:
     'flattening outlines the operands into a new vector and discards them, so there is nothing to restore; run it outside the batch',
+  create_text_path:
+    'the source shape is consumed and the text takes a new id, so the shape cannot come back under its own; run it outside the batch',
   ungroup_nodes: 'ungrouping deletes the group; grouping again makes a new group under a new id',
   remove_animation_style: 're-applying the preset mints a new applied-style id',
   remove_manual_keyframe_track:
@@ -1946,7 +2047,7 @@ const parseOps = (params: unknown): ParsedOp[] => {
 };
 
 /** Containers Figma deletes once their last child leaves — and a deleted node's id is gone. */
-const SELF_DELETING = new Set(['GROUP', 'BOOLEAN_OPERATION', 'COMPONENT_SET']);
+const SELF_DELETING = new Set(['GROUP', 'BOOLEAN_OPERATION', 'TRANSFORM_GROUP', 'COMPONENT_SET']);
 
 /**
  * Refuse a batch whose moves, taken together, would empty a container Figma then deletes. Each op's

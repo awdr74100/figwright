@@ -33,9 +33,13 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * bare type + visible, and would report each one as changed. v7: a glass effect's light,
  * refraction, depth, dispersion and splay, a texture's grain and clipping, a progressive blur's
  * ramp and cssLayers, a background blur's drawn: false, and a shadow's showShadowBehindNode /
- * blendMode — a v6 baseline holds those effects without them.
+ * blendMode — a v6 baseline holds those effects without them. v8: Figma Draw — a repeat group's
+ * transformModifiers / repeatTransforms, a brush / dynamic stroke's complexStrokeProperties, a
+ * width profile, a text path's text, typography and textPathStartData, the renderBounds of those
+ * nodes, and a pattern's verticalAlignment — a v7 baseline reads a dial as one tick and a text path
+ * as an empty shape.
  */
-export const SNAPSHOT_FORMAT_VERSION = 7;
+export const SNAPSHOT_FORMAT_VERSION = 8;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

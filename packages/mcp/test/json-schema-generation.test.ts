@@ -92,6 +92,11 @@ const CANARIES: Canary[] = [
     json: { minItems: 1, type: 'array', items: { type: 'string' } },
   },
   {
+    what: 'array with an upper length bound',
+    schema: z.array(z.string()).max(2),
+    json: { maxItems: 2, type: 'array', items: { type: 'string' } },
+  },
+  {
     // Zod 4.5 folds a union whose members carry nothing but a `type` into a type array; 4.4 wrote
     // it as `anyOf: [{type: 'string'}, {type: 'null'}]`. Both spell the same constraint in
     // draft 2020-12, and the array form is the one OpenAI's structured outputs documents for a

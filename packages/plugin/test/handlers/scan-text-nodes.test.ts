@@ -61,6 +61,25 @@ describe('scan_text_nodes handler', () => {
     expect(result.nodes[0]?.fontName).toEqual({ family: 'Inter', style: 'Regular' });
   });
 
+  it('includes text set along a path, which is copy too', async () => {
+    const page = [
+      fake('1:1', 'TEXT_PATH', {
+        characters: 'Round and round',
+        fontSize: 16,
+        fontName: { family: 'Inter', style: 'Bold' },
+        letterSpacing: { unit: 'PERCENT', value: 0 },
+        textCase: 'ORIGINAL',
+        textAlignHorizontal: 'LEFT',
+        textAlignVertical: 'TOP',
+        hyperlink: null,
+        textPathStartData: { segment: 0, position: 0 },
+      }),
+      fake('1:2', 'ELLIPSE'),
+    ];
+    const result = (await createScanTextNodesHandler(fakeFigma(page))({})) as ScanTextNodesResult;
+    expect(result.nodes.map(n => [n.id, n.characters])).toEqual([['1:1', 'Round and round']]);
+  });
+
   it('returns empty when the page has no text', async () => {
     const handler = createScanTextNodesHandler(fakeFigma([fake('1:1', 'RECTANGLE')]));
     const result = (await handler(undefined)) as ScanTextNodesResult;

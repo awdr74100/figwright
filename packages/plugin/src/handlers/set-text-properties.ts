@@ -2,6 +2,7 @@ import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaFontName } from './convert.js';
+import { isTextLike, unsupportedOnPath } from './text-like.js';
 
 /**
  * Set a TEXT node's typography + layout/overflow props. Figma requires every font on the node —
@@ -64,9 +65,18 @@ export const createSetTextPropertiesHandler =
     }
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-    if (node === null || node.type !== 'TEXT') {
-      throw new Error(`set_text_properties: node ${p.nodeId} is not a TEXT node`);
+    if (!isTextLike(node)) {
+      throw new Error(`set_text_properties: node ${p.nodeId} is not a TEXT node or text on a path`);
     }
+    // Refused before anything is written, so a path never takes half of a call.
+    const missing = node.type === 'TEXT_PATH' ? unsupportedOnPath(p) : [];
+    if (missing.length > 0) {
+      throw new Error(
+        `set_text_properties: ${p.nodeId} is text on a path, which has no ${missing.join(', ')} ` +
+          '(its text follows the path, so there are no lines, boxes or paragraphs to set)',
+      );
+    }
+    // The fields a path lacks were refused above, so the box-level writes below only reach TEXT.
     const text = node as TextNode;
 
     // Every write below needs the node's font(s) loaded — the layout/overflow three included, which

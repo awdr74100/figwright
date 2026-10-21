@@ -22,6 +22,16 @@ describe('ungroup_nodes handler', () => {
     expect(result).toEqual({ ok: true, affected: ['1:1', '1:2'] });
   });
 
+  it('ungroups a repeat group (TRANSFORM_GROUP), which drops the repeat', async () => {
+    const ungroup = vi.fn<() => { id: string }[]>(() => [{ id: '1:1' }]);
+    const f = {
+      getNodeByIdAsync: async () => ({ id: 'R:1', type: 'TRANSFORM_GROUP' }),
+      ungroup,
+    } as unknown as typeof figma;
+    const result = (await createUngroupNodesHandler(f)({ nodeIds: ['R:1'] })) as BatchNodeResult;
+    expect(result).toEqual({ ok: true, affected: ['1:1'] });
+  });
+
   it('throws on bad input', async () => {
     const f = { getNodeByIdAsync: async () => null } as unknown as typeof figma;
     await expect(createUngroupNodesHandler(f)({ nodeIds: 'x' })).rejects.toThrow(/nodeIds/);

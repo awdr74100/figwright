@@ -129,6 +129,7 @@ export interface SimplifiedPaint {
   scalingFactor?: number;
   spacing?: { x: number; y: number };
   horizontalAlignment?: string;
+  verticalAlignment?: string;
   /** SHADER: which shader, and what it is set to. Its pixels ship as the render (get_screenshot). */
   shaderId?: string;
   shaderProperties?: SimplifiedShaderProperty[];
@@ -169,6 +170,7 @@ export const simplifyPaint = (paint: SerializedPaint): SimplifiedPaint => {
     if (paint.spacing !== undefined) out.spacing = paint.spacing;
     if (paint.horizontalAlignment !== undefined)
       out.horizontalAlignment = paint.horizontalAlignment;
+    if (paint.verticalAlignment !== undefined) out.verticalAlignment = paint.verticalAlignment;
   } else if (paint.type === 'SHADER') {
     out.shaderId = paint.shaderId;
     if (paint.shaderProperties !== undefined) {

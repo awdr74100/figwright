@@ -7,7 +7,8 @@ export const FIND_REPLACE_TEXT_TOOL_NAME = 'find_replace_text';
 export const findReplaceTextTool: ToolSpec = {
   name: FIND_REPLACE_TEXT_TOOL_NAME,
   description:
-    'Replace a substring across all TEXT nodes under a scope. Without root the whole current ' +
+    'Replace a substring across all TEXT nodes under a scope (text set along a path is not ' +
+    'searched — scan_text_nodes lists those, and set_text edits one). Without root the whole current ' +
     'page is searched; matching is case-insensitive unless caseSensitive is true. Only the matched ' +
     'text changes: every other run keeps its styling, and each replacement takes the style of the ' +
     'text it replaces. Fonts are loaded before each edit. Returns { ok, affected } — the text node ' +

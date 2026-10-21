@@ -206,7 +206,70 @@ const richText = base({
   getStyledTextSegments: () => [fullSegment],
 });
 
-const FIXTURES = [frameInGrid, arcWithConstraints, richText];
+// Figma Draw: a stroke that wobbles and tapers, painting past its own box.
+const drawnStroke = base({
+  id: 'd',
+  type: 'VECTOR',
+  strokes: [SOLID],
+  strokeWeight: 6,
+  complexStrokeProperties: { type: 'DYNAMIC', frequency: 5, wiggle: 4, smoothen: 0.5 },
+  variableWidthStrokeProperties: {
+    widthProfile: 'TAPER',
+    variableWidthPoints: [
+      { position: 0, width: 0.5 },
+      { position: 1, width: 0.1875 },
+    ],
+  },
+  absoluteBoundingBox: { x: 1, y: 2, width: 10, height: 20 },
+  absoluteRenderBounds: { x: -1, y: -3, width: 14, height: 30 },
+});
+
+// A repeat group drawing its one child three times.
+const repeatGroup = base({
+  id: 'e',
+  type: 'TRANSFORM_GROUP',
+  transformModifiers: [
+    {
+      type: 'REPEAT',
+      repeatType: 'LINEAR',
+      axis: 'HORIZONTAL',
+      unitType: 'PIXELS',
+      offset: 12,
+      count: 3,
+    },
+  ],
+  absoluteTransform: [
+    [1, 0, 1],
+    [0, 1, 2],
+  ],
+  children: [
+    {
+      width: 10,
+      height: 20,
+      absoluteTransform: [
+        [1, 0, 1],
+        [0, 1, 2],
+      ],
+    },
+  ],
+});
+
+// Text set along a path, starting partway along its second segment.
+const textOnPath = base({
+  id: 'f',
+  type: 'TEXT_PATH',
+  characters: 'Round and round',
+  fontSize: 14,
+  fontName: { family: 'Inter', style: 'Regular' },
+  letterSpacing: { value: 0, unit: 'PERCENT' },
+  textCase: 'ORIGINAL',
+  textAlignHorizontal: 'CENTER',
+  textAlignVertical: 'TOP',
+  hyperlink: null,
+  textPathStartData: { segment: 1, position: 0.5 },
+});
+
+const FIXTURES = [frameInGrid, arcWithConstraints, richText, drawnStroke, repeatGroup, textOnPath];
 
 // SerializedNodeSchema is exported as a recursive z.lazy — unwrap to the inner object for keys.
 const schemaKeys = Object.keys(

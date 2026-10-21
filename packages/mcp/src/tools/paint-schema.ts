@@ -66,3 +66,47 @@ export const paintItemSchema = z
       .optional(),
   })
   .loose();
+
+/**
+ * A node fill or stroke: everything {@link paintItemSchema} takes, plus PATTERN — a source node
+ * tiled across the paint (Figma Draw). Kept apart from the shared schema on purpose: a paint style
+ * and a text run cannot hold a pattern (the plugin API offers no setter that accepts one there), so
+ * only the node-level paint tools advertise it.
+ */
+export const fillPaintItemSchema = paintItemSchema
+  .extend({
+    type: z.enum([
+      'SOLID',
+      'GRADIENT_LINEAR',
+      'GRADIENT_RADIAL',
+      'GRADIENT_ANGULAR',
+      'GRADIENT_DIAMOND',
+      'PATTERN',
+    ]),
+    sourceNodeId: z
+      .string()
+      .describe('PATTERN: the node whose artwork is tiled (any layer in the file)')
+      .optional(),
+    tileType: z
+      .enum(['RECTANGULAR', 'HORIZONTAL_HEXAGONAL', 'VERTICAL_HEXAGONAL'])
+      .describe('PATTERN: a plain grid, or rows / columns offset by half a tile')
+      .optional(),
+    scalingFactor: z
+      .number()
+      .positive()
+      .describe('PATTERN: the tile’s size as a multiple of the source node’s (default 1)')
+      .optional(),
+    spacing: z
+      .object({ x: z.number(), y: z.number() })
+      .describe('PATTERN: the gap between tiles as a fraction of the tile’s size (default 0, 0)')
+      .optional(),
+    horizontalAlignment: z
+      .enum(['START', 'CENTER', 'END'])
+      .describe('PATTERN: where the tiling is anchored horizontally (default START)')
+      .optional(),
+    verticalAlignment: z
+      .enum(['START', 'CENTER', 'END'])
+      .describe('PATTERN: where the tiling is anchored vertically (default START)')
+      .optional(),
+  })
+  .loose();

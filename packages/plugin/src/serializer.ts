@@ -24,6 +24,13 @@ import {
 } from '@figwright/shared';
 
 import { TimeSlice } from './cooperative.js';
+import {
+  renderBoundsOf,
+  repeatTransforms,
+  serializeComplexStroke,
+  serializeTransformModifiers,
+  serializeVariableWidthStroke,
+} from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
@@ -177,6 +184,11 @@ export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): 
       paint.horizontalAlignment !== 'START'
         ? { horizontalAlignment: paint.horizontalAlignment }
         : undefined;
+    // Missing from the typings, present on every pattern paint (measured).
+    const vertical = (paint as { verticalAlignment?: 'START' | 'CENTER' | 'END' })
+      .verticalAlignment;
+    const verticalAlignment =
+      vertical === 'CENTER' || vertical === 'END' ? { verticalAlignment: vertical } : undefined;
     return {
       type: 'PATTERN',
       visible,
@@ -186,6 +198,7 @@ export const serializePaint = (paint: Paint, ownerSize: PaintOwnerSize | null): 
       scalingFactor: paint.scalingFactor,
       ...spacing,
       ...alignment,
+      ...verticalAlignment,
     };
   }
   if (paint.type === 'SHADER') {
@@ -485,9 +498,29 @@ const SEGMENT_FIELDS = [
   'boundVariables',
 ] as const;
 
+/**
+ * The runs text on a path actually draws. It reports — and accepts — every TEXT run field, but
+ * draws only these (measured: an underline, a line height or a list set on its runs reads back and
+ * never renders), so asking for the rest would both split runs on invisible values and hand codegen
+ * an underline that is not there.
+ */
+const TEXT_PATH_SEGMENT_FIELDS = [
+  'fontName',
+  'fontSize',
+  'fills',
+  'textCase',
+  'letterSpacing',
+  'hyperlink',
+  'textStyleId',
+  'fillStyleId',
+  'boundVariables',
+] as const satisfies readonly (typeof SEGMENT_FIELDS)[number][];
+
 /** Break a mixed-style TEXT node into runs of uniform styling (so inline bold/links/colors survive). */
-const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
-  const segments = text.getStyledTextSegments([...SEGMENT_FIELDS]);
+const serializeTextSegments = (text: TextNode | TextPathNode): SerializedTextSegment[] => {
+  const segments = text.getStyledTextSegments([
+    ...(text.type === 'TEXT_PATH' ? TEXT_PATH_SEGMENT_FIELDS : SEGMENT_FIELDS),
+  ]) as StyledTextSegment[];
   // A gradient on a text run is positioned across the whole TEXT node's box, not the run's, so the
   // node's own size is what turns its axis matrix into a CSS angle — same as for a node fill.
   const ownerSize = { width: text.width, height: text.height };
@@ -499,7 +532,8 @@ const serializeTextSegments = (text: TextNode): SerializedTextSegment[] => {
       fontName: serializeFontName(s.fontName),
       fontSize: s.fontSize,
       fills: Array.isArray(s.fills) ? s.fills.map(p => serializePaint(p as Paint, ownerSize)) : [],
-      textDecoration: s.textDecoration,
+      // Never drawn on a path, so never requested there — the run is undecorated.
+      textDecoration: s.textDecoration ?? 'NONE',
       textCase: s.textCase,
     };
     // Per-run leading / tracking, only when they carry a concrete non-default value (AUTO leading /
@@ -583,7 +617,9 @@ const enrichWithMixins = (
     const opacity = node.opacity;
     if (typeof opacity === 'number') out.opacity = opacity;
   }
-  if ('cornerRadius' in node) {
+  // A text path inherits its source shape's corner fields — undeclared in the typings, `mixed` with
+  // no per-corner values at runtime (measured) — a radius it never draws, so it is not carried.
+  if (node.type !== 'TEXT_PATH' && 'cornerRadius' in node) {
     const cr = (node as { cornerRadius: unknown }).cornerRadius;
     if (typeof cr === 'number') {
       out.cornerRadius = cr;
@@ -709,6 +745,19 @@ const enrichWithMixins = (
       if (typeof cap === 'string' && cap !== 'NONE') out.strokeCap = cap;
       const join = (node as { strokeJoin?: unknown }).strokeJoin;
       if (typeof join === 'string' && join !== 'MITER') out.strokeJoin = join;
+      // Figma Draw strokes. Both outlive `strokes = []` on the node (measured), so they are read
+      // only here, where there is a stroke for them to shape.
+      const complex = serializeComplexStroke(
+        (node as { complexStrokeProperties?: unknown }).complexStrokeProperties,
+      );
+      if (complex !== undefined) out.complexStrokeProperties = complex;
+      const widths = serializeVariableWidthStroke(
+        (node as { variableWidthStrokeProperties?: unknown }).variableWidthStrokeProperties,
+      );
+      if (widths !== undefined) out.variableWidthStrokeProperties = widths;
+      // Neither kind draws dashes: a brush, a dynamic stroke and a width profile each draw the
+      // stroke solid with the dash pattern still set (measured), so the pattern is not reported.
+      if (complex !== undefined || widths !== undefined) delete out.dashPattern;
     }
   }
   if ('effects' in node) {
@@ -835,6 +884,35 @@ const enrichWithMixins = (
   collectComponentProperties(node, out);
   collectPropertyReferences(node, out);
 
+  if (node.type === 'TRANSFORM_GROUP') {
+    const modifiers = serializeTransformModifiers((node as TransformGroupNode).transformModifiers);
+    if (modifiers.length > 0) {
+      out.transformModifiers = modifiers;
+      const transforms = repeatTransforms(
+        node.absoluteTransform,
+        (node as TransformGroupNode).children,
+        modifiers,
+      );
+      if (transforms !== undefined && transforms.length > 0) out.repeatTransforms = transforms;
+    }
+  }
+  if (node.type === 'TEXT_PATH') serializeTextPath(node as TextPathNode, out);
+  // The painted box, for the Draw nodes whose paint can leave their own: a brush / dynamic /
+  // variable-width stroke, glyphs set along a path, a repeat group's copies. Read on those alone —
+  // a render-bounds read on every node would be a cost (and a field) the rest never need.
+  if (
+    out.complexStrokeProperties !== undefined ||
+    out.variableWidthStrokeProperties !== undefined ||
+    node.type === 'TEXT_PATH' ||
+    node.type === 'TRANSFORM_GROUP'
+  ) {
+    const bounds = renderBoundsOf(
+      (node as { absoluteRenderBounds?: Rect | null }).absoluteRenderBounds,
+      node.absoluteBoundingBox,
+    );
+    if (bounds !== undefined) out.renderBounds = bounds;
+  }
+
   if (node.type === 'TEXT') {
     const text = node as TextNode;
     out.characters = text.characters;
@@ -897,6 +975,42 @@ const enrichWithMixins = (
   }
 
   return out;
+};
+
+/**
+ * Text set along a path (Figma Draw). It carries the run-level half of a TEXT node's typography —
+ * font, size, case, tracking, links, fills — but none of the box-level half: no line height,
+ * decoration, auto-resize, truncation or paragraphs (measured: the properties do not exist, and
+ * per-run values for them are accepted and never drawn). Mixed runs expand into segments exactly as
+ * a TEXT node's do.
+ */
+const serializeTextPath = (text: TextPathNode, out: SerializedNode): void => {
+  out.characters = text.characters;
+  out.fontSize = typeof text.fontSize === 'number' ? text.fontSize : MIXED;
+  out.fontName = isFontName(text.fontName) ? serializeFontName(text.fontName) : MIXED;
+  out.letterSpacing = serializeLetterSpacing(text.letterSpacing);
+  out.textCase = typeof text.textCase === 'string' ? text.textCase : MIXED;
+  out.textAlignHorizontal = text.textAlignHorizontal;
+  out.textAlignVertical = text.textAlignVertical;
+  const link = text.hyperlink;
+  const linkMixed = typeof link === 'symbol';
+  if (link !== null && !linkMixed && typeof link === 'object') {
+    out.hyperlink = { type: link.type, value: link.value };
+  }
+  const start = text.textPathStartData;
+  if (start.segment !== 0 || start.position !== 0) {
+    out.textPathStartData = { segment: start.segment, position: start.position };
+  }
+  const needsSegments =
+    out.fontSize === MIXED ||
+    out.fontName === MIXED ||
+    out.fills === MIXED ||
+    out.textCase === MIXED ||
+    out.letterSpacing === MIXED ||
+    linkMixed;
+  if (needsSegments && text.characters.length > 0) {
+    out.segments = serializeTextSegments(text);
+  }
 };
 
 const isFontName = (value: unknown): value is FontName =>

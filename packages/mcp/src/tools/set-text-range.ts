@@ -68,7 +68,10 @@ export const setTextRangeTool: ToolSpec = {
     'lineHeight / letterSpacing / hyperlink / listOptions / indentation / textWrapStyle, and design-system bindings ' +
     'textStyleId / fillStyleId / boundVariables. Ranges apply in order (a later range overrides an ' +
     'earlier one on overlap). Fonts are loaded automatically. Set the whole node first with create_text ' +
-    '/ set_text; use set_text_properties for node-level typography & overflow. Returns { ok, nodeId }.',
+    '/ set_text; use set_text_properties for node-level typography & overflow. Text on a path ' +
+    '(TEXT_PATH) takes the run fields it draws — fontName, fontSize, fills, textCase, ' +
+    'letterSpacing, hyperlink and the bindings — and refuses decoration, lineHeight, lists and ' +
+    'textWrapStyle. Returns { ok, nodeId }.',
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id whose ranges to style'),
     ranges: z.array(rangeSchema).describe('Character ranges + the run properties to apply to each'),

@@ -340,3 +340,46 @@ describe('set_text_properties on a mixed-font node', () => {
     ).rejects.toThrow(/textAlignHorizontal must be a string/);
   });
 });
+
+describe('set_text_properties on text set along a path', () => {
+  it('sets the typography and the two alignments a path has', async () => {
+    const node = {
+      id: '1:1',
+      type: 'TEXT_PATH',
+      characters: 'Round',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      fontSize: 18,
+      letterSpacing: { unit: 'PERCENT', value: 8 },
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'BOTTOM',
+    });
+    expect(node).toMatchObject({
+      fontSize: 18,
+      letterSpacing: { unit: 'PERCENT', value: 8 },
+      textAlignHorizontal: 'CENTER',
+      textAlignVertical: 'BOTTOM',
+    });
+  });
+
+  it('refuses the line, box and decoration fields a path lacks — all of them, before writing', async () => {
+    const node: Record<string, unknown> = {
+      id: '1:1',
+      type: 'TEXT_PATH',
+      characters: 'Round',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    await expect(
+      createSetTextPropertiesHandler(fakeFigma(node))({
+        nodeId: '1:1',
+        fontSize: 18,
+        lineHeight: { unit: 'AUTO' },
+        textDecoration: 'UNDERLINE',
+        maxLines: 2,
+      }),
+    ).rejects.toThrow('is text on a path, which has no lineHeight, textDecoration, maxLines');
+    expect(node).not.toHaveProperty('fontSize');
+  });
+});

@@ -2,7 +2,11 @@ import type { BatchNodeResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 
-/** Ungroup GROUP nodes; non-groups are skipped. Returns the ids of the children promoted out. */
+/**
+ * Ungroup GROUP nodes and Figma Draw repeat groups (TRANSFORM_GROUP — ungrouping one removes the
+ * repeat and keeps the original content where it was, under the same ids); anything else is
+ * skipped. Returns the ids of the children promoted out.
+ */
 export const createUngroupNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
@@ -15,8 +19,8 @@ export const createUngroupNodesHandler =
 
     const affected: string[] = [];
     for (const node of nodes) {
-      if (node === null || node.type !== 'GROUP') continue;
-      const children = figmaCtx.ungroup(node as GroupNode);
+      if (node === null || (node.type !== 'GROUP' && node.type !== 'TRANSFORM_GROUP')) continue;
+      const children = figmaCtx.ungroup(node as GroupNode | TransformGroupNode);
       for (const child of children) affected.push(child.id);
     }
 

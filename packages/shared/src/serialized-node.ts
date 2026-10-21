@@ -184,8 +184,10 @@ const OtherPaintSchema = z.object({
 /**
  * PATTERN — a source node tiled across the fill (a newer Figma feature). The tile artwork itself
  * lives at `sourceNodeId` and is exported separately (like a raster) via get_screenshot; we carry
- * the geometry needed to reconstruct the tiling in code. `spacing` (0,0) and `horizontalAlignment`
+ * the geometry needed to reconstruct the tiling in code. `spacing` (0,0) and the two alignments
  * 'START' are the no-op defaults, omitted by the serializer to keep the payload lean.
+ * `verticalAlignment` is real but missing from the plugin typings (measured: every pattern paint
+ * reports it, and setFillsAsync honours it).
  */
 const PatternPaintSchema = z.object({
   type: z.literal('PATTERN'),
@@ -196,6 +198,7 @@ const PatternPaintSchema = z.object({
   scalingFactor: z.number(),
   spacing: z.object({ x: z.number(), y: z.number() }).optional(),
   horizontalAlignment: z.enum(['START', 'CENTER', 'END']).optional(),
+  verticalAlignment: z.enum(['START', 'CENTER', 'END']).optional(),
 });
 
 /**
@@ -523,6 +526,75 @@ export const SerializedTextSegmentSchema = z.object({
 });
 export type SerializedTextSegment = z.infer<typeof SerializedTextSegmentSchema>;
 
+/**
+ * One modifier of a Figma Draw repeat group (TRANSFORM_GROUP). Its content — the union of the
+ * group's children — is drawn `count` times in total. LINEAR steps every copy `offset` px along
+ * `axis` (RELATIVE: `offset` × the content's width or height). RADIAL turns each copy a further
+ * 360°/count clockwise about a centre directly below the content: the content's centre sits on a
+ * circle whose diameter is `offset` px (RELATIVE: `offset` × the content's height). Measured — the
+ * typings call RADIAL's offset the distance from the centre, which is half of what Figma draws. A
+ * second modifier repeats everything the first produced.
+ */
+export const SerializedTransformModifierSchema = z.object({
+  type: z.string(),
+  repeatType: z.enum(['LINEAR', 'RADIAL']).optional(),
+  axis: z.enum(['HORIZONTAL', 'VERTICAL']).optional(),
+  unitType: z.enum(['RELATIVE', 'PIXELS']).optional(),
+  offset: z.number().optional(),
+  count: z.number().optional(),
+});
+export type SerializedTransformModifier = z.infer<typeof SerializedTransformModifierSchema>;
+
+/**
+ * A Figma Draw stroke that CSS cannot draw: a STRETCH brush (one textured stroke along the path), a
+ * SCATTER brush (stamps repeated along it) or a DYNAMIC stroke (a hand-drawn wobble). Present only
+ * when the node has a visible stroke and it is not the plain BASIC kind. The fields are Figma's
+ * own, so the value round-trips into set_complex_stroke.
+ */
+export const SerializedComplexStrokeSchema = z.object({
+  type: z.enum(['BRUSH', 'DYNAMIC']),
+  brushType: z.enum(['STRETCH', 'SCATTER']).optional(),
+  brushName: z.string().optional(),
+  direction: z.enum(['FORWARD', 'BACKWARD']).optional(),
+  gap: z.number().optional(),
+  wiggle: z.number().optional(),
+  sizeJitter: z.number().optional(),
+  angularJitter: z.number().optional(),
+  rotation: z.number().optional(),
+  frequency: z.number().optional(),
+  smoothen: z.number().optional(),
+});
+export type SerializedComplexStroke = z.infer<typeof SerializedComplexStrokeSchema>;
+
+/**
+ * A stroke whose width varies along its path. `variableWidthPoints` are always present: each is a
+ * `position` 0–1 along the stroke and a `width` there, where the stroke is 2 × width × strokeWeight
+ * thick — 0.5 is its normal weight, 1 twice it (measured; the typings' "fraction of the weight"
+ * reads as half that). A named preset (TAPER, EYE, …) reports the points it stands for. Omitted for
+ * the uniform default.
+ */
+export const SerializedVariableWidthStrokeSchema = z.object({
+  widthProfile: z.string(),
+  variableWidthPoints: z.array(z.object({ position: z.number(), width: z.number() })),
+});
+export type SerializedVariableWidthStroke = z.infer<typeof SerializedVariableWidthStrokeSchema>;
+
+/** Where text on a path starts: a segment of the path's vector network, and 0–1 along it. */
+export const SerializedTextPathStartSchema = z.object({
+  segment: z.number(),
+  position: z.number(),
+});
+export type SerializedTextPathStart = z.infer<typeof SerializedTextPathStartSchema>;
+
+/** A box measured from a node's own top-left corner: x / y are offsets (negative = up / left). */
+export const SerializedBoundsSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export type SerializedBounds = z.infer<typeof SerializedBoundsSchema>;
+
 export interface SerializedNode {
   id: string;
   name: string;
@@ -576,6 +648,19 @@ export interface SerializedNode {
   strokeCap?: string;
   /** Stroke line join (ROUND / BEVEL); omitted at the MITER default. */
   strokeJoin?: string;
+  /** A brush or dynamic stroke (Figma Draw) — see SerializedComplexStrokeSchema. */
+  complexStrokeProperties?: SerializedComplexStroke;
+  /** A width profile that varies along the stroke — see SerializedVariableWidthStrokeSchema. */
+  variableWidthStrokeProperties?: SerializedVariableWidthStroke;
+  /**
+   * The box a Draw node — a brush, dynamic or variable-width stroke, glyphs set along a path, a
+   * repeat group's copies — actually paints into, measured from its own top-left (x / y are
+   * offsets). It usually reaches past the node's box; it falls short where a clipping parent cuts
+   * the paint off. An export of the node (get_screenshot / save_screenshots) covers exactly this
+   * box, so this is where the exported asset goes; width / height alone would squash it. Only on
+   * those Draw nodes, and only when it differs from the box.
+   */
+  renderBounds?: SerializedBounds;
   effects?: readonly SerializedEffect[];
   layout?: SerializedAutoLayout;
   // how this node sizes/positions itself inside an auto-layout parent
@@ -683,6 +768,16 @@ export interface SerializedNode {
   hyperlink?: SerializedHyperlink;
   /** Present only for mixed-style TEXT: per-run styling so rich text isn't flattened. */
   segments?: readonly SerializedTextSegment[];
+  /** TEXT_PATH: where along the path the text starts; omitted at the path's very start. */
+  textPathStartData?: SerializedTextPathStart;
+  /** TRANSFORM_GROUP (a Figma Draw repeat group): how its content is repeated. */
+  transformModifiers?: readonly SerializedTransformModifier[];
+  /**
+   * TRANSFORM_GROUP: one CSS transform per extra copy Figma draws (the original is not listed), in
+   * the group's own coordinates — origin at its top-left, `transform-origin: 0 0` — applied to the
+   * content as it sits in the group. Ready to emit; omitted past 100 copies.
+   */
+  repeatTransforms?: readonly string[];
   children?: readonly SerializedNode[];
 }
 
@@ -737,6 +832,9 @@ export const SerializedNodeSchema = z.lazy(() =>
     dashPattern: z.array(z.number()).optional(),
     strokeCap: z.string().optional(),
     strokeJoin: z.string().optional(),
+    complexStrokeProperties: SerializedComplexStrokeSchema.optional(),
+    variableWidthStrokeProperties: SerializedVariableWidthStrokeSchema.optional(),
+    renderBounds: SerializedBoundsSchema.optional(),
     effects: z.array(SerializedEffectSchema).optional(),
     layout: SerializedAutoLayoutSchema.optional(),
     layoutSizingHorizontal: z.string().optional(),
@@ -785,6 +883,9 @@ export const SerializedNodeSchema = z.lazy(() =>
     textWrapStyle: z.string().optional(),
     hyperlink: SerializedHyperlinkSchema.optional(),
     segments: z.array(SerializedTextSegmentSchema).optional(),
+    textPathStartData: SerializedTextPathStartSchema.optional(),
+    transformModifiers: z.array(SerializedTransformModifierSchema).optional(),
+    repeatTransforms: z.array(z.string()).optional(),
     children: z.array(SerializedNodeSchema).optional(),
   }),
 ) as unknown as z.ZodType<SerializedNode>;
