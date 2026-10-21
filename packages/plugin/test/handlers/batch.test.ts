@@ -48,6 +48,11 @@ import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
 import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
+import {
+  createCreateVectorHandler,
+  createOutlineStrokeHandler,
+  createSetVectorHandler,
+} from '../../src/handlers/vector.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 import { makeFlowsFigma } from './flows-fake.js';
 
@@ -2624,5 +2629,124 @@ describe('batch inverses for Figma Draw', () => {
     ).rejects.toThrow(
       /'create_text_path' \(index 0\) is not batchable — the source shape is consumed/,
     );
+  });
+});
+
+describe('batch inverses for vectors', () => {
+  const at = (x: number, y: number) => [
+    [1, 0, x],
+    [0, 1, y],
+  ];
+
+  it('puts a redrawn vector back whole: its network, the width profile a branch dropped, its place', async () => {
+    const { node, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null);
+    const frame = node('P', 'FRAME', page);
+    const network = {
+      vertices: [
+        { x: 0, y: 0, strokeCap: 'ROUND' },
+        { x: 80, y: 0, cornerRadius: 12 },
+      ],
+      segments: [{ start: 0, end: 1, tangentStart: { x: 20, y: -20 } }],
+      regions: [],
+    };
+    const taper = {
+      widthProfile: 'TAPER',
+      variableWidthPoints: [
+        { position: 0, width: 0.5 },
+        { position: 1, width: 0.1875 },
+      ],
+    };
+    const v = node('V', 'VECTOR', frame, {
+      relativeTransform: at(60, 500),
+      vectorNetwork: network,
+      variableWidthStrokeProperties: taper,
+    });
+    v.setVectorNetworkAsync = async (next: { segments: unknown[]; vertices: { x: number }[] }) => {
+      v.vectorNetwork = next;
+      // Figma fits the box to the drawing where it lies — moving the layer by the drawing's own
+      // offset — and allows no width profile on a branching network.
+      const [row0, row1] = v.relativeTransform as [number[], number[]];
+      v.relativeTransform = at(row0[2]! + Math.min(...next.vertices.map(p => p.x)), row1[2]!);
+      if (next.segments.length > next.vertices.length - 1) {
+        v.variableWidthStrokeProperties = { widthProfile: 'UNIFORM', variableWidthPoints: [] };
+      }
+    };
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const handler = createBatchHandler(figmaCtx, {
+      set_vector: createSetVectorHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_vector',
+            params: {
+              nodeId: 'V',
+              vectorNetwork: {
+                vertices: [
+                  { x: -20, y: 0 },
+                  { x: 50, y: 50 },
+                  { x: 100, y: 0 },
+                ],
+                segments: [
+                  { start: 0, end: 1 },
+                  { start: 1, end: 2 },
+                  { start: 2, end: 0 },
+                ],
+              },
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(v.vectorNetwork).toEqual(network);
+    // The preset goes back by name: the setter refuses a preset handed its own points.
+    expect(v.variableWidthStrokeProperties).toEqual({ widthProfile: 'TAPER' });
+    expect(v.relativeTransform).toEqual(at(60, 500));
+  });
+
+  it('removes what outline_stroke and create_vector added', async () => {
+    const { node, store, figmaCtx } = makeTree();
+    const page = node('P0', 'PAGE', null, { absoluteTransform: at(0, 0) });
+    const frame = node('P', 'FRAME', page, { absoluteTransform: at(0, 0) });
+    const source = node('S', 'VECTOR', frame, {
+      strokes: [{ type: 'SOLID', visible: true }],
+      strokeWeight: 2,
+      absoluteTransform: at(0, 0),
+    });
+    source.outlineStroke = () => {
+      const outline = node('O', 'VECTOR', page, { absoluteTransform: at(0, 0) });
+      return outline;
+    };
+    (figmaCtx as unknown as { createVector: unknown }).createVector = () => {
+      const v = node('NV', 'VECTOR', null, { x: 0, y: 0 });
+      v.vectorPaths = [];
+      return v;
+    };
+    (figmaCtx as unknown as { currentPage: unknown }).currentPage = page;
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const handler = createBatchHandler(figmaCtx, {
+      outline_stroke: createOutlineStrokeHandler(figmaCtx),
+      create_vector: createCreateVectorHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'outline_stroke', params: { nodeId: 'S' } },
+          {
+            tool: 'create_vector',
+            params: { parentId: 'P', vectorPaths: [{ windingRule: 'NONE', data: 'M 0 0 L 4 4' }] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2/);
+    expect(ids(frame)).toEqual(['S']);
+    expect(store.has('O')).toBe(false);
+    expect(store.has('NV')).toBe(false);
   });
 });

@@ -464,12 +464,21 @@ const groupTargets = async (
   return { nodes, parent: parent as BaseNode & ChildrenMixin };
 };
 
-/** Ungroup by putting every node back where it was; Figma deletes the group once it is empty. */
-const removeLeftover = async (figmaCtx: typeof figma, result: unknown): Promise<void> => {
+/**
+ * Remove what an op created: a group once ungrouping left it empty (Figma deletes it itself when
+ * its last child leaves, but a group the op made and emptied by hand may linger), or with `always`
+ * a node the op added outright.
+ */
+const removeLeftover = async (
+  figmaCtx: typeof figma,
+  result: unknown,
+  always = false,
+): Promise<void> => {
   const id = (result as { nodeId?: unknown } | null)?.nodeId;
   if (typeof id !== 'string') return;
   const node = await live(figmaCtx, id);
-  if (node !== null && 'children' in node && (node as ChildrenMixin).children.length === 0) {
+  if (node === null) return;
+  if (always || ('children' in node && (node as ChildrenMixin).children.length === 0)) {
     node.remove();
   }
 };
@@ -581,6 +590,64 @@ const complexStrokeInverse: BatchInverse = {
     return undefined;
   },
   touches: (_params, captured) => [(captured as ComplexStrokeState).id],
+};
+
+interface VectorState {
+  id: string;
+  network: VectorNetwork;
+  widths: VariableWidthStrokeProperties | null;
+}
+
+/**
+ * Set_vector: the network goes back whole — it is the one form that keeps per-vertex caps, joins
+ * and corner radii and the regions' own fills — and so does a width profile, which a redraw drops
+ * when the new network branches.
+ */
+const vectorInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const tool = 'set_vector';
+    const id = stringParam(params, 'nodeId', tool);
+    const node = await nodeOf(figmaCtx, id, tool);
+    if (node.type !== 'VECTOR') throw new Error(`batch/${tool}: node ${id} is not a VECTOR`);
+    const state: VectorState = {
+      id,
+      network: node.vectorNetwork,
+      widths: node.variableWidthStrokeProperties ?? null,
+    };
+    return state;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const { id, network, widths } = captured as VectorState;
+    const node = (await live(figmaCtx, id)) as VectorNode | null;
+    if (node === null) return undefined;
+    await node.setVectorNetworkAsync(network);
+    if (widths !== null && !same(node.variableWidthStrokeProperties, widths)) {
+      node.variableWidthStrokeProperties = writableWidths(widths);
+    }
+    return undefined;
+  },
+  touches: (_params, captured) => [(captured as VectorState).id],
+  resizes: (_params, captured) => [(captured as VectorState).id],
+};
+
+/** Outline_stroke adds a vector beside its source and leaves the source alone: undo removes it. */
+const outlineInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const tool = 'outline_stroke';
+    const id = stringParam(params, 'nodeId', tool);
+    const node = await nodeOf(figmaCtx, id, tool);
+    if (!('outlineStroke' in node)) throw new Error(`batch/${tool}: node ${id} has no stroke`);
+    return { parentId: node.parent?.id ?? null };
+  },
+  async undo(figmaCtx, _params, _captured, result) {
+    await removeLeftover(figmaCtx, result, true);
+    return undefined;
+  },
+  // A vector added to an auto-layout parent takes a place in its flow.
+  resizes: (_params, captured) => {
+    const parentId = (captured as { parentId: string | null }).parentId;
+    return parentId === null ? [] : [parentId];
+  },
 };
 
 interface CombineState extends ReparentState {
@@ -1924,6 +1991,8 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_repeat: propsInverse('set_repeat', ['transformModifiers'], { resizes: true }),
   set_text_path: propsInverse('set_text_path', ['textPathStartData']),
   set_complex_stroke: complexStrokeInverse,
+  set_vector: vectorInverse,
+  outline_stroke: outlineInverse,
   combine_as_variants: combineInverse,
   // Instances.
   set_instance_properties: instancePropsInverse,
@@ -1938,6 +2007,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   create_section: createInverse('create_section'),
   import_image: createInverse('import_image'),
   import_svg: createInverse('import_svg'),
+  create_vector: createInverse('create_vector'),
   create_instance: createInverse('create_instance'),
   clone_node: createInverse('clone_node', false),
   add_page: createInverse('add_page', false),

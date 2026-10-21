@@ -25,10 +25,10 @@ import {
 
 import { TimeSlice } from './cooperative.js';
 import {
+  applyRepeat,
   renderBoundsOf,
-  repeatTransforms,
+  type RepeatFields,
   serializeComplexStroke,
-  serializeTransformModifiers,
   serializeVariableWidthStroke,
 } from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
@@ -885,16 +885,7 @@ const enrichWithMixins = (
   collectPropertyReferences(node, out);
 
   if (node.type === 'TRANSFORM_GROUP') {
-    const modifiers = serializeTransformModifiers((node as TransformGroupNode).transformModifiers);
-    if (modifiers.length > 0) {
-      out.transformModifiers = modifiers;
-      const transforms = repeatTransforms(
-        node.absoluteTransform,
-        (node as TransformGroupNode).children,
-        modifiers,
-      );
-      if (transforms !== undefined && transforms.length > 0) out.repeatTransforms = transforms;
-    }
+    applyRepeat(node as TransformGroupNode, (node as TransformGroupNode).transformModifiers, out);
   }
   if (node.type === 'TEXT_PATH') serializeTextPath(node as TextPathNode, out);
   // The painted box, for the Draw nodes whose paint can leave their own: a brush / dynamic /
@@ -1044,6 +1035,27 @@ const toBase = (node: SceneNode, parent: BaseNode | null): SerializedNode =>
   });
 
 /**
+ * A repeat group inside an instance reports no modifiers, though its copies are drawn: Figma keeps
+ * them on the main component's node, and an instance cannot override them. That node is the last
+ * segment of the sublayer's id; its modifiers, applied to this group's own children (which an
+ * instance can move), give the copies drawn here. Async, so the synchronous read cannot do it.
+ */
+export const inheritRepeat = async (
+  node: SceneNode,
+  out: RepeatFields,
+  lookup: (id: string) => Promise<BaseNode | null> = id => figma.getNodeByIdAsync(id),
+): Promise<void> => {
+  if (node.type !== 'TRANSFORM_GROUP' || out.transformModifiers !== undefined) return;
+  if (!node.id.startsWith('I')) return;
+  try {
+    const source = await lookup(node.id.slice(node.id.lastIndexOf(';') + 1));
+    if (source?.type === 'TRANSFORM_GROUP') applyRepeat(node, source.transformModifiers, out);
+  } catch {
+    // The main component is out of reach (a library not loaded): the group reads as before.
+  }
+};
+
+/**
  * Synchronous serialization (no mainComponent). Used where async resolution isn't wanted, e.g. the
  * depth/detail-gated get_design_context view.
  */
@@ -1084,6 +1096,7 @@ export const serializeFlat = async (node: SceneNode): Promise<SerializedNode> =>
   const out = serializeFlatSync(node);
   const mainComponent = await resolveMainComponent(node);
   if (mainComponent !== undefined) out.mainComponent = mainComponent;
+  await inheritRepeat(node, out);
   return out;
 };
 

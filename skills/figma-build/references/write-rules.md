@@ -223,10 +223,27 @@ operand — the lowest for `SUBTRACT` — and no stroke, so style that operand f
 the result. Bake it into one editable path with `flatten_nodes` (which keeps the fill)
 only when the artwork is final — flattening turns text into outlines. Neither runs inside a `batch`.
 
-### Figma Draw: repeats, text on a path, brushes, patterns
+### Figma Draw: vectors, repeats, text on a path, brushes, patterns
 
-These four write the same fields `get_design_context` reads, so a design built with them reads back
+These write the same fields `get_design_context` reads, so a design built with them reads back
 exactly.
+
+- **A custom shape, icon or illustration → `create_vector`**: one editable VECTOR layer, no wrapper.
+  Give `vectorPaths` — SVG path data in any syntax, an icon's `d` attribute as is (arcs, relative
+  commands and minified paths are rewritten into the form Figma stores) — or a `vectorNetwork`
+  when the drawing branches or needs per-vertex arrowheads (`strokeCap: 'ARROW_EQUILATERAL'`, …) or
+  corner radii. `x` / `y` place the drawing's origin, so a 24-unit icon drawn at `x: 100` keeps its
+  own padding. An open path shows only with `strokes`. A whole SVG file (several layers, its own
+  colours) is still `import_svg`.
+- **Changing a vector's points → `get_vector`, edit, `set_vector`.** Coordinates are the layer's
+  own: Figma refits the box to the drawing, so a point drawn left of 0 moves the layer left rather
+  than the drawing. Fills, strokes and brushes stay; a width profile is dropped if the new network
+  branches. Rectangles, ellipses, stars and lines are `flatten_nodes`'d into a VECTOR first; a
+  vector inside an instance cannot be redrawn (change the main component).
+- **A stroke as a filled shape → `outline_stroke`** (Figma's Outline Stroke): to recolour it as a
+  fill, cut it with `boolean_nodes`, or hand a brush stroke on as plain vector art. The outline lands
+  directly above the node with the stroke's paints as fills; the node stays (`delete_nodes` it to
+  replace it). A scatter brush outlines into thousands of shapes.
 
 - **Repeated artwork → `repeat_nodes`**, not N clones: dial ticks, a ring of dots, petals, a row of
   stars. The copies stay live (edit the content, every copy follows). LINEAR steps each copy
@@ -255,14 +272,6 @@ exactly.
   `sourceNodeId` is the layer to tile, `scalingFactor` its scale, `spacing` the gap as a fraction of
   the tile, the two alignments where one tile sits flush (START / CENTER / END). Keep the source
   layer in the file — hide it or park it off-canvas — since the fill points at it.
-
-### Other things the tools do not have
-
-Check this list before promising a design; for each, use the fallback or say so.
-
-| Not available                                 | Fallback                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| freeform pen paths, editing a vector's points | draw it as SVG and `import_svg`; for a shape that is a combination, `boolean_nodes` of primitives |
 
 ## Sizing: HUG, FILL, FIXED (the same enum codegen reads)
 

@@ -120,6 +120,12 @@ import { createUpdateFlowsHandler } from './update-flows.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
 import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
+import {
+  createCreateVectorHandler,
+  createGetVectorHandler,
+  createOutlineStrokeHandler,
+  createSetVectorHandler,
+} from './vector.js';
 
 /**
  * Build the full sandbox handler map. Read handlers run as-is; write handlers are wrapped with
@@ -166,6 +172,9 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     create_text_path: createCreateTextPathHandler(figmaCtx),
     set_text_path: createSetTextPathHandler(figmaCtx),
     set_complex_stroke: createSetComplexStrokeHandler(figmaCtx),
+    create_vector: createCreateVectorHandler(figmaCtx),
+    set_vector: createSetVectorHandler(figmaCtx),
+    outline_stroke: createOutlineStrokeHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
     lock_nodes: createSetLockedHandler(figmaCtx, true),
@@ -242,6 +251,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     get_selection: createGetSelectionHandler(figmaCtx),
     get_document: createGetDocumentHandler(figmaCtx),
     get_node: createGetNodeHandler(figmaCtx),
+    get_vector: createGetVectorHandler(figmaCtx),
     get_nodes_info: createGetNodesInfoHandler(figmaCtx),
     get_metadata: createGetMetadataHandler(figmaCtx),
     get_pages: createGetPagesHandler(figmaCtx),

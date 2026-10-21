@@ -16,7 +16,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
+import { inheritRepeat, serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
 import { displayP3Marker } from './color-profile.js';
 
 const isSceneNode = (node: BaseNode): node is SceneNode =>
@@ -483,6 +483,8 @@ interface BuildCtx {
   detail: DetailLevel;
   dedupe: boolean;
   seen: Set<string>;
+  /** Node lookup, for what a node inside an instance keeps on its main component's node. */
+  lookup: (id: string) => Promise<BaseNode | null>;
 }
 
 /**
@@ -639,6 +641,7 @@ const buildNode = async (
   ctx: BuildCtx,
 ): Promise<DesignContextNode> => {
   const out = project(node, ctx.detail);
+  if (ctx.detail === 'full') await inheritRepeat(node, out, ctx.lookup);
 
   // Motion is a Motion-API dimension (not a serializer field), so it's attached here rather than in
   // project(). Full detail only — the compact hot path stays untouched.
@@ -807,6 +810,7 @@ export const createGetDesignContextHandler =
       detail: isDetailLevel(p.detail) ? p.detail : 'compact',
       dedupe: p.dedupeComponents === true,
       seen: new Set<string>(),
+      lookup: id => figmaCtx.getNodeByIdAsync(id),
     };
 
     let roots: readonly SceneNode[];

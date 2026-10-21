@@ -4,6 +4,7 @@ import {
   PageRefSchema,
   SerializedAnnotationSchema,
   SerializedFontNameSchema,
+  type SerializedPaint,
 } from './serialized-node.js';
 
 // ── list_files ───────────────────────────────────────────────────────────────
@@ -494,3 +495,36 @@ export const GetMotionContextResultSchema = z.object({
   nodes: z.array(MotionContextNodeSchema),
 });
 export type GetMotionContextResult = z.infer<typeof GetMotionContextResultSchema>;
+
+/** Get_vector: a VECTOR's (or text path's) geometry, in the shape create_vector / set_vector take. */
+export interface GetVectorResult {
+  nodeId: string;
+  type: string;
+  width: number;
+  height: number;
+  vectorPaths: { windingRule: string; data: string }[];
+  vectorNetwork: {
+    vertices: {
+      x: number;
+      y: number;
+      strokeCap?: string;
+      strokeJoin?: string;
+      cornerRadius?: number;
+      handleMirroring?: string;
+    }[];
+    segments: {
+      start: number;
+      end: number;
+      tangentStart?: { x: number; y: number };
+      tangentEnd?: { x: number; y: number };
+    }[];
+    regions?: {
+      windingRule: string;
+      loops: number[][];
+      fills?: SerializedPaint[];
+      fillStyleId?: string;
+    }[];
+  };
+  /** The node-wide handle mirroring, or 'mixed' when its vertices differ. */
+  handleMirroring: string;
+}

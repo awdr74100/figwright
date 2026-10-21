@@ -37,6 +37,7 @@ import { createTextStyleTool } from './create-text-style.js';
 import { createTextTool } from './create-text.js';
 import { createVariableCollectionTool } from './create-variable-collection.js';
 import { createVariableTool } from './create-variable.js';
+import { createVectorTool } from './create-vector.js';
 import { deleteComponentPropertyTool } from './delete-component-property.js';
 import { deleteNodesTool } from './delete-nodes.js';
 import { deletePageTool } from './delete-page.js';
@@ -69,6 +70,7 @@ import { getScreenshotTool } from './get-screenshot.js';
 import { getSelectionTool } from './get-selection.js';
 import { getStylesTool } from './get-styles.js';
 import { getVariableDefsTool } from './get-variable-defs.js';
+import { getVectorTool } from './get-vector.js';
 import { getViewportTool } from './get-viewport.js';
 import { groupNodesTool } from './group-nodes.js';
 import { iconMapTool } from './icon-map.js';
@@ -80,6 +82,7 @@ import { listFilesTool } from './list-files.js';
 import { lockNodesTool } from './lock-nodes.js';
 import { moveNodesTool } from './move-nodes.js';
 import { navigateToPageTool } from './navigate-to-page.js';
+import { outlineStrokeTool } from './outline-stroke.js';
 import { pingTool } from './ping.js';
 import { removeAnimationStyleTool } from './remove-animation-style.js';
 import { removeManualKeyframeTrackTool } from './remove-manual-keyframe-track.js';
@@ -124,6 +127,7 @@ import { setTextTool } from './set-text.js';
 import { setTimelineDurationTool } from './set-timeline-duration.js';
 import { setVariableCodeSyntaxTool } from './set-variable-code-syntax.js';
 import { setVariableValueTool } from './set-variable-value.js';
+import { setVectorTool } from './set-vector.js';
 import { setVisibleTool } from './set-visible.js';
 import type { ToolSpec } from './spec.js';
 import { swapComponentTool } from './swap-component.js';
@@ -150,6 +154,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   getDocumentTool,
   getNodeTool,
   getNodesInfoTool,
+  getVectorTool,
   getMetadataTool,
   getPagesTool,
   searchNodesTool,
@@ -207,6 +212,10 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createTextPathTool,
   setTextPathTool,
   setComplexStrokeTool,
+  // Vector geometry
+  createVectorTool,
+  setVectorTool,
+  outlineStrokeTool,
   setPositionTool,
   resizeNodesTool,
   setAutoLayoutTool,

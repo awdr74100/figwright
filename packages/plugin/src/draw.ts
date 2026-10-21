@@ -17,7 +17,10 @@ const round2 = (v: number): number => {
 const round4 = (v: number): number => Math.round(v * 1e4) / 1e4;
 
 /** An affine map as Figma writes one: [[a, c, e], [b, d, f]] — x' = a·x + c·y + e. */
-type Affine = readonly [readonly [number, number, number], readonly [number, number, number]];
+export type Affine = readonly [
+  readonly [number, number, number],
+  readonly [number, number, number],
+];
 
 interface Box {
   minX: number;
@@ -31,7 +34,7 @@ const IDENTITY: Affine = [
   [0, 1, 0],
 ];
 
-const compose = (outer: Affine, inner: Affine): Affine => {
+export const compose = (outer: Affine, inner: Affine): Affine => {
   const [[a1, c1, e1], [b1, d1, f1]] = outer;
   const [[a2, c2, e2], [b2, d2, f2]] = inner;
   return [
@@ -40,7 +43,7 @@ const compose = (outer: Affine, inner: Affine): Affine => {
   ];
 };
 
-const invert = (m: Affine): Affine | null => {
+export const invert = (m: Affine): Affine | null => {
   const [[a, c, e], [b, d, f]] = m;
   const det = a * d - b * c;
   if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
@@ -287,4 +290,19 @@ export const renderBoundsOf = (
     width: round2(render.width),
     height: round2(render.height),
   };
+};
+
+/** The fields a repeat group carries on the wire. */
+export interface RepeatFields {
+  transformModifiers?: readonly SerializedTransformModifier[] | undefined;
+  repeatTransforms?: readonly string[] | undefined;
+}
+
+/** A repeat group's modifiers and the transform of each copy they make of its own children. */
+export const applyRepeat = (node: TransformGroupNode, raw: unknown, out: RepeatFields): void => {
+  const modifiers = serializeTransformModifiers(raw);
+  if (modifiers.length === 0) return;
+  out.transformModifiers = modifiers;
+  const transforms = repeatTransforms(node.absoluteTransform, node.children, modifiers);
+  if (transforms !== undefined && transforms.length > 0) out.repeatTransforms = transforms;
 };

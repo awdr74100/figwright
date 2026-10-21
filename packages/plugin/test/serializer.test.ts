@@ -2645,6 +2645,44 @@ describe('Figma Draw nodes', () => {
     expect(out.renderBounds).toBeUndefined();
   });
 
+  it('reads a repeat group inside an instance off its main component’s node, which keeps them', async () => {
+    const modifiers = [
+      { type: 'REPEAT', repeatType: 'RADIAL', unitType: 'PIXELS', offset: 40, count: 4 },
+    ];
+    const getNodeByIdAsync = vi.fn<(id: string) => Promise<unknown>>(async id =>
+      id === '16:1183' ? { type: 'TRANSFORM_GROUP', transformModifiers: modifiers } : null,
+    );
+    vi.stubGlobal('figma', { getNodeByIdAsync });
+    try {
+      const group = (id: string) =>
+        fake({
+          id,
+          type: 'TRANSFORM_GROUP',
+          width: 20,
+          height: 20,
+          absoluteTransform: at(0, 0),
+          absoluteBoundingBox: { x: 0, y: 0, width: 20, height: 20 },
+          absoluteRenderBounds: { x: 0, y: 0, width: 20, height: 20 },
+          // What Figma reports inside an instance, though the copies are drawn.
+          transformModifiers: [],
+          children: [{ width: 20, height: 20, absoluteTransform: at(0, 0) }],
+        });
+      const inInstance = await serializeFlat(group('I16:1186;16:1183'));
+      expect(getNodeByIdAsync).toHaveBeenCalledWith('16:1183');
+      expect(inInstance.transformModifiers).toEqual(modifiers);
+      expect(inInstance.repeatTransforms).toHaveLength(3);
+      // A group outside any instance that has no modifiers really has none.
+      getNodeByIdAsync.mockClear();
+      expect((await serializeFlat(group('5:5'))).transformModifiers).toBeUndefined();
+      expect(getNodeByIdAsync).not.toHaveBeenCalled();
+      // A main component out of reach leaves the read as it was.
+      getNodeByIdAsync.mockRejectedValueOnce(new Error('library not loaded'));
+      expect((await serializeFlat(group('I1:1;2:2'))).transformModifiers).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reads text set along a path, with no corner radius it never draws', () => {
     const getStyledTextSegments = vi.fn<() => unknown[]>(() => []);
     const out = serializeFlatSync(
