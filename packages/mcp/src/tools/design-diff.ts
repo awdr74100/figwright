@@ -39,7 +39,7 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * nodes, and a pattern's verticalAlignment — a v7 baseline reads a dial as one tick and a text path
  * as an empty shape.
  */
-export const SNAPSHOT_FORMAT_VERSION = 8;
+export const SNAPSHOT_FORMAT_VERSION = 9;
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({

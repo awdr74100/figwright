@@ -267,6 +267,15 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   Every custom brush reads `brushName: 'CUSTOM'`, so two of them cannot be told apart from their
   fields: an instance holding such a stroke is never deduped — export each instance's stroke from
   its own node rather than reusing the first one's asset.
+- **Rotated and flipped nodes.** A node turned or mirrored within its parent carries
+  `cssTransform`, and `flipped: true` when it is mirrored — `rotation` alone reads the same with or
+  without a flip (a node flipped top to bottom reads 0). Place its box at `x` / `y` with
+  `transform-origin: 0 0` and `transform` set to `cssTransform` verbatim: `x` / `y` is the node's
+  origin, not its bounding box's top-left. Measured on turned and flipped shapes, that is within
+  0.3% of Figma; turning by `rotation` alone was 79% off and rotating about CSS's default centre 88%.
+  In an auto-layout flow keep the node in the flow and apply `cssTransform` about its centre — a
+  flip mirrors it in place; a turn there is approximate, as Figma gives a turned child its bounding
+  box's room.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
   own `x` / `y` in its parent's axes. An export of the node covers exactly that box (measured on a

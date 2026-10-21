@@ -223,6 +223,13 @@ operand — the lowest for `SUBTRACT` — and no stroke, so style that operand f
 the result. Bake it into one editable path with `flatten_nodes` (which keeps the fill)
 only when the artwork is final — flattening turns text into outlines. Neither runs inside a `batch`.
 
+### Mirroring: `flip_nodes`
+
+A mirrored icon, arrow or illustration (`transform: scaleX(-1)` in code, Shift+H / Shift+V in Figma)
+is `flip_nodes` with `axis: 'HORIZONTAL'` or `'VERTICAL'`: it flips each node in place about its own
+centre and reads back as `flipped: true`. Do not fake it with `rotate_nodes` 180 — that turns the
+node upside down instead of mirroring it.
+
 ### Figma Draw: vectors, repeats, text on a path, brushes, patterns
 
 These write the same fields `get_design_context` reads, so a design built with them reads back

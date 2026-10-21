@@ -19,6 +19,7 @@ import { createCreateFrameHandler } from '../../src/handlers/create-frame.js';
 import { createCreatePaintStyleHandler } from '../../src/handlers/create-paint-style.js';
 import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
 import { createEditComponentPropertyHandler } from '../../src/handlers/edit-component-property.js';
+import { createFlipNodesHandler } from '../../src/handlers/flip-nodes.js';
 import { createGroupNodesHandler } from '../../src/handlers/group-nodes.js';
 import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
 import { createNavigateToPageHandler } from '../../src/handlers/navigate-to-page.js';
@@ -2798,5 +2799,48 @@ describe('batch inverses for vectors', () => {
     expect(ids(frame)).toEqual(['S']);
     expect(store.has('O')).toBe(false);
     expect(store.has('NV')).toBe(false);
+  });
+});
+
+describe('batch inverse for flip_nodes', () => {
+  it('puts each flipped node’s transform back', async () => {
+    const { figmaCtx, store } = makeFigma({
+      A: {
+        id: 'A',
+        width: 100,
+        height: 40,
+        relativeTransform: [
+          [1, 0, 10],
+          [0, 1, 20],
+        ],
+      },
+      B: {
+        id: 'B',
+        width: 30,
+        height: 30,
+        relativeTransform: [
+          [0, 1, 50],
+          [-1, 0, 80],
+        ],
+      },
+      F: { id: 'F', fills: [] },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      flip_nodes: createFlipNodesHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'flip_nodes', params: { nodeIds: ['A', 'B'], axis: 'VERTICAL' } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(store.get('A')!.relativeTransform).toEqual([
+      [1, 0, 10],
+      [0, 1, 20],
+    ]);
+    expect(store.get('B')!.relativeTransform).toEqual([
+      [0, 1, 50],
+      [-1, 0, 80],
+    ]);
   });
 });

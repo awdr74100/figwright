@@ -2015,6 +2015,15 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
     (node, s) => writeIfDifferent(node, 'rotation', s.rotation),
     { resizes: true },
   ),
+  flip_nodes: nodesSnapshot(
+    'flip_nodes',
+    node =>
+      'relativeTransform' in node
+        ? { relativeTransform: (node as SceneNode).relativeTransform }
+        : null,
+    (node, s) => writeIfDifferent(node, 'relativeTransform', s.relativeTransform),
+    { resizes: true },
+  ),
   lock_nodes: nodesSnapshot(
     'lock_nodes',
     node => ('locked' in node ? { locked: node.locked } : null),

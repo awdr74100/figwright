@@ -70,6 +70,11 @@ const frameInGrid = base({
   visible: false,
   parent: { id: 'gp', layoutMode: 'GRID' },
   rotation: 45,
+  // Turned 45° and mirrored, as Figma writes it: rotate(θ), then the y axis reversed.
+  relativeTransform: [
+    [Math.SQRT1_2, -Math.SQRT1_2, 0],
+    [-Math.SQRT1_2, -Math.SQRT1_2, 0],
+  ],
   opacity: 0.5,
   cornerRadius: Symbol('mixed'),
   cornerSmoothing: 0.6,

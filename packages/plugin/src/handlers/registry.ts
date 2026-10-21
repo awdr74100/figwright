@@ -44,6 +44,7 @@ import { createExportPdfHandler } from './export-pdf.js';
 import { createExportVideoHandler } from './export-video.js';
 import { createFindReplaceTextHandler } from './find-replace-text.js';
 import { createFlattenNodesHandler } from './flatten-nodes.js';
+import { createFlipNodesHandler } from './flip-nodes.js';
 import { createGetAnnotationsHandler } from './get-annotations.js';
 import { createGetComponentApiHandler } from './get-component-api.js';
 import { createGetDesignContextHandler } from './get-design-context.js';
@@ -177,6 +178,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     outline_stroke: createOutlineStrokeHandler(figmaCtx),
     set_constraints: createSetConstraintsHandler(figmaCtx),
     rotate_nodes: createRotateNodesHandler(figmaCtx),
+    flip_nodes: createFlipNodesHandler(figmaCtx),
     lock_nodes: createSetLockedHandler(figmaCtx, true),
     unlock_nodes: createSetLockedHandler(figmaCtx, false),
     clone_node: createCloneNodeHandler(figmaCtx),

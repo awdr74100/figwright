@@ -52,6 +52,7 @@ import { exportPdfTool } from './export-pdf.js';
 import { exportVideoTool } from './export-video.js';
 import { findReplaceTextTool } from './find-replace-text.js';
 import { flattenNodesTool } from './flatten-nodes.js';
+import { flipNodesTool } from './flip-nodes.js';
 import { getAnnotationsTool } from './get-annotations.js';
 import { getComponentApiTool } from './get-component-api.js';
 import { getDesignContextTool } from './get-design-context.js';
@@ -226,6 +227,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setArcTool,
   setConstraintsTool,
   rotateNodesTool,
+  flipNodesTool,
   lockNodesTool,
   unlockNodesTool,
   cloneNodeTool,

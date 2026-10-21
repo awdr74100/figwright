@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "fields": [
     "colorProfile",
     "globalVars",
@@ -56,6 +56,7 @@
     "nodes[].cornerRadii.topRight",
     "nodes[].cornerRadius",
     "nodes[].cornerSmoothing",
+    "nodes[].cssTransform",
     "nodes[].dashPattern",
     "nodes[].deduped",
     "nodes[].effect",
@@ -205,6 +206,7 @@
     "nodes[].fills[].type",
     "nodes[].fills[].verticalAlignment",
     "nodes[].fills[].visible",
+    "nodes[].flipped",
     "nodes[].fontName",
     "nodes[].fontName.family",
     "nodes[].fontName.style",

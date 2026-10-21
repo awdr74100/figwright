@@ -800,6 +800,7 @@
     "set_arc": ["endingAngle", "innerRadius", "nodeId", "requestId", "startingAngle"],
     "set_constraints": ["horizontal", "nodeId", "requestId", "vertical"],
     "rotate_nodes": ["nodeIds", "requestId", "rotation"],
+    "flip_nodes": ["axis", "nodeIds", "requestId"],
     "lock_nodes": ["nodeIds", "requestId"],
     "unlock_nodes": ["nodeIds", "requestId"],
     "clone_node": ["nodeId", "requestId"],
