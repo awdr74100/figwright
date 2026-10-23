@@ -320,7 +320,9 @@ const fakeText = (id: string, characters: string, base: Run = {}): Record<string
       enumerable: true,
       configurable: true,
       get: () => uniform(field),
-      set: (value: unknown) => writeRun(0, chars.length, field, value),
+      set: (value: unknown) => {
+        writeRun(0, chars.length, field, value);
+      },
     });
   }
   return node;
