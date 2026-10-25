@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { leaderLockPath } from '../../src/election/leader-lock.js';
+import { onText } from './_helpers.js';
 
 // Process-level proof of the zombie fixes: real spawned servers (the built dist), a real stdin
 // EOF, and a real election takeover — the layers no in-process test exercises (process.exit
@@ -51,8 +52,8 @@ const spawnServer = (port: number): Server => {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   let stderr = '';
-  child.stderr?.on('data', (d: Buffer) => {
-    stderr += d.toString('utf8');
+  onText(child.stderr, text => {
+    stderr += text;
   });
   let exit: { code: number | null } | null = null;
   child.on('exit', code => {

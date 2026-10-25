@@ -13,7 +13,7 @@ import { PROMPT_DEFINITIONS } from '../../src/prompts/registry.js';
 import { annotationsFor } from '../../src/tools/annotations.js';
 import { ALL_TOOL_SPECS } from '../../src/tools/registry.js';
 import { toToolDefinition } from '../tool-schema.js';
-import { closeSocket, connectFakePlugin } from './_helpers.js';
+import { closeSocket, connectFakePlugin, onText } from './_helpers.js';
 
 // The wire gate. Everything else in this repo checks the server from the inside: `tool-schema.ts`
 // re-derives JSON Schema with Zod, the other e2e tests drive the relay and never start an MCP
@@ -63,15 +63,16 @@ class WireClient {
   async start(): Promise<void> {
     const port = await freePort();
     this.port = port;
-    this.child = spawn(process.execPath, [DIST_ENTRY], {
+    const child = spawn(process.execPath, [DIST_ENTRY], {
       env: { ...process.env, FIGWRIGHT_PORT: String(port) },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    this.child.stderr?.on('data', (d: Buffer) => {
-      this.stderr += d.toString('utf8');
+    this.child = child;
+    onText(child.stderr, text => {
+      this.stderr += text;
     });
-    this.child.stdout?.on('data', (d: Buffer) => {
-      this.buffer += d.toString('utf8');
+    onText(child.stdout, text => {
+      this.buffer += text;
       // Newline-delimited JSON is the stdio binding's framing; anything that isn't a response to a
       // request we sent (notifications, stray output) is ignored rather than failing the parse.
       for (let nl = this.buffer.indexOf('\n'); nl !== -1; nl = this.buffer.indexOf('\n')) {

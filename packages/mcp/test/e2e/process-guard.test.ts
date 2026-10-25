@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { leaderLockPath } from '../../src/election/leader-lock.js';
+import { onText } from './_helpers.js';
 
 // The crash guard, end to end: a real built server, made to misbehave from inside its own process,
 // must keep serving its client and keep stdout pure JSON-RPC. Unit tests cover each part; this is
@@ -35,8 +36,7 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process guard (built dist)', () => {
     let stderr = '';
     const responses = new Map<number, unknown>();
     let pendingLine = '';
-    child.stdout.on('data', (d: Buffer) => {
-      const text = d.toString('utf8');
+    onText(child.stdout, text => {
       stdout += text;
       // A large response (tools/list is ~160 KB) arrives in several chunks, so only a completed
       // line is parsed — the same framing mcp-wire.test.ts reads.
@@ -49,8 +49,8 @@ describe.skipIf(!existsSync(DIST_ENTRY))('process guard (built dist)', () => {
         if (msg.id !== undefined) responses.set(msg.id, msg);
       }
     });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString('utf8');
+    onText(child.stderr, text => {
+      stderr += text;
     });
     const send = async (id: number, method: string, params: object = {}): Promise<unknown> => {
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);

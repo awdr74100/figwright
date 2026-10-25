@@ -35,7 +35,10 @@ const session = repo => {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const stderr = [];
-  child.stderr.on('data', chunk => stderr.push(String(chunk)));
+  // Decoded by the stream, not per chunk: a multi-byte character split across two chunks would
+  // otherwise come out as U+FFFD. stdout needs no such care — readline decodes it the same way.
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', text => stderr.push(text));
 
   const pending = new Map();
   createInterface({ input: child.stdout }).on('line', line => {

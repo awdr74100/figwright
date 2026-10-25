@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { Readable } from 'node:stream';
 
 import {
   createError,
@@ -136,4 +137,23 @@ export const closeSocket = (ws: WebSocket): void => {
   if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
     ws.close();
   }
+};
+
+/**
+ * Read a child process's pipe as UTF-8 text. A pipe delivers bytes in chunks whose boundaries fall
+ * wherever the OS and the reading Node put them, so decoding each chunk on its own
+ * (`chunk.toString('utf8')`) turns any multi-byte character that straddles a boundary into U+FFFD
+ * replacement characters. `setEncoding` gives the stream a decoder that holds a partial character
+ * back until the rest of it arrives. This is not hypothetical: the tool descriptions carry `’` and
+ * `—`, and on macOS Node 20 and 22 read a pipe 8 KB at a time where Node 24 reads 64 KB — on 20 and
+ * 22 one boundary in `tools/list` lands inside a `’`, and the wire gate failed on a description
+ * that differed from the spec only there. Node 24 passed because no boundary happened to land on
+ * one, which any change to a description's length can undo.
+ *
+ * The encoding is set in the same call that attaches the listener, so no chunk can reach it
+ * undecoded.
+ */
+export const onText = (stream: Readable, listener: (text: string) => void): void => {
+  stream.setEncoding('utf8');
+  stream.on('data', listener);
 };
