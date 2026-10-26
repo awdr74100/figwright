@@ -174,37 +174,45 @@ The window is yours to arrange. Drag the bottom-right corner to resize it. A tal
 
 ## How it works
 
-Your MCP client talks to the `@figwright/mcp` server over stdio; the server relays to the Figma plugin over a local WebSocket. Several clients can share one plugin (they elect a leader that owns the connection), and the transport is built to ride out dropped sockets:
+Your MCP client launches the `@figwright/mcp` server and talks to it over stdio. The server relays each tool call over a local WebSocket to the Figwright plugin, which carries it out through Figma's Plugin API. Every agent runs its own server process; the processes elect a leader that holds the plugin connections, and the rest forward to it. The plugin runs in every file you open it in, so several agents can each work in their own file at once, and the whole path is built to ride out dropped sockets, leader handovers and long reads:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│ MCP CLIENTS  ·  one per agent                                       │
+│ MCP CLIENTS  ·  each agent's client launches its own server         │
 │ Claude Code · Cursor · Claude · any MCP-capable client              │
 └─────────────────────────────────────────────────────────────────────┘
                                    │  MCP protocol over stdio
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ @figwright/mcp  ·  your client launches one; they elect a leader    │
+│ @figwright/mcp  ·  the server processes elect one leader            │
 │                                                                     │
-│ LEADER   (owns the single plugin connection)                        │
-│    • WebSocket relay · request idempotency                          │
-│    • routes to the most-recently-active file                        │
-│    • session resume · "busy ≠ dead" heartbeat                       │
-│    • endpoints:  /ws (plugin) · /ping (health) · /rpc (followers)   │
+│ LEADER   (holds every plugin connection)                            │
+│    • WebSocket relay on 127.0.0.1:3055, Host- and Origin-checked    │
+│    • routes each agent to the file it claimed with use_file,        │
+│      otherwise to the file the user was last active in              │
+│    • session resume: a dropped plugin has 30 s to reconnect, and    │
+│      calls bound for it wait instead of failing                     │
+│    • "busy ≠ dead" heartbeat: a busy plugin isn't taken for dead    │
+│    • endpoints:  /ws (plugins) · /ping (health) · /rpc (followers)  │
+│                  /abdicate (hand over to a newer build)             │
 │                                                                     │
 │ FOLLOWERS                                                           │
 │    • forward tool calls to the leader over HTTP /rpc                │
-│    • take over automatically if the leader exits                    │
+│    • retry a call caught in a leader handover                       │
+│    • take over automatically if the leader exits, and ask an older  │
+│      leader to step down once it goes idle                          │
 └─────────────────────────────────────────────────────────────────────┘
                                    │  local WebSocket · msgpack (binary)
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ FIGMA  (desktop or browser)                                         │
+│ FIGMA  (desktop or browser)  ·  one plugin per file it's open in    │
 │                                                                     │
 │ ┌─────────────────────────────────────────────────────────────────┐ │
 │ │ Figwright plugin                                                │ │
-│ │   • UI (Vue 3 iframe): WebSocket client + heartbeat             │ │
+│ │   • UI (Vue 3 iframe): WebSocket client, heartbeat, reconnect   │ │
 │ │   • sandbox: executes Figma Plugin API calls                    │ │
+│ │       – replays a retried write instead of applying it twice    │ │
+│ │       – long reads yield every ~40 ms to keep Figma responsive  │ │
 │ └─────────────────────────────────────────────────────────────────┘ │
 │                                                                     │
 │              │ Figma Plugin API                                     │
