@@ -215,6 +215,27 @@ describe('joinTokens', () => {
     expect(m?.candidate?.matchedBy).toContain('value');
   });
 
+  it('matches a #RGBA project token against the 8-digit color Figma reports', () => {
+    const [m] = joinTokens(
+      [fig('Overlay', '#00000088')],
+      [proj('color-overlay', '#0008', 'overlay')],
+      { threshold: 0.7 },
+    );
+    expect(m?.candidate?.token).toBe('color-overlay');
+    expect(m?.candidate?.matchedBy).toEqual(['name', 'value']);
+    expect(m?.status).toBe('high');
+  });
+
+  it('does not report value drift for a name match whose #RGBA value is the same color', () => {
+    // Before #RGBA expanded, '#0008' never equalled '#00000088', so a correct name match was read
+    // as "the token's color drifted from Figma" and capped below high.
+    const [m] = joinTokens([fig('Scrim', '#00000088')], [proj('scrim', '#0008')], {
+      threshold: 0.7,
+    });
+    expect(m?.candidate?.token).toBe('scrim');
+    expect(m?.status).toBe('high');
+  });
+
   it('flags unmapped when neither name nor value match', () => {
     const [m] = joinTokens([fig('Accent/Teal', '#14B8A6')], tokens, { threshold: 0.7 });
     expect(m?.status).toBe('unmapped');

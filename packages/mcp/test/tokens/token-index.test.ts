@@ -39,6 +39,17 @@ describe('buildTokenValueIndex', () => {
     expect(index.get('#FFFFFF')?.map(t => t.name)).toEqual(['white', 'card']);
   });
 
+  it('expands #RGBA shorthand to the 8-digit form Figma reports', () => {
+    const index = buildTokenValueIndex([proj('overlay', '#0008'), proj('red', '#F00F')]);
+    expect(index.get('#00000088')?.map(t => t.name)).toEqual(['overlay']);
+    expect(index.get('#FF0000')?.map(t => t.name)).toEqual(['red']);
+  });
+
+  it('skips values with a hex length CSS does not accept', () => {
+    const index = buildTokenValueIndex([proj('five', '#12345'), proj('seven', '#1234567')]);
+    expect(index.size).toBe(0);
+  });
+
   it('collapses duplicate name+value declarations (aggregated CSS repeats a file)', () => {
     const index = buildTokenValueIndex([
       proj('color-primary', '#6266F0'),
@@ -69,6 +80,23 @@ describe('annotateProjectTokens', () => {
         matchedBy: ['value'],
       },
     });
+  });
+
+  it('annotates a translucent Figma color with a #RGBA project token', () => {
+    const index = buildTokenValueIndex([proj('overlay', '#0008')]);
+    const payload = result({ globalVars: { styles: { abc: { color: '#00000088' } } } });
+    const r = annotateProjectTokens(payload, index, false);
+    expect(r.projectTokens).toEqual({
+      '#00000088': { ref: 'var(--overlay)', name: 'overlay', matchedBy: ['value'] },
+    });
+  });
+
+  it('does not annotate a string whose hex length CSS does not accept', () => {
+    // A 5-digit string is not a color on either side; reading it as one would "match" it to a
+    // token that happens to hold the same malformed value.
+    const index = buildTokenValueIndex([proj('bogus', '#12345')]);
+    const payload = result({ globalVars: { styles: { abc: { color: '#12345' } } } });
+    expect(annotateProjectTokens(payload, index, false).projectTokens).toBeUndefined();
   });
 
   it('carries the declaring file for a SCSS token, without which the ref cannot resolve', () => {
