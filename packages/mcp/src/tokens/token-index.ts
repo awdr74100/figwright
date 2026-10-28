@@ -8,7 +8,7 @@ import type {
 } from '@figwright/shared';
 
 import { analyzeProject, isUtilityFirst } from '../profile/profile.js';
-import { normHex } from './hex.js';
+import { HEX_LITERAL, normHex } from './hex.js';
 import { loadProjectTokens } from './load.js';
 import { type ProjectToken, refOf } from './tokens.js';
 
@@ -58,13 +58,13 @@ const toMatch = (token: ProjectToken, utilityFirst: boolean): ProjectTokenMatch 
   ...(token.from === undefined ? {} : { from: token.from }),
 });
 
-/** A string is hex-like when normHex accepts it — the only values the index can answer for. */
-const HEX_SHAPE = /^#[0-9a-fA-F]{3,8}$/;
-
-/** Collect every hex-shaped string in the payload, keyed exactly as written (verbatim lookup). */
+/**
+ * Collect every hex-shaped string in the payload — the shapes normHex accepts, the only values the
+ * index can answer for — keyed exactly as written (verbatim lookup).
+ */
 const collectHexStrings = (value: unknown, out: Set<string>): void => {
   if (typeof value === 'string') {
-    if (HEX_SHAPE.test(value.trim())) out.add(value);
+    if (HEX_LITERAL.test(value.trim())) out.add(value);
     return;
   }
   if (Array.isArray(value)) {
