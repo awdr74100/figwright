@@ -10,5 +10,13 @@
   "rangeStrategy": "bump",
   "minimumReleaseAge": "1 day",
   "postUpdateOptions": ["pnpmDedupe"],
-  "ignoreDeps": ["node"]
+  "ignoreDeps": ["node"],
+  "packageRules": [
+    {
+      "description": "@types/node follows the dev Node in .node-version, not the newest Node: typing against a newer major lets code use APIs the supported runtimes lack. Bump it by hand together with .node-version.",
+      "matchPackageNames": ["@types/node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
 }
