@@ -31,13 +31,13 @@ It works in both directions:
 **Read**: turn a Figma selection into framework-aware code, grounded on faithful, de-duplicated design context (layout, typography, variables, components).
 
 <p align="center">
-  <img alt="Claude Code reading a selected Figma frame through Figwright, reusing the project's own Button component, color tokens and icons, then opening the page it built in a browser beside the design" src="./.github/assets/figma-to-code.gif" width="820">
+  <img alt="Claude Code reading a selected Figma frame through Figwright, reusing the project's own Button component, color tokens and icons, then opening the page it built in a browser beside the design" src="./.github/assets/figma-to-code.webp" width="820">
 </p>
 
 **Write**: author and edit the canvas directly, from frames and text to auto-layout, styles, variables, components, whole screens.
 
 <p align="center">
-  <img alt="Claude Code building a landing page on the Figma canvas through Figwright, one tool call at a time" src="./.github/assets/code-to-figma.gif" width="820">
+  <img alt="Claude Code building a landing page on the Figma canvas through Figwright, one tool call at a time" src="./.github/assets/code-to-figma.webp" width="820">
 </p>
 
 Everything runs on your machine: the server, the relay, and the plugin. Your designs are never sent anywhere.
