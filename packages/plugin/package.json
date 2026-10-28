@@ -13,7 +13,7 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@lucide/vue": "^1.61.0",
+    "@lucide/vue": "^1.62.0",
     "@vueuse/core": "^15.0.0",
     "vue": "^3.5.44",
     "zod": "^4.6.7"
