@@ -246,7 +246,7 @@ Both come down to how your MCP client launches the server: it spawns the `comman
   {
     "mcpServers": {
       "figwright": {
-        "command": "/Users/you/.local/share/fnm/node-versions/v24.x.x/installation/bin/npx",
+        "command": "/Users/you/.local/share/fnm/node-versions/v26.x.x/installation/bin/npx",
         "args": ["-y", "@figwright/mcp@latest"]
       }
     }

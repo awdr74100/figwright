@@ -32,7 +32,7 @@
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "changelogen": "^0.6.2",
     "knip": "^6.43.0",
