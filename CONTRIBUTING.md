@@ -15,7 +15,7 @@ By participating you agree to uphold our [Code of Conduct](./CODE_OF_CONDUCT.md)
 ## Prerequisites
 
 - **Node.js 24 LTS or newer** (see [`.node-version`](./.node-version)).
-- **pnpm 12**: this is a pnpm workspace; the version is pinned via `packageManager` in the root `package.json`, so [Corepack](https://github.com/nodejs/corepack) uses it automatically. Node 25 and later no longer bundle Corepack, so install it first: `npm install -g corepack && corepack enable`.
+- **pnpm 12**: this is a pnpm workspace; the version is pinned via `packageManager` in the root `package.json`, and any newer or older pnpm you run switches to it automatically. [Install pnpm](https://pnpm.io/installation) with `curl -fsSL https://get.pnpm.io/install.sh | sh -` on macOS and Linux, or `npm install -g pnpm@latest` on Windows. Node 25 and later no longer bundle Corepack, so it is not the default route any more.
 
 ## Getting started
 
