@@ -22,6 +22,7 @@
  */
 
 import { writePaints } from './paints.js';
+import { isAutoSized, writeTextBox } from './text-box.js';
 import type { TextLike } from './text-like.js';
 
 type Bag = Record<string, unknown>;
@@ -246,20 +247,17 @@ export const SEGMENT_FIELDS = [
   'openTypeFeatures',
 ] as const;
 
-/**
- * Node-level text settings, restored in this order: maxLines only takes effect once truncation is
- * ENDING, and truncation only once auto-resize allows it.
- */
+/** Node-level text settings outside the box, restored field by field. */
 const TEXT_NODE_PROPS = [
   'textAlignHorizontal',
   'textAlignVertical',
   'leadingTrim',
   'hangingPunctuation',
   'hangingList',
-  'textAutoResize',
-  'textTruncation',
-  'maxLines',
 ] as const;
+
+/** The box's own settings, captured alongside its size and restored as one by writeTextBox. */
+const TEXT_BOX_PROPS = ['textAutoResize', 'textTruncation', 'maxLines'] as const;
 
 /** Typography an EMPTY text node still carries at node level (it has no runs to hold it). */
 const EMPTY_TEXT_PROPS = [
@@ -336,7 +334,7 @@ export const captureText = async (
 ): Promise<TextSnapshot> => {
   const bag = bagOf(text);
   const node: Bag = {};
-  for (const k of TEXT_NODE_PROPS) if (k in text) node[k] = bag[k];
+  for (const k of [...TEXT_NODE_PROPS, ...TEXT_BOX_PROPS]) if (k in text) node[k] = bag[k];
   const empty: Bag = {};
   if (text.characters.length === 0) for (const k of EMPTY_TEXT_PROPS) empty[k] = bag[k];
   const segments =
@@ -515,27 +513,51 @@ export const restoreText = async (
 
   rebind(text, snapshot.characters_binding);
 
-  // A fixed or height-only box keeps whatever size the op left it at unless it is put back; the
-  // resize turns auto-resize off, which the node-level replay below turns back on.
-  const autoResize = snapshot.node.textAutoResize;
-  if (
-    autoResize !== 'WIDTH_AND_HEIGHT' &&
-    (text.width !== snapshot.width || text.height !== snapshot.height)
-  ) {
-    text.resizeWithoutConstraints(snapshot.width, snapshot.height);
-  }
   for (const k of TEXT_NODE_PROPS) writeIfDifferent(text, k, snapshot.node[k]);
+  // The box — size, auto-resize and line clamp — is coupled, so it is restored as one: written a
+  // field at a time, a mode written back cleared the clamp before it, and a same-size resize left
+  // auto height on. Text on a path has no box, and so no snapshot of one.
+  const notes = patternNote === undefined ? [] : [patternNote];
+  const autoResize = snapshot.node.textAutoResize as TextNode['textAutoResize'] | undefined;
+  if (text.type === 'TEXT' && autoResize !== undefined) {
+    const maxLines = snapshot.node.maxLines as number | null;
+    writeTextBox(
+      text,
+      {
+        autoResize: isAutoSized(autoResize)
+          ? (autoResize as 'HEIGHT' | 'WIDTH_AND_HEIGHT')
+          : 'NONE',
+        width: snapshot.width,
+        height: snapshot.height,
+        truncation: snapshot.node.textTruncation as TextNode['textTruncation'],
+        maxLines,
+      },
+      (w, h) => text.resizeWithoutConstraints(w, h),
+    );
+    // A fixed box shows a maxLines only as the one its fixing resize carried over, which no write
+    // brings back (measured) — so a snapshot with one says so rather than claim it.
+    if (text.maxLines !== maxLines) {
+      notes.push(
+        `text ${text.id} is back as a fixed box without its maxLines ${String(maxLines)} — Figma ` +
+          'shows a line count only on auto-sized text, and no write brings one back on a fixed box',
+      );
+    }
+  }
 
-  if (snapshot.segments.length === 0) return patternNote;
-  // Compared per character: the snapshot's runs split on every field, a fresh read on one, so
-  // run boundaries alone would differ even when every character's features match.
-  const drifted = !same(
-    perChar(text.getStyledTextSegments(['openTypeFeatures'])),
-    perChar(snapshot.segments),
-  );
-  return drifted
-    ? `text ${text.id} keeps changed OpenType features (Figma exposes no setter to restore them)`
-    : patternNote;
+  if (snapshot.segments.length > 0) {
+    // Compared per character: the snapshot's runs split on every field, a fresh read on one, so
+    // run boundaries alone would differ even when every character's features match.
+    const drifted = !same(
+      perChar(text.getStyledTextSegments(['openTypeFeatures'])),
+      perChar(snapshot.segments),
+    );
+    if (drifted) {
+      notes.push(
+        `text ${text.id} keeps changed OpenType features (Figma exposes no setter to restore them)`,
+      );
+    }
+  }
+  return notes.length > 0 ? notes.join('; ') : undefined;
 };
 
 // ── Geometry & placement ─────────────────────────────────────────────────────
@@ -605,6 +627,11 @@ export const captureGeometry = (node: SceneNode): GeometrySnapshot => {
   ]) {
     if (k in node) layout[k] = bag[k];
   }
+  // A text box's clamp goes with its mode: a mode written back alone cleared it (measured).
+  if (node.type === 'TEXT') {
+    layout.textTruncation = node.textTruncation;
+    layout.maxLines = node.maxLines;
+  }
   const parent = node.parent as (BaseNode & { layoutMode?: string }) | null;
   const grid =
     parent?.layoutMode === 'GRID' && !flowsIntoCells(node) && 'gridRowAnchorIndex' in node
@@ -637,10 +664,31 @@ export const restoreGeometry = (node: SceneNode, snapshot: GeometrySnapshot): vo
   };
   for (const k of MIN_MAX) if (k in L) writeIfDifferent(node, k, L[k]);
   if ('layoutPositioning' in L) writeIfDifferent(node, 'layoutPositioning', L.layoutPositioning);
-  restoreSizing();
-  if (!derivedBox(node) && (node.width !== snapshot.width || node.height !== snapshot.height)) {
-    (node as LayoutMixin).resizeWithoutConstraints(snapshot.width, snapshot.height);
+  if (node.type === 'TEXT' && 'textTruncation' in L) {
+    // A text box's size, mode and clamp are coupled, so they go back as one; the sizing modes
+    // around it go back first, and again after, in case the box's resizes moved them.
+    for (const k of SIZING) if (k in L) writeIfDifferent(node, k, L[k]);
+    const autoResize = L.textAutoResize as TextNode['textAutoResize'];
+    writeTextBox(
+      node,
+      {
+        autoResize: isAutoSized(autoResize)
+          ? (autoResize as 'HEIGHT' | 'WIDTH_AND_HEIGHT')
+          : 'NONE',
+        width: snapshot.width,
+        height: snapshot.height,
+        truncation: L.textTruncation as TextNode['textTruncation'],
+        maxLines: L.maxLines as number | null,
+      },
+      (w, h) => node.resizeWithoutConstraints(w, h),
+    );
+    for (const k of SIZING) if (k in L) writeIfDifferent(node, k, L[k]);
+  } else {
     restoreSizing();
+    if (!derivedBox(node) && (node.width !== snapshot.width || node.height !== snapshot.height)) {
+      (node as LayoutMixin).resizeWithoutConstraints(snapshot.width, snapshot.height);
+      restoreSizing();
+    }
   }
   if (!inFlow(node) && !derivedBox(node) && !same(node.relativeTransform, snapshot.transform)) {
     (node as LayoutMixin).relativeTransform = snapshot.transform;

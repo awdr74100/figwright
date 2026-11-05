@@ -23,6 +23,12 @@ const TEXT_KEYS = [
   'textAutoResize',
 ] as const;
 
+/**
+ * A text box's size, which set_text_properties sets alongside its auto-resize. Taken for TEXT only:
+ * create_frame and the shape tools have a width / height of their own, sized by `resize()`.
+ */
+const TEXT_BOX_KEYS = ['width', 'height'] as const;
+
 const pick = (source: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> =>
   Object.fromEntries(keys.filter(k => source[k] !== undefined).map(k => [k, source[k]]));
 
@@ -31,9 +37,10 @@ const pick = (source: Record<string, unknown>, keys: readonly string[]): Record<
  * set_corner_radius / set_auto_layout / set_layout_props / set_text_properties run — so a field
  * means the same thing at creation as afterwards, and their validation and quirks come along.
  *
- * Runs after the node is placed: FILL sizing needs its auto-layout parent, and auto layout must be
- * on before HUG means anything. If any step throws, the half-built node is removed so a refused
- * create never leaves a styled-wrong layer behind, and the error says which step it was.
+ * Runs after the node is placed: FILL sizing needs its auto-layout parent, auto layout must be on
+ * before HUG means anything, and a text node's typography must be set before a FIXED axis freezes
+ * its box. If any step throws, the half-built node is removed so a refused create never leaves a
+ * styled-wrong layer behind, and the error says which step it was.
  */
 export const applyInitialProps = async (
   figmaCtx: typeof figma,
@@ -74,13 +81,16 @@ export const applyInitialProps = async (
       { nodeId, ...(params.autoLayout as Record<string, unknown>) },
     ]);
   }
+  // Typography before sizing: a FIXED axis on a text node freezes its box at the size it has right
+  // then (Figma switches textAutoResize to NONE), so sizing first would freeze the box the default
+  // 12px font needs and let a larger fontSize overflow it.
+  const text = pick(params, node.type === 'TEXT' ? [...TEXT_KEYS, ...TEXT_BOX_KEYS] : TEXT_KEYS);
+  if (Object.keys(text).length > 0) {
+    steps.push(['text', createSetTextPropertiesHandler(figmaCtx), { nodeId, ...text }]);
+  }
   const layout = pick(params, ['layoutSizingHorizontal', 'layoutSizingVertical', 'clipsContent']);
   if (Object.keys(layout).length > 0) {
     steps.push(['layout', createSetLayoutPropsHandler(figmaCtx), { nodeId, ...layout }]);
-  }
-  const text = pick(params, TEXT_KEYS);
-  if (Object.keys(text).length > 0) {
-    steps.push(['text', createSetTextPropertiesHandler(figmaCtx), { nodeId, ...text }]);
   }
 
   for (const [label, handler, args] of steps) {

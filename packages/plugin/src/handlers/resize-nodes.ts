@@ -12,9 +12,9 @@ interface Box {
 
 type Adjusted = NonNullable<ResizeNodesResult['adjusted']>[number];
 
-const sameSize = (a: number, b: number): boolean => Math.abs(a - b) < SIZE_EPSILON;
+export const sameSize = (a: number, b: number): boolean => Math.abs(a - b) < SIZE_EPSILON;
 
-const enclosingInstance = (node: BaseNode): BaseNode | null => {
+export const enclosingInstance = (node: BaseNode): BaseNode | null => {
   for (let parent = node.parent; parent !== null; parent = parent.parent) {
     if (parent.type === 'INSTANCE') return parent;
   }
@@ -30,7 +30,7 @@ const bound = (node: BaseNode, key: 'minWidth' | 'maxWidth' | 'minHeight' | 'max
  * Why a node did not end at the requested size. Only ever called on a node that missed it, so each
  * branch names something that measurably happened, never a rule assumed in advance.
  */
-const explain = (node: BaseNode, requested: Box, before: Box, after: Box): string => {
+export const explain = (node: BaseNode, requested: Box, before: Box, after: Box): string => {
   const instance = enclosingInstance(node);
   if (node.type === 'LINE' && instance === null && sameSize(after.width, requested.width)) {
     return `a line has no height — it was set to length ${after.width} and keeps height 0`;

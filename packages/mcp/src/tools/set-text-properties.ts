@@ -30,11 +30,30 @@ export const setTextPropertiesTool: ToolSpec = {
     'textAlignHorizontal (CSS text-align; JUSTIFIED = justify) and textAlignVertical (where the ' +
     'text sits in a box taller than it — it only shows with a fixed height, textAutoResize NONE ' +
     'or WIDTH_AND_HEIGHT hugging leaves no slack). Layout/overflow: textTruncation (ellipsis), maxLines (line clamp), ' +
-    'textAutoResize. Any field may be omitted to leave it unchanged. maxLines applies when ' +
-    'textTruncation is ENDING. Text on a path (TEXT_PATH) takes fontName, fontSize, ' +
+    'textAutoResize, and the box size: width alone wraps the text at that width and lets its ' +
+    'height follow (auto-width text becomes auto height; a fixed box keeps its height), width + ' +
+    'height make a fixed box, and height alone fixes the height at the current width — the way to ' +
+    'size text, since resize_nodes leaves it a fixed box its wrapped lines can overflow. In auto ' +
+    'layout a sized axis becomes FIXED, and a width / height passed replaces a variable bound to ' +
+    'it, as resize_nodes does. A width / height that textAutoResize in the same call ' +
+    'would undo (WIDTH_AND_HEIGHT; HEIGHT with a height) is refused. A box being fixed keeps the ' +
+    'height its text showed: textAutoResize NONE / TRUNCATE on auto-sized text fixes it as it is, ' +
+    'and with a width it is re-fitted there first (FigJam keeps a fixed text box at least as tall ' +
+    'as its text). Any field may be omitted to leave it unchanged, ' +
+    'with the one exception Figma imposes: maxLines (a line clamp) shows only on auto-sized text ' +
+    'with textTruncation ENDING, so a box being fixed keeps its ellipsis but shows no line count ' +
+    '(a fixed box truncates at its own edge), turning the ellipsis off clears it, and turning it ' +
+    'on for auto-sized text sets it to 1. A maxLines the box would not show is refused. Text on a ' +
+    'path (TEXT_PATH) takes fontName, fontSize, ' +
     'letterSpacing, textCase and the two alignments — on a path textAlignHorizontal anchors the ' +
     'text at its start point and textAlignVertical picks the side of the path; the line, ' +
-    'paragraph, decoration and box fields are refused there. Returns { ok, nodeId }.',
+    'paragraph, decoration and box fields are refused there. Inside an instance, whose layers ' +
+    'Figma mostly will not resize, a box change that needs a resize (a size, fixing the box, ' +
+    're-fitting it) is refused before anything is written, and in a batch so is one whose ' +
+    'rollback would need it. Returns { ok, nodeId, ' +
+    'width, height, adjusted? } — the size the text ends at, read back; adjusted says why the box ' +
+    'is not what was asked (a min / max bound held its size, or Figma did not apply the mode or ' +
+    'clamp).',
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id'),
     // Typography (font load happens automatically when any of these is set)
@@ -82,6 +101,16 @@ export const setTextPropertiesTool: ToolSpec = {
       .enum(['NONE', 'HEIGHT', 'WIDTH_AND_HEIGHT', 'TRUNCATE'])
       .optional()
       .describe('How the text box resizes to its content'),
+    width: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Text box width in px; the text wraps at it (auto-width text becomes auto height)'),
+    height: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Text box height in px; fixes the box (textAutoResize NONE)'),
   }),
   kind: 'write',
 };

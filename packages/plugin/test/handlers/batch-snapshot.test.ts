@@ -190,6 +190,88 @@ describe('restoreOrder', () => {
   });
 });
 
+describe('restoreGeometry on a text box', () => {
+  /**
+   * A text node with the box rules measured in a real file: a resize that changes the height fixes
+   * the box (a same-size one does nothing), a mode write that moves the mode turns the ellipsis
+   * off, maxLines reads only on auto-sized text with the ellipsis on, and auto height sizes the
+   * text — one 400px line at 15px a line.
+   */
+  const clampedText = () => {
+    let mode = 'HEIGHT';
+    let [width, height] = [120, 30];
+    let truncation = 'ENDING';
+    let lines: number | null = 2;
+    const fit = () => {
+      if (mode === 'HEIGHT') height = 15 * Math.min(Math.ceil(400 / width), lines ?? 99);
+    };
+    const resize = (w: number, h: number) => {
+      if (w === width && h === height) return;
+      if (h !== height) mode = 'NONE';
+      [width, height] = [w, h];
+      fit();
+    };
+    return {
+      id: 't',
+      type: 'TEXT',
+      parent: null,
+      relativeTransform: [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      get width() {
+        return width;
+      },
+      get height() {
+        return height;
+      },
+      resize,
+      resizeWithoutConstraints: resize,
+      get textAutoResize() {
+        return mode === 'NONE' && truncation === 'ENDING' ? 'TRUNCATE' : mode;
+      },
+      set textAutoResize(value: string) {
+        if (value !== this.textAutoResize) [truncation, lines] = ['DISABLED', null];
+        mode = value === 'TRUNCATE' ? 'NONE' : value;
+        if (value === 'TRUNCATE') truncation = 'ENDING';
+        fit();
+      },
+      get textTruncation() {
+        return truncation;
+      },
+      set textTruncation(value: string) {
+        if (value === 'DISABLED') lines = null;
+        truncation = value;
+        fit();
+      },
+      get maxLines() {
+        return mode === 'NONE' ? null : lines;
+      },
+      set maxLines(value: number | null) {
+        if (mode !== 'NONE' && truncation === 'ENDING') lines = value;
+        fit();
+      },
+    };
+  };
+
+  it('puts a resized clamped text back with its clamp, which a mode written back alone cleared', () => {
+    // resize_nodes' rollback wrote textAutoResize HEIGHT over the fixed box, which turned the
+    // ellipsis off and cleared maxLines (measured).
+    const text = clampedText();
+    const snapshot = captureGeometry(text as unknown as SceneNode);
+    text.resize(77, 33);
+    expect(text).toMatchObject({ textAutoResize: 'TRUNCATE', maxLines: null });
+    restoreGeometry(text as unknown as SceneNode, snapshot);
+    expect(text).toMatchObject({
+      textAutoResize: 'HEIGHT',
+      textTruncation: 'ENDING',
+      maxLines: 2,
+      width: 120,
+      height: 30,
+    });
+  });
+});
+
 describe('restoreGeometry', () => {
   /** A grid child whose direct placement Figma refuses while its grid flows (measured). */
   const gridChild = (parent: Record<string, unknown>) => {

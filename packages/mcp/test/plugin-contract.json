@@ -1,5 +1,5 @@
 {
-  "minPluginVersion": "0.7.0",
+  "minPluginVersion": "0.8.0",
   "tools": {
     "ping": [],
     "get_selection": [],
@@ -78,6 +78,7 @@
       "fontName.style",
       "fontName.variationSettings",
       "fontSize",
+      "height",
       "letterSpacing",
       "letterSpacing.unit",
       "letterSpacing.value",
@@ -95,7 +96,8 @@
       "textCase",
       "textDecoration",
       "textTruncation",
-      "textWrapStyle"
+      "textWrapStyle",
+      "width"
     ],
     "set_text_range": [
       "nodeId",
@@ -276,6 +278,7 @@
       "fontName.style",
       "fontName.variationSettings",
       "fontSize",
+      "height",
       "layoutSizingHorizontal",
       "layoutSizingVertical",
       "letterSpacing",
@@ -296,6 +299,7 @@
       "textDecoration",
       "textTruncation",
       "textWrapStyle",
+      "width",
       "x",
       "y"
     ],

@@ -221,6 +221,11 @@ const fakeText = (id: string, characters: string, base: Run = {}): Record<string
       node.height = h;
       node.textAutoResize = 'NONE';
     },
+    resize: (w: number, h: number) => {
+      node.width = w;
+      node.height = h;
+      node.textAutoResize = 'NONE';
+    },
     getRangeTextStyleId: (s: number, e: number) => {
       const ids = new Set(runs.slice(s, e).map(r => r.textStyleId));
       return ids.size === 1 ? [...ids][0] : MIXED;
@@ -667,6 +672,92 @@ describe('batch handler', () => {
     expect(text.textAutoResize).toBe('WIDTH_AND_HEIGHT');
     // A captured face — the bold run's — is loaded again before its runs are written back.
     expect(loadFontAsync).toHaveBeenCalledWith(INTER_BOLD);
+  });
+
+  it('puts a text box back — size, auto-resize and line clamp — after a box write', async () => {
+    const text = fakeText('1:1', 'Hello World');
+    Object.assign(text, { textAutoResize: 'HEIGHT', textTruncation: 'ENDING', maxLines: 2 });
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('1:1', text);
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_text_properties',
+            params: { nodeId: '1:1', width: 300, height: 90, maxLines: null },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(text).toMatchObject({
+      width: 100,
+      textAutoResize: 'HEIGHT',
+      textTruncation: 'ENDING',
+      maxLines: 2,
+    });
+  });
+
+  it('puts back the FILL a width write turned FIXED', async () => {
+    // A width goes through resize(), which turns a FILL axis FIXED (measured); the text snapshot
+    // alone held no sizing, so the rollback left the text FIXED.
+    // In a vertical auto layout the horizontal sizing is read off the layoutAlign primitive.
+    const text = fakeText('1:1', 'Hello World');
+    Object.assign(text, {
+      textAutoResize: 'HEIGHT',
+      layoutAlign: 'STRETCH',
+      resize: (w: number, h: number) => {
+        Object.assign(text, {
+          width: w,
+          height: h,
+          textAutoResize: 'NONE',
+          layoutAlign: 'INHERIT',
+        });
+      },
+    });
+    Object.defineProperty(text, 'layoutSizingHorizontal', {
+      get: () => (text.layoutAlign === 'STRETCH' ? 'FILL' : 'FIXED'),
+    });
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('1:1', text);
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [{ tool: 'set_text_properties', params: { nodeId: '1:1', width: 90 } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+
+    expect(text).toMatchObject({ layoutSizingHorizontal: 'FILL', layoutAlign: 'STRETCH' });
+  });
+
+  it('refuses a box change it could not roll back inside an instance, before running anything', async () => {
+    // Auto height needs no resize, but fixing the box again on rollback does — and the instance
+    // ignores resize() (measured), so the undo would leave the label in auto height.
+    const text = fakeText('I9:9;1:1', 'Hello World');
+    Object.assign(text, {
+      parent: { type: 'INSTANCE', id: '9:9', name: 'Card', parent: null },
+      textAutoResize: 'NONE',
+      resize: () => {},
+      resizeWithoutConstraints: () => {},
+    });
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('I9:9;1:1', text);
+    const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_text_properties', params: { nodeId: 'I9:9;1:1', textAutoResize: 'HEIGHT' } },
+        ],
+      }),
+    ).rejects.toThrow(
+      /inside an instance that will not resize it, so this box change could not be rolled back/,
+    );
+    expect(text.textAutoResize).toBe('NONE');
   });
 
   it('brings back the runs a set_text restyled', async () => {
