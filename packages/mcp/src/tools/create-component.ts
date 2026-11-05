@@ -21,8 +21,20 @@ export const createComponentTool: ToolSpec = {
     name: z.string().optional(),
     x: z.number().optional(),
     y: z.number().optional(),
-    width: z.number().optional(),
-    height: z.number().optional(),
+    width: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe(
+        'Width in px, at least 0.01; alone, the height stays at 100 (or that of the node converted)',
+      ),
+    height: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe(
+        'Height in px, at least 0.01; alone, the width stays at 100 (or that of the node converted)',
+      ),
   }),
   kind: 'write',
 };

@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyCreateSize, readCreateSize } from './create-size.js';
 import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
@@ -16,9 +17,11 @@ export const createCreateRectangleHandler =
       height?: unknown;
     };
 
+    const size = readCreateSize(p, 'create_rectangle');
+
     const rect = figmaCtx.createRectangle();
     if (typeof p.name === 'string') rect.name = p.name;
-    if (typeof p.width === 'number' && typeof p.height === 'number') rect.resize(p.width, p.height);
+    applyCreateSize(rect, size, (w, h) => rect.resize(w, h));
     if (typeof p.x === 'number') rect.x = p.x;
     if (typeof p.y === 'number') rect.y = p.y;
 

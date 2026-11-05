@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyCreateSize, readCreateSize } from './create-size.js';
 import { placeNode } from './place.js';
 
 export const createCreateComponentHandler =
@@ -18,6 +19,7 @@ export const createCreateComponentHandler =
 
     // fromNodeId → componentize an existing node (createComponentFromNode replaces it in place,
     // keeping its parent + position); otherwise create an empty component to build into.
+    const size = readCreateSize(p, 'create_component');
     let component: ComponentNode;
     let alreadyPlaced = false;
     if (typeof p.fromNodeId === 'string') {
@@ -42,9 +44,7 @@ export const createCreateComponentHandler =
     }
 
     if (typeof p.name === 'string') component.name = p.name;
-    if (typeof p.width === 'number' && typeof p.height === 'number') {
-      component.resize(p.width, p.height);
-    }
+    applyCreateSize(component, size, (w, h) => component.resize(w, h));
     if (typeof p.x === 'number') component.x = p.x;
     if (typeof p.y === 'number') component.y = p.y;
 

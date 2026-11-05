@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyCreateSize, readCreateSize } from './create-size.js';
 import { placeNode } from './place.js';
 
 export const createCreateSectionHandler =
@@ -15,12 +16,12 @@ export const createCreateSectionHandler =
       height?: unknown;
     };
 
+    const size = readCreateSize(p, 'create_section');
+
     const section = figmaCtx.createSection();
     if (typeof p.name === 'string') section.name = p.name;
     // Sections size via resizeWithoutConstraints (they have no constraint behaviour).
-    if (typeof p.width === 'number' && typeof p.height === 'number') {
-      section.resizeWithoutConstraints(p.width, p.height);
-    }
+    applyCreateSize(section, size, (w, h) => section.resizeWithoutConstraints(w, h));
     if (typeof p.x === 'number') section.x = p.x;
     if (typeof p.y === 'number') section.y = p.y;
 

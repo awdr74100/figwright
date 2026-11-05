@@ -290,9 +290,10 @@ size) — the exact `layoutSizingHorizontal/Vertical` codegen reads, now settabl
 first:
 
 - A container (wrapper, row, card, button) should **`HUG`** so it shrinks to its content instead of
-  staying a fixed **100×100** box — this is the single most common write miss. A frame created
-  without an explicit `width`+`height` stays 100×100 with its counter axis FIXED until you set
-  `HUG`.
+  staying a fixed **100×100** box — this is the single most common write miss. A side you don't
+  give `create_frame` stays 100, its counter axis FIXED until you set `HUG`. Pass only the side the
+  source fixes (a card's `w-[360px]`) and let the other hug: with `autoLayout`, the side passed is
+  FIXED and the primary axis hugs its content.
 - A child that should stretch fills with **`FILL`** — append it into its auto-layout parent first.
 - `FIXED` keeps an explicit size (e.g. a card pinned to a column width).
 

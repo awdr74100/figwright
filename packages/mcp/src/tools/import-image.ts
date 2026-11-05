@@ -41,8 +41,16 @@ export const importImageTool: ToolSpec = {
     parentId: z.string().optional().describe('Parent node id (default: current page)'),
     x: z.number().optional(),
     y: z.number().optional(),
-    width: z.number().optional().describe('Override width (default: image width)'),
-    height: z.number().optional().describe('Override height (default: image height)'),
+    width: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Override width, at least 0.01 (default: image width)'),
+    height: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Override height, at least 0.01 (default: image height)'),
     scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
   }),
   kind: 'write',
