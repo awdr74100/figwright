@@ -2,7 +2,11 @@ import { ErrorCode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createToolCall, isPluginBridgeMessage } from '../protocol/bridge.js';
-import { dispatchSandboxMessage, type SandboxHandlers } from '../src/dispatcher.js';
+import {
+  dispatchSandboxMessage,
+  markWriteHandler,
+  type SandboxHandlers,
+} from '../src/dispatcher.js';
 
 describe('dispatchSandboxMessage', () => {
   it('replies with tool-result when handler resolves', async () => {
@@ -82,6 +86,26 @@ describe('dispatchSandboxMessage', () => {
       },
     });
     expect((outcome as { reply: { message: string } }).reply.message).toContain('editor: dev');
+  });
+
+  // Dev Mode refuses every write, so a write refused for its own arguments first still names it;
+  // a read that fails for its own reasons does not.
+  it('names Dev Mode on any error from a handler marked as a write, and not from a read', async () => {
+    const fail = (): never => {
+      throw new Error('node 9:999 not found');
+    };
+    const handlers: SandboxHandlers = { write: markWriteHandler(fail), read: () => fail() };
+    const reply = async (method: string) =>
+      (
+        (await dispatchSandboxMessage({
+          raw: createToolCall({ id: method, method }),
+          handlers,
+          editorType: 'dev',
+        })) as { reply: { message: string } }
+      ).reply.message;
+
+    expect(await reply('write')).toContain('(editor: dev — ');
+    expect(await reply('read')).toBe('node 9:999 not found');
   });
 
   // Figma Design is the common case, and it must stay free of the caveat entirely.

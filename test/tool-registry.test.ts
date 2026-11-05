@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_TOOL_SPECS, WRITE_TOOL_NAMES } from '../packages/mcp/src/tools/registry.js';
 import { WIRE_TOOL_SCHEMAS } from '../packages/mcp/src/tools/wire-schema.js';
 import { toToolDefinition } from '../packages/mcp/test/tool-schema.js';
+import { isWriteHandler } from '../packages/plugin/src/dispatcher.js';
 import { BATCHABLE_TOOLS, NON_BATCHABLE } from '../packages/plugin/src/handlers/batch.js';
 import { createSandboxHandlers } from '../packages/plugin/src/handlers/registry.js';
 
@@ -81,6 +82,14 @@ describe('tool registry', () => {
     const writes = [...WRITE_TOOL_NAMES];
     expect(writes.filter(n => !serverNames.includes(n))).toEqual([]);
     expect(writes.filter(n => !handlerKeys.includes(n))).toEqual([]);
+  });
+
+  // Dev Mode refuses every write, so a write handler's error names it whatever it says — which
+  // needs the plugin's write handlers to be exactly the tools the server advertises as writes.
+  it('marks exactly the advertised write tools as writes in the plugin', () => {
+    const handlers = createSandboxHandlers({} as never);
+    const marked = Object.keys(handlers).filter(name => isWriteHandler(handlers[name]!));
+    expect(marked.toSorted()).toEqual([...WRITE_TOOL_NAMES].toSorted());
   });
 
   it('every delete_* tool declares destructive, and destructive only appears on writes', () => {

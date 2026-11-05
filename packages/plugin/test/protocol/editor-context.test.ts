@@ -10,7 +10,9 @@ describe('editorLimitation', () => {
   // The manifest claims three editors; two of them can't do what the tool surface assumes.
   it('describes what Dev Mode and FigJam refuse', () => {
     expect(editorLimitation('dev')).toContain('blocks every write');
-    expect(editorLimitation('figjam')).toContain('no components, variables or styles');
+    expect(editorLimitation('figjam')).toContain(
+      'no components, variables, styles or Figma Motion',
+    );
   });
 
   // Verified live in FigJam: createFrame / createSection / createRectangle / createText all
@@ -49,22 +51,70 @@ describe('editorLimitation', () => {
 });
 
 describe('withEditorContext', () => {
-  it('names the editor alongside the error the API already raised', () => {
-    const message = withEditorContext('Cannot write to document', 'dev');
+  const read = false;
+  const write = true;
 
-    expect(message).toContain('Cannot write to document');
-    expect(message).toContain('editor: dev');
-    expect(message).toContain('blocks every write');
+  // Each message below is what the editor itself raised, measured live with every tool called on
+  // arguments Figma Design accepts.
+  it.each([
+    ['dev', 'in createFrame: Can\'t call "createFrame" in read-only mode'],
+    ['dev', 'in set_name: Can\'t set "name" in read-only mode'],
+    ['figjam', "cannot read property 'createVariableCollection' of undefined"],
+    ['figjam', 'not a function'],
+    ['figjam', "create_frame: fills — cannot read property 'getVariableByIdAsync' of undefined"],
+    // The V8 wording of the same failure.
+    ['figjam', "Cannot read properties of undefined (reading 'getLocalVariableCollectionsAsync')"],
+    // A handler meeting what FigJam lacks, in its own words.
+    ['figjam', 'swap_component: node 0:0 is not an INSTANCE'],
+    ['figjam', 'add_component_property: 0:0 (DOCUMENT) is not a component or component set'],
+    ['figjam', 'combine_as_variants: node 0:0 is a DOCUMENT, not a COMPONENT'],
+    ['figjam', 'get_motion_styles: the Figma Motion API is not available here.'],
+  ])('names %s when it is behind the error: %s', (editorType, raised) => {
+    const message = withEditorContext(new Error(raised), editorType, read);
+    expect(message.startsWith(`${raised} (editor: ${editorType} — `)).toBe(true);
+    expect(message).toContain(editorLimitation(editorType)!);
   });
 
-  // The suffix is a statement about the environment, not a diagnosis of this failure — so it must
-  // not overwrite or reword what actually went wrong.
-  it('keeps the original message intact', () => {
-    expect(withEditorContext('node 1:2 not found', 'figjam')).toMatch(/^node 1:2 not found /);
+  // Dev Mode refuses every write, so a write refused first for its own arguments would only be
+  // refused again once fixed.
+  it('names Dev Mode on any error a write raises there', () => {
+    expect(
+      withEditorContext(new Error('rename_node: node 9:999 not found'), 'dev', write),
+    ).toContain('(editor: dev — Dev Mode blocks every write');
   });
 
-  it('leaves Figma Design errors untouched', () => {
-    expect(withEditorContext('boom', 'figma')).toBe('boom');
+  // Measured: set_layout_props reworded the read-only refusal it caught ("… HUG needs an auto-layout
+  // frame …"), and the refusal survived only as the error it wrapped.
+  it('finds the refusal in an error a handler wrapped', () => {
+    const wrapped = new Error('set_layout_props: cannot set layoutSizingHorizontal=FILL', {
+      cause: new Error(
+        'in set_layoutSizingHorizontal: Can\'t set "layoutSizingHorizontal" in read-only mode',
+      ),
+    });
+    expect(withEditorContext(wrapped, 'dev', read)).toBe(
+      `set_layout_props: cannot set layoutSizingHorizontal=FILL (editor: dev — ${editorLimitation('dev')!})`,
+    );
+  });
+
+  // The suffix used to go on every error in these editors, telling an agent whose own arguments
+  // were refused that the editor was to blame.
+  it.each([
+    ['dev', 'get_node: node 9:999 not found', read],
+    ['figjam', 'create_rectangle: width must be a number, 0 or more', write],
+    ['figjam', 'set_text: node 9:999 not found', write],
+    ['figjam', 'set_reactions: node 0:1 not found or cannot have reactions', write],
+    ['figjam', 'resize_nodes: width and height must be finite numbers', write],
+  ])('leaves a %s error the editor is not behind untouched: %s', (editorType, raised, writes) => {
+    expect(withEditorContext(new Error(raised), editorType, writes)).toBe(raised);
+  });
+
+  it('leaves Figma Design errors untouched, refusal-shaped or not', () => {
+    expect(withEditorContext(new Error('boom'), 'figma', write)).toBe('boom');
+    expect(withEditorContext(new Error('not a function'), 'figma', read)).toBe('not a function');
+  });
+
+  it('takes a thrown non-Error as its message', () => {
+    expect(withEditorContext('not a function', 'figjam', read)).toContain('(editor: figjam — ');
   });
 });
 

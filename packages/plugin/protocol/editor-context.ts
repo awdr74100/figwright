@@ -15,15 +15,23 @@
  * Types, constants and pure functions only, so it stays importable from a context with no `figma`
  * and one with no DOM.
  *
- * The fix deliberately carries no list of which tools write. A list would be a second source of
- * truth beside the tool registry and would drift the first time a tool is added — the same failure
- * mode as any hand-kept mirror. Instead the editor's limitation is appended to whatever error the
- * API already produced: only the calls an editor rejects ever reach that path, so the set stays
- * correct by construction.
+ * It used to go on every error raised in those editors. That told an agent whose call was refused
+ * for its own arguments — a maxLines without an ellipsis, a node id that matches nothing — that the
+ * editor was the reason, and sent it off to open another file instead of fixing the call. It now
+ * goes on an error the editor can be behind, decided from what each editor was measured to raise
+ * when every tool was called in it with arguments Figma Design accepts:
  *
- * The wording is a statement about the environment, never a claim about this particular failure. An
- * agent that hits "node not found" in Dev Mode should not be told read-only was the cause — it
- * should be told which editor it is standing in, and left to draw its own conclusion.
+ * - Dev Mode refuses every write, so any write's error carries it — even one refused for its own
+ *   arguments, which would only be refused again once fixed — and a read's only when it has Figma's
+ *   refusal ("in read-only mode") somewhere in it, a handler's own wording wrapped round it
+ *   included.
+ * - FigJam's missing APIs throw "cannot read property 'X' of undefined" or "not a function", and a
+ *   handler that reaches for a component, an instance or Figma Motion first finds none and says so
+ *   in its own words ("is not an INSTANCE", "is not a component"). Either carries it.
+ *
+ * Neither needs a list of tools: whether a handler writes is the registry's own split (the
+ * dispatcher's `markWriteHandler`), and the rest is read off the error. A new tool that hits a
+ * limit gets the sentence without anyone listing it.
  */
 
 /**
@@ -47,30 +55,72 @@
  * `slides` and `buzz` exist in the typings but are not in our manifest's `editorType`, so the
  * plugin can never run there — they are omitted rather than guessed at.
  */
-const EDITOR_LIMITATIONS: Readonly<Record<string, string>> = {
-  dev:
-    'Dev Mode blocks every write — nodes, pages, variables and styles alike. Reads, exports ' +
-    '(screenshots, PDF) and plugin data still work. Switch the file to Design mode to make ' +
-    'changes.',
-  figjam:
-    'FigJam has no components, variables or styles, so the tools that read or edit them fail ' +
-    'there — frames, sections, shapes and text all work. Open a Figma Design file for the rest.',
+interface EditorLimitation {
+  sentence: string;
+  /** The editor's own refusal, found in the error or anything it wraps. */
+  refusal: RegExp;
+  /** A handler's own words for meeting something the editor lacks. */
+  lacks?: RegExp;
+  /** The editor refuses every write, so a write's error carries the sentence whatever it says. */
+  refusesWrites?: true;
+}
+
+const EDITOR_LIMITATIONS: Readonly<Record<string, EditorLimitation>> = {
+  dev: {
+    sentence:
+      'Dev Mode blocks every write — nodes, pages, variables and styles alike. Reads, exports ' +
+      '(screenshots, PDF) and plugin data still work. Switch the file to Design mode to make ' +
+      'changes.',
+    // Measured: `in createFrame: Can't call "createFrame" in read-only mode` for a create, and
+    // `in set_name: Can't set "name" in read-only mode` for a property write.
+    refusal: /in read-only mode/,
+    refusesWrites: true,
+  },
+  figjam: {
+    sentence:
+      'FigJam has no components, variables, styles or Figma Motion, so the tools that read or ' +
+      'edit them fail there — frames, sections, shapes and text all work. Open a Figma Design file ' +
+      'for the rest.',
+    // Measured: `cannot read property 'createVariableCollection' of undefined` (figma.variables is
+    // missing) and a bare `not a function` (createPaintStyle, createComponent, getLocalPaintStyles
+    // are). The V8 wording of the first, "Cannot read properties of undefined", is matched too.
+    refusal: /cannot read propert(?:y|ies)\b.*\bof undefined|\bnot a function\b/i,
+    // Measured: "node 0:0 is not an INSTANCE", "… is not a component or component set", "Figma
+    // Motion is only available in the Figma Design editor", "the Figma Motion API is not available
+    // here". Variables and styles need no words of their own: their APIs are missing outright.
+    lacks: /\b(?:components?|instances?|variants?|motion)\b/i,
+  },
 };
 
 /** The limitation an agent (or the user) should know about in `editorType`, or null in Figma Design. */
 export const editorLimitation = (editorType: string): string | null =>
-  EDITOR_LIMITATIONS[editorType] ?? null;
+  EDITOR_LIMITATIONS[editorType]?.sentence ?? null;
+
+/** An error's message and those of the errors it wraps (`cause`), outermost first. */
+const messagesOf = (error: unknown): string[] => {
+  const messages: string[] = [];
+  for (let e = error, depth = 0; e !== undefined && e !== null && depth < 8; depth++) {
+    messages.push(e instanceof Error ? e.message : String(e));
+    e = e instanceof Error ? e.cause : undefined;
+  }
+  return messages;
+};
 
 /**
- * Append the current editor's limitation to a handler error.
- *
- * Phrased as `(editor: X — …)` so it reads as the environment the call was made in rather than a
- * diagnosis of it. In Figma Design — the overwhelmingly common case — the message is returned
- * untouched, so this adds no noise to the errors most users ever see.
+ * A handler error's message, with the current editor's limitation appended when the editor can be
+ * behind it (see the module doc). Phrased as `(editor: X — …)`. Any other error — the call's own
+ * arguments refused by a tool the editor allows, a node not found — is returned untouched, as it is
+ * in Figma Design.
  */
-export const withEditorContext = (message: string, editorType: string): string => {
-  const limitation = editorLimitation(editorType);
-  return limitation === null ? message : `${message} (editor: ${editorType} — ${limitation})`;
+export const withEditorContext = (error: unknown, editorType: string, write: boolean): string => {
+  const [message = '', ...wrapped] = messagesOf(error);
+  const limitation = EDITOR_LIMITATIONS[editorType];
+  if (limitation === undefined) return message;
+  const applies =
+    (write && limitation.refusesWrites === true) ||
+    [message, ...wrapped].some(m => limitation.refusal.test(m)) ||
+    (limitation.lacks?.test(message) ?? false);
+  return applies ? `${message} (editor: ${editorType} — ${limitation.sentence})` : message;
 };
 
 /**

@@ -1,4 +1,4 @@
-import type { SandboxHandlers } from '../dispatcher.js';
+import { markWriteHandler, type SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { withInstanceIdLookup } from '../node-lookup.js';
 import { createUndoSteps } from '../undo-steps.js';
@@ -285,9 +285,11 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
   // neither waits its turn nor closes a step.
   const undoStep = createUndoSteps(figmaApi);
   for (const name of Object.keys(rawWrites)) {
-    handlers[name] = idempotent(cache, undoStep(rawWrites[name]!));
+    handlers[name] = markWriteHandler(idempotent(cache, undoStep(rawWrites[name]!)));
   }
-  handlers.batch = idempotent(cache, undoStep(createBatchHandler(figmaCtx, rawWrites)));
+  handlers.batch = markWriteHandler(
+    idempotent(cache, undoStep(createBatchHandler(figmaCtx, rawWrites))),
+  );
 
   return handlers;
 };
