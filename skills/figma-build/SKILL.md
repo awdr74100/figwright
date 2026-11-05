@@ -118,8 +118,8 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
 - **One create call, fully styled.** `create_frame`, `create_rectangle`, `create_ellipse`,
   `create_shape` and `create_text` take `fills`, `strokes`, `layoutSizing*` (frame and rectangle
   also `cornerRadius`; a frame also `autoLayout` and `clipsContent`; text its typography incl.
-  `textAlignHorizontal`) — each meaning what it means on its `set_*` tool. Use them instead of a
-  create plus a chain of follow-ups.
+  `textAlignHorizontal`, and the `width` it wraps at) — each meaning what it means on its `set_*`
+  tool. Use them instead of a create plus a chain of follow-ups.
 - **`ok: true` is not proof.** Confirm layout-sensitive writes by screenshot or read-back, and report
   anything the tools could not express instead of claiming it done.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from

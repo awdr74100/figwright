@@ -13,6 +13,22 @@ export const MutateResultSchema = z.object({
 export type MutateResult = z.infer<typeof MutateResultSchema>;
 
 /**
+ * Result of set_text_properties: the text's size once the call is applied. Font, size, spacing and
+ * wrapping all move it, and a requested width / height can be held off by a min / max bound or an
+ * instance, so the size is read back rather than assumed.
+ */
+export const TextPropertiesResultSchema = MutateResultSchema.extend({
+  width: z.number(),
+  height: z.number(),
+  /**
+   * Why the box is not what the call asked for: a min / max bound held its size, or Figma did not
+   * apply the mode or line clamp. Absent when it is.
+   */
+  adjusted: z.string().optional(),
+});
+export type TextPropertiesResult = z.infer<typeof TextPropertiesResultSchema>;
+
+/**
  * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
  * applyAnimationStyle. batch's inverse uses it to removeAnimationStyle on undo, so it must
  * round-trip.
@@ -32,6 +48,16 @@ export const CreateResultSchema = z.object({
   type: z.string(),
 });
 export type CreateResult = z.infer<typeof CreateResultSchema>;
+
+/**
+ * Result of create_text: the size the text came out at. Unlike a frame's or a shape's, a text box's
+ * size follows from its content, font and wrapping, so the caller cannot know it in advance.
+ */
+export const CreateTextResultSchema = CreateResultSchema.extend({
+  width: z.number(),
+  height: z.number(),
+});
+export type CreateTextResult = z.infer<typeof CreateTextResultSchema>;
 
 /** Result of a multi-node op (delete_nodes / …): which target ids were actually affected. */
 /** Set_image_fill: the fill it wrote, and the image's size in pixels. */

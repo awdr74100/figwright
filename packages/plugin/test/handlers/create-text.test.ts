@@ -1,4 +1,4 @@
-import type { CreateResult } from '@figwright/shared';
+import type { CreateResult, CreateTextResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createCreateTextHandler } from '../../src/handlers/create-text.js';
@@ -6,12 +6,21 @@ import { createCreateTextHandler } from '../../src/handlers/create-text.js';
 const makeText = () => ({
   id: '2:1',
   name: 'Text',
+  parent: null,
   type: 'TEXT',
   fontName: { family: 'Inter', style: 'Regular' },
   characters: '',
   fontSize: 12,
   x: 0,
   y: 0,
+  width: 40,
+  height: 15,
+  textAutoResize: 'WIDTH_AND_HEIGHT',
+  textTruncation: 'DISABLED',
+  maxLines: null,
+  resize(w: number, h: number) {
+    Object.assign(this, { width: w, height: h, textAutoResize: 'NONE' });
+  },
   remove: vi.fn<() => void>(),
 });
 
@@ -42,7 +51,55 @@ describe('create_text handler', () => {
     expect(text.characters).toBe('Hi');
     expect(text.fontSize).toBe(20);
     expect(currentPage.appendChild).toHaveBeenCalledWith(text);
-    expect(result).toEqual({ ok: true, nodeId: '2:1', name: 'Text', type: 'TEXT' });
+    expect(result).toEqual({
+      ok: true,
+      nodeId: '2:1',
+      name: 'Text',
+      type: 'TEXT',
+      width: 40,
+      height: 15,
+    });
+  });
+
+  it('wraps at a width through set_text_properties, and reports the size it came out at', async () => {
+    const text = makeText();
+    const handler = createCreateTextHandler(
+      fakeFigma(text, { appendChild: vi.fn<(n: unknown) => void>() }, undefined, { '2:1': text }),
+    );
+    const result = (await handler({ characters: 'Hi', width: 240 })) as CreateTextResult;
+    expect(text).toMatchObject({ width: 240, textAutoResize: 'HEIGHT' });
+    expect(result).toMatchObject({ width: 240, height: 15 });
+  });
+
+  it.each([
+    [
+      { width: 200, layoutSizingHorizontal: 'FILL' },
+      /width conflicts with layoutSizingHorizontal FILL/,
+    ],
+    [
+      { width: 200, layoutSizingHorizontal: 'HUG' },
+      /width conflicts with layoutSizingHorizontal HUG/,
+    ],
+    [{ height: 40, layoutSizingVertical: 'HUG' }, /height conflicts with layoutSizingVertical HUG/],
+    [
+      { width: 200, textAutoResize: 'WIDTH_AND_HEIGHT' },
+      /create_text: width conflicts with textAutoResize WIDTH_AND_HEIGHT/,
+    ],
+    [{ height: 40, textAutoResize: 'HEIGHT' }, /create_text: height conflicts with textAutoResize/],
+    [{ width: -5 }, /create_text: width must be a number of at least 0.01/],
+    [
+      { width: 120, textTruncation: 'ENDING', maxLines: 2, layoutSizingVertical: 'FIXED' },
+      /create_text: maxLines needs auto-sized text/,
+    ],
+    [
+      { width: 120, textTruncation: 'ENDING', maxLines: 2, layoutSizingVertical: 'FILL' },
+      /create_text: maxLines needs auto-sized text/,
+    ],
+  ])('refuses %o before creating anything', async (args, message) => {
+    const createText = vi.fn<() => unknown>();
+    const handler = createCreateTextHandler({ createText } as unknown as typeof figma);
+    await expect(handler({ characters: 'Hi', ...args })).rejects.toThrow(message);
+    expect(createText).not.toHaveBeenCalled();
   });
 
   it('throws when characters is missing', async () => {

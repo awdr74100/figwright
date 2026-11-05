@@ -48,9 +48,9 @@ Append each child into its auto-layout parent **first**, then `set_layout_props`
 
 ## 4. Text
 
-`create_text` / `set_text` for content, then `set_text_properties` to set the real font (a new TEXT
-node defaults to Inter, not the system font — see `write-rules.md`). Bind `characters` to a `STRING`
-variable when the copy is tokenised.
+`create_text` / `set_text` for content, with the real font (a new TEXT node defaults to Inter, not
+the system font) and, for text that wraps, `layoutSizingHorizontal: 'FILL'` or a `width` — see
+`write-rules.md`. Bind `characters` to a `STRING` variable when the copy is tokenised.
 
 ## 5. Reference tokens for every value
 

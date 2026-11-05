@@ -13,6 +13,7 @@ const setup = (nodeFactory: () => Record<string, unknown>, nodeType: string) => 
   const node: Record<string, unknown> = {
     id: '5:1',
     name: nodeType,
+    parent: null,
     type: nodeType,
     resize: (w: number, h: number) => Object.assign(node, { width: w, height: h }),
     remove: vi.fn<() => void>(),
@@ -214,5 +215,54 @@ describe('create_* initial style', () => {
       fontName: { family: 'Poppins', style: 'Bold' },
     });
     expect((node.fills as unknown[]).length).toBe(1);
+  });
+
+  it('sets a text node’s typography and box before its sizing, so FIXED freezes the final box', async () => {
+    // A FIXED axis freezes a text box at the size it has when set (measured in a real file); set
+    // first, it froze the box the default 12px font needed and a 48px fontSize overflowed it.
+    const order: string[] = [];
+    const { node, ctx } = setup(
+      () => ({
+        characters: '',
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 12,
+        width: 40,
+        height: 15,
+        textAutoResize: 'WIDTH_AND_HEIGHT',
+        textTruncation: 'DISABLED',
+        maxLines: null,
+        layoutAlign: 'INHERIT',
+        layoutGrow: 0,
+        layoutPositioning: 'AUTO',
+        layoutSizingHorizontal: 'HUG',
+      }),
+      'TEXT',
+    );
+    for (const prop of ['fontSize', 'textAutoResize', 'layoutSizingVertical']) {
+      let value = node[prop];
+      Object.defineProperty(node, prop, {
+        get: () => value,
+        set: (v: unknown) => {
+          value = v;
+          order.push(`${prop}:${String(v)}`);
+        },
+      });
+    }
+    await createCreateTextHandler(ctx)({
+      characters: 'Big',
+      fontSize: 48,
+      width: 200,
+      layoutSizingVertical: 'FIXED',
+    });
+    expect(order).toEqual(['fontSize:48', 'textAutoResize:HEIGHT', 'layoutSizingVertical:FIXED']);
+    expect(node.width).toBe(200);
+  });
+
+  it('keeps a frame’s width / height off the text step', async () => {
+    // create_frame takes width / height too; they size the frame and must not reach
+    // set_text_properties, which would refuse a FRAME.
+    const { node, ctx } = setup(frameNode, 'FRAME');
+    await createCreateFrameHandler(ctx)({ width: 320, height: 200, fills: [SOLID] });
+    expect(node).toMatchObject({ width: 320, height: 200 });
   });
 });

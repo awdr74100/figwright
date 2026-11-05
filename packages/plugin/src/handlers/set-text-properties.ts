@@ -1,15 +1,160 @@
-import type { MutateResult } from '@figwright/shared';
+import type { TextPropertiesResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaFontName } from './convert.js';
+import { enclosingInstance, explain, sameSize } from './resize-nodes.js';
+import {
+  boxNeedsResize,
+  readTextBox,
+  resizeTakes,
+  type TextBox,
+  writeTextBox,
+} from './text-box.js';
 import { isTextLike, unsupportedOnPath } from './text-like.js';
+
+type AutoResize = TextNode['textAutoResize'];
+
+const boxSide = (value: unknown, field: string, tool: string): number | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.01) {
+    throw new TypeError(`${tool}: ${field} must be a number of at least 0.01`);
+  }
+  return value;
+};
+
+/**
+ * Validate a text box size, refusing one the same call's textAutoResize would undo:
+ * WIDTH_AND_HEIGHT sizes both sides to the text, and HEIGHT sizes the height, so whichever ran last
+ * would otherwise silently win. Exported so create_text can refuse before the node exists.
+ */
+export const checkTextBox = (
+  p: { width?: unknown; height?: unknown; textAutoResize?: unknown },
+  tool: string,
+): { width: number | undefined; height: number | undefined } => {
+  const width = boxSide(p.width, 'width', tool);
+  const height = boxSide(p.height, 'height', tool);
+  const autoResize = p.textAutoResize;
+  const overridden: string[] = [];
+  if (width !== undefined && autoResize === 'WIDTH_AND_HEIGHT') overridden.push('width');
+  if (height !== undefined && (autoResize === 'WIDTH_AND_HEIGHT' || autoResize === 'HEIGHT')) {
+    overridden.push('height');
+  }
+  if (overridden.length > 0) {
+    throw new TypeError(
+      `${tool}: ${overridden.join(' and ')} conflicts with textAutoResize ` +
+        `${autoResize as string}, which sizes it to the text — drop one (width alone wraps the ` +
+        'text and grows its height; width and height together make a fixed box)',
+    );
+  }
+  return { width, height };
+};
+
+/**
+ * The box a call asks for, with everything it leaves out kept as it is.
+ *
+ * The mode: a named textAutoResize wins (TRUNCATE being a fixed box with the ellipsis on). Without
+ * one, a new height fixes the box, since auto height would discard it; a new width keeps the text
+ * wrapping — auto-width text becomes auto height (a width it would discard at once is no width at
+ * all) and a box already fixed stays fixed; and otherwise the mode stays.
+ *
+ * The ellipsis: the one passed, else TRUNCATE's, else the one it has — kept however the mode moves.
+ * maxLines: the one passed (checked by {@link checkMaxLines}), else the one it has, as far as Figma
+ * keeps one at all — only on auto-sized text with the ellipsis on, so a box being fixed, or having
+ * its ellipsis turned off, ends with none; and ellipsis turned on for auto-sized text that had none
+ * takes the single line Figma gives it (all measured).
+ *
+ * The height of a fixed box: the one passed, else the one it has when it was fixed already and
+ * nothing asked to re-fit it, else the height its text needs at the target width (`measure`) — a
+ * box being fixed from auto height, or a width passed with NONE named.
+ *
+ * Decided from `prior`, the box before this call wrote anything; the unpassed sides come from
+ * `current`, the text's size as it stands when the box is written — after the typography that sizes
+ * it.
+ */
+export const targetBox = (
+  prior: TextBox,
+  current: { width: number; height: number },
+  p: { textAutoResize?: unknown; textTruncation?: unknown; maxLines?: unknown },
+  width: number | undefined,
+  height: number | undefined,
+): { box: TextBox; measure: boolean } => {
+  const requested = p.textAutoResize as AutoResize | undefined;
+  const wasFixed = prior.autoResize === 'NONE';
+
+  let autoResize: TextBox['autoResize'];
+  if (requested !== undefined) autoResize = requested === 'TRUNCATE' ? 'NONE' : requested;
+  else if (height !== undefined || wasFixed) autoResize = 'NONE';
+  else autoResize = width !== undefined ? 'HEIGHT' : prior.autoResize;
+
+  const truncation =
+    (p.textTruncation as TextBox['truncation'] | undefined) ??
+    (requested === 'TRUNCATE' ? 'ENDING' : prior.truncation);
+  let maxLines: number | null;
+  if (p.maxLines !== undefined) maxLines = p.maxLines as number | null;
+  else if (autoResize === 'NONE' || truncation === 'DISABLED') maxLines = null;
+  else if (prior.truncation === 'DISABLED') maxLines = 1;
+  else maxLines = prior.maxLines;
+
+  const box: TextBox = {
+    autoResize,
+    width: width ?? current.width,
+    height: height ?? current.height,
+    truncation,
+    maxLines,
+  };
+  const measure =
+    autoResize === 'NONE' &&
+    height === undefined &&
+    (!wasFixed || (width !== undefined && requested !== undefined));
+  return { box, measure };
+};
+
+/**
+ * Refuse a maxLines the box it would land on would not show — Figma shows one only on auto-sized
+ * text with the ellipsis on, and drops it anywhere else without an error (measured). Checked
+ * against the box the call ends with, before anything is written.
+ */
+export const checkMaxLines = (box: TextBox, maxLines: unknown, tool: string): void => {
+  if (typeof maxLines !== 'number') return;
+  if (box.autoResize === 'NONE') {
+    throw new TypeError(
+      `${tool}: maxLines needs auto-sized text — a fixed box shows no line count (it truncates ` +
+        'at its own edge); pass textAutoResize HEIGHT, or leave maxLines out',
+    );
+  }
+  if (box.truncation !== 'ENDING') {
+    throw new TypeError(
+      `${tool}: maxLines needs textTruncation ENDING, which is what cuts the text at that line — ` +
+        'pass it in the same call',
+    );
+  }
+};
+
+/**
+ * For the batch: whether this call's box change, on a layer inside an instance, could not be put
+ * back. Undoing it needs a resize — to fix the box again, say, after auto height — and Figma
+ * ignores resize() on most instance layers (measured), while the change itself may need none.
+ * Answered before the op runs; a probe that finds the resize applied puts the box back as it found
+ * it.
+ */
+export const isOneWayInInstance = (text: TextNode, params: Record<string, unknown>): boolean => {
+  if (enclosingInstance(text) === null) return false;
+  const { width, height } = checkTextBox(params, 'set_text_properties');
+  const prior = readTextBox(text);
+  const plan = targetBox(prior, prior, params, width, height);
+  if (!boxNeedsResize(plan.box, prior, false)) return false;
+  const resize = (w: number, h: number): void => text.resize(w, h);
+  if (!resizeTakes(text, resize)) return true;
+  writeTextBox(text, prior, resize);
+  return false;
+};
 
 /**
  * Set a TEXT node's typography + layout/overflow props. Figma requires every font on the node —
  * plus the target fontName, if changing it — to be loaded before _any_ of them is written: the
  * layout/overflow three (textAutoResize/truncation/maxLines) are refused the same way typography
- * is, despite reading as node-level settings. Applied in order autoResize → truncation → maxLines
- * because maxLines only takes effect once truncation is ENDING.
+ * is, despite reading as node-level settings. Typography goes first so the box is sized for it; the
+ * box — size, auto-resize and line clamp, which Figma couples — goes through writeTextBox.
  */
 export const createSetTextPropertiesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -30,9 +175,12 @@ export const createSetTextPropertiesHandler =
       textTruncation?: unknown;
       maxLines?: unknown;
       textAutoResize?: unknown;
+      width?: unknown;
+      height?: unknown;
     };
     if (typeof p.nodeId !== 'string')
       throw new TypeError('set_text_properties: nodeId must be a string');
+    const { width, height } = checkTextBox(p, 'set_text_properties');
     if (
       p.paragraphSpacing !== undefined &&
       (typeof p.paragraphSpacing !== 'number' || p.paragraphSpacing < 0)
@@ -76,6 +224,12 @@ export const createSetTextPropertiesHandler =
           '(its text follows the path, so there are no lines, boxes or paragraphs to set)',
       );
     }
+    if (node.type === 'TEXT_PATH' && (width !== undefined || height !== undefined)) {
+      throw new Error(
+        `set_text_properties: ${p.nodeId} is text on a path, which has no text box to size — its ` +
+          'text follows the path, so reshape the path itself instead',
+      );
+    }
     // The fields a path lacks were refused above, so the box-level writes below only reach TEXT.
     const text = node as TextNode;
 
@@ -106,7 +260,9 @@ export const createSetTextPropertiesHandler =
       p.textAlignVertical !== undefined ||
       p.textAutoResize !== undefined ||
       p.textTruncation !== undefined ||
-      p.maxLines !== undefined;
+      p.maxLines !== undefined ||
+      width !== undefined ||
+      height !== undefined;
     if (willWrite) {
       const fonts: FontNameInput[] =
         text.fontName === figmaCtx.mixed && text.characters.length > 0
@@ -116,6 +272,36 @@ export const createSetTextPropertiesHandler =
       // set-text-range.ts), so pushing onto it threw on every mixed-font node given a fontName.
       if (fontName !== undefined) fonts.push(fontName);
       await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
+    }
+
+    const before = { width: text.width, height: text.height };
+    const prior = readTextBox(text);
+    const touchesBox =
+      width !== undefined ||
+      height !== undefined ||
+      p.textAutoResize !== undefined ||
+      p.textTruncation !== undefined ||
+      p.maxLines !== undefined;
+    const resize = (w: number, h: number): void => text.resize(w, h);
+    if (touchesBox) {
+      const plan = targetBox(prior, before, p, width, height);
+      checkMaxLines(plan.box, p.maxLines, 'set_text_properties');
+      // Inside an instance Figma may ignore a resize outright, and the writes around it would still
+      // land: a label left FIXED that no longer hugs its text, a fixed box left in auto height
+      // (both measured). So when this box write needs a resize, whether Figma applies one here is
+      // asked before anything is written, and a no leaves the layer as it was.
+      if (
+        enclosingInstance(text) !== null &&
+        boxNeedsResize(prior, plan.box, plan.measure) &&
+        !resizeTakes(text, resize)
+      ) {
+        const requested = { width: width ?? before.width, height: height ?? before.height };
+        throw new Error(
+          `set_text_properties: ${p.nodeId} cannot take this box change, which needs a resize ` +
+            '(a size, fixing the box, or re-fitting it at a new width) — ' +
+            explain(text, requested, before, before),
+        );
+      }
     }
 
     // `fontName` is declared as `FontName` (style required) even though the API accepts a
@@ -138,12 +324,74 @@ export const createSetTextPropertiesHandler =
     if (p.textAlignVertical !== undefined)
       text.textAlignVertical = p.textAlignVertical as TextNode['textAlignVertical'];
 
-    if (p.textAutoResize !== undefined)
-      text.textAutoResize = p.textAutoResize as TextNode['textAutoResize'];
-    if (p.textTruncation !== undefined)
-      text.textTruncation = p.textTruncation as TextNode['textTruncation'];
-    if (p.maxLines !== undefined) text.maxLines = p.maxLines as number | null;
+    const notes: string[] = [];
+    // The size the box is meant to end at: a fixed box's both sides, auto height's width — the
+    // ones passed, and the ones a box being fixed was measured at.
+    let expected: { width: number; height: number } | null = null;
+    if (touchesBox) {
+      const target = targetBox(prior, { width: text.width, height: text.height }, p, width, height);
+      if (target.measure) {
+        // The fixed box takes the height its text shows at the target width — not whatever height
+        // it had before — so it is laid out in auto height first and read. Laid out as it showed
+        // until now: auto-sized text with its own clamp (fixing a two-line clamp keeps two lines,
+        // where turning the ellipsis on first would have Figma clamp it to one), a fixed box with
+        // none (re-fitted at a new width, it shows all its text).
+        const wasAuto = prior.autoResize !== 'NONE';
+        writeTextBox(
+          text,
+          {
+            ...target.box,
+            autoResize: 'HEIGHT',
+            truncation: wasAuto ? prior.truncation : 'DISABLED',
+            maxLines: wasAuto ? prior.maxLines : null,
+          },
+          resize,
+        );
+        target.box.height = text.height;
+      }
+      writeTextBox(text, target.box, resize);
+      // Read back rather than trusted: each rule writeTextBox works around was found by a write
+      // that answered ok and landed elsewhere.
+      const end = readTextBox(text);
+      const missed = (['autoResize', 'truncation', 'maxLines'] as const)
+        .filter(k => end[k] !== target.box[k])
+        .map(
+          k =>
+            `${k === 'autoResize' ? 'textAutoResize' : k === 'truncation' ? 'textTruncation' : k} ${String(end[k])}`,
+        );
+      if (missed.length > 0) {
+        notes.push(`the box ended with ${missed.join(', ')} — Figma did not apply what was asked`);
+      }
+      if (target.box.autoResize === 'NONE') {
+        expected = { width: target.box.width, height: target.box.height };
+      } else if (target.box.autoResize === 'HEIGHT') {
+        expected = { width: target.box.width, height: text.height };
+      }
+    }
 
-    const result: MutateResult = { ok: true, nodeId: text.id };
+    const after = { width: text.width, height: text.height };
+    if (
+      expected !== null &&
+      !(sameSize(after.width, expected.width) && sameSize(after.height, expected.height))
+    ) {
+      // FigJam keeps a fixed text box at least as tall as its text (measured: 20, 30 and 31 all came
+      // back at the 45 its lines need, 100 stayed 100) — a clamp's shorter look cannot be fixed there.
+      const figjamFloor =
+        figmaCtx.editorType === 'figjam' &&
+        sameSize(after.width, expected.width) &&
+        after.height > expected.height;
+      notes.unshift(
+        figjamFloor
+          ? `FigJam keeps a fixed text box at least as tall as its text, so it is ${after.width} × ` +
+              `${after.height}, not the ${expected.height} asked or shown before`
+          : explain(text, expected, before, after),
+      );
+    }
+    const result: TextPropertiesResult = {
+      ok: true,
+      nodeId: text.id,
+      ...after,
+      ...(notes.length > 0 && { adjusted: notes.join('; ') }),
+    };
     return result;
   };

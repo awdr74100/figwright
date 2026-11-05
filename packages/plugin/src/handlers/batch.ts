@@ -41,6 +41,7 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import { isOneWayInInstance } from './set-text-properties.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
@@ -220,6 +221,62 @@ const textInverse = (tool: string): BatchInverse => ({
   touches: (_params, captured) => [(captured as TextState).id],
   resizes: (_params, captured) => [(captured as TextState).id],
 });
+
+interface TextPropertiesState extends TextState {
+  /** Present when the op can resize the box: what a resize disturbs beyond the text itself. */
+  box: { geometry: GeometrySnapshot; bindings: BindingSnapshot } | null;
+}
+
+const BOX_PARAMS = ['width', 'height', 'textAutoResize', 'textTruncation', 'maxLines'] as const;
+
+/**
+ * Set_text_properties: a text op that can also resize the box — and a resize turns a FILL / HUG
+ * axis FIXED and drops a width / height variable binding (measured), neither of which the text
+ * snapshot holds. So a box-touching op also takes the geometry and those bindings, as resize_nodes
+ * does. Refused up front when its box change could not be rolled back: a layer inside an instance
+ * Figma will not resize, where the change needs no resize but its undo does (auto height on a fixed
+ * box, say).
+ */
+const textPropertiesInverse: BatchInverse = {
+  ...textInverse('set_text_properties'),
+  async capture(figmaCtx, params) {
+    const captured = (await textInverse('set_text_properties').capture(
+      figmaCtx,
+      params,
+    )) as TextState;
+    const node = await figmaCtx.getNodeByIdAsync(captured.id);
+    if (node?.type === 'TEXT' && isOneWayInInstance(node, paramsOf(params))) {
+      throw new Error(
+        `batch/set_text_properties: ${captured.id} sits inside an instance that will not resize ` +
+          'it, so this box change could not be rolled back — run it outside a batch, or change ' +
+          'the layer in the main component',
+      );
+    }
+    const touchesBox = BOX_PARAMS.some(k => paramsOf(params)[k] !== undefined);
+    const state: TextPropertiesState = {
+      ...captured,
+      box:
+        node?.type === 'TEXT' && touchesBox
+          ? {
+              geometry: captureGeometry(node),
+              bindings: await captureBindings(figmaCtx, node, ['width', 'height']),
+            }
+          : null,
+    };
+    return state;
+  },
+  async undo(figmaCtx, params, captured, result) {
+    const { box } = captured as TextPropertiesState;
+    const node = box === null ? null : await live(figmaCtx, box.geometry.id);
+    if (box !== null && node !== null) {
+      unbindAdded(node, box.bindings);
+      restoreGeometry(node as SceneNode, box.geometry);
+    }
+    const note = await textInverse('set_text_properties').undo(figmaCtx, params, captured, result);
+    if (box !== null && node !== null) rebind(node, box.bindings);
+    return note;
+  },
+};
 
 /** Find_replace_text rewrites every matching TEXT node under a scope; snapshot exactly those. */
 const findReplaceInverse: BatchInverse = {
@@ -1979,7 +2036,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   rename_node: propsInverse('rename_node', ['name']),
   // Text.
   set_text: textInverse('set_text'),
-  set_text_properties: textInverse('set_text_properties'),
+  set_text_properties: textPropertiesInverse,
   set_text_range: textInverse('set_text_range'),
   find_replace_text: findReplaceInverse,
   // Layout.

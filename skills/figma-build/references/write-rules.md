@@ -313,6 +313,24 @@ family/style in the `create_text` call itself (`fontName`), or with `set_text_pr
 existing node (the plugin loads the node's fonts on edit). In a file whose typography is driven by `STRING` variables (a `font family` / `weight` token),
 read those off `get_variable_defs` and apply the same family — don't leave headings in Inter.
 
+## Text wraps at a width, never at a resize
+
+A new `TEXT` node is auto width: one line as long as its content. Where the source text wraps, give
+it the width it wraps at in the same call:
+
+- Text that spans its auto-layout parent (a card body, a column of copy) → `layoutSizingHorizontal:
+  'FILL'`; the height follows the lines.
+- A text block with a width of its own (`w-64`, `width: 320px`, a centred line under a hero, text
+  placed outside auto layout) → `width` on `create_text` / `set_text_properties`; the text wraps at it
+  and its height follows. `width` + `height` makes a fixed box — only when the source fixes the
+  height too (`textAlignVertical` needs one).
+- **Never `resize_nodes` a text node to make it wrap**: resizing turns it into a fixed box at the
+  height you passed, and its wrapped lines overflow that box.
+
+A line clamp (`line-clamp-2`) is `textTruncation: 'ENDING'` + `maxLines` on auto-sized text — a
+`width` (or `FILL`) with no `height`. Figma shows no line count on a fixed box: a fixed box with
+`ENDING` cuts at its own bottom edge instead (`text-overflow: ellipsis` in a box of fixed height).
+
 ## Inline rich text → `set_text_range`, not a separate node per span
 
 When a single text block mixes styles — a link inside a sentence, a bold word, a coloured span, a
