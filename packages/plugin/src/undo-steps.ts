@@ -1,4 +1,15 @@
+import { BUDGET_LAYER_MARGIN_MS, DEFAULT_TOOL_BUDGET_MS } from '@figwright/shared';
+
 import type { SandboxToolHandler } from './dispatcher.js';
+
+/**
+ * How long a write may hold the queue. Past this it is taken to be stuck — a fetch that never
+ * answers (measured: a create_instance by key hung in FigJam, and every write queued behind it
+ * timed out until the plugin was reloaded) — and the writes behind it go ahead. Two layer margins
+ * short of the default budget, so a write that waited the whole time still has ten seconds of its
+ * own window to run in, where a few milliseconds is the norm.
+ */
+export const QUEUE_RELEASE_MS = DEFAULT_TOOL_BUDGET_MS - 2 * BUDGET_LAYER_MARGIN_MS;
 
 /**
  * One Cmd+Z step per write call.
@@ -17,24 +28,46 @@ import type { SandboxToolHandler } from './dispatcher.js';
  * A write that throws still closes its step, so whatever it changed before failing undoes on its
  * own rather than with the next call. A commit that fails (an editor without an undo history) is
  * ignored: it must never replace the tool's own result or error.
+ *
+ * A write still running after {@link QUEUE_RELEASE_MS} closes its step there and lets the queue
+ * move: a stuck write must not hold every later one. Whatever it does after that lands in whichever
+ * step is open when it does, and it closes none itself — a commit at an arbitrary later moment
+ * would cut another write's step in two.
  */
 export const createUndoSteps = (
   figmaApi: Pick<PluginAPI, 'commitUndo'>,
 ): ((handler: SandboxToolHandler) => SandboxToolHandler) => {
-  let tail: Promise<unknown> = Promise.resolve();
+  const commit = (): void => {
+    try {
+      figmaApi.commitUndo();
+    } catch {
+      // No undo history to commit to; the call's own outcome stands.
+    }
+  };
+  let tail: Promise<void> = Promise.resolve();
   return handler => params => {
-    const run = tail.then(async () => {
+    let release!: () => void;
+    const slot = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const previous = tail;
+    tail = slot;
+    return previous.then(async () => {
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        commit();
+        release();
+      }, QUEUE_RELEASE_MS);
       try {
         return await handler(params);
       } finally {
-        try {
-          figmaApi.commitUndo();
-        } catch {
-          // No undo history to commit to; the call's own outcome stands.
+        clearTimeout(timer);
+        if (!timedOut) {
+          commit();
+          release();
         }
       }
     });
-    tail = run.catch(() => {});
-    return run;
   };
 };

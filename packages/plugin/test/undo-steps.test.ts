@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSandboxHandlers } from '../src/handlers/registry.js';
-import { createUndoSteps } from '../src/undo-steps.js';
+import { createUndoSteps, QUEUE_RELEASE_MS } from '../src/undo-steps.js';
 
 /** A promise and the hand that settles it, so a test decides when a write finishes. */
 const deferred = () => {
@@ -57,6 +57,65 @@ describe('createUndoSteps', () => {
     ).rejects.toThrow('refused');
     expect(await step(() => 'next')({})).toBe('next');
     expect(commitUndo).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the queue move past a write stuck for QUEUE_RELEASE_MS, closing its step there', async () => {
+    // A create_instance by key hung in FigJam, and every write queued behind it timed out until the
+    // plugin was reloaded (measured).
+    vi.useFakeTimers();
+    try {
+      const events: string[] = [];
+      const step = createUndoSteps({ commitUndo: () => events.push('commit') });
+      const stuck = deferred();
+      const first = step(async () => {
+        events.push('stuck:start');
+        await stuck.promise;
+        events.push('stuck:end');
+        return 'late';
+      })({});
+      const second = step(() => {
+        events.push('next');
+        return 'next';
+      })({});
+
+      await vi.advanceTimersByTimeAsync(QUEUE_RELEASE_MS - 1);
+      expect(events).toEqual(['stuck:start']);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await second).toBe('next');
+      expect(events).toEqual(['stuck:start', 'commit', 'next', 'commit']);
+
+      // Finishing later, it closes no step of its own — that would cut some other write's in two —
+      // and its caller still gets its result.
+      stuck.resolve(undefined);
+      expect(await first).toBe('late');
+      expect(events).toEqual(['stuck:start', 'commit', 'next', 'commit', 'stuck:end']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds the queue for a write that finishes inside the window, and leaves no timer behind', async () => {
+    vi.useFakeTimers();
+    try {
+      const events: string[] = [];
+      const step = createUndoSteps({ commitUndo: () => events.push('commit') });
+      const slow = deferred();
+      const first = step(async () => {
+        await slow.promise;
+        events.push('slow');
+      })({});
+      const second = step(() => {
+        events.push('next');
+      })({});
+      await vi.advanceTimersByTimeAsync(QUEUE_RELEASE_MS - 1000);
+      slow.resolve(undefined);
+      await Promise.all([first, second]);
+      expect(events).toEqual(['slow', 'commit', 'next', 'commit']);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('never lets a failed commit replace the call’s own result or error', async () => {
