@@ -1,6 +1,7 @@
 import type { SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { withInstanceIdLookup } from '../node-lookup.js';
+import { createUndoSteps } from '../undo-steps.js';
 import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
@@ -130,8 +131,9 @@ import {
 
 /**
  * Build the full sandbox handler map. Read handlers run as-is; write handlers are wrapped with
- * idempotency (same requestId applies once). `batch` calls the un-wrapped writes directly — it
- * carries one requestId and is itself idempotent, so per-op deduping would double-count.
+ * idempotency (same requestId applies once) and run one at a time, each its own undo step. `batch`
+ * calls the un-wrapped writes directly — it carries one requestId and is itself idempotent, so
+ * per-op deduping would double-count.
  *
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
@@ -279,10 +281,13 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     export_video: createExportVideoHandler(figmaCtx),
   };
 
+  // Inside the idempotency wrapper: a retried call replayed from the cache changed nothing, so it
+  // neither waits its turn nor closes a step.
+  const undoStep = createUndoSteps(figmaApi);
   for (const name of Object.keys(rawWrites)) {
-    handlers[name] = idempotent(cache, rawWrites[name]!);
+    handlers[name] = idempotent(cache, undoStep(rawWrites[name]!));
   }
-  handlers.batch = idempotent(cache, createBatchHandler(figmaCtx, rawWrites));
+  handlers.batch = idempotent(cache, undoStep(createBatchHandler(figmaCtx, rawWrites)));
 
   return handlers;
 };
