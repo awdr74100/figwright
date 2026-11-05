@@ -19,8 +19,16 @@ export const importSvgTool: ToolSpec = {
     parentId: z.string().optional().describe('Parent node id (default: current page)'),
     x: z.number().optional(),
     y: z.number().optional(),
-    width: z.number().optional().describe('Override width (default: SVG intrinsic width)'),
-    height: z.number().optional().describe('Override height (default: SVG intrinsic height)'),
+    width: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Override width, at least 0.01 (default: SVG intrinsic width)'),
+    height: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Override height, at least 0.01 (default: SVG intrinsic height)'),
   }),
   kind: 'write',
 };

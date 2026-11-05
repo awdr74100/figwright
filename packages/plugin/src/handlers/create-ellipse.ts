@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { applyCreateSize, readCreateSize } from './create-size.js';
 import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
@@ -16,11 +17,11 @@ export const createCreateEllipseHandler =
       height?: unknown;
     };
 
+    const size = readCreateSize(p, 'create_ellipse');
+
     const ellipse = figmaCtx.createEllipse();
     if (typeof p.name === 'string') ellipse.name = p.name;
-    if (typeof p.width === 'number' && typeof p.height === 'number') {
-      ellipse.resize(p.width, p.height);
-    }
+    applyCreateSize(ellipse, size, (w, h) => ellipse.resize(w, h));
     if (typeof p.x === 'number') ellipse.x = p.x;
     if (typeof p.y === 'number') ellipse.y = p.y;
 

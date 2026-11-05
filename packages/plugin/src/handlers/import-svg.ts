@@ -3,6 +3,7 @@ import type { CreateResult } from '@figwright/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { documentColorProfile } from './color-profile.js';
 import { toDocumentRgb } from './convert.js';
+import { applyCreateSize, readCreateSize } from './create-size.js';
 import { placeNode } from './place.js';
 
 // Every imported colour goes through the one wire → document conversion, as sRGB.
@@ -71,15 +72,12 @@ export const createImportSvgHandler =
       throw new TypeError('import_svg: svg must be a non-empty SVG markup string');
     }
 
+    const size = readCreateSize(p, 'import_svg');
+
     const node = figmaCtx.createNodeFromSvg(p.svg);
     svgColorsToDocument(figmaCtx, node);
     if (typeof p.name === 'string') node.name = p.name;
-    if (typeof p.width === 'number' || typeof p.height === 'number') {
-      node.resize(
-        typeof p.width === 'number' ? p.width : node.width,
-        typeof p.height === 'number' ? p.height : node.height,
-      );
-    }
+    applyCreateSize(node, size, (w, h) => node.resize(w, h));
     if (typeof p.x === 'number') node.x = p.x;
     if (typeof p.y === 'number') node.y = p.y;
 

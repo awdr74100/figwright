@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readCreateSize } from './create-size.js';
 import { placeNode } from './place.js';
 
 const SCALE_MODES = ['FILL', 'FIT', 'CROP', 'TILE'] as const;
@@ -28,6 +29,7 @@ export const createImportImageHandler =
     if (typeof p.data !== 'string' && typeof p.url !== 'string') {
       throw new TypeError('import_image: provide data (base64) or url');
     }
+    const override = readCreateSize(p, 'import_image');
     const scaleMode: ScaleMode = SCALE_MODES.includes(p.scaleMode as ScaleMode)
       ? (p.scaleMode as ScaleMode)
       : 'FILL';
@@ -40,10 +42,7 @@ export const createImportImageHandler =
 
     const rect = figmaCtx.createRectangle();
     if (typeof p.name === 'string') rect.name = p.name;
-    rect.resize(
-      typeof p.width === 'number' ? p.width : size.width,
-      typeof p.height === 'number' ? p.height : size.height,
-    );
+    rect.resize(override.width ?? size.width, override.height ?? size.height);
     if (typeof p.x === 'number') rect.x = p.x;
     if (typeof p.y === 'number') rect.y = p.y;
     rect.fills = [{ type: 'IMAGE', scaleMode, imageHash: image.hash }];

@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readCreateSize } from './create-size.js';
 import { applyInitialProps } from './initial-props.js';
 import { placeNode } from './place.js';
 
@@ -37,8 +38,7 @@ export const createCreateShapeHandler =
     if (typeof p.shape !== 'string' || !SHAPES.has(p.shape)) {
       throw new TypeError('create_shape: shape must be LINE, POLYGON or STAR');
     }
-    const width = optionalNumber(p.width, 'width');
-    const height = optionalNumber(p.height, 'height');
+    const { width, height } = readCreateSize(p, 'create_shape');
     const x = optionalNumber(p.x, 'x');
     const y = optionalNumber(p.y, 'y');
     const pointCount = optionalNumber(p.pointCount, 'pointCount');

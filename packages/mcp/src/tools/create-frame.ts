@@ -16,8 +16,9 @@ export const createFrameTool: ToolSpec = {
     'optionally sized/positioned and appended to a parent (default: current page). Pass ' +
     'fills, strokes, cornerRadius, autoLayout and layoutSizing* to style and lay it out in this ' +
     'same call (each means what it does on its set_* tool) instead of a chain of follow-ups. With ' +
-    'autoLayout, a width + height you pass stays FIXED on any axis whose layoutSizing* you omit ' +
-    '(Figma would otherwise hug it); omit the size, or pass HUG, to hug the content. For a ' +
+    'autoLayout, a width or height you pass stays FIXED on its axis unless the layoutSizing* ' +
+    'of that axis says otherwise (Figma would otherwise hug it) — a width alone fixes the width ' +
+    'and lets the height hug; omit a side, or pass HUG, to hug the content. For a ' +
     'canvas-level grouping container use create_section instead. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     parentId: z
@@ -27,8 +28,16 @@ export const createFrameTool: ToolSpec = {
     name: z.string().optional().describe('Frame name'),
     x: z.number().optional(),
     y: z.number().optional(),
-    width: z.number().optional().describe('Frame width (with height, resizes from default)'),
-    height: z.number().optional().describe('Frame height (with width, resizes from default)'),
+    width: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Frame width in px, at least 0.01; alone, the height stays at 100'),
+    height: z
+      .number()
+      .min(0.01)
+      .optional()
+      .describe('Frame height in px, at least 0.01; alone, the width stays at 100'),
     ...initialStyleShape,
     ...initialRadiusShape,
     ...initialFrameShape,
