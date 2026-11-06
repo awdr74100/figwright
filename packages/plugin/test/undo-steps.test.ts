@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSandboxHandlers } from '../src/handlers/registry.js';
-import { createUndoSteps } from '../src/undo-steps.js';
+import { createUndoSteps, STALE_WRITE_MS } from '../src/undo-steps.js';
 
 /** A promise and the hand that settles it, so a test decides when a write finishes. */
 const deferred = () => {
@@ -15,7 +15,7 @@ const deferred = () => {
 };
 
 describe('createUndoSteps', () => {
-  it('closes one step when a write finishes, after its changes', async () => {
+  it('closes a step when a write finishes, after its changes', async () => {
     const events: string[] = [];
     const step = createUndoSteps({ commitUndo: () => events.push('commit') });
     const result = await step(() => {
@@ -26,28 +26,50 @@ describe('createUndoSteps', () => {
     expect(events).toEqual(['write', 'commit']);
   });
 
-  it('runs writes one at a time, so a step never holds part of another write', async () => {
-    // The relay sends calls concurrently; two writes interleaving across an await would have one
-    // commit close a step on half of the other.
+  it('closes one step per write when they come one after another', async () => {
+    const events: string[] = [];
+    const step = createUndoSteps({ commitUndo: () => events.push('commit') });
+    await step(() => events.push('a'))({});
+    await step(() => events.push('b'))({});
+    expect(events).toEqual(['a', 'commit', 'b', 'commit']);
+  });
+
+  it('never commits while another write is mid-way, so a step never holds half of one', async () => {
+    // The relay sends calls concurrently; a commit as the first finished would have closed a step on
+    // the part of the second written so far.
     const events: string[] = [];
     const step = createUndoSteps({ commitUndo: () => events.push('commit') });
     const a = deferred();
+    const b = deferred();
     const first = step(async () => {
       events.push('a:start');
       await a.promise;
       events.push('a:end');
     })({});
-    const second = step(() => {
-      events.push('b');
+    const second = step(async () => {
+      events.push('b:start');
+      await b.promise;
+      events.push('b:end');
     })({});
-    await Promise.resolve();
-    expect(events).toEqual(['a:start']);
     a.resolve(undefined);
-    await Promise.all([first, second]);
-    expect(events).toEqual(['a:start', 'a:end', 'commit', 'b', 'commit']);
+    await first;
+    expect(events).toEqual(['a:start', 'b:start', 'a:end']);
+    b.resolve(undefined);
+    await second;
+    expect(events).toEqual(['a:start', 'b:start', 'a:end', 'b:end', 'commit']);
   });
 
-  it('closes the step of a write that throws, passes its error on, and keeps the queue moving', async () => {
+  it('makes no write wait for another', async () => {
+    // Queueing them made fifteen 2.5 s writes sent together run in turn until the last four timed out
+    // (measured); overlapping writes now run as they did before any of this.
+    const step = createUndoSteps({ commitUndo: () => {} });
+    const slow = deferred();
+    void step(() => slow.promise)({});
+    expect(await step(() => 'ran')({})).toBe('ran');
+    slow.resolve(undefined);
+  });
+
+  it('closes the step of a write that throws and passes its error on', async () => {
     const commitUndo = vi.fn<() => void>();
     const step = createUndoSteps({ commitUndo });
     await expect(
@@ -55,8 +77,39 @@ describe('createUndoSteps', () => {
         throw new Error('refused');
       })({}),
     ).rejects.toThrow('refused');
-    expect(await step(() => 'next')({})).toBe('next');
-    expect(commitUndo).toHaveBeenCalledTimes(2);
+    expect(commitUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops counting a write stuck for STALE_WRITE_MS, so it cannot hold the others\u2019 step open', async () => {
+    // A create_instance by key hung in FigJam (measured); counted forever, it would have kept every
+    // later write's step from closing.
+    vi.useFakeTimers();
+    try {
+      const events: string[] = [];
+      const step = createUndoSteps({ commitUndo: () => events.push('commit') });
+      const stuck = deferred();
+      const first = step(async () => {
+        await stuck.promise;
+        events.push('stuck:end');
+        return 'late';
+      })({});
+      await step(() => events.push('during'))({});
+      expect(events).toEqual(['during']);
+
+      await vi.advanceTimersByTimeAsync(STALE_WRITE_MS);
+      expect(events).toEqual(['during', 'commit']);
+      await step(() => events.push('after'))({});
+      expect(events).toEqual(['during', 'commit', 'after', 'commit']);
+
+      // Finishing later it closes no step — that would cut some other write's in two — and its
+      // caller still gets its result.
+      stuck.resolve(undefined);
+      expect(await first).toBe('late');
+      expect(events.at(-1)).toBe('stuck:end');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('never lets a failed commit replace the call’s own result or error', async () => {
