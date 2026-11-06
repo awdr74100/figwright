@@ -42,6 +42,7 @@ A few things worth knowing (full details in [AGENTS.md](./AGENTS.md)):
 - **No git hooks.** Formatting and lint are enforced by CI, so run `pnpm format` before committing (or format on save).
 - **Tests live in `test/`**, mirroring `src/`, with no co-located tests. Cross-package tests go in the root `test/`.
 - Add or update tests for any behavior change.
+- **Equal-or-better, never a regression.** Everything that worked in the last release must still work the same or better, which you show by running the old behavior against the new rather than by reading the diff. A change that deliberately does something different has to say why the new outcome is better. See the [Engineering standard](./AGENTS.md#engineering-standard) in AGENTS.md.
 
 ## Commit & PR conventions
 
