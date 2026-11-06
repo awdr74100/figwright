@@ -43,6 +43,26 @@ export type DispatchOutcome =
   | { kind: 'reply'; reply: PluginToolResult | PluginToolError }
   | { kind: 'ignore' };
 
+/**
+ * Figma's own wording when a call it answers from its server gets no answer. It says to check the
+ * internet connection, which sends an agent off to diagnose a network that was fine: measured, it
+ * came and went while other calls in the same file kept working, in Figma Design and FigJam,
+ * foreground or background, and only on calls Figma answers from its server — a lookup of an id the
+ * file does not have loaded (a deleted one took 10 s to fail where it took 0.2–0.7 s to answer
+ * null), a style by id, a reactions write.
+ */
+const FIGMA_SERVER_SILENT = /Unable to establish connection to Figma\b/;
+
+const FIGMA_SERVER_SILENT_NOTE =
+  "Figma's server did not answer this call. That comes and goes, and hits calls Figma answers " +
+  'from its server — looking up an id this file does not have loaded (often a deleted or ' +
+  'mistyped one), a style by id, a reactions write. Re-read any id that may be stale, bring the ' +
+  'file to the front in Figma, and retry.';
+
+/** An error's message, with what Figma's "check your internet connection" means appended. */
+const explainFigmaServerSilence = (message: string): string =>
+  FIGMA_SERVER_SILENT.test(message) ? `${message} (${FIGMA_SERVER_SILENT_NOTE})` : message;
+
 export const dispatchSandboxMessage = async (input: DispatchInput): Promise<DispatchOutcome> => {
   if (!isPluginBridgeMessage(input.raw)) return { kind: 'ignore' };
   if (input.raw.kind !== 'tool-call') return { kind: 'ignore' };
@@ -77,7 +97,9 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
       reply: createToolError({
         id,
         code: ErrorCode.Internal,
-        message: withEditorContext(err, input.editorType, isWriteHandler(handler)),
+        message: explainFigmaServerSilence(
+          withEditorContext(err, input.editorType, isWriteHandler(handler)),
+        ),
       }),
     };
   }
