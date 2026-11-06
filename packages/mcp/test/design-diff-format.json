@@ -51,6 +51,7 @@
     "nodes[].componentPropertyReferences.characters",
     "nodes[].componentPropertyReferences.mainComponent",
     "nodes[].componentPropertyReferences.visible",
+    "nodes[].componentSetError",
     "nodes[].constraints",
     "nodes[].constraints.horizontal",
     "nodes[].constraints.vertical",

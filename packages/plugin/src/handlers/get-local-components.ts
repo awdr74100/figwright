@@ -5,6 +5,7 @@ import type {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readComponentGetter } from '../serializer.js';
 
 export const createGetLocalComponentsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -64,24 +65,29 @@ export const createGetLocalComponentsHandler =
           description: node.description,
           parentId: node.parent === null ? null : node.parent.id,
         };
-        if (node.variantProperties !== null) {
-          info.variantProperties = { ...node.variantProperties };
-        }
+        // Figma refuses both reads below while the variant's set has errors; that set is reported
+        // with its error rather than failing every component found alongside it.
+        const variant = readComponentGetter(() => node.variantProperties);
+        if ('error' in variant) info.componentSetError = variant.error;
+        else if (variant.value !== null) info.variantProperties = { ...variant.value };
         components.push(info);
       } else {
-        componentSets.push({
+        const set: SerializedComponentSetInfo = {
           id: node.id,
           name: node.name,
           key: node.key,
           description: node.description,
           componentIds: node.children.map(child => child.id),
-          variantGroupProperties: Object.fromEntries(
-            Object.entries(node.variantGroupProperties).map(([prop, def]) => [
-              prop,
-              { values: [...def.values] },
-            ]),
-          ),
-        });
+        };
+        const groups = readComponentGetter(() => node.variantGroupProperties);
+        if ('error' in groups) {
+          set.componentSetError = groups.error;
+        } else {
+          set.variantGroupProperties = Object.fromEntries(
+            Object.entries(groups.value).map(([prop, def]) => [prop, { values: [...def.values] }]),
+          );
+        }
+        componentSets.push(set);
       }
     }
 

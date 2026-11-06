@@ -11,7 +11,9 @@ export const getLocalComponentsTool: ToolSpec = {
     '{ components, componentSets }. Scans a subtree, not the whole document — pass nodeId, or select ' +
     'the frames to scan. A document root is not supported; use get_pages and scan each page by nodeId. ' +
     'Components carry their variantProperties (when part of a set); component sets ' +
-    'carry their variantGroupProperties (available values per axis) and the ids of their variant components.',
+    'carry their variantGroupProperties (available values per axis) and the ids of their variant components. ' +
+    'A set Figma flags with errors (two variants with the same values, or variants whose properties ' +
+    'differ) carries componentSetError in place of those properties, and so do its variants.',
   inputSchema: z.object({
     nodeId: z
       .string()

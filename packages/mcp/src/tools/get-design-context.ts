@@ -29,6 +29,8 @@ export const getDesignContextTool: ToolSpec = {
     'component (flagged deduped); a deduped instance still carries textOverrides ({ name, ' +
     'characters } — the visible text it actually renders) and propertyOverrides (its per-instance ' +
     'visual diffs), so per-instance content survives without re-expanding the collapsed subtree. ' +
+    'An instance whose component set Figma flags with errors carries componentSetError in place ' +
+    'of its componentProperties, which Figma will not read there; the rest of the read is whole. ' +
     'A node carrying variableModes ({ color: "Dark" }) renders in that variable mode: its values ' +
     "are that mode's but its token names are the default's, so keep the token refs and scope the " +
     "subtree in the project's theme mechanism (a root lists the modes it inherits too). " +

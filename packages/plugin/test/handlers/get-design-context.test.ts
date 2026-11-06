@@ -95,6 +95,52 @@ describe('get_design_context handler', () => {
     },
   );
 
+  // Issue #334: one instance of a component set with errors failed the whole full-detail read,
+  // because Figma throws on reading its componentProperties (measured).
+  const brokenSetFrame = (): SceneNode => {
+    const healthy = node({
+      id: 'ok',
+      type: 'INSTANCE',
+      getMainComponentAsync: async () => ({ id: 'main-ok', name: 'Badge' }),
+      componentProperties: { Size: { type: 'VARIANT', value: 'lg' } },
+      children: [],
+      overrides: [],
+    });
+    const broken = node({
+      id: 'bad',
+      type: 'INSTANCE',
+      getMainComponentAsync: async () => ({ id: 'main-bad', name: 'Button' }),
+      children: [],
+      overrides: [],
+    });
+    Object.defineProperty(broken, 'componentProperties', {
+      get: () => {
+        throw new Error('in get_componentProperties: Component set for node has existing errors');
+      },
+    });
+    return node({ id: 'f', children: [healthy, broken] });
+  };
+  const readBrokenSetFrame = async (detail: 'full' | 'compact' | 'minimal') =>
+    (await createGetDesignContextHandler(fakeFigma({ selection: [brokenSetFrame()] }))({
+      detail,
+      dedupeComponents: false,
+    })) as GetDesignContextResult;
+
+  it.each(['full', 'compact', 'minimal'] as const)(
+    'reads a frame holding an instance whose component set has errors, at %s detail',
+    async detail => {
+      const result = await readBrokenSetFrame(detail);
+      expect(result.nodes[0]?.children?.map(c => c.id)).toEqual(['ok', 'bad']);
+    },
+  );
+
+  it('leaves out only that instance’s properties at full detail, and says why', async () => {
+    const [ok, bad] = (await readBrokenSetFrame('full')).nodes[0]?.children ?? [];
+    expect(ok?.componentProperties).toEqual({ Size: { type: 'VARIANT', value: 'lg' } });
+    expect(bad).not.toHaveProperty('componentProperties');
+    expect(bad?.componentSetError).toBe('Component set for node has existing errors');
+  });
+
   it('leaves an override that is not about smoothing exactly as it was, with no smoothing 0', async () => {
     // A child whose only override is its opacity: the entry carries that, and no smoothing field
     // — the circular default says nothing, and every deduped instance would otherwise repeat it.
