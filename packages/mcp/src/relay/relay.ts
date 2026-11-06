@@ -65,6 +65,20 @@ export const DEFAULT_PLUGIN_REQUEST_TIMEOUT_MS = 30_000;
  */
 const PLUGIN_ENDED_CODES: ReadonlySet<number> = new Set([1000, 1001]);
 
+/**
+ * A tool call the plugin answered with an error. The text is `CODE: message` as it always was, and
+ * the code is kept as a field too: folded into the text alone, a caller that needs it — the
+ * leader's `/rpc`, answering a follower — could only guess it back from the words.
+ */
+export class PluginReplyError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(`${code}: ${message}`);
+  }
+}
+
 export class Relay {
   readonly sessions = new SessionManager();
   private readonly wss: WebSocketServer;
@@ -589,7 +603,7 @@ export class Relay {
         // Recorded on the error path too: a plugin that answers METHOD_NOT_FOUND for a tool it
         // predates is the most visible thing an out-of-date one does, and the least self-explaining.
         p.served.sessionId = p.dispatchedToSessionId;
-        p.reject(new Error(`${env.error.code}: ${env.error.message}`));
+        p.reject(new PluginReplyError(env.error.code, env.error.message));
       }
       return;
     }
