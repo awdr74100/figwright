@@ -16,16 +16,8 @@ export const createEllipseTool: ToolSpec = {
     name: z.string().optional().describe('Layer name'),
     x: z.number().optional().describe('X position in the parent'),
     y: z.number().optional().describe('Y position in the parent'),
-    width: z
-      .number()
-      .min(0.01)
-      .optional()
-      .describe('Width in px, at least 0.01; alone, the height stays at 100'),
-    height: z
-      .number()
-      .min(0.01)
-      .optional()
-      .describe('Height in px, at least 0.01; alone, the width stays at 100'),
+    width: z.number().min(0).optional().describe('Width in px; alone, the height stays at 100'),
+    height: z.number().min(0).optional().describe('Height in px; alone, the width stays at 100'),
     ...initialStyleShape,
   }),
   kind: 'write',

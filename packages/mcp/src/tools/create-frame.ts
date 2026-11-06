@@ -30,14 +30,14 @@ export const createFrameTool: ToolSpec = {
     y: z.number().optional(),
     width: z
       .number()
-      .min(0.01)
+      .min(0)
       .optional()
-      .describe('Frame width in px, at least 0.01; alone, the height stays at 100'),
+      .describe('Frame width in px; alone, the height stays at 100'),
     height: z
       .number()
-      .min(0.01)
+      .min(0)
       .optional()
-      .describe('Frame height in px, at least 0.01; alone, the width stays at 100'),
+      .describe('Frame height in px; alone, the width stays at 100'),
     ...initialStyleShape,
     ...initialRadiusShape,
     ...initialFrameShape,

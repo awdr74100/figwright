@@ -2,10 +2,10 @@
  * The width / height a create_* call asked for, checked before the node exists.
  *
  * Figma's own check runs inside `resize()`, after the node has been created and appended to the
- * page: a negative side threw there and left the new layer behind at its default size (measured),
- * and a 0 was taken and stored as 0.0001 — a layer nobody can see, answered ok (measured). So a
- * side must be a finite number of at least 0.01, the floor resize_nodes holds too, and a refused
- * call creates nothing.
+ * page: a negative side threw there and left the new layer behind at its default size (measured).
+ * So a side must be a finite number of 0 or more, and a refused call creates nothing. A 0 is still
+ * Figma's to store, as it always was (it keeps 0.0001, measured) — a CSS `height: 0` has a layer to
+ * land on.
  */
 export interface CreateSize {
   width?: number;
@@ -20,8 +20,8 @@ export const readCreateSize = (
   for (const side of ['width', 'height'] as const) {
     const value = p[side];
     if (value === undefined) continue;
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0.01) {
-      throw new TypeError(`${tool}: ${side} must be a number of at least 0.01`);
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new TypeError(`${tool}: ${side} must be a number, 0 or more`);
     }
     size[side] = value;
   }
