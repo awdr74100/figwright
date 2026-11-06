@@ -8,6 +8,12 @@ per-property fidelity catalog, and how to ground a page too big for one call.
 
 ## Reading the tree
 
+- **`componentSetError` on an instance means its variant is unknown, not that it has none.** Figma
+  withholds `componentProperties` while the instance's component set has errors (two variants with
+  the same values, or variants whose properties differ). Build it from its `mainComponent` and
+  the screenshot, and tell the user that set needs fixing in Figma — never emit it as a prop-less
+  default.
+
 - **`colorProfile: "DISPLAY_P3"` means every colour in the payload is a P3 colour.** It is the first
   key of a result from a Display P3 file, and absent otherwise. There, a hex (and any r/g/b) is P3
   channels: `#CC6633` is what CSS writes as `color(display-p3 0.8 0.4 0.2)`, and emitted as the

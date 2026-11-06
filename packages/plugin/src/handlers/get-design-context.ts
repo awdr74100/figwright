@@ -237,6 +237,7 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   // and adds to each root the modes it inherits from outside the read.
   if (flat.explicitVariableModes !== undefined) out.variableModes = flat.explicitVariableModes;
   if (flat.componentProperties !== undefined) out.componentProperties = flat.componentProperties;
+  if (flat.componentSetError !== undefined) out.componentSetError = flat.componentSetError;
   if (flat.componentPropertyReferences !== undefined)
     out.componentPropertyReferences = flat.componentPropertyReferences;
   return out;

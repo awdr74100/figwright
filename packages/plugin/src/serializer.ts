@@ -565,8 +565,31 @@ const serializeTextSegments = (text: TextNode | TextPathNode): SerializedTextSeg
   });
 };
 
+/**
+ * Read a component getter that Figma refuses to answer while the node's component set has errors —
+ * "Component set for node has existing errors" (measured: two variants with the same property
+ * values, or variants whose properties differ; the getter throws, and one such node used to fail
+ * the whole read it sat in). The error, without Figma's "in get_x: " prefix, is returned in place
+ * of the value.
+ */
+export const readComponentGetter = <T>(read: () => T): { value: T } | { error: string } => {
+  try {
+    return { value: read() };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { error: message.replace(/^in get_\w+: /, '') };
+  }
+};
+
 const collectComponentProperties = (node: SceneNode, out: SerializedNode): void => {
-  const raw = (node as { componentProperties?: unknown }).componentProperties;
+  const read = readComponentGetter(
+    () => (node as { componentProperties?: unknown }).componentProperties,
+  );
+  if ('error' in read) {
+    out.componentSetError = read.error;
+    return;
+  }
+  const raw = read.value;
   if (typeof raw !== 'object' || raw === null) return;
   const props: Record<string, SerializedComponentProperty> = {};
   for (const [name, def] of Object.entries(raw)) {

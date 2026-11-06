@@ -8,6 +8,11 @@ export const SerializedComponentInfoSchema = z.object({
   parentId: z.string().nullable(),
   /** Variant assignments for a component inside a set, e.g. { Size: "Large", State: "Hover" }. */
   variantProperties: z.record(z.string(), z.string()).optional(),
+  /**
+   * Figma's reason for withholding `variantProperties` when this variant's set has errors
+   * ("Component set for node has existing errors"). Omitted when they read.
+   */
+  componentSetError: z.string().optional(),
 });
 export type SerializedComponentInfo = z.infer<typeof SerializedComponentInfoSchema>;
 
@@ -20,6 +25,11 @@ export const SerializedComponentSetInfoSchema = z.object({
   variantGroupProperties: z
     .record(z.string(), z.object({ values: z.array(z.string()) }))
     .optional(),
+  /**
+   * Figma's reason for withholding `variantGroupProperties` when this set has errors ("Component
+   * set has existing errors"). Omitted when they read.
+   */
+  componentSetError: z.string().optional(),
   componentIds: z.array(z.string()),
 });
 export type SerializedComponentSetInfo = z.infer<typeof SerializedComponentSetInfoSchema>;

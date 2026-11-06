@@ -276,6 +276,13 @@ export interface DesignContextNode {
   variableModes?: Readonly<Record<string, string>>;
   componentProperties?: Readonly<Record<string, SerializedComponentProperty>>;
   /**
+   * Figma's reason for withholding the component properties of a node whose component set has
+   * errors — "Component set for node has existing errors" (measured: two variants with the same
+   * property values, or variants whose properties differ). Figma throws on reading them there, so
+   * they are left out of this node alone and the rest of the read goes on. Omitted when they read.
+   */
+  componentSetError?: string;
+  /**
    * For a sublayer inside a COMPONENT or an INSTANCE: which component property drives which field,
    * as the property name `bind_component_property` and `get_component_api` both use. Tells codegen
    * that a layer is prop-driven rather than static — without it the text a TEXT property fills in
@@ -474,6 +481,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     boundVariables: z.record(z.string(), z.array(z.string())).optional(),
     variableModes: z.record(z.string(), z.string()).optional(),
     componentProperties: z.record(z.string(), SerializedComponentPropertySchema).optional(),
+    componentSetError: z.string().optional(),
     componentPropertyReferences: z
       .object({
         visible: z.string().optional(),
@@ -680,6 +688,9 @@ const CONTENT_FIELDS = [
   'textOverrides',
   // Which variant an instance renders — an INSTANCE without its props is not buildable.
   'componentProperties',
+  // Why an instance carries no props, when its component set has errors: kept wherever the props
+  // would have been, or a downgrade would make the missing props look like none.
+  'componentSetError',
   // The mirror of the above on the definition side: which property drives a sublayer. A downgrade
   // still generates component structure, and without this the generated component has no props at
   // all — a prop-driven string becomes a literal and a BOOLEAN-gated layer becomes unconditional.

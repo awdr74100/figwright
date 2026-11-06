@@ -112,6 +112,36 @@ describe('instance override guard', () => {
     expect(note).toMatch(/I;2\.vectorNetwork/);
   });
 
+  // Measured: a nested instance whose properties were set through the outer one is listed as an
+  // override of 'componentProperties'; once its component set has errors, Figma throws on reading
+  // them, and every batch touching the outer instance failed at capture.
+  it('passes over a nested instance whose component set has errors, and names it if a reset is needed', async () => {
+    const { instance, sublayer, store, figmaCtx, markRaw } = makeInstance();
+    const a = sublayer('I;1', { fills: ['red'] });
+    // Its main component still resolves on a broken set (measured); only the properties are withheld.
+    const nested: Node = {
+      id: 'I;2',
+      type: 'INSTANCE',
+      parent: instance,
+      getMainComponentAsync: async () => ({ id: 'M' }),
+    };
+    Object.defineProperty(nested, 'componentProperties', {
+      get: () => {
+        throw new Error('in get_componentProperties: Component set for node has existing errors');
+      },
+    });
+    store.set('I;2', nested);
+    markRaw('I;2', 'componentProperties');
+
+    const guards = await captureOverrideGuard(figmaCtx, ['I;1']);
+    a.fills = ['blue'];
+    a.fills = ['red'];
+    const note = await restoreOverrideGuard(figmaCtx, guards);
+
+    expect(instance.removeOverrides).not.toHaveBeenCalled();
+    expect(note).toMatch(/I;2\.componentProperties \(Component set for node has existing errors\)/);
+  });
+
   it('re-applies a nested swap the reset reverted', async () => {
     const { store, sublayer, figmaCtx } = makeInstance();
     const main1 = { id: 'M1', type: 'COMPONENT' };

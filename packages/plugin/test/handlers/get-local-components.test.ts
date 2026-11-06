@@ -73,6 +73,48 @@ describe('get_local_components handler', () => {
     });
   });
 
+  // Measured: Figma throws on a set's variantGroupProperties and a variant's variantProperties while
+  // the set has errors; one such set used to fail the whole listing (issue #334).
+  it('lists a component set with errors, and its variants, with the reason in place of their properties', async () => {
+    const throwing = (getter: string, message: string): PropertyDescriptor => ({
+      get: () => {
+        throw new Error(`in get_${getter}: ${message}`);
+      },
+    });
+    const broken = Object.defineProperty(
+      { ...set, id: 'CS:2', variantGroupProperties: undefined },
+      'variantGroupProperties',
+      throwing('variantGroupProperties', 'Component set has existing errors'),
+    );
+    const brokenVariant = Object.defineProperty(
+      { ...variant, id: 'C:5', parent: { id: 'CS:2' }, variantProperties: undefined },
+      'variantProperties',
+      throwing('variantProperties', 'Component set for node has existing errors'),
+    );
+    const handler = createGetLocalComponentsHandler(
+      fakeFigma({ selection: [frame('F:1', [set, broken, brokenVariant, standalone])] }),
+    );
+    const result = (await handler({})) as GetLocalComponentsResult;
+
+    expect(result.componentSets.find(s => s.id === 'CS:2')).toEqual({
+      id: 'CS:2',
+      name: 'Button',
+      key: 'csk',
+      description: 'btn',
+      componentIds: ['C:1', 'C:2'],
+      componentSetError: 'Component set has existing errors',
+    });
+    expect(result.components.find(c => c.id === 'C:5')).toMatchObject({
+      componentSetError: 'Component set for node has existing errors',
+    });
+    expect(result.components.find(c => c.id === 'C:5')).not.toHaveProperty('variantProperties');
+    // Everything else comes back whole.
+    expect(result.componentSets.find(s => s.id === 'CS:1')?.variantGroupProperties).toEqual(
+      set.variantGroupProperties,
+    );
+    expect(result.components.map(c => c.id)).toEqual(['C:5', 'C:3']);
+  });
+
   it('scopes to an explicit nodeId', async () => {
     const handler = createGetLocalComponentsHandler(
       fakeFigma({ lookup: { 'F:9': frame('F:9', [standalone]) } }),

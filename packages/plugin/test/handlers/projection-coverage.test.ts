@@ -274,7 +274,23 @@ const textOnPath = base({
   textPathStartData: { segment: 1, position: 0.5 },
 });
 
-const FIXTURES = [frameInGrid, arcWithConstraints, richText, drawnStroke, repeatGroup, textOnPath];
+// An instance of a component set Figma flags with errors: reading its properties throws (measured).
+const brokenSetInstance = base({ id: 'g', type: 'INSTANCE' });
+Object.defineProperty(brokenSetInstance, 'componentProperties', {
+  get: () => {
+    throw new Error('in get_componentProperties: Component set for node has existing errors');
+  },
+});
+
+const FIXTURES = [
+  frameInGrid,
+  arcWithConstraints,
+  richText,
+  drawnStroke,
+  repeatGroup,
+  textOnPath,
+  brokenSetInstance,
+];
 
 // SerializedNodeSchema is exported as a recursive z.lazy — unwrap to the inner object for keys.
 const schemaKeys = Object.keys(
