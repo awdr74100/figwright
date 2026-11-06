@@ -1,3 +1,4 @@
+import { readComponentGetter } from '../serializer.js';
 import {
   type BindingSnapshot,
   captureBindings,
@@ -213,7 +214,16 @@ const captureEntry = async (
       entry.values.width = (node as SceneNode).width;
       entry.values.height = (node as SceneNode).height;
     } else if (field === 'componentProperties' && node.type === 'INSTANCE') {
-      entry.values.componentProperties = propertyValues(node);
+      // A nested instance whose component set has errors: Figma throws on reading its properties
+      // and refuses setProperties on it alike (measured), so they can be neither captured nor put
+      // back. Left as an override the guard will not reset — the batch runs, as it does outside one
+      // — rather than failing every batch that touches the outer instance.
+      const values = readComponentGetter(() => propertyValues(node));
+      if ('error' in values) {
+        unsupported.push(`${override.id}.${raw} (${values.error})`);
+        continue;
+      }
+      entry.values.componentProperties = values.value;
     } else if (field === 'reactions' && 'reactions' in node) {
       entry.values.reactions = (node as ReactionMixin).reactions;
     } else if (
