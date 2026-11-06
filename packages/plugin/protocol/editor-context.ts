@@ -26,8 +26,9 @@
  *   refusal ("in read-only mode") somewhere in it, a handler's own wording wrapped round it
  *   included.
  * - FigJam's missing APIs throw "cannot read property 'X' of undefined" or "not a function", and a
- *   handler that reaches for a component, an instance or Figma Motion first finds none and says so
- *   in its own words ("is not an INSTANCE", "is not a component"). Either carries it.
+ *   handler that reaches for a component, an instance, a variable, a style or Figma Motion first
+ *   finds none and says so in its own words ("is not an INSTANCE", "style S:1 not found"). Either
+ *   carries it.
  *
  * Neither needs a list of tools: whether a handler writes is the registry's own split (the
  * dispatcher's `markWriteHandler`), and the rest is read off the error. A new tool that hits a
@@ -87,8 +88,11 @@ const EDITOR_LIMITATIONS: Readonly<Record<string, EditorLimitation>> = {
     refusal: /cannot read propert(?:y|ies)\b.*\bof undefined|\bnot a function\b/i,
     // Measured: "node 0:0 is not an INSTANCE", "… is not a component or component set", "Figma
     // Motion is only available in the Figma Design editor", "the Figma Motion API is not available
-    // here". Variables and styles need no words of their own: their APIs are missing outright.
-    lacks: /\b(?:components?|instances?|variants?|motion)\b/i,
+    // here". Variables and styles too ("style S:1 not found", "variable V:1 not found"): their APIs
+    // were missing outright on every call measured, but a lookup that comes back empty says so in
+    // these words, and saying too much here costs no more than the old suffix on every error did.
+    // A font's style ("fontName.style") is not a style.
+    lacks: /\b(?:components?|instances?|variants?|motion|variables?)\b|(?<![.\w])styles?\b/i,
   },
 };
 

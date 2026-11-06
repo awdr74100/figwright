@@ -69,6 +69,8 @@ describe('withEditorContext', () => {
     ['figjam', 'add_component_property: 0:0 (DOCUMENT) is not a component or component set'],
     ['figjam', 'combine_as_variants: node 0:0 is a DOCUMENT, not a COMPONENT'],
     ['figjam', 'get_motion_styles: the Figma Motion API is not available here.'],
+    ['figjam', 'delete_style: style S:1 not found'],
+    ['figjam', 'set_variable_value: variable VariableID:1:2 not found'],
   ])('names %s when it is behind the error: %s', (editorType, raised) => {
     const message = withEditorContext(new Error(raised), editorType, read);
     expect(message.startsWith(`${raised} (editor: ${editorType} — `)).toBe(true);
@@ -104,6 +106,8 @@ describe('withEditorContext', () => {
     ['figjam', 'set_text: node 9:999 not found', write],
     ['figjam', 'set_reactions: node 0:1 not found or cannot have reactions', write],
     ['figjam', 'resize_nodes: width and height must be finite numbers', write],
+    // A font's style is not one of the styles FigJam lacks.
+    ['figjam', 'create_text: fontName.style must be a string', write],
   ])('leaves a %s error the editor is not behind untouched: %s', (editorType, raised, writes) => {
     expect(withEditorContext(new Error(raised), editorType, writes)).toBe(raised);
   });
