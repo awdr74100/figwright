@@ -22,5 +22,6 @@ Link the issues it resolves, e.g. `Fixes #123`.
 
 - [ ] The canonical checks pass locally: `pnpm typecheck && pnpm lint && pnpm format:check && pnpm knip && pnpm build && pnpm test`
 - [ ] Tests are added or updated for any behavior change (in `test/` mirroring `src/`; cross-package tests in the root `test/`)
+- [ ] Every call that worked in the last release ends the same or better — measured by running old against new, not read off the code — and each deliberate behavior change is listed in the Description with its old and new outcome
 - [ ] Read-path / serializer changes are verified with a live round-trip against a real Figma file (plugin connected, running the built `dist`)
 - [ ] Documentation is updated if needed (README, AGENTS.md, tool descriptions)
