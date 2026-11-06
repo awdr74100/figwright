@@ -2,7 +2,6 @@ import { createServer, type Server as HttpServer, request as httpRequest } from 
 import type { AddressInfo } from 'node:net';
 
 import {
-  createError,
   createRequest,
   createResponse,
   decodeEnvelope,
@@ -111,16 +110,8 @@ const attachFakePlugin = async (
       env.method !== SystemMethod.Ping &&
       env.method !== SystemMethod.Hello
     ) {
-      // A handler that throws `{ code, message }` answers with an error, as a plugin's sandbox does.
-      try {
-        const result = await handle(env.method, env.params);
-        ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
-      } catch (thrown) {
-        const { code, message } = thrown as { code: ErrorCode; message: string };
-        ws.send(
-          encodeEnvelope(createError({ id: env.id, sessionId: env.sessionId, code, message })),
-        );
-      }
+      const result = await handle(env.method, env.params);
+      ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId: env.sessionId, result })));
     }
   });
 
@@ -299,36 +290,6 @@ describe('leader endpoints', () => {
     const resp = await respPromise;
     if (resp.kind !== 'ok') throw new Error(`expected ok, got ${resp.kind}`);
     expect(resp.result).toEqual({ ok: 'flushed' });
-  });
-
-  // The relay used to fold the plugin's code into the text and /rpc read it back from the words,
-  // so a follower got INTERNAL_ERROR for a TIMEOUT the plugin had chosen. The text stays the same.
-  it.each([
-    [
-      ErrorCode.Timeout,
-      'Unable to establish connection to Figma after 10 seconds.',
-      ErrorCode.Timeout,
-    ],
-    [ErrorCode.MethodNotFound, 'no sandbox handler (method=get_node)', ErrorCode.MethodNotFound],
-    // The plugin's catch-all: still read from the words, as before — its bridge reports timing out
-    // this way.
-    [ErrorCode.Internal, 'sandbox tool timeout (method=get_node)', ErrorCode.Timeout],
-    [ErrorCode.Internal, 'node 9:9 not found', ErrorCode.Internal],
-  ])('POST /rpc passes on a plugin error answered %s: %s', async (sent, message, expected) => {
-    const b = await startLeader();
-    await attachFakePlugin(b, async () => {
-      throw { code: sent, message };
-    });
-
-    const resp = await callRpc(b.port, {
-      requestId: `r-${sent}`,
-      toolName: 'get_node',
-      args: { nodeId: '1:1' },
-    });
-
-    if (resp.kind !== 'err') throw new Error(`expected err, got ${resp.kind}`);
-    expect(resp.code).toBe(expected);
-    expect(resp.message).toBe(`${sent}: ${message}`);
   });
 
   it('POST /rpc returns TIMEOUT when plugin does not reply in time', async () => {

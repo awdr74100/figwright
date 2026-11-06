@@ -10,7 +10,7 @@ import {
 import { decode, encode } from '@msgpack/msgpack';
 
 import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
-import { PluginReplyError, type Relay } from '../relay/relay.js';
+import type { Relay } from '../relay/relay.js';
 import { checkWireCall, type WireRejection } from '../tools/wire-schema.js';
 
 export const PING_PATH = '/ping';
@@ -287,21 +287,14 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
           });
         } catch (err) {
           const message = (err as Error).message;
-          // A code the plugin chose (TIMEOUT for Figma's own server going silent, METHOD_NOT_FOUND)
-          // is passed on as it is. INTERNAL_ERROR is the plugin's catch-all — its bridge reports
-          // timing out that way — so that one, and the relay's own errors, are still read from the
-          // words.
-          const pluginCode =
-            err instanceof PluginReplyError && err.code !== ErrorCode.Internal ? err.code : null;
           const code =
-            pluginCode ??
-            (message.startsWith('no plugin connected') ||
+            message.startsWith('no plugin connected') ||
             message.startsWith('pinned session') ||
             message.startsWith('plugin closed before answering')
               ? ErrorCode.PluginDisconnected
               : message.includes('timeout')
                 ? ErrorCode.Timeout
-                : ErrorCode.Internal);
+                : ErrorCode.Internal;
           writeMsgpack(res, 200, { kind: 'err', requestId, code, message });
         }
       })();
