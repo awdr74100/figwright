@@ -1975,6 +1975,47 @@ describe('batch inverses for tree structure', () => {
     expect([...store.keys()].filter(k => k.startsWith('S:'))).toEqual([]);
   });
 
+  // Measured in Figma Design and FigJam: in a file in a background tab, looking up the id of a node
+  // that is gone — the container a rollback just emptied, which Figma deletes itself — can hang
+  // for 10 s and throw instead of answering null, and that failed the whole rollback.
+  it.each(['group_nodes', 'repeat_nodes', 'combine_as_variants'] as const)(
+    'rolls back %s without looking up the container it deleted',
+    async tool => {
+      const { node, store, figmaCtx } = makeTree();
+      const lookup = figmaCtx.getNodeByIdAsync;
+      Object.assign(figmaCtx, {
+        getNodeByIdAsync: async (id: string) => {
+          if (!store.has(id)) {
+            throw new Error('Unable to establish connection to Figma after 10 seconds.');
+          }
+          return lookup(id);
+        },
+      });
+      const page = node('P0', 'PAGE', null);
+      const p = node('P', 'FRAME', page);
+      const kind = tool === 'combine_as_variants' ? 'COMPONENT' : 'RECTANGLE';
+      node('a', kind, p, { componentPropertyDefinitions: {} });
+      node('b', kind, p, { componentPropertyDefinitions: {} });
+      node('F', 'RECTANGLE', page, { fills: [] });
+      const handler = createBatchHandler(figmaCtx, {
+        group_nodes: createGroupNodesHandler(figmaCtx),
+        repeat_nodes: createRepeatNodesHandler(figmaCtx),
+        combine_as_variants: createCombineAsVariantsHandler(figmaCtx),
+        set_fills: createSetFillsHandler(figmaCtx),
+      });
+      const params =
+        tool === 'repeat_nodes'
+          ? { nodeIds: ['a'], modifiers: [{ repeatType: 'RADIAL', count: 8, offset: 50 }] }
+          : { nodeIds: ['a', 'b'] };
+
+      await expect(handler({ ops: [{ tool, params }, FAIL] })).rejects.toThrow(
+        /rolled back 1 applied op\(s\): /,
+      );
+      expect(ids(p)).toEqual(['a', 'b']);
+      expect([...store.keys()].filter(k => /^[GRS]:/.test(k))).toEqual([]);
+    },
+  );
+
   it('turns auto-layout back off last, after the fields only a layout mode can take', async () => {
     const { node, figmaCtx } = makeTree();
     const page = node('P0', 'PAGE', null);

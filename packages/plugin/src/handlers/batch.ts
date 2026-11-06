@@ -513,23 +513,25 @@ const groupTargets = async (
   return { nodes, parent: parent as BaseNode & ChildrenMixin };
 };
 
-/**
- * Remove what an op created: a group once ungrouping left it empty (Figma deletes it itself when
- * its last child leaves, but a group the op made and emptied by hand may linger), or with `always`
- * a node the op added outright.
- */
-const removeLeftover = async (
-  figmaCtx: typeof figma,
-  result: unknown,
-  always = false,
-): Promise<void> => {
+/** The node an op created (its result's `nodeId`), or null when it reports none or is gone. */
+const createdBy = async (figmaCtx: typeof figma, result: unknown): Promise<BaseNode | null> => {
   const id = (result as { nodeId?: unknown } | null)?.nodeId;
-  if (typeof id !== 'string') return;
-  const node = await live(figmaCtx, id);
-  if (node === null) return;
-  if (always || ('children' in node && (node as ChildrenMixin).children.length === 0)) {
-    node.remove();
-  }
+  return typeof id === 'string' ? live(figmaCtx, id) : null;
+};
+
+/**
+ * Remove the container an op created once its rollback has emptied it. Figma deletes a group or a
+ * repeat group itself when its last child leaves; one emptied some other way may linger.
+ *
+ * Takes the node, looked up by the caller before the rollback moved its children out, rather than
+ * its id: looking up a deleted node's id goes to Figma's server (measured 0.2–0.7 s), and in a file
+ * in a background tab that lookup can hang for 10 s and throw "Unable to establish connection to
+ * Figma" instead of answering null (measured, in Figma Design and FigJam alike) — which failed the
+ * whole rollback. The reference reads `removed` at once.
+ */
+const removeIfEmptied = (node: BaseNode | null): void => {
+  if (node === null || node.removed) return;
+  if ('children' in node && (node as ChildrenMixin).children.length === 0) node.remove();
 };
 
 const groupInverse: BatchInverse = {
@@ -540,8 +542,9 @@ const groupInverse: BatchInverse = {
     return state;
   },
   async undo(figmaCtx, _params, captured, result) {
+    const container = await createdBy(figmaCtx, result);
     await undoRehome(figmaCtx, (captured as ReparentState).rehome);
-    await removeLeftover(figmaCtx, result);
+    removeIfEmptied(container);
     return undefined;
   },
   resizes: (_params, captured) => parentIds((captured as ReparentState).rehome),
@@ -573,8 +576,9 @@ const repeatInverse: BatchInverse = {
     return state;
   },
   async undo(figmaCtx, _params, captured, result) {
+    const container = await createdBy(figmaCtx, result);
     await undoRehome(figmaCtx, (captured as ReparentState).rehome);
-    await removeLeftover(figmaCtx, result);
+    removeIfEmptied(container);
     return undefined;
   },
   resizes: (_params, captured) => parentIds((captured as ReparentState).rehome),
@@ -689,7 +693,7 @@ const outlineInverse: BatchInverse = {
     return { parentId: node.parent?.id ?? null };
   },
   async undo(figmaCtx, _params, _captured, result) {
-    await removeLeftover(figmaCtx, result, true);
+    (await createdBy(figmaCtx, result))?.remove();
     return undefined;
   },
   // A vector added to an auto-layout parent takes a place in its flow.
@@ -793,8 +797,9 @@ const combineInverse: BatchInverse = {
   },
   async undo(figmaCtx, _params, captured, result) {
     const s = captured as CombineState;
+    const set = await createdBy(figmaCtx, result);
     await undoRehome(figmaCtx, s.rehome);
-    await removeLeftover(figmaCtx, result);
+    removeIfEmptied(set);
     const components = await Promise.all(s.properties.map(async p => live(figmaCtx, p.id)));
     s.properties.forEach((p, i) => {
       const component = components[i] as ComponentNode | null | undefined;
