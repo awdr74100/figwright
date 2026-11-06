@@ -17,8 +17,10 @@ export const createTextTool: ToolSpec = {
     'text (a paragraph, a line centred across a column), and width + height for a fixed box — in ' +
     'this call rather than resize_nodes afterwards, which leaves a fixed box its wrapped lines can ' +
     'overflow. width / height cannot be combined with a layoutSizing* HUG / FILL on the same axis, ' +
-    'which sizes it instead. Returns { ok, nodeId, name, type, width, height } — the size the text ' +
-    'came out at.',
+    'which sizes it instead. textAutoResize / textTruncation / maxLines go on after the ' +
+    'layoutSizing*, so where they disagree the mode wins — as it would set afterwards. Returns ' +
+    '{ ok, nodeId, name, type, width, height, adjusted? } — the size the text came out at, and ' +
+    'what did not land as asked (as set_text_properties reports it).',
   inputSchema: z.object({
     characters: z.string().describe('Text content'),
     parentId: z.string().optional().describe('Container node id; omit for current page'),

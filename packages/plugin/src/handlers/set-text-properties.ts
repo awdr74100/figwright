@@ -58,10 +58,11 @@ export const checkTextBox = (
  * all) and a box already fixed stays fixed; and otherwise the mode stays.
  *
  * The ellipsis: the one passed, else TRUNCATE's, else the one it has — kept however the mode moves.
- * maxLines: the one passed (checked by {@link checkMaxLines}), else the one it has, as far as Figma
- * keeps one at all — only on auto-sized text with the ellipsis on, so a box being fixed, or having
- * its ellipsis turned off, ends with none; and ellipsis turned on for auto-sized text that had none
- * takes the single line Figma gives it (all measured).
+ * maxLines: the one passed (the caller leaves out one the box would not show, see
+ * {@link unshownMaxLines}), else the one it has, as far as Figma keeps one at all — only on
+ * auto-sized text with the ellipsis on, so a box being fixed, or having its ellipsis turned off,
+ * ends with none; and ellipsis turned on for auto-sized text that had none takes the single line
+ * Figma gives it (all measured).
  *
  * The height of a fixed box: the one passed, else the one it has when it was fixed already and
  * nothing asked to re-fit it, else the height its text needs at the target width (`measure`) — a
@@ -110,43 +111,27 @@ export const targetBox = (
 };
 
 /**
- * Refuse a maxLines the box it would land on would not show — Figma shows one only on auto-sized
- * text with the ellipsis on, and drops it anywhere else without an error (measured). Checked
- * against the box the call ends with, before anything is written.
+ * Why the box this call lands on would not show `maxLines`, or undefined when it would. Figma shows
+ * a line count only on auto-sized text with the ellipsis on, and drops it anywhere else without an
+ * error (measured) — nor does one written there show up later, once the box is auto-sized with the
+ * ellipsis on (measured, three runs each). The rest of the call still applies, as it always did;
+ * the line count is left out and the caller told why, instead of the old silent ok.
  */
-export const checkMaxLines = (box: TextBox, maxLines: unknown, tool: string): void => {
-  if (typeof maxLines !== 'number') return;
+export const unshownMaxLines = (box: TextBox, maxLines: unknown): string | undefined => {
+  if (typeof maxLines !== 'number') return undefined;
   if (box.autoResize === 'NONE') {
-    throw new TypeError(
-      `${tool}: maxLines needs auto-sized text — a fixed box shows no line count (it truncates ` +
-        'at its own edge); pass textAutoResize HEIGHT, or leave maxLines out',
+    return (
+      `maxLines ${maxLines} was not applied — a fixed box shows no line count (it truncates at ` +
+      'its own edge); pass textAutoResize HEIGHT for one'
     );
   }
   if (box.truncation !== 'ENDING') {
-    throw new TypeError(
-      `${tool}: maxLines needs textTruncation ENDING, which is what cuts the text at that line — ` +
-        'pass it in the same call',
+    return (
+      `maxLines ${maxLines} was not applied — it needs textTruncation ENDING, which is what cuts ` +
+      'the text at that line; pass it in the same call'
     );
   }
-};
-
-/**
- * For the batch: whether this call's box change, on a layer inside an instance, could not be put
- * back. Undoing it needs a resize — to fix the box again, say, after auto height — and Figma
- * ignores resize() on most instance layers (measured), while the change itself may need none.
- * Answered before the op runs; a probe that finds the resize applied puts the box back as it found
- * it.
- */
-export const isOneWayInInstance = (text: TextNode, params: Record<string, unknown>): boolean => {
-  if (enclosingInstance(text) === null) return false;
-  const { width, height } = checkTextBox(params, 'set_text_properties');
-  const prior = readTextBox(text);
-  const plan = targetBox(prior, prior, params, width, height);
-  if (!boxNeedsResize(plan.box, prior, false)) return false;
-  const resize = (w: number, h: number): void => text.resize(w, h);
-  if (!resizeTakes(text, resize)) return true;
-  writeTextBox(text, prior, resize);
-  return false;
+  return undefined;
 };
 
 /**
@@ -283,9 +268,13 @@ export const createSetTextPropertiesHandler =
       p.textTruncation !== undefined ||
       p.maxLines !== undefined;
     const resize = (w: number, h: number): void => text.resize(w, h);
+    const unshown = touchesBox
+      ? unshownMaxLines(targetBox(prior, before, p, width, height).box, p.maxLines)
+      : undefined;
+    // The box is planned without a line count it would not show, so the rest still lands.
+    const boxParams = unshown === undefined ? p : { ...p, maxLines: undefined };
     if (touchesBox) {
-      const plan = targetBox(prior, before, p, width, height);
-      checkMaxLines(plan.box, p.maxLines, 'set_text_properties');
+      const plan = targetBox(prior, before, boxParams, width, height);
       // Inside an instance Figma may ignore a resize outright, and the writes around it would still
       // land: a label left FIXED that no longer hugs its text, a fixed box left in auto height
       // (both measured). So when this box write needs a resize, whether Figma applies one here is
@@ -298,7 +287,7 @@ export const createSetTextPropertiesHandler =
         const requested = { width: width ?? before.width, height: height ?? before.height };
         throw new Error(
           `set_text_properties: ${p.nodeId} cannot take this box change, which needs a resize ` +
-            '(a size, fixing the box, or re-fitting it at a new width) — ' +
+            '(a new size, or re-fitting it at a new width) — ' +
             explain(text, requested, before, before),
         );
       }
@@ -324,12 +313,18 @@ export const createSetTextPropertiesHandler =
     if (p.textAlignVertical !== undefined)
       text.textAlignVertical = p.textAlignVertical as TextNode['textAlignVertical'];
 
-    const notes: string[] = [];
+    const notes: string[] = unshown === undefined ? [] : [unshown];
     // The size the box is meant to end at: a fixed box's both sides, auto height's width — the
     // ones passed, and the ones a box being fixed was measured at.
     let expected: { width: number; height: number } | null = null;
     if (touchesBox) {
-      const target = targetBox(prior, { width: text.width, height: text.height }, p, width, height);
+      const target = targetBox(
+        prior,
+        { width: text.width, height: text.height },
+        boxParams,
+        width,
+        height,
+      );
       if (target.measure) {
         // The fixed box takes the height its text shows at the target width — not whatever height
         // it had before — so it is laid out in auto height first and read. Laid out as it showed

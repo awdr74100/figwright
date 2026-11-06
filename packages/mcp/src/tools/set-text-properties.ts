@@ -43,17 +43,18 @@ export const setTextPropertiesTool: ToolSpec = {
     'with the one exception Figma imposes: maxLines (a line clamp) shows only on auto-sized text ' +
     'with textTruncation ENDING, so a box being fixed keeps its ellipsis but shows no line count ' +
     '(a fixed box truncates at its own edge), turning the ellipsis off clears it, and turning it ' +
-    'on for auto-sized text sets it to 1. A maxLines the box would not show is refused. Text on a ' +
+    'on for auto-sized text sets it to 1. A maxLines the box would not show is left out and named ' +
+    'in adjusted; the rest of the call still applies. Text on a ' +
     'path (TEXT_PATH) takes fontName, fontSize, ' +
     'letterSpacing, textCase and the two alignments — on a path textAlignHorizontal anchors the ' +
     'text at its start point and textAlignVertical picks the side of the path; the line, ' +
     'paragraph, decoration and box fields are refused there. Inside an instance, whose layers ' +
-    'Figma mostly will not resize, a box change that needs a resize (a size, fixing the box, ' +
-    're-fitting it) is refused before anything is written, and in a batch so is one whose ' +
-    'rollback would need it. Returns { ok, nodeId, ' +
+    'Figma mostly will not resize, a box change that needs a resize (a new size, or re-fitting ' +
+    'it at a new width) is refused before anything is written; NONE / TRUNCATE fixing ' +
+    'auto-sized text where it stands needs none. Returns { ok, nodeId, ' +
     'width, height, adjusted? } — the size the text ends at, read back; adjusted says why the box ' +
-    'is not what was asked (a min / max bound held its size, or Figma did not apply the mode or ' +
-    'clamp).',
+    'is not what was asked (a min / max bound held its size, Figma did not apply the mode or ' +
+    'clamp, or a maxLines was left out).',
   inputSchema: z.object({
     nodeId: z.string().describe('TEXT node id'),
     // Typography (font load happens automatically when any of these is set)

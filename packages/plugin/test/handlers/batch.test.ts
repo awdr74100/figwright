@@ -734,15 +734,32 @@ describe('batch handler', () => {
     expect(text).toMatchObject({ layoutSizingHorizontal: 'FILL', layoutAlign: 'STRETCH' });
   });
 
-  it('refuses a box change it could not roll back inside an instance, before running anything', async () => {
-    // Auto height needs no resize, but fixing the box again on rollback does — and the instance
-    // ignores resize() (measured), so the undo would leave the label in auto height.
+  it('runs a box change inside an instance, and says what its rollback could not resize back', async () => {
+    // Auto height needs no resize, but fixing the box again at its old height does — and the
+    // instance ignores resize() (measured). The op still runs, as it does outside a batch; the
+    // rollback puts the mode back and names the size it could not.
     const text = fakeText('I9:9;1:1', 'Hello World');
+    let mode = 'NONE';
     Object.assign(text, {
-      parent: { type: 'INSTANCE', id: '9:9', name: 'Card', parent: null },
-      textAutoResize: 'NONE',
+      parent: {
+        type: 'INSTANCE',
+        id: '9:9',
+        name: 'Card',
+        parent: null,
+        removed: false,
+        overrides: [],
+        componentProperties: {},
+        findAllWithCriteria: () => [],
+      },
       resize: () => {},
       resizeWithoutConstraints: () => {},
+    });
+    Object.defineProperty(text, 'textAutoResize', {
+      get: () => mode,
+      set: (value: string) => {
+        mode = value;
+        if (value === 'HEIGHT') text.height = 40; // re-fitted to its text
+      },
     });
     const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
     store.set('I9:9;1:1', text);
@@ -752,12 +769,13 @@ describe('batch handler', () => {
       handler({
         ops: [
           { tool: 'set_text_properties', params: { nodeId: 'I9:9;1:1', textAutoResize: 'HEIGHT' } },
+          FAIL,
         ],
       }),
     ).rejects.toThrow(
-      /inside an instance that will not resize it, so this box change could not be rolled back/,
+      /rolled back 1 applied op\(s\) \(restored with residue: op 0 \(set_text_properties\): text I9:9;1:1 is back at 100 × 40, not the 100 × 20 it had/,
     );
-    expect(text.textAutoResize).toBe('NONE');
+    expect(mode).toBe('NONE');
   });
 
   it('brings back the runs a set_text restyled', async () => {

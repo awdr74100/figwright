@@ -41,7 +41,6 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
-import { isOneWayInInstance } from './set-text-properties.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
@@ -233,9 +232,9 @@ const BOX_PARAMS = ['width', 'height', 'textAutoResize', 'textTruncation', 'maxL
  * Set_text_properties: a text op that can also resize the box — and a resize turns a FILL / HUG
  * axis FIXED and drops a width / height variable binding (measured), neither of which the text
  * snapshot holds. So a box-touching op also takes the geometry and those bindings, as resize_nodes
- * does. Refused up front when its box change could not be rolled back: a layer inside an instance
- * Figma will not resize, where the change needs no resize but its undo does (auto height on a fixed
- * box, say).
+ * does. A box the rollback cannot put back at its size — inside an instance Figma ignores the
+ * resize (auto height on a fixed box, say, whose undo would need one) — is reported by the restore,
+ * not refused up front: the op itself lands as it would outside a batch.
  */
 const textPropertiesInverse: BatchInverse = {
   ...textInverse('set_text_properties'),
@@ -245,13 +244,6 @@ const textPropertiesInverse: BatchInverse = {
       params,
     )) as TextState;
     const node = await figmaCtx.getNodeByIdAsync(captured.id);
-    if (node?.type === 'TEXT' && isOneWayInInstance(node, paramsOf(params))) {
-      throw new Error(
-        `batch/set_text_properties: ${captured.id} sits inside an instance that will not resize ` +
-          'it, so this box change could not be rolled back — run it outside a batch, or change ' +
-          'the layer in the main component',
-      );
-    }
     const touchesBox = BOX_PARAMS.some(k => paramsOf(params)[k] !== undefined);
     const state: TextPropertiesState = {
       ...captured,

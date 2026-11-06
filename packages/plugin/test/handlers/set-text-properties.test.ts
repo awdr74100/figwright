@@ -447,16 +447,41 @@ describe('set_text_properties text box size', () => {
   });
 
   it.each([
-    [{ textTruncation: 'ENDING', maxLines: 2 }, 'NONE', /maxLines needs auto-sized text/],
-    [{ height: 40, textTruncation: 'ENDING', maxLines: 2 }, 'HEIGHT', /maxLines needs auto-sized/],
-    [{ maxLines: 2 }, 'HEIGHT', /maxLines needs textTruncation ENDING/],
-    [{ textTruncation: 'DISABLED', maxLines: 2 }, 'HEIGHT', /maxLines needs textTruncation ENDING/],
+    [
+      { textTruncation: 'ENDING', maxLines: 2 },
+      'NONE',
+      { textAutoResize: 'TRUNCATE', height: 40 },
+      /maxLines 2 was not applied — a fixed box shows no line count/,
+    ],
+    [
+      { height: 40, textTruncation: 'ENDING', maxLines: 2 },
+      'HEIGHT',
+      { textAutoResize: 'TRUNCATE', height: 40 },
+      /maxLines 2 was not applied — a fixed box/,
+    ],
+    [
+      { maxLines: 2 },
+      'HEIGHT',
+      { textAutoResize: 'HEIGHT', textTruncation: 'DISABLED' },
+      /maxLines 2 was not applied — it needs textTruncation ENDING/,
+    ],
+    [
+      { textTruncation: 'DISABLED', maxLines: 2 },
+      'HEIGHT',
+      { textAutoResize: 'HEIGHT', textTruncation: 'DISABLED' },
+      /maxLines 2 was not applied — it needs textTruncation ENDING/,
+    ],
   ] as const)(
-    'refuses %o on %s text — a maxLines Figma would drop',
-    async (args, mode, message) => {
+    'applies the rest of %o on %s text and names the maxLines Figma would not show',
+    async (args, mode, box, message) => {
+      // Figma drops such a maxLines without an error, and it never shows up later (measured), so
+      // it is left out — but the call goes on as it always did, with the rest of its fields.
       const node = textBox({ mode, width: 100, height: 40 });
-      await expect(run(node, args)).rejects.toThrow(message);
-      expect(node).toMatchObject({ textTruncation: 'DISABLED', maxLines: null });
+      const result = await run(node, { ...args, fontSize: 20 });
+      expect(node).toMatchObject({ ...box, fontSize: 20, maxLines: null });
+      expect(result.adjusted).toMatch(message);
+      // Left out of the box, not written and then reported back as Figma's refusal.
+      expect(result.adjusted).not.toMatch(/did not apply what was asked/);
     },
   );
 
@@ -544,18 +569,34 @@ describe('set_text_properties text box size', () => {
     expect(node).not.toHaveProperty('fontSize');
   });
 
-  it('refuses fixing a box an instance will not resize, leaving it as it was', async () => {
-    // Only a resize fixes a box and keeps its ellipsis; ignored, the writes around it would leave
-    // the layer half changed.
+  it('fixes auto-sized text where it stands inside an instance, by the mode write alone', async () => {
+    // At its own width the box already has the height its text shows, so no resize is needed —
+    // and the mode write lands inside an instance, where the resize would be ignored (measured).
     const node = textBox({ mode: 'HEIGHT', width: 100, textTruncation: 'ENDING', maxLines: 2 });
     Object.assign(node, {
       parent: { type: 'INSTANCE', id: '9:9', name: 'Card', parent: null },
       resize: () => {},
     });
-    await expect(run(node, { textAutoResize: 'NONE' })).rejects.toThrow(
+    const result = await run(node, { textAutoResize: 'NONE' });
+    expect(node).toMatchObject({
+      textAutoResize: 'TRUNCATE',
+      textTruncation: 'ENDING',
+      width: 100,
+      height: 30,
+    });
+    expect(result).not.toHaveProperty('adjusted');
+  });
+
+  it('still refuses re-fitting a box at a new width inside an instance', async () => {
+    const node = textBox({ mode: 'HEIGHT', width: 100 });
+    Object.assign(node, {
+      parent: { type: 'INSTANCE', id: '9:9', name: 'Card', parent: null },
+      resize: () => {},
+    });
+    await expect(run(node, { textAutoResize: 'NONE', width: 200 })).rejects.toThrow(
       /needs a resize .* inside instance 9:9/,
     );
-    expect(node).toMatchObject({ textAutoResize: 'HEIGHT', maxLines: 2 });
+    expect(node).toMatchObject({ textAutoResize: 'HEIGHT', width: 100 });
   });
 
   it('lets a mode change through inside an instance when it needs no resize', async () => {
