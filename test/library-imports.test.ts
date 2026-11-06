@@ -34,6 +34,9 @@ const setup = () => {
   };
   const text = {
     id: '1:2',
+    get textStyleId() {
+      return textStyleId;
+    },
     setTextStyleIdAsync: async (id: string) => {
       if (!styles.has(id)) throw new Error('Cannot find style');
       textStyleId = id;
@@ -51,6 +54,8 @@ const setup = () => {
       },
       getVariableByIdAsync: async (id: string) => variables.get(id) ?? null,
     },
+    // An imported style is in the document, where getStyleByIdAsync finds it.
+    getStyleByIdAsync: async (id: string) => styles.get(id) ?? null,
     importStyleByKeyAsync: async (key: string) => {
       styleImports += 1;
       if (key !== style.key) throw new Error('Style is unpublished or inaccessible');
