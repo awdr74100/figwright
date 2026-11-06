@@ -94,9 +94,9 @@ describe('create_* width / height', () => {
     },
   );
 
-  // A 0 was stored as 0.0001 and answered ok; a negative threw from resize() after the node was
-  // already on the page, leaving it there at its default size (both measured).
-  const BAD = [0, -5, 0.005, Number.NaN, Number.POSITIVE_INFINITY, '120'];
+  // A negative threw from resize() after the node was already on the page, leaving it there at its
+  // default size (measured).
+  const BAD = [-5, -0.005, Number.NaN, Number.POSITIVE_INFINITY, '120'];
   const ALL = [
     ...CREATORS.map(([tool, make, type, side]) => [tool, make, type, side, {}] as const),
     ['create_shape', createCreateShapeHandler, 'POLYGON', 100, { shape: 'POLYGON' }] as const,
@@ -117,9 +117,25 @@ describe('create_* width / height', () => {
       const node = makeNode(type, side);
       const { ctx, created } = ctxFor(node);
       await expect(make(ctx)({ ...base, [field]: value })).rejects.toThrow(
-        `${tool}: ${field} must be a number of at least 0.01`,
+        `${tool}: ${field} must be a number, 0 or more`,
       );
       expect(created).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(
+    ALL.flatMap(([tool, make, type, side, base]) =>
+      [0, 0.005].map(value => [tool, value, make, type, side, base] as const),
+    ),
+  )(
+    '%s still hands a width of %s to Figma, as it always did',
+    async (_, value, make, type, side, base) => {
+      // Figma stores a 0 as 0.0001 and answers ok (measured) — a CSS height: 0 has a layer to land on.
+      const node = makeNode(type, side);
+      const { ctx, created } = ctxFor(node);
+      await make(ctx)({ ...base, width: value });
+      expect(created).toHaveBeenCalled();
+      expect(node.width).toBe(value);
     },
   );
 });

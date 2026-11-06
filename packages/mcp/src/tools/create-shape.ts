@@ -23,12 +23,12 @@ export const createShapeTool: ToolSpec = {
     name: z.string().optional().describe('Layer name'),
     x: z.number().optional().describe('X position in the parent'),
     y: z.number().optional().describe('Y position in the parent'),
-    width: z.number().min(0.01).optional().describe('Width in px, at least 0.01 (a LINE’s length)'),
+    width: z.number().min(0).optional().describe('Width in px (a LINE’s length)'),
     height: z
       .number()
-      .min(0.01)
+      .min(0)
       .optional()
-      .describe('Height in px, at least 0.01 (POLYGON / STAR only; a LINE has none)'),
+      .describe('Height in px (POLYGON / STAR only; a LINE has none)'),
     // Figma caps both at 60 and draws 60 for anything larger without saying so (measured: 100
     // sides and 200 points both came back as 60), so a larger count is refused, not clamped.
     pointCount: z
