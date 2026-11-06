@@ -131,9 +131,9 @@ import {
 
 /**
  * Build the full sandbox handler map. Read handlers run as-is; write handlers are wrapped with
- * idempotency (same requestId applies once) and run one at a time, each its own undo step. `batch`
- * calls the un-wrapped writes directly — it carries one requestId and is itself idempotent, so
- * per-op deduping would double-count.
+ * idempotency (same requestId applies once) and close an undo step when no write is left running
+ * (see undo-steps.ts). `batch` calls the un-wrapped writes directly — it carries one requestId and
+ * is itself idempotent, so per-op deduping would double-count.
  *
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
