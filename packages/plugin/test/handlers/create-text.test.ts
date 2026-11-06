@@ -87,19 +87,29 @@ describe('create_text handler', () => {
     ],
     [{ height: 40, textAutoResize: 'HEIGHT' }, /create_text: height conflicts with textAutoResize/],
     [{ width: -5 }, /create_text: width must be a number of at least 0.01/],
-    [
-      { width: 120, textTruncation: 'ENDING', maxLines: 2, layoutSizingVertical: 'FIXED' },
-      /create_text: maxLines needs auto-sized text/,
-    ],
-    [
-      { width: 120, textTruncation: 'ENDING', maxLines: 2, layoutSizingVertical: 'FILL' },
-      /create_text: maxLines needs auto-sized text/,
-    ],
   ])('refuses %o before creating anything', async (args, message) => {
     const createText = vi.fn<() => unknown>();
     const handler = createCreateTextHandler({ createText } as unknown as typeof figma);
     await expect(handler({ characters: 'Hi', ...args })).rejects.toThrow(message);
     expect(createText).not.toHaveBeenCalled();
+  });
+
+  it('creates the text and names a maxLines its box would not show, as set_text_properties does', async () => {
+    // Figma drops a line count on a fixed box without an error (measured); the text is still made
+    // with everything else asked, as it always was, and the result says what was left out.
+    const text = makeText();
+    const handler = createCreateTextHandler(
+      fakeFigma(text, { appendChild: vi.fn<(n: unknown) => void>() }, undefined, { '2:1': text }),
+    );
+    const result = (await handler({
+      characters: 'Hi',
+      fontSize: 20,
+      textAutoResize: 'TRUNCATE',
+      maxLines: 2,
+    })) as CreateTextResult;
+    expect(text).toMatchObject({ fontSize: 20, textAutoResize: 'NONE', textTruncation: 'ENDING' });
+    expect(text.remove).not.toHaveBeenCalled();
+    expect(result.adjusted).toMatch(/maxLines 2 was not applied — a fixed box shows no line count/);
   });
 
   it('throws when characters is missing', async () => {

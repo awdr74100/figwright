@@ -22,6 +22,7 @@
  */
 
 import { writePaints } from './paints.js';
+import { sameSize } from './resize-nodes.js';
 import { isAutoSized, writeTextBox } from './text-box.js';
 import type { TextLike } from './text-like.js';
 
@@ -540,6 +541,20 @@ export const restoreText = async (
       notes.push(
         `text ${text.id} is back as a fixed box without its maxLines ${String(maxLines)} — Figma ` +
           'shows a line count only on auto-sized text, and no write brings one back on a fixed box',
+      );
+    }
+    // The sides the box holds — both of a fixed one, the width of auto height — come back only by a
+    // resize, which Figma ignores on most layers inside an instance (measured): said, not claimed.
+    const fixed = !isAutoSized(autoResize);
+    if (
+      autoResize !== 'WIDTH_AND_HEIGHT' &&
+      !(sameSize(text.width, snapshot.width) && (!fixed || sameSize(text.height, snapshot.height)))
+    ) {
+      const was = fixed ? `${snapshot.width} × ${snapshot.height}` : `${snapshot.width} wide`;
+      const is = fixed ? `${text.width} × ${text.height}` : `${text.width} wide`;
+      notes.push(
+        `text ${text.id} is back at ${is}, not the ${was} it had — Figma did not apply the resize ` +
+          'that would put it back',
       );
     }
   }

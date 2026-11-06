@@ -56,6 +56,8 @@ export type CreateResult = z.infer<typeof CreateResultSchema>;
 export const CreateTextResultSchema = CreateResultSchema.extend({
   width: z.number(),
   height: z.number(),
+  /** What did not land as asked — set_text_properties' `adjusted`. Absent when everything did. */
+  adjusted: z.string().optional(),
 });
 export type CreateTextResult = z.infer<typeof CreateTextResultSchema>;
 

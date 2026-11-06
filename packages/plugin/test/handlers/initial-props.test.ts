@@ -258,6 +258,46 @@ describe('create_* initial style', () => {
     expect(node.width).toBe(200);
   });
 
+  it('writes a text box’s mode after its sizing, so where they disagree the mode wins', async () => {
+    // As set_text_properties after set_layout_props does on a node already made (measured: FIXED
+    // height then auto height ends auto height) — a create means the same as create-then-set.
+    const order: string[] = [];
+    const { node, ctx } = setup(
+      () => ({
+        characters: '',
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 12,
+        width: 40,
+        height: 15,
+        textAutoResize: 'WIDTH_AND_HEIGHT',
+        textTruncation: 'DISABLED',
+        maxLines: null,
+        layoutAlign: 'INHERIT',
+        layoutGrow: 0,
+        layoutPositioning: 'AUTO',
+        layoutSizingHorizontal: 'HUG',
+      }),
+      'TEXT',
+    );
+    for (const prop of ['fontSize', 'textAutoResize', 'layoutSizingVertical']) {
+      let value = node[prop];
+      Object.defineProperty(node, prop, {
+        get: () => value,
+        set: (v: unknown) => {
+          value = v;
+          order.push(`${prop}:${String(v)}`);
+        },
+      });
+    }
+    await createCreateTextHandler(ctx)({
+      characters: 'Big',
+      fontSize: 48,
+      textAutoResize: 'HEIGHT',
+      layoutSizingVertical: 'FIXED',
+    });
+    expect(order).toEqual(['fontSize:48', 'layoutSizingVertical:FIXED', 'textAutoResize:HEIGHT']);
+  });
+
   it('keeps a frame’s width / height off the text step', async () => {
     // create_frame takes width / height too; they size the frame and must not reach
     // set_text_properties, which would refuse a FRAME.

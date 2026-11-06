@@ -20,7 +20,8 @@
  *   30 and 31 all came back 45 for a text needing 45; 100 stayed 100). The other rules here held
  *   there too.
  * - Inside an instance, `resize()` is ignored outright (the layer keeps its size, mode and sizing)
- *   and an x / y write throws — except in content Figma lets a plugin resize, such as a slot's.
+ *   and an x / y write throws — except in content Figma lets a plugin resize, such as a slot's. A
+ *   mode or ellipsis write still lands there: NONE / TRUNCATE fixes auto-sized text at its size.
  *
  * Assigning the fields one by one therefore lands somewhere else depending on the order and on the
  * state the node starts in. {@link writeTextBox} is the one path to a box that respects them,
@@ -61,16 +62,17 @@ export const readTextBox = (text: TextNode): TextBox => ({
 });
 
 /**
- * Whether {@link writeTextBox} has to resize the node to get from `from` to `to`: to fix a box, to
- * change a fixed box's size, or to re-wrap auto-height text at a new width. `measure` is a fixed
- * box first laid out in auto height to find the height it needs.
+ * Whether {@link writeTextBox} has to resize the node to get from `from` to `to`: to fix a box at a
+ * size it does not have, to re-fit a fixed box to its text, or to re-wrap auto-height text at a new
+ * width. `measure` is a box first laid out in auto height to find the height it needs — which
+ * auto-sized text kept at its width already has, so fixing it where it stands needs no resize: the
+ * mode write alone does it, and lands inside an instance too (measured).
  */
 export const boxNeedsResize = (from: TextBox, to: TextBox, measure: boolean): boolean => {
   if (to.autoResize === 'WIDTH_AND_HEIGHT') return false;
   if (to.autoResize === 'HEIGHT') return !sameSize(to.width, from.width);
   return (
-    from.autoResize !== 'NONE' ||
-    measure ||
+    (from.autoResize === 'NONE' && measure) ||
     !sameSize(to.width, from.width) ||
     !sameSize(to.height, from.height)
   );
