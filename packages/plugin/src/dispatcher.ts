@@ -12,6 +12,21 @@ import { withEditorContext } from '../protocol/editor-context.js';
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
 export type SandboxHandlers = Record<string, SandboxToolHandler>;
 
+const WRITE_HANDLERS = new WeakSet<SandboxToolHandler>();
+
+/**
+ * Mark a handler as one that writes, so an error it raises in an editor that refuses every write
+ * names that editor. The registry marks the handlers it wraps as writes, so the split is the one it
+ * already keeps rather than a second list.
+ */
+export const markWriteHandler = (handler: SandboxToolHandler): SandboxToolHandler => {
+  WRITE_HANDLERS.add(handler);
+  return handler;
+};
+
+/** Whether the registry marked this handler as a write. */
+export const isWriteHandler = (handler: SandboxToolHandler): boolean => WRITE_HANDLERS.has(handler);
+
 export interface DispatchInput {
   raw: unknown;
   handlers: SandboxHandlers;
@@ -62,7 +77,7 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
       reply: createToolError({
         id,
         code: ErrorCode.Internal,
-        message: withEditorContext(raised, input.editorType),
+        message: withEditorContext(err, input.editorType, isWriteHandler(handler)),
       }),
     };
   }
