@@ -123,10 +123,12 @@ describe('dispatchSandboxMessage', () => {
       raw: createToolCall({ id: 's', method: 'lookup' }),
       handlers,
       editorType: 'figma',
-    })) as { reply: { message: string } };
+    })) as { reply: { code: string; message: string } };
 
+    // A timeout — Figma's own 10 s ran out — not a fault in the plugin.
+    expect(outcome.reply.code).toBe(ErrorCode.Timeout);
     expect(outcome.reply.message.startsWith(raised)).toBe(true);
-    expect(outcome.reply.message).toContain("(Figma's server did not answer this call.");
+    expect(outcome.reply.message).toContain("(Figma's server did not answer. Despite the wording");
     expect(outcome.reply.message.match(/Figma's server did not answer/g)).toHaveLength(1);
   });
 
@@ -142,6 +144,7 @@ describe('dispatchSandboxMessage', () => {
     const outcome = await dispatchSandboxMessage({ raw, handlers, editorType: 'figma' });
 
     expect((outcome as { reply: { message: string } }).reply.message).toBe('handler exploded');
+    expect((outcome as { reply: { code: string } }).reply.code).toBe(ErrorCode.Internal);
   });
 
   it('ignores non-bridge raw messages', async () => {

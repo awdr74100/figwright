@@ -54,14 +54,19 @@ export type DispatchOutcome =
 const FIGMA_SERVER_SILENT = /Unable to establish connection to Figma\b/;
 
 const FIGMA_SERVER_SILENT_NOTE =
-  "Figma's server did not answer this call. That comes and goes, and hits calls Figma answers " +
-  'from its server — looking up an id this file does not have loaded (often a deleted or ' +
-  'mistyped one), a style by id, a reactions write. Re-read any id that may be stale, bring the ' +
-  'file to the front in Figma, and retry.';
+  "Figma's server did not answer. Despite the wording, this was measured to come and go with the " +
+  'network fine; it hits ids this file does not have loaded, such as a deleted or mistyped one. ' +
+  'Check the id, then retry; bringing the file to the front can help.';
 
-/** An error's message, with what Figma's "check your internet connection" means appended. */
-const explainFigmaServerSilence = (message: string): string =>
-  FIGMA_SERVER_SILENT.test(message) ? `${message} (${FIGMA_SERVER_SILENT_NOTE})` : message;
+/**
+ * A handler error as the reply carries it: Figma's "check your internet connection" gets what it
+ * means appended and is a TIMEOUT — Figma's own 10 s ran out — rather than an INTERNAL_ERROR that
+ * reads as a fault in the plugin. Anything else is INTERNAL_ERROR, as before.
+ */
+const toolErrorOf = (message: string): { code: ErrorCode; message: string } =>
+  FIGMA_SERVER_SILENT.test(message)
+    ? { code: ErrorCode.Timeout, message: `${message} (${FIGMA_SERVER_SILENT_NOTE})` }
+    : { code: ErrorCode.Internal, message };
 
 export const dispatchSandboxMessage = async (input: DispatchInput): Promise<DispatchOutcome> => {
   if (!isPluginBridgeMessage(input.raw)) return { kind: 'ignore' };
@@ -96,10 +101,7 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
       kind: 'reply',
       reply: createToolError({
         id,
-        code: ErrorCode.Internal,
-        message: explainFigmaServerSilence(
-          withEditorContext(err, input.editorType, isWriteHandler(handler)),
-        ),
+        ...toolErrorOf(withEditorContext(err, input.editorType, isWriteHandler(handler))),
       }),
     };
   }
