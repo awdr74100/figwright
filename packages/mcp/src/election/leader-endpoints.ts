@@ -288,9 +288,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         } catch (err) {
           const message = (err as Error).message;
           // A code the plugin chose (METHOD_NOT_FOUND for a tool it predates, TIMEOUT for a library
-          // import left waiting in a background file) is passed on as it is. INTERNAL_ERROR is the plugin's catch-all — its bridge reports
-          // timing out that way — so that one, and the relay's own errors, are still read from the
-          // words.
+          // import left waiting in a background file) is passed on as it is. INTERNAL_ERROR is the
+          // plugin's catch-all — its bridge reports timing out that way — so that one, and the
+          // relay's own errors, are still read from the words.
           const pluginCode =
             err instanceof PluginReplyError && err.code !== ErrorCode.Internal ? err.code : null;
           const code =
