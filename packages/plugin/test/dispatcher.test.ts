@@ -108,6 +108,30 @@ describe('dispatchSandboxMessage', () => {
     expect(await reply('read')).toBe('node 9:999 not found');
   });
 
+  // Measured: Figma's own "check your internet connection" came and went with the network fine,
+  // on calls it answers from its server — a lookup of a deleted id among them.
+  it.each([
+    'Unable to establish connection to Figma after 10 seconds. Please check your internet connection.',
+    'batch: op 1 (set_fills) failed, rolled back 0/1 op(s); 1 undo(s) FAILED [op 0 (group_nodes): Unable to establish connection to Figma after 10 seconds. Please check your internet connection.]',
+  ])('says what Figma\u2019s server timeout means, keeping its own words: %s', async raised => {
+    const handlers: SandboxHandlers = {
+      lookup: () => {
+        throw new Error(raised);
+      },
+    };
+    const outcome = (await dispatchSandboxMessage({
+      raw: createToolCall({ id: 's', method: 'lookup' }),
+      handlers,
+      editorType: 'figma',
+    })) as { reply: { code: string; message: string } };
+
+    // A timeout — Figma's own 10 s ran out — not a fault in the plugin.
+    expect(outcome.reply.code).toBe(ErrorCode.Timeout);
+    expect(outcome.reply.message.startsWith(raised)).toBe(true);
+    expect(outcome.reply.message).toContain("(Figma's server did not answer. Despite the wording");
+    expect(outcome.reply.message.match(/Figma's server did not answer/g)).toHaveLength(1);
+  });
+
   // Figma Design is the common case, and it must stay free of the caveat entirely.
   it('adds nothing to an error raised in Figma Design', async () => {
     const handlers: SandboxHandlers = {
@@ -120,6 +144,7 @@ describe('dispatchSandboxMessage', () => {
     const outcome = await dispatchSandboxMessage({ raw, handlers, editorType: 'figma' });
 
     expect((outcome as { reply: { message: string } }).reply.message).toBe('handler exploded');
+    expect((outcome as { reply: { code: string } }).reply.code).toBe(ErrorCode.Internal);
   });
 
   it('ignores non-bridge raw messages', async () => {
