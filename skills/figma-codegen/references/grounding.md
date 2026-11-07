@@ -132,11 +132,11 @@ the obvious ones. These are ordered by how easily they're silently dropped.
     and no `maxLines` clamps at that height: Figma shows each whole line whose box, rounded down to
     whole pixels, ends at most 1px past `maxHeight`, and puts the ellipsis on the last one. So
     N = the largest k with ⌊k × lineHeight⌋ ≤ maxHeight + 1 (measured: Inter / Roboto / Georgia,
-    12–24px, 3,692 heights, no miss), where lineHeight is the line box — px as given, a percentage
-    rounded to whole px, absent (`AUTO`) the font's own (about 1.2 × fontSize; 1.13–1.25
-    measured, so a `maxHeight` right at a boundary can come out one line off). Emit `line-clamp-N`
-    — never `truncate`, which puts the text on one line. While clamped, Figma's box stays
-    `maxHeight` tall where the CSS one ends at N lines.
+    12–24px, 5,292 heights, whole and fractional, no miss), where lineHeight is the line box — px
+    as given, a percentage rounded to whole px, absent (`AUTO`) the font's own (about 1.2 ×
+    fontSize; 1.13–1.25 measured, so a `maxHeight` right at a boundary can come out one line off).
+    Emit `line-clamp-N` — never `truncate`, which puts the text on one line. While clamped,
+    Figma's box stays `maxHeight` tall where the CSS one ends at N lines.
   - **`textWrapStyle` is per paragraph, not per node.** When a node's paragraphs disagree the
     node-level field is absent and the real values ride in `segments` (a run carries it only when it
     is not `auto`) — so a `segments` array whose runs differ only in `textWrapStyle` is one text
