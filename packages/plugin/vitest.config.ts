@@ -6,9 +6,9 @@ import { defineConfig } from 'vitest/config';
  * that compiles `.vue` component tests — so `@vitejs/plugin-vue` stays a plugin-package dependency
  * rather than leaking into the root.
  *
- * Environment is `node` by default; the component tests opt into a DOM per file with `//
- * @vitest-environment happy-dom`, keeping the non-DOM tests at Node speed. Icons are plain
- * `@lucide/vue` imports, so there's no virtual-module resolver to wire up.
+ * Environment is `node` by default; the component tests opt into a DOM per file with `// @vitest-environment
+ * happy-dom`, keeping the non-DOM tests at Node speed. Icons are plain `@lucide/vue` imports, so
+ * there's no virtual-module resolver to wire up.
  */
 export default defineConfig({
   plugins: [vue()],
