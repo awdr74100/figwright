@@ -439,7 +439,7 @@ const collectBoundVariables = (raw: unknown): Record<string, string[]> | undefin
 const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   const styleIds: SerializedStyleIds = {};
   const pick = (
-    key: 'fillStyleId' | 'strokeStyleId' | 'effectStyleId' | 'textStyleId',
+    key: 'fillStyleId' | 'strokeStyleId' | 'effectStyleId' | 'gridStyleId' | 'textStyleId',
   ): string | undefined => {
     const value = (node as unknown as Record<string, unknown>)[key];
     return typeof value === 'string' && value !== '' ? value : undefined;
@@ -450,6 +450,8 @@ const collectStyleLinks = (node: SceneNode, out: SerializedNode): void => {
   if (stroke !== undefined) styleIds.stroke = stroke;
   const effect = pick('effectStyleId');
   if (effect !== undefined) styleIds.effect = effect;
+  const grid = pick('gridStyleId');
+  if (grid !== undefined) styleIds.grid = grid;
   const text = pick('textStyleId');
   if (text !== undefined) styleIds.text = text;
   if (Object.keys(styleIds).length > 0) out.styleIds = styleIds;
