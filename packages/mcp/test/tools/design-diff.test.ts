@@ -126,10 +126,13 @@ describe('handleDesignDiff', () => {
     expect(saved.figwrightSnapshot).toBe(SNAPSHOT_FORMAT_VERSION); // rewritten to the current format
   });
 
-  describe('a v9 baseline, which predates the grid style slot', () => {
+  describe('a baseline saved by an older release', () => {
     const withStyles = (
       styleIds: Record<string, string>,
-      title = 'Hello',
+      {
+        title = 'Hello',
+        styles,
+      }: { title?: string; styles?: GetDesignContextResult['styles'] } = {},
     ): GetDesignContextResult =>
       ctx({
         nodes: [
@@ -141,38 +144,111 @@ describe('handleDesignDiff', () => {
             children: [{ id: '1:2', name: 'Title', type: 'TEXT', characters: title }],
           },
         ],
+        ...(styles === undefined ? {} : { styles }),
       });
-    const writeV9 = async (context: GetDesignContextResult) => {
+    const writeAt = async (version: number, context: GetDesignContextResult) => {
       await mkdir(join(dir, '.figwright', 'snapshots'), { recursive: true });
       await writeFile(
         join(dir, SNAP_REL),
-        JSON.stringify({ figwrightSnapshot: 9, nodeId: '1:1', capturedAt: 'v9', context }),
+        JSON.stringify({
+          figwrightSnapshot: version,
+          nodeId: '1:1',
+          capturedAt: `v${version}`,
+          context,
+        }),
       );
     };
+    const diff = () => handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+    const changedFields = (r: Awaited<ReturnType<typeof diff>>) =>
+      r.changes?.changed.flatMap(c => c.fields?.map(x => [x.field, x.after]) ?? []);
 
-    // Re-baselining it would overwrite the saved baseline and lose every change made since.
-    it('is still diffed, and a grid style it could not hold is no change', async () => {
-      await writeV9(ctx());
+    // Re-baselining one would overwrite the saved baseline and lose every change made since.
+    it('v9 is still diffed, and a grid style it could not hold is no change', async () => {
+      await writeAt(9, ctx());
       currentCtx = withStyles({ grid: 'S:grid,' });
-      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+      const r = await diff();
       expect(r.status).toBe('no-changes');
       expect(r.baselineCapturedAt).toBe('v9');
     });
 
-    it('reports every other change, other style slots included', async () => {
-      await writeV9(withStyles({ fill: 'S:a,' }));
-      currentCtx = withStyles({ fill: 'S:b,', grid: 'S:grid,' }, 'Bye');
-      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+    // Up to v10 a local style id was saved without its trailing comma, and never named — on a node
+    // and on each run of a mixed text alike.
+    const withRun = (context: GetDesignContextResult, textStyleId: string) => {
+      const title = context.nodes[0]!.children![0] as { segments?: unknown };
+      title.segments = [{ characters: 'Hello', styleIds: { text: textStyleId } }];
+      return context;
+    };
+    it.each([9, 10])(
+      'v%i sees a local style id gain its comma and its name as no change',
+      async version => {
+        await writeAt(
+          version,
+          withRun(
+            withStyles(
+              { fill: 'S:a', text: 'S:lib,1:2' },
+              {
+                styles: { 'S:lib,1:2': { name: 'Body', type: 'TEXT' } },
+              },
+            ),
+            'S:t',
+          ),
+        );
+        currentCtx = withRun(
+          withStyles(
+            { fill: 'S:a,', text: 'S:lib,1:2' },
+            {
+              styles: {
+                'S:a,': { name: 'Brand/A', type: 'PAINT' },
+                'S:lib,1:2': { name: 'Body', type: 'TEXT' },
+                'S:t,': { name: 'Body/Bold', type: 'TEXT' },
+              },
+            },
+          ),
+          'S:t,',
+        );
+        expect((await diff()).status).toBe('no-changes');
+      },
+    );
+
+    // The server ships ahead of the plugin, so a baseline in the current format can still have been
+    // captured through a plugin that cut the ids — once that plugin updates, nothing has changed.
+    it.each([
+      ['a node', 'S:a', 'S:lib,9:9'],
+      ['only a run of a mixed text', 'S:lib,1:2', 'S:t'],
+    ])(
+      'a current baseline captured through an older plugin, a cut id on %s, sees the same',
+      async (_where, fill, run) => {
+        const named = (id: string) => (id.includes(',') ? id : `${id},`);
+        const tokens = {
+          [named(fill)]: { name: 'Brand/A', type: 'PAINT' },
+          [named(run)]: { name: 'Body/Bold', type: 'TEXT' },
+        };
+        // A library style resolved before too, so the old baseline names it; a cut one it could not.
+        const libraryOnly = Object.fromEntries(
+          Object.entries(tokens).filter(([id]) => !id.endsWith(',')),
+        );
+        await writeAt(
+          SNAPSHOT_FORMAT_VERSION,
+          withRun(withStyles({ fill }, { styles: libraryOnly }), run),
+        );
+        currentCtx = withRun(withStyles({ fill: named(fill) }, { styles: tokens }), named(run));
+        expect((await diff()).status).toBe('no-changes');
+      },
+    );
+
+    it('v9 reports every other change, other style slots included', async () => {
+      await writeAt(9, withStyles({ fill: 'S:a' }));
+      currentCtx = withStyles({ fill: 'S:b,', grid: 'S:grid,' }, { title: 'Bye' });
+      const r = await diff();
       expect(r.status).toBe('diff');
-      const fields = r.changes?.changed.flatMap(c => c.fields?.map(x => [x.field, x.after]) ?? []);
-      expect(fields).toEqual([
-        ['styleIds', { fill: 'S:b,' }],
+      expect(changedFields(r)).toEqual([
+        ['styleIds', { fill: 'S:b' }],
         ['characters', 'Bye'],
       ]);
     });
 
     it('is replaced by a full capture on update:true, which then sees a grid style change', async () => {
-      await writeV9(ctx());
+      await writeAt(9, ctx());
       currentCtx = withStyles({ grid: 'S:grid,' });
       await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir, update: true });
       const saved = JSON.parse(await readFile(join(dir, SNAP_REL), 'utf8'));
@@ -180,8 +256,29 @@ describe('handleDesignDiff', () => {
       expect(saved.context.nodes[0].styleIds).toEqual({ grid: 'S:grid,' });
 
       currentCtx = withStyles({ grid: 'S:other,' });
-      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
-      expect(r.status).toBe('diff');
+      expect((await diff()).status).toBe('diff');
+    });
+
+    it('a current baseline names a swapped local style', async () => {
+      await writeAt(
+        SNAPSHOT_FORMAT_VERSION,
+        withStyles(
+          { fill: 'S:a,' },
+          {
+            styles: { 'S:a,': { name: 'Brand/A', type: 'PAINT' } },
+          },
+        ),
+      );
+      currentCtx = withStyles(
+        { fill: 'S:b,' },
+        {
+          styles: { 'S:b,': { name: 'Brand/B', type: 'PAINT' } },
+        },
+      );
+      const r = await diff();
+      expect(r.changes?.changed[0]?.fields).toEqual([
+        { field: 'styleIds', before: { fill: 'Brand/A' }, after: { fill: 'Brand/B' } },
+      ]);
     });
   });
 

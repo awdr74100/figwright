@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { type DesignDiffChanges, diffDesignContext } from '../diff/design-diff.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
+import { hasCutStyleIds, withLegacyStyleIds } from './legacy-style-ids.js';
 import type { ToolSpec } from './spec.js';
 
 export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
@@ -39,10 +40,11 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * width profile, a text path's text, typography and textPathStartData, the renderBounds of those
  * nodes, and a pattern's verticalAlignment — a v7 baseline reads a dial as one tick and a text path
  * as an empty shape. v9: a mirrored or turned node's flipped / boundingBox / cssTransform. v10: a
- * frame's grid style (styleIds.grid) — a v9 baseline is still diffed, against a capture without
- * it.
+ * frame's grid style (styleIds.grid) — a v9 baseline is still diffed, against a capture without it.
+ * v11: a local style id keeps its trailing comma and resolves to a name — a v9 or v10 baseline is
+ * still diffed, against a capture in the shape those were saved in (withLegacyStyleIds).
  */
-export const SNAPSHOT_FORMAT_VERSION = 10;
+export const SNAPSHOT_FORMAT_VERSION = 11;
 
 interface StyledNode {
   styleIds?: Record<string, string>;
@@ -70,7 +72,10 @@ const withoutGridStyleIds = (context: GetDesignContextResult): GetDesignContextR
  */
 const READABLE_OLDER_FORMATS: Readonly<
   Record<number, (context: GetDesignContextResult) => GetDesignContextResult>
-> = { 9: withoutGridStyleIds };
+> = {
+  9: context => withoutGridStyleIds(withLegacyStyleIds(context)),
+  10: withLegacyStyleIds,
+};
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({
@@ -235,7 +240,10 @@ export const handleDesignDiff = async (
     };
   }
 
-  const asRecorded = READABLE_OLDER_FORMATS[existing.figwrightSnapshot];
+  // A current-format baseline captured through an older plugin holds the cut style ids too.
+  const asRecorded =
+    READABLE_OLDER_FORMATS[existing.figwrightSnapshot] ??
+    (hasCutStyleIds(existing.context) ? withLegacyStyleIds : undefined);
   const changes = diffDesignContext(
     existing.context,
     asRecorded === undefined ? current : asRecorded(current),

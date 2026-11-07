@@ -733,17 +733,21 @@ describe('get_design_context handler', () => {
     });
   });
 
-  it('resolves variable + style ids to a deduped top-level token map (full detail), stripping the styleId comma', async () => {
+  // getStyleByIdAsync matches exactly, and a local style's id ends in a comma (measured): the id has
+  // to reach the lookup as Figma gave it. Cutting the comma off used to leave every local style
+  // unnamed — only library ids, which never end in one, resolved.
+  it('resolves variable + style ids to a deduped top-level token map (full detail), keeping each style id as Figma gives it', async () => {
     const a = node({
       id: 'a',
       type: 'TEXT',
-      fillStyleId: 'S:text1,', // Figma trailing-comma artifact
+      fillStyleId: 'S:text1,', // a local style
       boundVariables: { fills: [{ id: 'VariableID:181:4147' }] },
     });
     // second node references the SAME variable — must dedupe to one map entry
     const b = node({
       id: 'b',
       type: 'TEXT',
+      strokeStyleId: 'S:libkey,12:34', // a library style
       boundVariables: { fills: [{ id: 'VariableID:181:4147' }] },
     });
 
@@ -758,13 +762,17 @@ describe('get_design_context handler', () => {
             codeSyntax: { WEB: '--color-primary', ANDROID: '' },
           },
         },
-        styles: { 'S:text1': { name: 'Body/Bold', type: 'TEXT' } },
+        styles: {
+          'S:text1,': { name: 'Body/Bold', type: 'TEXT' },
+          'S:libkey,12:34': { name: 'Brand/Outline', type: 'PAINT' },
+        },
       }),
     );
     const full = (await handler({ detail: 'full' })) as GetDesignContextResult;
 
-    // styleId comma stripped on the node so it joins the map key
-    expect(full.nodes[0]?.styleIds).toEqual({ fill: 'S:text1' });
+    // The node keeps the id Figma gave, so it joins the map key and passes back to the style tools.
+    expect(full.nodes[0]?.styleIds).toEqual({ fill: 'S:text1,' });
+    expect(full.nodes[1]?.styleIds).toEqual({ stroke: 'S:libkey,12:34' });
     expect(full.variables).toEqual({
       'VariableID:181:4147': {
         name: 'Primary/500',
@@ -772,7 +780,10 @@ describe('get_design_context handler', () => {
         codeSyntax: { WEB: '--color-primary' },
       },
     });
-    expect(full.styles).toEqual({ 'S:text1': { name: 'Body/Bold', type: 'TEXT' } });
+    expect(full.styles).toEqual({
+      'S:text1,': { name: 'Body/Bold', type: 'TEXT' },
+      'S:libkey,12:34': { name: 'Brand/Outline', type: 'PAINT' },
+    });
   });
 
   it("resolves a mixed TEXT run's per-segment token bindings into the top-level maps", async () => {
@@ -816,16 +827,16 @@ describe('get_design_context handler', () => {
       fakeFigma({
         selection: [link],
         variables: { 'VariableID:primary': { name: 'Primary/500', resolvedType: 'COLOR' } },
-        styles: { 'S:linkstyle': { name: 'Link/Default', type: 'TEXT' } },
+        styles: { 'S:linkstyle,': { name: 'Link/Default', type: 'TEXT' } },
       }),
     )({ detail: 'full' })) as GetDesignContextResult;
 
-    // The segment carries the cleaned styleId + raw variable id …
+    // The segment carries the style and variable ids as Figma gives them …
     const seg = full.nodes[0]?.segments?.[1];
-    expect(seg?.styleIds).toEqual({ text: 'S:linkstyle' });
+    expect(seg?.styleIds).toEqual({ text: 'S:linkstyle,' });
     expect(seg?.boundVariables).toEqual({ fills: ['VariableID:primary'] });
     // … and those per-segment ids resolve into the deduped top-level token maps.
-    expect(full.styles).toEqual({ 'S:linkstyle': { name: 'Link/Default', type: 'TEXT' } });
+    expect(full.styles).toEqual({ 'S:linkstyle,': { name: 'Link/Default', type: 'TEXT' } });
     expect(full.variables).toEqual({
       'VariableID:primary': { name: 'Primary/500', type: 'COLOR' },
     });

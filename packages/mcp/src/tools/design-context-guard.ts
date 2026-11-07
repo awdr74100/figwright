@@ -11,6 +11,7 @@ import {
 
 import { annotateProjectTokens, loadTokenValueIndex } from '../tokens/token-index.js';
 import { getDesignContextTool } from './get-design-context.js';
+import { withLegacyStyleIds } from './legacy-style-ids.js';
 
 // The public-path guard around get_design_context, the hot grounding read. Internal consumers
 // (design_diff snapshots, component/icon map walks) dispatch the tool directly and are untouched;
@@ -75,6 +76,10 @@ const withLeadingNote = (result: GetDesignContextResult, note: string): GetDesig
   void superseded;
   return { note, ...rest };
 };
+
+const LOCAL_STYLE_NAMES_DROPPED =
+  'The local style names (the top-level styles map) were left out to fit: each local styleIds ' +
+  'value here is its get_styles id without the trailing comma. Everything else is whole.';
 
 /** Does this shape survive the net? */
 const fits = (candidate: GetDesignContextResult): boolean =>
@@ -276,6 +281,13 @@ export const handleDesignContext = async (
   }
 
   if (detail === 'full') {
+    // First, the read as it was before local style names resolved: a payload that fit then fits
+    // now, whole, and never pays a level for the names. Said so when there is room to.
+    const beforeNames = withLegacyStyleIds(result);
+    const named = withLeadingNote(beforeNames, LOCAL_STYLE_NAMES_DROPPED);
+    if (fits(named)) return named;
+    if (fits(beforeNames)) return beforeNames;
+
     // One rung of over-budget: shed appearance but keep the whole tree, its layout and its text.
     // Cheaper than N round trips and still enough to build correct containers.
     const withEverythingButAppearance = layoutDowngrade(true)(result, payloadChars);

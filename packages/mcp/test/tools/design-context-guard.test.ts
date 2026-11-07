@@ -92,6 +92,73 @@ describe('handleDesignContext (the public-path guard)', () => {
     expect(r.note).toBeUndefined();
   });
 
+  // Local style names are the newest part of a full read. A read that fit before they resolved must
+  // still come back whole: the first over-budget rung is the read as it was then.
+  describe('a full read that only the local style names push over budget', () => {
+    /** The read with local style names, or — beforeNames — as v0.7.0 gave it: ids cut, unnamed. */
+    const styled = (filler: string, { beforeNames = false } = {}): GetDesignContextResult => {
+      const ids = Array.from(
+        { length: 40 },
+        (_v, i) => `S:${String(i).padStart(40, '0')}${beforeNames ? '' : ','}`,
+      );
+      const localNames = beforeNames
+        ? {}
+        : Object.fromEntries(
+            ids.map(id => [id, { name: `Brand/${'x'.repeat(20_000)}`, type: 'PAINT' }]),
+          );
+      return {
+        nodes: [
+          leaf('root', {
+            type: 'FRAME',
+            styleIds: { fill: ids[0], text: 'S:lib,1:2' },
+            characters: filler,
+            children: ids.map((id, i) => leaf(`c${i}`, { styleIds: { fill: id } })),
+          }),
+        ],
+        styles: { ...localNames, 'S:lib,1:2': { name: 'Body', type: 'TEXT' } },
+        // As the plugin measures them: 40 local names and one library name, and v0.7.0's read 41
+        // commas (one per local id) shorter — 50 - 41/1024 KB.
+        metrics: {
+          nodeCount: 41,
+          maxDepth: 2,
+          styleCount: 0,
+          tokenCount: beforeNames ? 1 : 41,
+          inlineSizeKb: beforeNames ? 49.96 : 50,
+          dedupedSizeKb: beforeNames ? 49.96 : 50,
+        },
+      };
+    };
+    const tokens = (r: GetDesignContextResult) => estimateResultTokens(JSON.stringify(r));
+
+    it('comes back whole, as it was before the names, and says so', async () => {
+      const payload = styled('');
+      expect(tokens(payload)).toBeGreaterThan(DESIGN_CONTEXT_TOKEN_BUDGET);
+      const r = await handleDesignContext(dispatcher(payload).dispatch, {});
+
+      expect(r.note).toMatch(/local style names .* left out to fit/);
+      const { note, ...rest } = r;
+      void note;
+      // A library style was named before too, and keeps its name.
+      expect(rest).toEqual(styled('', { beforeNames: true }));
+    });
+
+    it('drops even the note when only the bare read fits', async () => {
+      // Grow the text until the pre-names read is just under budget, so its note no longer fits.
+      let lo = 0;
+      let hi = 4 * DESIGN_CONTEXT_TOKEN_BUDGET;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const bare = styled('y'.repeat(mid), { beforeNames: true });
+        if (tokens(bare) <= DESIGN_CONTEXT_TOKEN_BUDGET) lo = mid;
+        else hi = mid - 1;
+      }
+      const filler = 'y'.repeat(lo);
+      const r = await handleDesignContext(dispatcher(styled(filler)).dispatch, {});
+
+      expect(r).toEqual(styled(filler, { beforeNames: true }));
+    });
+  });
+
   it('passes a plugin-side section plan through without re-processing', async () => {
     const bail: GetDesignContextResult = {
       nodes: [leaf('1:1')],
