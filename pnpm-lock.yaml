@@ -250,7 +250,7 @@ importers:
         specifier: workspace:*
         version: link:../shared
       '@tailwindcss/vite':
-        specifier: ^4.3.4
+        specifier: ^4.3.5
         version: 4.3.5(vite@8.3.6(@types/node@26.6.6)(jiti@2.7.0)(yaml@2.9.1))
       '@vitejs/plugin-vue':
         specifier: ^6.0.10
@@ -262,7 +262,7 @@ importers:
         specifier: ^21.0.4
         version: 21.0.4
       tailwindcss:
-        specifier: ^4.3.4
+        specifier: ^4.3.5
         version: 4.3.5
       vite:
         specifier: ^8.3.6

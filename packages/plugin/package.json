@@ -21,11 +21,11 @@
   "devDependencies": {
     "@figma/plugin-typings": "^1.142.0",
     "@figwright/shared": "workspace:*",
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",
     "happy-dom": "^21.0.4",
-    "tailwindcss": "^4.3.4",
+    "tailwindcss": "^4.3.5",
     "vite": "^8.3.6",
     "vite-plugin-singlefile": "^2.3.4",
     "vue-tsc": "^3.3.14"
