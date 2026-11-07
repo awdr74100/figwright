@@ -28,7 +28,7 @@
  * shared by set_text_properties and the batch restore.
  */
 
-import { sameSize } from './resize-nodes.js';
+import { sameSize } from './size.js';
 
 type AutoResize = TextNode['textAutoResize'];
 

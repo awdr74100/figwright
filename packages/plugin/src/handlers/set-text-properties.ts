@@ -2,7 +2,8 @@ import type { TextPropertiesResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaFontName } from './convert.js';
-import { enclosingInstance, explain, sameSize } from './resize-nodes.js';
+import { enclosingInstance, explain } from './resize-nodes.js';
+import { sameSize } from './size.js';
 import {
   boxNeedsResize,
   readTextBox,
