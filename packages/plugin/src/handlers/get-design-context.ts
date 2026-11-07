@@ -26,17 +26,6 @@ const isDetailLevel = (value: unknown): value is DetailLevel =>
   typeof value === 'string' && (DETAIL_LEVELS as readonly string[]).includes(value);
 
 /**
- * Strip Figma's trailing-comma artifact from *StyleId values (e.g. "S:abc,") so the id matches the
- * `styles` resolution map key and joins cleanly downstream. Used for a node's own styleIds and for
- * a mixed TEXT run's per-segment styleIds.
- */
-const cleanStyleIds = (ids: Record<string, string>): Record<string, string> => {
-  const cleaned: Record<string, string> = {};
-  for (const [k, raw] of Object.entries(ids)) cleaned[k] = raw.replace(/,+$/, '');
-  return cleaned;
-};
-
-/**
  * Project a node down to the fields a given detail level exposes. Detail-gated on purpose:
  * get_design_context is the hot read path and defaults to `compact`, so minimal/compact read their
  * few values straight off the node and skip the full serializeFlatSync — which maps every
@@ -215,10 +204,9 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
       if (s.listOptions !== undefined) seg.listOptions = s.listOptions;
       if (s.indentation !== undefined) seg.indentation = s.indentation;
       if (s.textWrapStyle !== undefined) seg.textWrapStyle = s.textWrapStyle;
-      // Per-run token bindings — same shape (and trailing-comma cleaning) as a node's own, so
-      // collectRefs / resolveTokens resolve them to names alongside the node-level ones.
-      if (s.styleIds !== undefined)
-        seg.styleIds = cleanStyleIds(s.styleIds as Record<string, string>);
+      // Per-run token bindings — same shape as a node's own, so collectRefs / resolveTokens resolve
+      // them to names alongside the node-level ones.
+      if (s.styleIds !== undefined) seg.styleIds = s.styleIds;
       if (s.boundVariables !== undefined) seg.boundVariables = s.boundVariables;
       return seg;
     });
@@ -230,8 +218,10 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   // Grounding fields (M3 P1): surface what serializeFlatSync already captured but
   // get_design_context used to drop. id→token-name resolution lands in P2 (top-level maps below);
   // globalVars dedup in P3.
-  if (flat.styleIds !== undefined)
-    out.styleIds = cleanStyleIds(flat.styleIds as Record<string, string>);
+  // Style ids exactly as Figma gives them — a local one ends in a comma ("S:abc,"). That is the only
+  // form getStyleByIdAsync finds (measured: without the comma it answers null), so it is what the
+  // `styles` map is keyed by, and what get_styles and the style write tools take.
+  if (flat.styleIds !== undefined) out.styleIds = flat.styleIds;
   if (flat.boundVariables !== undefined) out.boundVariables = flat.boundVariables;
   // Ids for now (collection id → mode id); resolveVariableModes names them once the tree is built,
   // and adds to each root the modes it inherits from outside the read.
