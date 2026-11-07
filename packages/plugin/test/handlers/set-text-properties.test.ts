@@ -28,6 +28,7 @@ type Mode = 'NONE' | 'HEIGHT' | 'WIDTH_AND_HEIGHT' | 'TRUNCATE';
  * - MaxLines reads back only on auto-sized text with the ellipsis on; turning the ellipsis off clears
  *   it, turning it on for auto-sized text that had none sets it to 1.
  * - A vertically centred box moves when auto height re-fits it.
+ * - It keeps one truncation limit: a line count written clears a maxHeight bound.
  *
  * Its text is one 400px line at 15px a line, so auto height is 15px per line a width wraps it into,
  * up to maxLines.
@@ -38,6 +39,7 @@ const textBox = (init: {
   height?: number;
   textTruncation?: 'DISABLED' | 'ENDING';
   maxLines?: number | null;
+  maxHeight?: number | null;
   textAlignVertical?: 'TOP' | 'CENTER';
 }) => {
   let mode: Mode = init.mode === 'TRUNCATE' ? 'NONE' : init.mode;
@@ -47,6 +49,7 @@ const textBox = (init: {
   let truncation: string =
     init.mode === 'TRUNCATE' ? 'ENDING' : (init.textTruncation ?? 'DISABLED');
   let lines: number | null = init.maxLines ?? null;
+  let maxHeight: number | null = init.maxHeight ?? null;
   const fit = (): void => {
     const before = height;
     if (mode === 'WIDTH_AND_HEIGHT') [width, height] = [400, 15];
@@ -114,12 +117,41 @@ const textBox = (init: {
     set maxLines(value: number | null) {
       if (mode === 'NONE' || truncation !== 'ENDING') return;
       lines = value;
+      if (value !== null) maxHeight = null;
       fit();
+    },
+    get maxHeight() {
+      return maxHeight;
     },
   };
 };
 
 describe('set_text_properties handler', () => {
+  // Measured: a text keeps one truncation limit, so a line count clears a maxHeight bound the call
+  // never named. The clamp lands as asked; the bound it cost is named in adjusted.
+  it('sets maxLines and names the maxHeight it replaced', async () => {
+    const node = textBox({ mode: 'HEIGHT', width: 100, textTruncation: 'ENDING', maxHeight: 40 });
+    const result = (await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      maxLines: 3,
+    })) as TextPropertiesResult;
+    expect(node).toMatchObject({ maxLines: 3, maxHeight: null });
+    expect(result.adjusted).toBe(
+      'maxHeight 40 was cleared — a text truncates at one limit, a line count or a maxHeight, and ' +
+        'maxLines 3 replaced it',
+    );
+  });
+
+  it('reports nothing when a call leaves a maxHeight bound in place', async () => {
+    const node = textBox({ mode: 'HEIGHT', width: 100, textTruncation: 'ENDING', maxHeight: 40 });
+    const result = (await createSetTextPropertiesHandler(fakeFigma(node))({
+      nodeId: '1:1',
+      textAlignVertical: 'TOP',
+    })) as TextPropertiesResult;
+    expect(node.maxHeight).toBe(40);
+    expect(result.adjusted).toBeUndefined();
+  });
+
   it('sets truncation / maxLines / autoResize on a TEXT node', async () => {
     const node = textBox({ mode: 'NONE', width: 100, height: 40 });
     const handler = createSetTextPropertiesHandler(fakeFigma(node));

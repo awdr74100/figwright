@@ -29,6 +29,16 @@ export const TextPropertiesResultSchema = MutateResultSchema.extend({
 export type TextPropertiesResult = z.infer<typeof TextPropertiesResultSchema>;
 
 /**
+ * Result of set_layout_props. On a text, Figma keeps one truncation limit — a line count or a
+ * maxHeight — and a fixed box shows no line count, so a call can clear a maxLines it never named;
+ * `adjusted` says which and why. Absent when nothing beyond the call changed.
+ */
+export const LayoutPropsResultSchema = MutateResultSchema.extend({
+  adjusted: z.string().optional(),
+});
+export type LayoutPropsResult = z.infer<typeof LayoutPropsResultSchema>;
+
+/**
  * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
  * applyAnimationStyle. batch's inverse uses it to removeAnimationStyle on undo, so it must
  * round-trip.

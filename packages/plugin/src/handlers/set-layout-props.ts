@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figwright/shared';
+import type { LayoutPropsResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 
@@ -29,6 +29,24 @@ const setSizing = (
       { cause: err },
     );
   }
+};
+
+/**
+ * Why a text's line count is gone after a write that did not name it, or undefined when it is not.
+ * Figma keeps one truncation limit on a text — a line count or a maxHeight, setting either clears
+ * the other — and a fixed box truncates at its own edge, showing no line count (both measured), so
+ * a maxHeight or a FIXED / FILL height clears a maxLines the caller never mentioned.
+ */
+const clearedMaxLines = (text: TextNode, before: number | null): string | undefined => {
+  if (before === null || text.maxLines === before) return undefined;
+  const why =
+    typeof text.maxHeight === 'number'
+      ? `a text truncates at one limit, a line count or a maxHeight, and maxHeight ${text.maxHeight} ` +
+        'replaced it'
+      : text.textAutoResize === 'NONE' || text.textAutoResize === 'TRUNCATE'
+        ? 'the box is now a fixed height, which truncates at its own edge and shows no line count'
+        : `Figma reads it as ${String(text.maxLines)}`;
+  return `maxLines ${before} was cleared — ${why}`;
 };
 
 /**
@@ -77,6 +95,8 @@ export const createSetLayoutPropsHandler =
     if (!('layoutAlign' in node)) {
       throw new Error(`set_layout_props: node ${p.nodeId} has no auto-layout child properties`);
     }
+    // A text's line count, to tell whether this call cleared it (see clearedMaxLines).
+    const maxLinesBefore = node.type === 'TEXT' ? node.maxLines : null;
     const n = node as SceneNode & {
       layoutAlign: string;
       layoutGrow: number;
@@ -126,6 +146,11 @@ export const createSetLayoutPropsHandler =
     if (typeof p.clipsContent === 'boolean') {
       (node as { clipsContent: boolean }).clipsContent = p.clipsContent;
     }
-    const result: MutateResult = { ok: true, nodeId: node.id };
+    const cleared = node.type === 'TEXT' ? clearedMaxLines(node, maxLinesBefore) : undefined;
+    const result: LayoutPropsResult = {
+      ok: true,
+      nodeId: node.id,
+      ...(cleared !== undefined && { adjusted: cleared }),
+    };
     return result;
   };

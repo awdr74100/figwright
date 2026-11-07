@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figwright/shared';
+import type { LayoutPropsResult, MutateResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createSetLayoutPropsHandler } from '../../src/handlers/set-layout-props.js';
@@ -151,5 +151,91 @@ describe('set_layout_props handler', () => {
         layoutSizingHorizontal: 'HUG',
       }),
     ).rejects.toThrow(/HUG needs an auto-layout frame/);
+  });
+
+  // Measured: Figma keeps one truncation limit on a text — setting maxHeight clears maxLines — and a
+  // FIXED / FILL height makes it a fixed box, which shows no line count. The write lands as asked;
+  // the line count it cost is named instead of answering a bare ok.
+  describe('on a text clamped to a line count', () => {
+    const clampedText = () => {
+      const state = {
+        maxLines: 2 as number | null,
+        maxHeight: null as number | null,
+        textAutoResize: 'HEIGHT',
+        layoutSizingVertical: 'HUG',
+      };
+      const text = {
+        id: '1:5',
+        type: 'TEXT',
+        layoutAlign: 'INHERIT',
+        layoutGrow: 0,
+        layoutPositioning: 'AUTO',
+        layoutSizingHorizontal: 'FIXED',
+        minWidth: null,
+        maxWidth: null,
+        minHeight: null,
+        get maxLines() {
+          return state.maxLines;
+        },
+        get maxHeight() {
+          return state.maxHeight;
+        },
+        set maxHeight(v: number | null) {
+          state.maxHeight = v;
+          if (v !== null) state.maxLines = null;
+        },
+        get textAutoResize() {
+          return state.textAutoResize;
+        },
+        get layoutSizingVertical() {
+          return state.layoutSizingVertical;
+        },
+        set layoutSizingVertical(v: string) {
+          state.layoutSizingVertical = v;
+          if (v !== 'HUG') {
+            state.textAutoResize = 'TRUNCATE';
+            state.maxLines = null;
+          }
+        },
+      };
+      return text;
+    };
+    const run = async (args: Record<string, unknown>) => {
+      const text = clampedText();
+      const result = (await createSetLayoutPropsHandler(fakeFigma({ '1:5': text }))({
+        nodeId: '1:5',
+        ...args,
+      })) as LayoutPropsResult;
+      return { text, result };
+    };
+
+    it('sets maxHeight and names the line count it replaced', async () => {
+      const { text, result } = await run({ maxHeight: 40 });
+      expect(text.maxHeight).toBe(40);
+      expect(result.adjusted).toBe(
+        'maxLines 2 was cleared — a text truncates at one limit, a line count or a maxHeight, and ' +
+          'maxHeight 40 replaced it',
+      );
+    });
+
+    it.each(['FIXED', 'FILL'])(
+      'sets a %s height and names the line count a fixed box does not show',
+      async value => {
+        const { text, result } = await run({ layoutSizingVertical: value });
+        expect(text.layoutSizingVertical).toBe(value);
+        expect(result.adjusted).toMatch(/^maxLines 2 was cleared — the box is now a fixed height/);
+      },
+    );
+
+    it.each([
+      { minHeight: 20 },
+      { maxWidth: 200 },
+      { layoutSizingVertical: 'HUG' },
+      { maxHeight: null },
+    ])('reports nothing when %o leaves the line count', async args => {
+      const { text, result } = await run(args);
+      expect(text.maxLines).toBe(2);
+      expect(result).toEqual({ ok: true, nodeId: '1:5' });
+    });
   });
 });
