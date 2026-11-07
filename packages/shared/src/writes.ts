@@ -106,6 +106,11 @@ export const ResizeNodesResultSchema = BatchNodeResultSchema.extend({
       }),
     )
     .optional(),
+  /**
+   * Texts that reached their size but lost a maxLines line clamp on the way: a new height makes a
+   * fixed box, which shows no line count. Absent when none did.
+   */
+  cleared: z.array(z.object({ nodeId: z.string(), reason: z.string() })).optional(),
 });
 export type ResizeNodesResult = z.infer<typeof ResizeNodesResultSchema>;
 

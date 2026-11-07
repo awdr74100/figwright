@@ -207,4 +207,62 @@ describe('resize_nodes handler', () => {
     );
     await expect(handler({ nodeIds: 'x', width: 1, height: 1 })).rejects.toThrow(/nodeIds/);
   });
+
+  // Measured: resizing an auto-height text to a new height makes it a fixed box, which shows no line
+  // count, so a maxLines clamp is cleared. The text still reaches its size; the clamp it lost is named.
+  describe('a text clamped to a line count', () => {
+    const clamped = (id: string) => {
+      const text = {
+        id,
+        name: id,
+        type: 'TEXT',
+        parent: null,
+        width: 240,
+        height: 30,
+        maxLines: 2 as number | null,
+        maxHeight: null,
+        textAutoResize: 'HEIGHT',
+        resize: vi.fn<(w: number, h: number) => void>((w, h) => {
+          if (h !== text.height) {
+            text.textAutoResize = 'TRUNCATE';
+            text.maxLines = null;
+          }
+          [text.width, text.height] = [w, h];
+        }),
+      };
+      return text;
+    };
+
+    it('lists the text in cleared when a new height drops its clamp', async () => {
+      const text = clamped('1:7');
+      const result = (await createResizeNodesHandler(fakeFigma({ '1:7': text }))({
+        nodeIds: ['1:7'],
+        width: 240,
+        height: 60,
+      })) as ResizeNodesResult;
+      expect(result).toEqual({
+        ok: true,
+        affected: ['1:7'],
+        cleared: [
+          {
+            nodeId: '1:7',
+            reason:
+              'maxLines 2 was cleared — the box is now a fixed height, which truncates at its own ' +
+              'edge and shows no line count',
+          },
+        ],
+      });
+    });
+
+    it('lists nothing when the height stays and the clamp with it', async () => {
+      const text = clamped('1:7');
+      const result = (await createResizeNodesHandler(fakeFigma({ '1:7': text }))({
+        nodeIds: ['1:7'],
+        width: 200,
+        height: 30,
+      })) as ResizeNodesResult;
+      expect(text.maxLines).toBe(2);
+      expect(result).toEqual({ ok: true, affected: ['1:7'] });
+    });
+  });
 });
