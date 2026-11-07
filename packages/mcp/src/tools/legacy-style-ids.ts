@@ -36,3 +36,21 @@ export const withLegacyStyleIds = (context: GetDesignContextResult): GetDesignCo
   }
   return copy;
 };
+
+const holdsCutId = (ids: Record<string, string> | undefined): boolean =>
+  ids !== undefined && Object.values(ids).some(id => id.startsWith('S:') && !id.includes(','));
+
+/**
+ * Whether a capture holds a style id in the cut shape — no comma at all. A local style's id ends in
+ * one and a library style's has one inside ("S:key,12:34"), so only a capture taken through a
+ * plugin that cut them can hold such an id. A server ships ahead of the plugin it talks to (an npx
+ * install of the latest server against a hand-imported plugin zip), so a baseline saved in the
+ * current format can still have come from one.
+ */
+export const hasCutStyleIds = (context: GetDesignContextResult): boolean => {
+  const visit = (node: StyledNode): boolean =>
+    holdsCutId(node.styleIds) ||
+    (node.segments ?? []).some(segment => holdsCutId(segment.styleIds)) ||
+    (node.children ?? []).some(child => visit(child as StyledNode));
+  return context.nodes.some(node => visit(node as StyledNode));
+};

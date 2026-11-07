@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import { type DesignDiffChanges, diffDesignContext } from '../diff/design-diff.js';
 import { GET_DESIGN_CONTEXT_TOOL_NAME } from './get-design-context.js';
-import { withLegacyStyleIds } from './legacy-style-ids.js';
+import { hasCutStyleIds, withLegacyStyleIds } from './legacy-style-ids.js';
 import type { ToolSpec } from './spec.js';
 
 export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
@@ -240,7 +240,10 @@ export const handleDesignDiff = async (
     };
   }
 
-  const asRecorded = READABLE_OLDER_FORMATS[existing.figwrightSnapshot];
+  // A current-format baseline captured through an older plugin holds the cut style ids too.
+  const asRecorded =
+    READABLE_OLDER_FORMATS[existing.figwrightSnapshot] ??
+    (hasCutStyleIds(existing.context) ? withLegacyStyleIds : undefined);
   const changes = diffDesignContext(
     existing.context,
     asRecorded === undefined ? current : asRecorded(current),

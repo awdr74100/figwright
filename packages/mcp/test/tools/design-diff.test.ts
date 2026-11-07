@@ -210,6 +210,32 @@ describe('handleDesignDiff', () => {
       },
     );
 
+    // The server ships ahead of the plugin, so a baseline in the current format can still have been
+    // captured through a plugin that cut the ids — once that plugin updates, nothing has changed.
+    it.each([
+      ['a node', 'S:a', 'S:lib,9:9'],
+      ['only a run of a mixed text', 'S:lib,1:2', 'S:t'],
+    ])(
+      'a current baseline captured through an older plugin, a cut id on %s, sees the same',
+      async (_where, fill, run) => {
+        const named = (id: string) => (id.includes(',') ? id : `${id},`);
+        const tokens = {
+          [named(fill)]: { name: 'Brand/A', type: 'PAINT' },
+          [named(run)]: { name: 'Body/Bold', type: 'TEXT' },
+        };
+        // A library style resolved before too, so the old baseline names it; a cut one it could not.
+        const libraryOnly = Object.fromEntries(
+          Object.entries(tokens).filter(([id]) => !id.endsWith(',')),
+        );
+        await writeAt(
+          SNAPSHOT_FORMAT_VERSION,
+          withRun(withStyles({ fill }, { styles: libraryOnly }), run),
+        );
+        currentCtx = withRun(withStyles({ fill: named(fill) }, { styles: tokens }), named(run));
+        expect((await diff()).status).toBe('no-changes');
+      },
+    );
+
     it('v9 reports every other change, other style slots included', async () => {
       await writeAt(9, withStyles({ fill: 'S:a' }));
       currentCtx = withStyles({ fill: 'S:b,', grid: 'S:grid,' }, { title: 'Bye' });
