@@ -20,8 +20,11 @@ export const setLayoutPropsTool: ToolSpec = {
     'layoutPositioning (ABSOLUTE = ignore the flow and position freely, AUTO = participate in ' +
     'layout). minWidth / maxWidth / minHeight / maxHeight set responsive size bounds (→ min-w / ' +
     'max-w); pass null to clear a bound. Bounds apply to auto-layout frames and their direct ' +
-    'children. HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. Any ' +
-    'field may be omitted to leave it unchanged. Returns { ok, nodeId }.',
+    'children. HUG needs an auto-layout frame (or text); FILL needs an auto-layout parent. On a ' +
+    'text, Figma keeps one truncation limit — a maxLines line clamp or a maxHeight — so maxHeight ' +
+    'replaces a line clamp, and a FIXED or FILL height makes a fixed box, which truncates at its ' +
+    'edge and shows no line count; the write still lands, and a maxLines it cleared is named in ' +
+    'adjusted. Any field may be omitted to leave it unchanged. Returns { ok, nodeId, adjusted? }.',
   inputSchema: z.object({
     nodeId: z.string().describe('Node id — a frame-like container, or an auto-layout child'),
     clipsContent: z.boolean().optional().describe('Clip children to the container bounds'),

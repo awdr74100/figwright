@@ -1,6 +1,7 @@
 import type { ResizeNodesResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { clearedMaxLines } from './text-limit.js';
 
 // Figma stores sizes as floats; anything closer than its own minimum size (0.01) is the same size.
 const SIZE_EPSILON = 0.01;
@@ -126,12 +127,17 @@ export const createResizeNodesHandler =
     // move another's (a main component's layer carries its instances' copies with it), so a size read
     // straight after its own write can already be stale by the end of the call.
     const before = targets.map(({ node }): Box => ({ width: node.width, height: node.height }));
+    // A text's line count, to tell whether its resize cleared it (see clearedMaxLines).
+    const maxLinesBefore = targets.map(({ node }) => (node.type === 'TEXT' ? node.maxLines : null));
     for (const { node } of targets) node.resize(requested.width, heightOf(node));
 
     const affected: string[] = [];
     const adjusted: Adjusted[] = [];
+    const cleared: { nodeId: string; reason: string }[] = [];
     let changedAny = false;
     targets.forEach(({ id, node }, i) => {
+      const lost = node.type === 'TEXT' ? clearedMaxLines(node, maxLinesBefore[i]!) : undefined;
+      if (lost !== undefined) cleared.push({ nodeId: id, reason: lost });
       const after: Box = { width: node.width, height: node.height };
       const was = before[i]!;
       if (!sameSize(after.width, was.width) || !sameSize(after.height, was.height))
@@ -155,6 +161,7 @@ export const createResizeNodesHandler =
       ok: true,
       affected,
       ...(adjusted.length > 0 && { adjusted }),
+      ...(cleared.length > 0 && { cleared }),
     };
     return result;
   };

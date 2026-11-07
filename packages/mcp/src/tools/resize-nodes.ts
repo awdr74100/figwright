@@ -11,14 +11,16 @@ export const resizeNodesTool: ToolSpec = {
     'its length and keeps height 0 — pass 0, or any height is reported in adjusted; every other ' +
     'node needs a height of at least 0.01 px, checked before any node is resized. ' +
     'This fixes the size, so an auto-layout ' +
-    'FILL / HUG axis becomes FIXED and a TEXT node a fixed box its wrapped lines can overflow — to ' +
-    'wrap text at a width use set_text_properties width instead, which lets its height follow. ' +
+    'FILL / HUG axis becomes FIXED and a TEXT node a fixed box its wrapped lines can overflow, ' +
+    'which shows no maxLines line clamp — to wrap text at a width use set_text_properties width ' +
+    'instead, which lets its height follow. ' +
     'Non-resizable nodes are skipped. A layer inside an instance keeps ' +
     'the size its main component gives it — resize the instance itself, change the layer in the main ' +
     'component, or detach_instance first. Every node is read back: affected lists the nodes that ' +
     'reached the requested size, and adjusted lists any Figma sized differently (an instance layer, a ' +
     'minWidth / maxWidth / minHeight / maxHeight bound) with its actual size and why. A call that ' +
-    'changed nothing throws. Returns { ok, affected, adjusted? }.',
+    'changed nothing throws. A text that reached its size but lost a maxLines is listed in ' +
+    'cleared. Returns { ok, affected, adjusted?, cleared? }.',
   inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to resize'),
     width: z.number().min(0.01),

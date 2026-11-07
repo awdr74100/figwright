@@ -261,6 +261,9 @@ export const createSetTextPropertiesHandler =
 
     const before = { width: text.width, height: text.height };
     const prior = readTextBox(text);
+    // Figma keeps one truncation limit on a text, a line count or a maxHeight: setting maxLines clears
+    // a maxHeight bound the call never named (measured), so it is read back and named below.
+    const maxHeightBefore = text.maxHeight;
     const touchesBox =
       width !== undefined ||
       height !== undefined ||
@@ -364,6 +367,14 @@ export const createSetTextPropertiesHandler =
       }
     }
 
+    if (typeof maxHeightBefore === 'number' && text.maxHeight !== maxHeightBefore) {
+      notes.push(
+        typeof text.maxLines === 'number'
+          ? `maxHeight ${maxHeightBefore} was cleared — a text truncates at one limit, a line count ` +
+              `or a maxHeight, and maxLines ${text.maxLines} replaced it`
+          : `maxHeight ${maxHeightBefore} was cleared — Figma reads it as ${String(text.maxHeight)}`,
+      );
+    }
     const after = { width: text.width, height: text.height };
     if (
       expected !== null &&

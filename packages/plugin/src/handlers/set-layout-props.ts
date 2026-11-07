@@ -1,6 +1,7 @@
-import type { MutateResult } from '@figwright/shared';
+import type { LayoutPropsResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { clearedMaxLines } from './text-limit.js';
 
 type SizingAxis = 'layoutSizingHorizontal' | 'layoutSizingVertical';
 
@@ -77,6 +78,8 @@ export const createSetLayoutPropsHandler =
     if (!('layoutAlign' in node)) {
       throw new Error(`set_layout_props: node ${p.nodeId} has no auto-layout child properties`);
     }
+    // A text's line count, to tell whether this call cleared it (see clearedMaxLines).
+    const maxLinesBefore = node.type === 'TEXT' ? node.maxLines : null;
     const n = node as SceneNode & {
       layoutAlign: string;
       layoutGrow: number;
@@ -126,6 +129,11 @@ export const createSetLayoutPropsHandler =
     if (typeof p.clipsContent === 'boolean') {
       (node as { clipsContent: boolean }).clipsContent = p.clipsContent;
     }
-    const result: MutateResult = { ok: true, nodeId: node.id };
+    const cleared = node.type === 'TEXT' ? clearedMaxLines(node, maxLinesBefore) : undefined;
+    const result: LayoutPropsResult = {
+      ok: true,
+      nodeId: node.id,
+      ...(cleared !== undefined && { adjusted: cleared }),
+    };
     return result;
   };
