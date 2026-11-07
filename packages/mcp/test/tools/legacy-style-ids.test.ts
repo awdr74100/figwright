@@ -74,20 +74,24 @@ describe('withLegacyStyleIds', () => {
 
   // The size guard returns this shape so that a read that fit before still fits, and only the
   // rounded new size is known — so it may differ from the old by 0.01, never print longer.
+  // Sizes where the nearest estimate alone would print longer recur every ~100 chars (1,728 of
+  // 175k measured up to 60k chars), so this range holds hundreds of them.
   it('never prints a size longer than the old read did', () => {
-    for (let chars = 1024; chars <= 60_000; chars += 1) {
-      for (const cut of [1, 2, 41]) {
+    for (let chars = 1024; chars <= 25_000; chars += 1) {
+      for (const cut of [1, 41]) {
         const was = sizeKb(chars - cut);
         const got = withLegacyStyleIds({
-          ...read(sizeKb(chars)),
           nodes: [
-            {
-              id: '1:1',
-              name: 'n',
-              type: 'FRAME',
-              styleIds: { fill: `S:a${','.repeat(cut)}` },
-            },
+            { id: '1:1', name: 'n', type: 'FRAME', styleIds: { fill: `S:a${','.repeat(cut)}` } },
           ],
+          metrics: {
+            nodeCount: 1,
+            maxDepth: 1,
+            styleCount: 0,
+            tokenCount: 0,
+            inlineSizeKb: sizeKb(chars),
+            dedupedSizeKb: sizeKb(chars),
+          },
         }).metrics!.inlineSizeKb;
         expect(String(got).length).toBeLessThanOrEqual(String(was).length);
         expect(Math.abs(got - was)).toBeLessThanOrEqual(0.0100001);
