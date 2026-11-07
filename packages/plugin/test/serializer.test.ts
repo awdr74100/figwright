@@ -1270,6 +1270,11 @@ describe('serializeFlat — style links / component properties', () => {
     expect(out.styleIds).toEqual({ fill: 'S:abc', effect: 'S:def' });
   });
 
+  it("collects a frame's grid style", () => {
+    const out = serializeFlatSync(fake({ type: 'FRAME', gridStyleId: 'S:grid,', fillStyleId: '' }));
+    expect(out.styleIds).toEqual({ grid: 'S:grid,' });
+  });
+
   it('collapses boundVariables to flat lists of variable ids', () => {
     const out = serializeFlatSync(
       fake({

@@ -126,6 +126,65 @@ describe('handleDesignDiff', () => {
     expect(saved.figwrightSnapshot).toBe(SNAPSHOT_FORMAT_VERSION); // rewritten to the current format
   });
 
+  describe('a v9 baseline, which predates the grid style slot', () => {
+    const withStyles = (
+      styleIds: Record<string, string>,
+      title = 'Hello',
+    ): GetDesignContextResult =>
+      ctx({
+        nodes: [
+          {
+            id: '1:1',
+            name: 'Card',
+            type: 'FRAME',
+            styleIds,
+            children: [{ id: '1:2', name: 'Title', type: 'TEXT', characters: title }],
+          },
+        ],
+      });
+    const writeV9 = async (context: GetDesignContextResult) => {
+      await mkdir(join(dir, '.figwright', 'snapshots'), { recursive: true });
+      await writeFile(
+        join(dir, SNAP_REL),
+        JSON.stringify({ figwrightSnapshot: 9, nodeId: '1:1', capturedAt: 'v9', context }),
+      );
+    };
+
+    // Re-baselining it would overwrite the saved baseline and lose every change made since.
+    it('is still diffed, and a grid style it could not hold is no change', async () => {
+      await writeV9(ctx());
+      currentCtx = withStyles({ grid: 'S:grid,' });
+      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+      expect(r.status).toBe('no-changes');
+      expect(r.baselineCapturedAt).toBe('v9');
+    });
+
+    it('reports every other change, other style slots included', async () => {
+      await writeV9(withStyles({ fill: 'S:a,' }));
+      currentCtx = withStyles({ fill: 'S:b,', grid: 'S:grid,' }, 'Bye');
+      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+      expect(r.status).toBe('diff');
+      const fields = r.changes?.changed.flatMap(c => c.fields?.map(x => [x.field, x.after]) ?? []);
+      expect(fields).toEqual([
+        ['styleIds', { fill: 'S:b,' }],
+        ['characters', 'Bye'],
+      ]);
+    });
+
+    it('is replaced by a full capture on update:true, which then sees a grid style change', async () => {
+      await writeV9(ctx());
+      currentCtx = withStyles({ grid: 'S:grid,' });
+      await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir, update: true });
+      const saved = JSON.parse(await readFile(join(dir, SNAP_REL), 'utf8'));
+      expect(saved.figwrightSnapshot).toBe(SNAPSHOT_FORMAT_VERSION);
+      expect(saved.context.nodes[0].styleIds).toEqual({ grid: 'S:grid,' });
+
+      currentCtx = withStyles({ grid: 'S:other,' });
+      const r = await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
+      expect(r.status).toBe('diff');
+    });
+  });
+
   it('warns (but still diffs) when the baseline root looks like a different node', async () => {
     await handleDesignDiff(dispatch, { nodeId: '1:1', rootDir: dir });
     // Same id, but the root was renamed/replaced (different name + type).

@@ -18,11 +18,12 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
 
 /**
  * Bumped only when the on-disk snapshot shape changes; an older file is re-baselined, never
- * mis-diffed. v2: the read-dimension batch (itemReverseZIndex / strokesIncludedInLayout /
- * targetAspectRatio / numberOfFixedChildren / annotations / filtersApplied) — a v1 baseline lacking
- * those fields would report them as spurious "changes" against a fresh capture. v3: every field
- * added since without a bump — textWrapStyle, the motion summary, component-property references,
- * gradient cssAngle, font variationSettings, shader identity, cornerSmoothing, variableModes.
+ * mis-diffed — unless READABLE_OLDER_FORMATS can cut a fresh capture back to its shape. v2: the
+ * read-dimension batch (itemReverseZIndex / strokesIncludedInLayout / targetAspectRatio /
+ * numberOfFixedChildren / annotations / filtersApplied) — a v1 baseline lacking those fields would
+ * report them as spurious "changes" against a fresh capture. v3: every field added since without a
+ * bump — textWrapStyle, the motion summary, component-property references, gradient cssAngle, font
+ * variationSettings, shader identity, cornerSmoothing, variableModes.
  * test/design-diff-format.test.ts now fails when the captured shape changes, so the next one is a
  * decision rather than an oversight. v4: a grid's gridItemsPositioning / gridAutoTracks, and no
  * cell anchors on the children of a ROW_AUTO_FLOW grid — a v3 baseline would report every flowing
@@ -37,9 +38,39 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * transformModifiers / repeatTransforms, a brush / dynamic stroke's complexStrokeProperties, a
  * width profile, a text path's text, typography and textPathStartData, the renderBounds of those
  * nodes, and a pattern's verticalAlignment — a v7 baseline reads a dial as one tick and a text path
- * as an empty shape.
+ * as an empty shape. v9: a mirrored or turned node's flipped / boundingBox / cssTransform. v10: a
+ * frame's grid style (styleIds.grid) — a v9 baseline is still diffed, against a capture without
+ * it.
  */
-export const SNAPSHOT_FORMAT_VERSION = 9;
+export const SNAPSHOT_FORMAT_VERSION = 10;
+
+interface StyledNode {
+  styleIds?: Record<string, string>;
+  children?: readonly unknown[];
+}
+
+/** A capture with every node's grid style left out: the shape a v9 baseline was recorded in. */
+const withoutGridStyleIds = (context: GetDesignContextResult): GetDesignContextResult => {
+  const copy = structuredClone(context);
+  const visit = (node: StyledNode): void => {
+    if (node.styleIds?.grid !== undefined) {
+      delete node.styleIds.grid;
+      if (Object.keys(node.styleIds).length === 0) delete node.styleIds;
+    }
+    for (const child of node.children ?? []) visit(child as StyledNode);
+  };
+  for (const node of copy.nodes) visit(node as StyledNode);
+  return copy;
+};
+
+/**
+ * Older formats still diffed: each holds everything the current one does but a field it predates,
+ * so a fresh capture is cut back to that shape before the compare. Re-baselining one instead would
+ * overwrite the user's baseline and lose every change made since it was taken.
+ */
+const READABLE_OLDER_FORMATS: Readonly<
+  Record<number, (context: GetDesignContextResult) => GetDesignContextResult>
+> = { 9: withoutGridStyleIds };
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 
 const inputSchema = z.object({
@@ -148,7 +179,8 @@ const readSnapshot = async (absPath: string): Promise<SnapshotFile | null> => {
   try {
     const parsed = JSON.parse(raw) as Partial<SnapshotFile>;
     if (
-      parsed.figwrightSnapshot !== SNAPSHOT_FORMAT_VERSION ||
+      (parsed.figwrightSnapshot !== SNAPSHOT_FORMAT_VERSION &&
+        !Object.hasOwn(READABLE_OLDER_FORMATS, parsed.figwrightSnapshot ?? '')) ||
       typeof parsed.context !== 'object' ||
       parsed.context === null
     ) {
@@ -203,7 +235,11 @@ export const handleDesignDiff = async (
     };
   }
 
-  const changes = diffDesignContext(existing.context, current);
+  const asRecorded = READABLE_OLDER_FORMATS[existing.figwrightSnapshot];
+  const changes = diffDesignContext(
+    existing.context,
+    asRecorded === undefined ? current : asRecorded(current),
+  );
   const summary = {
     added: changes.added.length,
     removed: changes.removed.length,

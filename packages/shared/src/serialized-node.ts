@@ -460,6 +460,7 @@ export const SerializedStyleIdsSchema = z.object({
   fill: z.string().optional(),
   stroke: z.string().optional(),
   effect: z.string().optional(),
+  grid: z.string().optional(),
   text: z.string().optional(),
 });
 export type SerializedStyleIds = z.infer<typeof SerializedStyleIdsSchema>;
