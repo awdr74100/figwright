@@ -22,7 +22,7 @@
  */
 
 import { writePaints } from './paints.js';
-import { sameSize } from './resize-nodes.js';
+import { sameSize } from './size.js';
 import { isAutoSized, writeTextBox } from './text-box.js';
 import type { TextLike } from './text-like.js';
 
@@ -315,7 +315,7 @@ export interface TextSnapshot {
   variables: Record<string, Variable>;
 }
 
-const fontsOf = (figmaCtx: typeof figma, text: TextLike): FontName[] =>
+export const fontsOf = (figmaCtx: typeof figma, text: TextLike): FontName[] =>
   text.fontName === figmaCtx.mixed && text.characters.length > 0
     ? [...text.getRangeAllFontNames(0, text.characters.length)]
     : [text.fontName as FontName];
