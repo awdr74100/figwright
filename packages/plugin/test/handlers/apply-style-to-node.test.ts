@@ -103,6 +103,28 @@ describe('apply_style_to_node handler', () => {
     expect(node.setFillStyleIdAsync).not.toHaveBeenCalled();
   });
 
+  // A text whose runs carry different styles reads mixed, and no single id would put it back — the
+  // setter would strip every run on an id it cannot parse, so such an id is not tried there.
+  it('refuses an unknown id on a text with mixed styles without writing anything', async () => {
+    const MIXED = Symbol('mixed');
+    const node = {
+      id: '1:2',
+      textStyleId: MIXED as unknown,
+      setTextStyleIdAsync: vi.fn<(id: string) => Promise<void>>(async () => {
+        node.textStyleId = '';
+      }),
+    };
+    await expect(
+      createApplyStyleToNodeHandler(fakeFigma(node))({
+        nodeId: '1:2',
+        styleId: 'S:none',
+        field: 'text',
+      }),
+    ).rejects.toThrow(/nothing was written, since 1:2's runs carry different text styles/);
+    expect(node.setTextStyleIdAsync).not.toHaveBeenCalled();
+    expect(node.textStyleId).toBe(MIXED);
+  });
+
   it('reports a style Figma did not apply, rather than answering ok', async () => {
     const node = { ...styledNode(), setFillStyleIdAsync: async () => {} };
     await expect(

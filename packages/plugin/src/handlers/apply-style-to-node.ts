@@ -90,6 +90,16 @@ export const createApplyStyleToNodeHandler =
     }
 
     const before = readStyle();
+    // A text whose runs carry different styles reads figma.mixed: no single id would put it back,
+    // so an id the lookup does not vouch for is not tried on it — the setter would strip every run.
+    if (!found && typeof before !== 'string') {
+      throw new Error(
+        `apply_style_to_node: no style ${JSON.stringify(styleId)} in this file — pass an id ` +
+          'exactly as get_styles or import_style return it (e.g. "S:5b55…,"), or "" to remove ' +
+          `the style; nothing was written, since ${p.nodeId}'s runs carry different ` +
+          `${String(p.field)} styles that could not be put back`,
+      );
+    }
     await setStyle(styleId);
     // Read back rather than trusted: the setter answering is what used to pass for success.
     const applied = readStyle();
