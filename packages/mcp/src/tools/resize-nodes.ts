@@ -19,7 +19,8 @@ export const resizeNodesTool: ToolSpec = {
     'component, or detach_instance first. Every node is read back: affected lists the nodes that ' +
     'reached the requested size, and adjusted lists any Figma sized differently (an instance layer, a ' +
     'minWidth / maxWidth / minHeight / maxHeight bound) with its actual size and why. A call that ' +
-    'changed nothing throws. A text that reached its size but lost a maxLines is listed in ' +
+    'changed nothing throws. A node Figma held at its size is left as it was, its HUG / FILL ' +
+    'sizing and text box included. A text that reached its size but lost a maxLines is listed in ' +
     'cleared. Returns { ok, affected, adjusted?, cleared? }.',
   inputSchema: z.object({
     nodeIds: z.array(z.string()).describe('Node ids to resize'),

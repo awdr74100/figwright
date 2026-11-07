@@ -265,4 +265,144 @@ describe('resize_nodes handler', () => {
       expect(result).toEqual({ ok: true, affected: ['1:7'] });
     });
   });
+
+  // Measured: a resize a bound holds at its size still turns a HUG / FILL axis FIXED and an auto-sized
+  // text a fixed box. A node whose size did not move is put back, so an error means nothing changed.
+  describe('a node held at its size', () => {
+    const IDENTITY = [
+      [1, 0, 0],
+      [0, 1, 0],
+    ];
+    /** A HUG frame a bound holds: resize() flips its sizing to FIXED and keeps its size. */
+    const heldFrame = (id: string) => {
+      const frame = {
+        id,
+        name: id,
+        type: 'FRAME',
+        parent: null,
+        width: 40,
+        height: 20,
+        x: 0,
+        y: 0,
+        relativeTransform: IDENTITY,
+        layoutGrow: 0,
+        layoutAlign: 'INHERIT',
+        primaryAxisSizingMode: 'AUTO',
+        counterAxisSizingMode: 'AUTO',
+        maxWidth: 40,
+        maxHeight: 20,
+        resize: vi.fn<(w: number, h: number) => void>(() => {
+          frame.primaryAxisSizingMode = 'FIXED';
+          frame.counterAxisSizingMode = 'FIXED';
+        }),
+        resizeWithoutConstraints: vi.fn<(w: number, h: number) => void>(),
+      };
+      return frame;
+    };
+    /** An auto-height text a maxHeight holds: resize() fixes the box and keeps the size. */
+    const heldText = (id: string) => {
+      const text = {
+        id,
+        name: id,
+        type: 'TEXT',
+        parent: null,
+        width: 240,
+        height: 40,
+        x: 0,
+        y: 0,
+        relativeTransform: IDENTITY,
+        characters: 'abc',
+        fontName: { family: 'Inter', style: 'Regular' },
+        textAutoResize: 'HEIGHT',
+        textTruncation: 'ENDING',
+        maxLines: null as number | null,
+        maxHeight: 40,
+        layoutGrow: 0,
+        layoutAlign: 'INHERIT',
+        resize: vi.fn<(w: number, h: number) => void>(() => {
+          text.textAutoResize = 'TRUNCATE';
+        }),
+        resizeWithoutConstraints: vi.fn<(w: number, h: number) => void>(),
+      };
+      return text;
+    };
+    const withFonts = (lookup: Record<string, unknown>) => {
+      const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
+      const ctx = {
+        getNodeByIdAsync: async (id: string) => lookup[id] ?? null,
+        loadFontAsync,
+        mixed: Symbol('mixed'),
+      } as unknown as typeof figma;
+      return { ctx, loadFontAsync };
+    };
+
+    it('puts a held frame back as HUG before refusing the call', async () => {
+      const frame = heldFrame('1:8');
+      await expect(
+        createResizeNodesHandler(withFonts({ '1:8': frame }).ctx)({
+          nodeIds: ['1:8'],
+          width: 90,
+          height: 60,
+        }),
+      ).rejects.toThrow(/nothing was resized/);
+      expect(frame).toMatchObject({ primaryAxisSizingMode: 'AUTO', counterAxisSizingMode: 'AUTO' });
+    });
+
+    it("loads a held text's fonts and puts its auto height back", async () => {
+      const text = heldText('1:9');
+      const { ctx, loadFontAsync } = withFonts({ '1:9': text });
+      await expect(
+        createResizeNodesHandler(ctx)({ nodeIds: ['1:9'], width: 240, height: 60 }),
+      ).rejects.toThrow(/nothing was resized/);
+      expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });
+      expect(text.textAutoResize).toBe('HEIGHT');
+    });
+
+    it('puts back only the nodes that did not move, in a call that resized others', async () => {
+      const frame = heldFrame('1:8');
+      const free = node('1:1');
+      const result = (await createResizeNodesHandler(withFonts({ '1:8': frame, '1:1': free }).ctx)({
+        nodeIds: ['1:8', '1:1'],
+        width: 90,
+        height: 60,
+      })) as ResizeNodesResult;
+      expect(result.affected).toEqual(['1:1']);
+      expect(result.adjusted?.[0]).toMatchObject({ nodeId: '1:8', width: 40, height: 20 });
+      expect(result.adjusted?.[0]?.reason).not.toMatch(/put back|left with/);
+      expect(frame.primaryAxisSizingMode).toBe('AUTO');
+    });
+
+    // A node that moved on one side and was held on the other did resize: its FIXED sizing is the
+    // resize's own, and putting it back would undo the side that landed.
+    it('leaves a partly resized node as the resize left it', async () => {
+      const frame = {
+        ...heldFrame('1:8'),
+        resizeWithoutConstraints: vi.fn<(w: number, h: number) => void>((w, h) => {
+          [frame.width, frame.height] = [w, h];
+        }),
+      };
+      frame.resize = vi.fn<(w: number, h: number) => void>(w => {
+        frame.width = w;
+        frame.primaryAxisSizingMode = 'FIXED';
+        frame.counterAxisSizingMode = 'FIXED';
+      });
+      const result = (await createResizeNodesHandler(withFonts({ '1:8': frame }).ctx)({
+        nodeIds: ['1:8'],
+        width: 90,
+        height: 60,
+      })) as ResizeNodesResult;
+      expect(result.adjusted?.[0]).toMatchObject({ nodeId: '1:8', width: 90, height: 20 });
+      expect(frame).toMatchObject({ width: 90, primaryAxisSizingMode: 'FIXED' });
+      expect(frame.resizeWithoutConstraints).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing to a held node that kept its sizing, not even a font load', async () => {
+      const text = { ...heldText('1:9'), resize: vi.fn<(w: number, h: number) => void>() };
+      const { ctx, loadFontAsync } = withFonts({ '1:9': text });
+      await expect(
+        createResizeNodesHandler(ctx)({ nodeIds: ['1:9'], width: 240, height: 60 }),
+      ).rejects.toThrow(/nothing was resized/);
+      expect(loadFontAsync).not.toHaveBeenCalled();
+    });
+  });
 });

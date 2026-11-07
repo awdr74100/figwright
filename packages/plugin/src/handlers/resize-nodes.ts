@@ -1,10 +1,16 @@
 import type { ResizeNodesResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import {
+  captureGeometry,
+  fontsOf,
+  loadFonts,
+  restoreGeometry,
+  same,
+  type GeometrySnapshot,
+} from './batch-snapshot.js';
+import { sameSize } from './size.js';
 import { clearedMaxLines } from './text-limit.js';
-
-// Figma stores sizes as floats; anything closer than its own minimum size (0.01) is the same size.
-const SIZE_EPSILON = 0.01;
 
 interface Box {
   width: number;
@@ -12,8 +18,6 @@ interface Box {
 }
 
 type Adjusted = NonNullable<ResizeNodesResult['adjusted']>[number];
-
-export const sameSize = (a: number, b: number): boolean => Math.abs(a - b) < SIZE_EPSILON;
 
 export const enclosingInstance = (node: BaseNode): BaseNode | null => {
   for (let parent = node.parent; parent !== null; parent = parent.parent) {
@@ -75,7 +79,36 @@ export const explain = (node: BaseNode, requested: Box, before: Box, after: Box)
  * nothing at all throws, so an error always means nothing was written and a batch rolls back;
  * otherwise `affected` lists the nodes that reached the requested size and `adjusted` accounts for
  * the rest.
+ *
+ * A resize Figma holds at its size still leaves a mark: a HUG / FILL axis turns FIXED and an
+ * auto-sized text a fixed box, whether or not the size moved (measured — a bound holding a frame, a
+ * text, an auto-layout child). A node whose size did not move at all is therefore put back as it
+ * was, so the error, or the size `adjusted` reports it kept, is the whole story.
  */
+const putBack = async (
+  figmaCtx: typeof figma,
+  node: SceneNode,
+  snapshot: GeometrySnapshot,
+): Promise<string | undefined> => {
+  const moved = (): string[] => {
+    const now = captureGeometry(node).layout;
+    return Object.keys(snapshot.layout).filter(k => !same(now[k], snapshot.layout[k]));
+  };
+  // Nothing to put back (a layer inside an instance, where Figma ignores the resize outright) means
+  // nothing is written — not even a font load that could fail.
+  if (moved().length === 0) return undefined;
+  try {
+    if (node.type === 'TEXT') await loadFonts(figmaCtx, fontsOf(figmaCtx, node));
+    restoreGeometry(node, snapshot);
+  } catch (error) {
+    return `its sizing could not be put back: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  const left = moved();
+  if (left.length === 0) return undefined;
+  const now = captureGeometry(node).layout;
+  return `it was left with ${left.map(k => `${k} ${JSON.stringify(now[k])}`).join(', ')}`;
+};
+
 export const createResizeNodesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
@@ -127,6 +160,7 @@ export const createResizeNodesHandler =
     // move another's (a main component's layer carries its instances' copies with it), so a size read
     // straight after its own write can already be stale by the end of the call.
     const before = targets.map(({ node }): Box => ({ width: node.width, height: node.height }));
+    const geometry = targets.map(({ node }) => captureGeometry(node as unknown as SceneNode));
     // A text's line count, to tell whether its resize cleared it (see clearedMaxLines).
     const maxLinesBefore = targets.map(({ node }) => (node.type === 'TEXT' ? node.maxLines : null));
     for (const { node } of targets) node.resize(requested.width, heightOf(node));
@@ -135,6 +169,7 @@ export const createResizeNodesHandler =
     const adjusted: Adjusted[] = [];
     const cleared: { nodeId: string; reason: string }[] = [];
     let changedAny = false;
+    const held: number[] = [];
     targets.forEach(({ id, node }, i) => {
       const lost = node.type === 'TEXT' ? clearedMaxLines(node, maxLinesBefore[i]!) : undefined;
       if (lost !== undefined) cleared.push({ nodeId: id, reason: lost });
@@ -142,12 +177,22 @@ export const createResizeNodesHandler =
       const was = before[i]!;
       if (!sameSize(after.width, was.width) || !sameSize(after.height, was.height))
         changedAny = true;
+      else if (!sameSize(after.width, requested.width) || !sameSize(after.height, requested.height))
+        held.push(i);
       if (sameSize(after.width, requested.width) && sameSize(after.height, requested.height)) {
         affected.push(id);
       } else {
         adjusted.push({ nodeId: id, ...after, reason: explain(node, requested, was, after) });
       }
     });
+
+    for (const i of held) {
+      const { id, node } = targets[i]!;
+      // eslint-disable-next-line no-await-in-loop -- a font load per held text, in order
+      const residue = await putBack(figmaCtx, node as unknown as SceneNode, geometry[i]!);
+      const entry = residue === undefined ? undefined : adjusted.find(a => a.nodeId === id);
+      if (entry !== undefined) entry.reason += `; ${residue}`;
+    }
 
     if (affected.length === 0 && adjusted.length > 0 && !changedAny) {
       throw new Error(
