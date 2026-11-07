@@ -396,13 +396,68 @@ describe('resize_nodes handler', () => {
       expect(frame.resizeWithoutConstraints).not.toHaveBeenCalled();
     });
 
-    it('writes nothing to a held node that kept its sizing, not even a font load', async () => {
+    it('writes nothing to a held node that kept its sizing', async () => {
       const text = { ...heldText('1:9'), resize: vi.fn<(w: number, h: number) => void>() };
-      const { ctx, loadFontAsync } = withFonts({ '1:9': text });
+      const writes = vi.fn<(key: string) => void>();
+      const watched = new Proxy(text, {
+        set: (target, key, value) => {
+          writes(String(key));
+          return Reflect.set(target, key, value);
+        },
+      });
+      await expect(
+        createResizeNodesHandler(withFonts({ '1:9': watched }).ctx)({
+          nodeIds: ['1:9'],
+          width: 240,
+          height: 60,
+        }),
+      ).rejects.toThrow(/nothing was resized/);
+      expect(writes).not.toHaveBeenCalled();
+    });
+
+    // The fonts load before the node is read: an await between the capture and the put-back would
+    // let an edit made meanwhile be overwritten with the captured state.
+    it('keeps an edit made while its fonts were loading', async () => {
+      const text = heldText('1:9');
+      const ctx = {
+        getNodeByIdAsync: async () => text,
+        mixed: Symbol('mixed'),
+        loadFontAsync: async () => {
+          text.layoutAlign = 'STRETCH';
+        },
+      } as unknown as typeof figma;
       await expect(
         createResizeNodesHandler(ctx)({ nodeIds: ['1:9'], width: 240, height: 60 }),
       ).rejects.toThrow(/nothing was resized/);
-      expect(loadFontAsync).not.toHaveBeenCalled();
+      expect(text).toMatchObject({ layoutAlign: 'STRETCH', textAutoResize: 'HEIGHT' });
+    });
+
+    // Resizing needs no font: a missing one does not stop the call, it only stops a held text's box
+    // from being put back — which is said, not left silent.
+    it('resizes a text whose fonts will not load, and names a held one it cannot put back', async () => {
+      const free = node('1:1', { type: 'TEXT' });
+      const text = heldText('1:9');
+      const ctx = {
+        getNodeByIdAsync: async (id: string) => ({ '1:1': free, '1:9': text })[id] ?? null,
+        mixed: Symbol('mixed'),
+        loadFontAsync: async () => {
+          throw new Error('font missing');
+        },
+      } as unknown as typeof figma;
+      (free as unknown as { fontName: unknown; characters: string }).fontName = {
+        family: 'X',
+        style: 'Y',
+      };
+      (free as unknown as { characters: string }).characters = 'a';
+      const result = (await createResizeNodesHandler(ctx)({
+        nodeIds: ['1:1', '1:9'],
+        width: 240,
+        height: 60,
+      })) as ResizeNodesResult;
+      expect(result.affected).toEqual(['1:1']);
+      expect(result.adjusted?.[0]?.reason).toMatch(
+        /its text box could not be put back: its fonts could not be loaded/,
+      );
     });
   });
 });

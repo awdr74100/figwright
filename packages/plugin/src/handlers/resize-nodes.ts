@@ -85,20 +85,22 @@ export const explain = (node: BaseNode, requested: Box, before: Box, after: Box)
  * text, an auto-layout child). A node whose size did not move at all is therefore put back as it
  * was, so the error, or the size `adjusted` reports it kept, is the whole story.
  */
-const putBack = async (
-  figmaCtx: typeof figma,
+const putBack = (
   node: SceneNode,
   snapshot: GeometrySnapshot,
-): Promise<string | undefined> => {
+  fontsLoaded: boolean,
+): string | undefined => {
   const moved = (): string[] => {
     const now = captureGeometry(node).layout;
     return Object.keys(snapshot.layout).filter(k => !same(now[k], snapshot.layout[k]));
   };
   // Nothing to put back (a layer inside an instance, where Figma ignores the resize outright) means
-  // nothing is written — not even a font load that could fail.
+  // nothing is written.
   if (moved().length === 0) return undefined;
+  if (node.type === 'TEXT' && !fontsLoaded) {
+    return 'its text box could not be put back: its fonts could not be loaded';
+  }
   try {
-    if (node.type === 'TEXT') await loadFonts(figmaCtx, fontsOf(figmaCtx, node));
     restoreGeometry(node, snapshot);
   } catch (error) {
     return `its sizing could not be put back: ${error instanceof Error ? error.message : String(error)}`;
@@ -159,6 +161,21 @@ export const createResizeNodesHandler =
     // Every size is captured before any write and read after all of them: one target's resize can
     // move another's (a main component's layer carries its instances' copies with it), so a size read
     // straight after its own write can already be stale by the end of the call.
+    // A text box is only written with its fonts loaded, so a text's are loaded now, before anything
+    // is read or written: an await between the capture below and the put-back would let an edit made
+    // meanwhile be overwritten with the captured state. Resizing needs no font, so one that will not
+    // load does not stop the call; it only means that text, if held, cannot be put back.
+    const fontsLoaded = await Promise.all(
+      targets.map(async ({ node }) => {
+        if (node.type !== 'TEXT') return true;
+        try {
+          await loadFonts(figmaCtx, fontsOf(figmaCtx, node as unknown as TextNode));
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    );
     const before = targets.map(({ node }): Box => ({ width: node.width, height: node.height }));
     const geometry = targets.map(({ node }) => captureGeometry(node as unknown as SceneNode));
     // A text's line count, to tell whether its resize cleared it (see clearedMaxLines).
@@ -188,8 +205,7 @@ export const createResizeNodesHandler =
 
     for (const i of held) {
       const { id, node } = targets[i]!;
-      // eslint-disable-next-line no-await-in-loop -- a font load per held text, in order
-      const residue = await putBack(figmaCtx, node as unknown as SceneNode, geometry[i]!);
+      const residue = putBack(node as unknown as SceneNode, geometry[i]!, fontsLoaded[i]!);
       const entry = residue === undefined ? undefined : adjusted.find(a => a.nodeId === id);
       if (entry !== undefined) entry.reason += `; ${residue}`;
     }
