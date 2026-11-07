@@ -116,6 +116,16 @@ describe('handleDesignContext (the public-path guard)', () => {
           }),
         ],
         styles: { ...localNames, 'S:lib,1:2': { name: 'Body', type: 'TEXT' } },
+        // As the plugin measures them: 40 local names and one library name, and v0.7.0's read 41
+        // commas (one per local id) shorter — 50 - 41/1024 KB.
+        metrics: {
+          nodeCount: 41,
+          maxDepth: 2,
+          styleCount: 0,
+          tokenCount: beforeNames ? 1 : 41,
+          inlineSizeKb: beforeNames ? 49.96 : 50,
+          dedupedSizeKb: beforeNames ? 49.96 : 50,
+        },
       };
     };
     const tokens = (r: GetDesignContextResult) => estimateResultTokens(JSON.stringify(r));
