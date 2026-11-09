@@ -40,6 +40,12 @@ export const saveScreenshotsTool: ToolSpec = {
   // No sandbox handler of its own; its plugin arguments are recorded under the tool it reuses.
   serverOnlyArgs: null,
 };
+/**
+ * The only extensions this tool will write, keyed by every format `get_screenshot` can answer with.
+ * It is a closed allow-list, not a convenience lookup: a format absent here is never written (see
+ * writeScreenshots), which is what keeps a plugin-supplied `format` string out of the filesystem
+ * path. Keep its keys in step with `SCREENSHOT_FORMATS` — a new export format is added to both.
+ */
 const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
 
 /** Map a Figma node id (e.g. "1:2") to a filesystem-safe basename, blocking path traversal. */
@@ -63,8 +69,16 @@ export const writeScreenshots = async (
         ...(img.recovered === true ? { recovered: true as const } : {}),
       };
       const payload = binaryPayload(img);
-      if (payload === null) return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
-      const ext = EXTENSIONS[img.format] ?? img.format.toLowerCase();
+      // `format` is echoed from the plugin's reply and the result is cast, never re-parsed on the
+      // wire, so it is not trusted to build a path: a value outside the known set could carry path
+      // separators and land the write outside outDir. The extension therefore comes only from this
+      // fixed table, never from `format` itself. A real export is unaffected — get_screenshot clamps
+      // its answer to SCREENSHOT_FORMATS (PNG / JPG / SVG), the exact keys here — and anything else
+      // is reported non-exportable, the same path:null a missing node already returns.
+      const ext = EXTENSIONS[img.format];
+      if (payload === null || ext === undefined) {
+        return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
+      }
       const path = join(dir, `${sanitize(img.nodeId)}.${ext}`);
       await writeFile(path, payload);
       return { nodeId: img.nodeId, format: img.format, path, ...flags };

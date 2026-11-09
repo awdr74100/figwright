@@ -76,6 +76,29 @@ describe('writeScreenshots', () => {
     await expect(readFile(join(dir, '9-9.png'))).rejects.toThrow(/ENOENT/);
   });
 
+  it('never lets a format string escape outDir, and writes nothing for it', async () => {
+    const base = await makeDir();
+    const dir = join(base, 'nested', 'shots');
+    // `format` is echoed from the plugin reply and never re-validated on the wire. A hijacked or
+    // buggy reply could put path separators here; it must not steer the write out of outDir. With
+    // outDir two levels under `base`, this climbs past both into `base` itself — the prior code,
+    // which fell back to the raw format as the extension, would have written the bytes to
+    // `base/pwned`.
+    const escape = join('..', '..', '..', '..', 'pwned');
+    const result = await writeScreenshots(dir, [{ nodeId: '1:1', format: escape, base64: 'AAAA' }]);
+
+    expect(result.saved).toEqual([{ nodeId: '1:1', format: escape, path: null }]);
+    // Nothing landed at the ancestor the traversal aimed at, nor anywhere in outDir.
+    await expect(readFile(join(base, 'pwned'))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('treats an unknown-but-benign format as non-exportable (path null, no write)', async () => {
+    const dir = await makeDir();
+    const result = await writeScreenshots(dir, [{ nodeId: '1:1', format: 'WEBP', base64: 'AAAA' }]);
+    expect(result.saved).toEqual([{ nodeId: '1:1', format: 'WEBP', path: null }]);
+    await expect(readFile(join(dir, '1-1.webp'))).rejects.toThrow(/ENOENT/);
+  });
+
   it('passes the empty flag through (file still written, but flagged blank)', async () => {
     const dir = await makeDir();
     const result = await writeScreenshots(dir, [
