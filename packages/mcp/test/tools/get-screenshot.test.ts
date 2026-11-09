@@ -52,6 +52,20 @@ describe('screenshotContent', () => {
     expect(blocks[0]).toEqual({ type: 'text', text: `1:3 (SVG):\n${svg}` });
   });
 
+  it('does not treat an inherited-property format name as a raster mime type', () => {
+    // `format` is echoed from the plugin reply and never re-parsed. The mime lookup is a Map, so an
+    // inherited key resolves to undefined and the block degrades to text — a plain object would
+    // answer `__proto__` with a prototype value and ship it as an image block's mimeType.
+    const result: GetScreenshotResult = {
+      images: [
+        { nodeId: '1:1', format: '__proto__', base64: Buffer.from('hi').toString('base64') },
+      ],
+    };
+    const blocks = screenshotContent(result);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual({ type: 'text', text: '1:1 (__proto__):\nhi' });
+  });
+
   it('notes missing / non-exportable nodes as text', () => {
     const result: GetScreenshotResult = {
       images: [{ nodeId: '9:9', format: 'PNG', base64: null }],

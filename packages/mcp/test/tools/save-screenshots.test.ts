@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,6 +13,7 @@ import {
   handleSaveScreenshots,
   SAVE_SCREENSHOTS_TOOL_NAME,
   saveScreenshotsTool,
+  type ScreenshotRequest,
   type ToolDispatcher,
   writeScreenshots,
 } from '../../src/tools/save-screenshots.js';
@@ -52,35 +53,118 @@ describe('save_screenshots — definition', () => {
 });
 
 describe('writeScreenshots', () => {
-  it('writes each image to a sanitized filename and creates missing dirs', async () => {
+  const asked = (format: ScreenshotRequest['format'], ...nodeIds: string[]): ScreenshotRequest => ({
+    nodeIds,
+    format,
+  });
+
+  it('writes each requested image to a sanitized filename and creates missing dirs', async () => {
     const base = await makeDir();
     const dir = join(base, 'nested', 'shots');
     const images: ScreenshotImage[] = [
       { nodeId: '1:1', format: 'PNG', base64: 'AAAA' },
-      { nodeId: '2:3', format: 'SVG', base64: 'BBBB' },
+      { nodeId: '2:3', format: 'PNG', base64: 'BBBB' },
     ];
-    const result = await writeScreenshots(dir, images);
+    const result = await writeScreenshots(dir, images, asked('PNG', '1:1', '2:3'));
 
     expect(result.saved).toEqual([
       { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png') },
-      { nodeId: '2:3', format: 'SVG', path: join(dir, '2-3.svg') },
+      { nodeId: '2:3', format: 'PNG', path: join(dir, '2-3.png') },
     ]);
     expect((await readFile(join(dir, '1-1.png'))).toString('base64')).toBe('AAAA');
-    expect((await readFile(join(dir, '2-3.svg'))).toString('base64')).toBe('BBBB');
+    expect((await readFile(join(dir, '2-3.png'))).toString('base64')).toBe('BBBB');
+  });
+
+  it.each([
+    ['JPG', 'jpg'],
+    ['SVG', 'svg'],
+  ] as const)('names a %s export with the .%s extension', async (format, ext) => {
+    const dir = await makeDir();
+    const result = await writeScreenshots(
+      dir,
+      [{ nodeId: '2:3', format, base64: 'BBBB' }],
+      asked(format, '2:3'),
+    );
+    expect(result.saved).toEqual([{ nodeId: '2:3', format, path: join(dir, `2-3.${ext}`) }]);
+    expect((await readFile(join(dir, `2-3.${ext}`))).toString('base64')).toBe('BBBB');
   });
 
   it('returns path null for non-exportable nodes without writing', async () => {
     const dir = await makeDir();
-    const result = await writeScreenshots(dir, [{ nodeId: '9:9', format: 'PNG', base64: null }]);
+    const result = await writeScreenshots(
+      dir,
+      [{ nodeId: '9:9', format: 'PNG', base64: null }],
+      asked('PNG', '9:9'),
+    );
     expect(result.saved).toEqual([{ nodeId: '9:9', format: 'PNG', path: null }]);
     await expect(readFile(join(dir, '9-9.png'))).rejects.toThrow(/ENOENT/);
   });
 
+  // The reply is cast, never re-parsed on the wire, so everything below is a reply a real plugin
+  // never sends — and none of it may choose where a file lands or what it is called.
+
+  it('never lets a format string escape outDir, and writes nothing for it', async () => {
+    const base = await makeDir();
+    const dir = join(base, 'nested', 'shots');
+    // With outDir two levels under `base`, this climbs past both into `base` itself — the prior
+    // code, which fell back to the raw format as the extension, wrote the bytes to `base/pwned`.
+    const escape = join('..', '..', '..', '..', 'pwned');
+    const result = await writeScreenshots(
+      dir,
+      [{ nodeId: '1:1', format: escape, base64: 'AAAA' }],
+      asked('PNG', '1:1'),
+    );
+
+    expect(result.saved).toEqual([{ nodeId: '1:1', format: escape, path: null }]);
+    await expect(readFile(join(base, 'pwned'))).rejects.toThrow(/ENOENT/);
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it.each(['SVG', 'JPG', 'WEBP', '__proto__', 'constructor'])(
+    'writes nothing when the reply claims %s for a PNG request',
+    async format => {
+      // A different known format would otherwise put an SVG — markup that can carry script — where
+      // a PNG was asked for; an unknown or inherited name has no extension at all.
+      const dir = await makeDir();
+      const result = await writeScreenshots(
+        dir,
+        [{ nodeId: '1:1', format, base64: 'AAAA' }],
+        asked('PNG', '1:1'),
+      );
+      expect(result.saved).toEqual([{ nodeId: '1:1', format, path: null }]);
+      expect(await readdir(dir)).toEqual([]);
+    },
+  );
+
+  it('never writes a node that was not requested, so no other file in outDir is overwritten', async () => {
+    const dir = await makeDir();
+    await writeFile(join(dir, 'logo.png'), 'original');
+    const result = await writeScreenshots(
+      dir,
+      [
+        { nodeId: '1:1', format: 'PNG', base64: 'AAAA' },
+        { nodeId: 'logo', format: 'PNG', base64: 'BBBB' },
+        { nodeId: '__proto__', format: 'PNG', base64: 'CCCC' },
+      ],
+      asked('PNG', '1:1'),
+    );
+
+    expect(result.saved).toEqual([
+      { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png') },
+      { nodeId: 'logo', format: 'PNG', path: null },
+      { nodeId: '__proto__', format: 'PNG', path: null },
+    ]);
+    expect(await readFile(join(dir, 'logo.png'), 'utf8')).toBe('original');
+    expect((await readdir(dir)).toSorted()).toEqual(['1-1.png', 'logo.png']);
+  });
+
   it('passes the empty flag through (file still written, but flagged blank)', async () => {
     const dir = await makeDir();
-    const result = await writeScreenshots(dir, [
-      { nodeId: '1:1', format: 'PNG', base64: 'AAAA', empty: true },
-    ]);
+    const result = await writeScreenshots(
+      dir,
+      [{ nodeId: '1:1', format: 'PNG', base64: 'AAAA', empty: true }],
+      asked('PNG', '1:1'),
+    );
     expect(result.saved).toEqual([
       { nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png'), empty: true },
     ]);
@@ -104,10 +188,12 @@ describe('handleSaveScreenshots', () => {
     })) as SaveScreenshotsResult;
 
     // scale:1 is always forwarded explicitly — an omitted scale would make get_screenshot auto-fit
-    // the raster for model consumption, but files on disk are user artifacts and stay full-res.
+    // the raster for model consumption, but files on disk are user artifacts and stay full-res. The
+    // default format is explicit too: files are named from this request, so it must not rest on the
+    // plugin's own default agreeing.
     expect(dispatched).toEqual({
       tool: 'get_screenshot',
-      args: { binary: true, nodeIds: ['1:1'], scale: 1 },
+      args: { binary: true, nodeIds: ['1:1'], format: 'PNG', scale: 1 },
     });
     expect(result.saved[0]).toEqual({ nodeId: '1:1', format: 'PNG', path: join(dir, '1-1.png') });
     expect((await readFile(join(dir, '1-1.png'))).toString('base64')).toBe('AAAA');

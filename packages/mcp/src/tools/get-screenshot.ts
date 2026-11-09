@@ -53,7 +53,14 @@ export type ScreenshotContent =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string };
 
-const RASTER_MIME: Partial<Record<string, string>> = { PNG: 'image/png', JPG: 'image/jpeg' };
+// A Map, not a plain object: `img.format` is echoed from the plugin reply and never re-parsed, so
+// an inherited key like `__proto__` or `constructor` would make a plain-object lookup return a
+// prototype value rather than undefined, and the `=== undefined` branch below would then ship it as
+// an image block's mimeType. `Map.get` returns undefined for anything not explicitly set.
+const RASTER_MIME = new Map<string, string>([
+  ['PNG', 'image/png'],
+  ['JPG', 'image/jpeg'],
+]);
 
 /**
  * How many bytes of inlined payload one result may carry.
@@ -127,7 +134,7 @@ export const screenshotContent = (
       img.width !== undefined && img.height !== undefined
         ? ` ${img.width}×${img.height}px${img.scale !== undefined ? ` @${img.scale}x` : ''}`
         : '';
-    const mimeType = RASTER_MIME[img.format];
+    const mimeType = RASTER_MIME.get(img.format);
     // SVG carries its payload in the label block itself; rasters split into label + image. Either
     // way the label is emitted unconditionally and only the payload is subject to the budget.
     const payload: ScreenshotContent =

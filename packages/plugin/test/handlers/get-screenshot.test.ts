@@ -96,6 +96,38 @@ describe('get_screenshot handler', () => {
     expect(calls[0]).toEqual({ format: 'SVG' });
   });
 
+  // save_screenshots names every file from its own request and writes an image only when the image
+  // carries a requested id and the requested format. This is the contract that makes that safe for
+  // real exports: break it and saves silently come back path:null.
+  it.each(['PNG', 'JPG', 'SVG'] as const)(
+    'answers each requested id verbatim, in order, with the requested %s, in every branch',
+    async format => {
+      const calls: ExportCall[] = [];
+      // The node Figma returns reports a different id than the one asked for — the answer must
+      // carry the requested string, not node.id.
+      const aliased = { ...exportable('9:9', calls) } as unknown as BaseNode;
+      const clipped = {
+        id: '2:2',
+        visible: true,
+        absoluteRenderBounds: null,
+        absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 },
+        exportAsync: async () => new Uint8Array([9]),
+      } as unknown as BaseNode;
+      const handler = createGetScreenshotHandler(
+        fakeFigma({ 'I1:2;3:4': aliased, '1:1': exportable('1:1', calls), '2:2': clipped }, calls),
+      );
+      const requested = ['I1:2;3:4', 'missing', '1:1', '2:2'];
+      const result = (await handler({
+        nodeIds: requested,
+        format,
+        binary: true,
+      })) as GetScreenshotResult;
+
+      expect(result.images.map(i => i.nodeId)).toEqual(requested);
+      expect(result.images.map(i => i.format)).toEqual(requested.map(() => format));
+    },
+  );
+
   it('returns null base64 for missing or non-exportable nodes', async () => {
     const handler = createGetScreenshotHandler(
       fakeFigma({ '1:9': null, '1:8': { id: '1:8' } as unknown as BaseNode }),
