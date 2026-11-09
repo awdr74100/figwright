@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -32,7 +33,8 @@ export const saveImageFillsTool: ToolSpec = {
     'mixed? }] }. index is the fill position in node.fills; width/height are the image intrinsic size; ' +
     'scaleMode is how the fill is displayed (FILL / FIT / CROP / TILE); format is sniffed from the ' +
     'bytes (PNG / JPG / GIF / WEBP, or BIN if unrecognized). Identical images (same imageHash reused ' +
-    'across nodes) are fetched once and share one file named by hash. path is null when the fill image ' +
+    'across nodes) are fetched once and share one file, named by the SHA-1 of its bytes — which is ' +
+    'the imageHash Figma reports for it. path is null when the fill image ' +
     "can't be resolved; images:[] means the node has no image fill; mixed:true means the node's fills " +
     'are per-text-range and were not enumerated. For a rendered/composited raster use save_screenshots; ' +
     'for a vector node use export_pdf.',
@@ -76,8 +78,23 @@ export const detectImageFormat = (bytes: Buffer): { format: string; ext: string 
   return { format: 'BIN', ext: 'bin' };
 };
 
-/** Map a Figma image hash to a filesystem-safe basename, blocking path traversal. */
-const sanitize = (hash: string): string => hash.replace(/[^\w.-]/g, '-');
+/**
+ * The name a file is written under: the SHA-1 of its own bytes, computed here.
+ *
+ * Not the reply's `imageHash`. The reply is cast, not re-parsed on the wire, so that string is
+ * untrusted, and taken as the name it lets a reply choose which file in outDir to write — `logo`
+ * overwrites `logo.png` — where sanitising it only kept it inside outDir. A name derived from the
+ * bytes cannot be aimed: replacing a file written from a real image would take a SHA-1 second
+ * preimage of it. (A collision pair lets a reply overwrite one of its own files with the other,
+ * which is no more than choosing its own bytes in the first place.)
+ *
+ * It is the same name for every real image. Figma's imageHash is the SHA-1 of the bytes
+ * `getBytesAsync` returns — measured for PNG, JPG and GIF created through the plugin API, a repeat
+ * of the same bytes, two encodings of the same pixels (two hashes), and images dropped onto the
+ * canvas, including one Figma downscaled from 6000px and re-encoded on import, whose hash is that
+ * of the stored bytes, not the original's.
+ */
+const contentName = (bytes: Buffer): string => createHash('sha1').update(bytes).digest('hex');
 
 /** Carry the identifying/display fields through from the plugin result to the write result. */
 const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'format' | 'path'> => ({
@@ -90,26 +107,34 @@ const carry = (img: NodeImageFills['images'][number]): Omit<SavedImageFill, 'for
 
 /**
  * Land the original image-fill bytes as files under outDir (created if missing). Files are named by
- * imageHash so an asset reused across many nodes is written exactly once; every usage still gets
- * its own result entry pointing at the shared path. Pure-fs and dispatch-free so it can be
- * unit-tested against a temp directory.
+ * the SHA-1 of their bytes (see contentName) so an asset reused across many nodes is written
+ * exactly once; every usage still gets its own result entry pointing at the shared path. Pure-fs
+ * and dispatch-free so it can be unit-tested against a temp directory.
+ *
+ * Only a node that was asked for is written: the plugin answers each requested id with that id, in
+ * every build, so an entry for any other node is reported unresolved (path: null) rather than
+ * landing files nobody requested.
  */
 export const writeImageFills = async (
   outDir: string,
   nodes: readonly NodeImageFills[],
+  requestedNodeIds: readonly string[],
 ): Promise<SaveImageFillsResult> => {
   const dir = resolve(outDir);
   await mkdir(dir, { recursive: true });
+  const requested = new Set(requestedNodeIds);
 
-  // Dedup writes by path: a hash reused across nodes maps to one file written once. Build the whole
-  // result (and the unique write set) first, then flush the files in parallel — no await in a loop.
+  // Dedup writes by path: an image reused across nodes maps to one file written once. Build the
+  // whole result (and the unique write set) first, then flush the files in parallel — no await in a
+  // loop.
   const toWrite = new Map<string, Buffer>();
   const outNodes: SavedNodeImageFills[] = nodes.map(node => {
+    const asked = requested.has(node.nodeId);
     const images: SavedImageFill[] = node.images.map(img => {
       const buf = binaryPayload(img);
-      if (buf === null || img.imageHash === null) return { ...carry(img), path: null };
+      if (buf === null || img.imageHash === null || !asked) return { ...carry(img), path: null };
       const { format, ext } = detectImageFormat(buf);
-      const path = join(dir, `${sanitize(img.imageHash)}.${ext}`);
+      const path = join(dir, `${contentName(buf)}.${ext}`);
       if (!toWrite.has(path)) toWrite.set(path, buf);
       return { ...carry(img), format, path };
     });
@@ -136,5 +161,5 @@ export const handleSaveImageFills = async (
     binary: true,
     nodeIds: args.nodeIds,
   })) as ImageFillsResult;
-  return writeImageFills(args.outDir, nodes);
+  return writeImageFills(args.outDir, nodes, args.nodeIds);
 };
