@@ -47,6 +47,21 @@ describe('dispatchSandboxMessage', () => {
     expect(log).toHaveBeenCalled();
   });
 
+  it.each(['__proto__', 'constructor', 'toString', 'valueOf', 'hasOwnProperty'])(
+    'replies METHOD_NOT_FOUND for the inherited property name %s, never running it',
+    async method => {
+      // The handler table is a plain object, so indexing it by a name it does not own reaches
+      // Object.prototype: `constructor` would run `Object(params)` and answer ok.
+      const handlers: SandboxHandlers = { ping: () => ({ pong: true }) };
+      const raw = createToolCall({ id: 'p', method });
+      const outcome = await dispatchSandboxMessage({ raw, handlers, editorType: 'figma' });
+      expect(outcome).toMatchObject({
+        kind: 'reply',
+        reply: { kind: 'tool-error', code: ErrorCode.MethodNotFound },
+      });
+    },
+  );
+
   it('replies INTERNAL_ERROR when handler throws', async () => {
     const handlers: SandboxHandlers = {
       boom: () => {

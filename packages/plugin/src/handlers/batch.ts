@@ -1,6 +1,7 @@
 import type { BatchResult, FlowStartingPoint } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
+import { ownValue } from '../own-value.js';
 import {
   captureOverrideGuard,
   type InstanceGuard,
@@ -2216,8 +2217,11 @@ const parseOps = (params: unknown): ParsedOp[] => {
   return ops.map((op, i) => {
     const o = op as { tool?: unknown; params?: unknown } | null;
     if (typeof o?.tool !== 'string') throw new TypeError(`batch: ops[${i}].tool must be a string`);
-    if (INVERSES[o.tool] === undefined) {
-      const why = NON_BATCHABLE[o.tool] ?? 'only write tools can be batched';
+    // Own keys only, in both tables: an inherited name (`constructor`, `__proto__`) is neither
+    // undefined nor an inverse, and would otherwise pass here and fail later, mid-capture. Every
+    // later INVERSES[op.tool] lookup relies on this having admitted only the table's own names.
+    if (ownValue(INVERSES, o.tool) === undefined) {
+      const why = ownValue(NON_BATCHABLE, o.tool) ?? 'only write tools can be batched';
       throw new Error(`batch: op '${o.tool}' (index ${i}) is not batchable — ${why}`);
     }
     return { tool: o.tool, params: o.params ?? {} };
@@ -2317,7 +2321,9 @@ export const createBatchHandler =
   async params => {
     const ops = parseOps(params);
     for (const op of ops) {
-      if (apply[op.tool] === undefined) throw new Error(`batch: no handler for op '${op.tool}'`);
+      if (ownValue(apply, op.tool) === undefined) {
+        throw new Error(`batch: no handler for op '${op.tool}'`);
+      }
     }
     await refuseEmptiedContainers(figmaCtx, ops);
 
