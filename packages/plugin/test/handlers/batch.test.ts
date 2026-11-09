@@ -376,6 +376,28 @@ describe('batch handler', () => {
     expect(store.get('1:1')).toMatchObject({ name: 'A' }); // untouched
   });
 
+  it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
+    'rejects the inherited property name %s as an op tool at validate time, mutating nothing',
+    async tool => {
+      // The op table is a plain object: indexed by a name it does not own, it reaches
+      // Object.prototype, which is neither undefined nor an inverse.
+      const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', name: 'A' } });
+      const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));
+
+      await expect(
+        handler({
+          ops: [
+            { tool: 'rename_node', params: { nodeId: '1:1', name: 'renamed' } },
+            { tool, params: {} },
+          ],
+        }),
+      ).rejects.toThrow(
+        `batch: op '${tool}' (index 1) is not batchable — only write tools can be batched`,
+      );
+      expect(store.get('1:1')).toMatchObject({ name: 'A' }); // first op never applied
+    },
+  );
+
   it('rejects create_component with fromNodeId (no faithful inverse) at validate time', async () => {
     const { figmaCtx, store } = makeFigma({ '1:1': { id: '1:1', type: 'FRAME', name: 'A' } });
     const handler = createBatchHandler(figmaCtx, realWrites(figmaCtx));

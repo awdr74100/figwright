@@ -1,6 +1,7 @@
 import type { MutateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { ownValue } from '../own-value.js';
 
 /**
  * Figma Draw strokes: a brush, a dynamic (hand-drawn) stroke, a width that varies along the path.
@@ -51,7 +52,9 @@ const PRESETS = new Set(['UNIFORM', 'WEDGE', 'TAPER', 'QUARTER_TAPER', 'EYE', 'M
 export const toFigmaComplexStroke = (raw: unknown, tool: string): ComplexStrokeProperties => {
   const c = (raw ?? {}) as Record<string, unknown>;
   const kind = c.type === 'BRUSH' ? c.brushType : c.type;
-  const allowed = typeof kind === 'string' ? FIELDS[kind] : undefined;
+  // Own keys only: `kind` comes from the arguments, and an inherited name would otherwise return an
+  // Object.prototype member — spread below as if it listed fields, or taken for a brush kind.
+  const allowed = typeof kind === 'string' ? ownValue(FIELDS, kind) : undefined;
   if (allowed === undefined) {
     throw new TypeError(
       `${tool}: complexStrokeProperties needs type BASIC, DYNAMIC, or BRUSH with brushType ` +

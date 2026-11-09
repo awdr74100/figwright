@@ -8,6 +8,7 @@ import {
   type PluginToolResult,
 } from '../protocol/bridge.js';
 import { withEditorContext } from '../protocol/editor-context.js';
+import { ownValue } from './own-value.js';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
 export type SandboxHandlers = Record<string, SandboxToolHandler>;
@@ -73,7 +74,9 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
   if (input.raw.kind !== 'tool-call') return { kind: 'ignore' };
 
   const { id, method, params } = input.raw;
-  const handler = input.handlers[method];
+  // `method` arrives over the relay: an inherited name must not resolve to Object.prototype, where
+  // `constructor` would run `Object(params)` and answer ok for a method that does not exist.
+  const handler = ownValue(input.handlers, method);
   const log = input.log ?? ((): void => {});
 
   if (handler === undefined) {

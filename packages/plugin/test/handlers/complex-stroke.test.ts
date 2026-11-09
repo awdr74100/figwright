@@ -96,6 +96,14 @@ describe('set_complex_stroke handler', () => {
     ],
     [{ type: 'BASIC', wiggle: 1 }, 'wiggle does not apply to a BASIC stroke'],
     [{ type: 'BRUSH' }, 'needs type BASIC, DYNAMIC, or BRUSH with brushType'],
+    // Inherited property names are not stroke kinds: the field table is a plain object, and these
+    // must read as unknown rather than reaching Object.prototype.
+    [{ type: '__proto__' }, 'needs type BASIC, DYNAMIC, or BRUSH with brushType'],
+    [{ type: 'constructor' }, 'needs type BASIC, DYNAMIC, or BRUSH with brushType'],
+    [
+      { type: 'BRUSH', brushType: 'toString', brushName: 'NOIR' },
+      'needs type BASIC, DYNAMIC, or BRUSH with brushType',
+    ],
   ])('refuses %j before writing anything', async (complexStrokeProperties, message) => {
     const t = setup();
     await expect(run(t.ctx, { complexStrokeProperties })).rejects.toThrow(message);
