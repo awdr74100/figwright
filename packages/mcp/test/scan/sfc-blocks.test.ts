@@ -106,6 +106,17 @@ describe('scanSfcScripts — dialect', () => {
     // simply unread — the false claim propsExtracted exists to prevent.
     expect(vue('<script lang="coffee">a = 1</script>').blocks[0]?.lang).toBeNull();
   });
+
+  // The only Object.prototype members whose names survive the lowercasing the lookup applies first —
+  // `toString` arrives as `tostring`, which no table inherits.
+  it.each(['__proto__', 'constructor'])(
+    'reports the inherited property name %s as a dialect with no parser (null)',
+    lang => {
+      // The attribute comes from whatever repository is being scanned. A plain-object table would
+      // answer these with an Object.prototype member — not a dialect, and not null either.
+      expect(vue(`<script lang="${lang}">a = 1</script>`).blocks[0]?.lang).toBeNull();
+    },
+  );
 });
 
 describe('scanSfcScripts — external sources', () => {

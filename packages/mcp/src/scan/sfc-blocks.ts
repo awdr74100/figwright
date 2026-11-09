@@ -254,20 +254,24 @@ const skipElement = (src: string, from: number, name: string): { end: number; cl
 // Both Vue and Svelte spell TypeScript `ts`; `typescript` and `javascript` are accepted because
 // being forgiving here costs nothing — a lang we map wrong reads as a parse failure, which is the
 // conservative outcome anyway.
-const LANGS: Record<string, ScriptLang> = {
-  '': 'js',
-  js: 'js',
-  javascript: 'js',
-  jsx: 'jsx',
-  ts: 'ts',
-  tsx: 'tsx',
-  typescript: 'ts',
-};
+//
+// A Map, not a plain object: the attribute comes from whatever repository is being scanned, and a
+// plain object answers `__proto__` or `constructor` with an Object.prototype member — neither a
+// dialect nor null.
+const LANGS = new Map<string, ScriptLang>([
+  ['', 'js'],
+  ['js', 'js'],
+  ['javascript', 'js'],
+  ['jsx', 'jsx'],
+  ['ts', 'ts'],
+  ['tsx', 'tsx'],
+  ['typescript', 'ts'],
+]);
 
 const langOf = (attrs: Map<string, string>): ScriptLang | null => {
   const raw = attrs.get('lang');
   if (raw === undefined) return 'js';
-  return LANGS[raw.trim().toLowerCase()] ?? null;
+  return LANGS.get(raw.trim().toLowerCase()) ?? null;
 };
 
 /**
