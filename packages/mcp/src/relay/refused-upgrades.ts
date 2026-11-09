@@ -50,6 +50,12 @@ export class RefusedUpgradeLog {
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 const isNullableString = (v: unknown): v is string | null => v === null || typeof v === 'string';
+/**
+ * A number a Date can represent. typeof alone admits Infinity (JSON.parse reads 1e400 as it) and
+ * values past ±8.64e15, both of which make toISOString throw.
+ */
+const isEpochMs = (v: unknown): v is number =>
+  typeof v === 'number' && !Number.isNaN(new Date(v).getTime());
 const REASONS: ReadonlySet<unknown> = new Set<RefusalReason>(['host', 'origin', 'user-agent']);
 
 /**
@@ -65,7 +71,7 @@ export const parseRefusedUpgrades = (value: unknown): RefusedUpgrades | undefine
   if (r.last !== null) {
     if (typeof r.last !== 'object' || r.last === undefined) return undefined;
     const l = r.last as Record<string, unknown>;
-    if (!REASONS.has(l.reason) || typeof l.at !== 'number') return undefined;
+    if (!REASONS.has(l.reason) || !isEpochMs(l.at)) return undefined;
     if (!isNullableString(l.origin) || !isNullableString(l.userAgent)) return undefined;
     last = {
       reason: l.reason as RefusalReason,

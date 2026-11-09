@@ -91,6 +91,21 @@ describe('parseRefusedUpgrades', () => {
     expect(parseRefusedUpgrades({ ...valid, last: null })).toEqual({ ...valid, last: null });
   });
 
+  it('ignores a timestamp no Date can render, so the notice built from it cannot throw', () => {
+    // JSON.parse turns 1e400 into Infinity, and 1e16 is past the last representable Date; either
+    // would make toISOString throw RangeError inside a follower's ping.
+    for (const at of [Infinity, -Infinity, 1e16, -1e16]) {
+      expect(parseRefusedUpgrades({ ...valid, last: { ...valid.last, at } })).toBeUndefined();
+    }
+    const parsed = parseRefusedUpgrades(
+      JSON.parse(
+        '{"host":0,"origin":0,"userAgent":1,"last":{"reason":"user-agent","at":1e400,"origin":null,"userAgent":null}}',
+      ),
+    );
+    expect(parsed).toBeUndefined();
+    expect(() => userAgentRefusalNotice(parsed ?? null)).not.toThrow();
+  });
+
   it('ignores an absent or malformed field rather than doubting the leader', () => {
     expect(parseRefusedUpgrades(undefined)).toBeUndefined();
     expect(parseRefusedUpgrades(null)).toBeUndefined();
