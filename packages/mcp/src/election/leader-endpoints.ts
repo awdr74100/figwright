@@ -9,7 +9,12 @@ import {
 } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
-import { hasContentType, isAllowedHost, isAllowedHttpOrigin } from '../local-access.js';
+import {
+  hasContentType,
+  isAccessGateLifted,
+  isAllowedHost,
+  isAllowedHttpOrigin,
+} from '../local-access.js';
 import { PluginReplyError, type Relay } from '../relay/relay.js';
 import { checkWireCall, type WireRejection } from '../tools/wire-schema.js';
 
@@ -128,6 +133,7 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'GET' && req.url === PING_PATH) {
+      const refused = relay.refusedUpgrades();
       writeJson(res, 200, {
         ok: true,
         serverVersion,
@@ -142,6 +148,12 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         // of its own. `plugins` above is this list's length and stays for older followers, which
         // read it and would not know what to do with this.
         sessions: relay.listSessionInfo(),
+        // Only the leader turns plugin connections away, so a follower's ping learns of refusals
+        // here. Omitted when there were none, so a clean /ping is unchanged.
+        ...(refused === null ? {} : { refusedConnections: refused }),
+        // The leader is the process that enforces the origin and User-Agent checks, so whether
+        // they are lifted is its setting, not a follower's. Present only when lifted.
+        ...(isAccessGateLifted() ? { accessChecksLifted: true } : {}),
       });
       return;
     }

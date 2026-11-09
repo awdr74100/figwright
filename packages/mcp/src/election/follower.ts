@@ -7,6 +7,7 @@ import {
 } from '@figwright/shared';
 import { decode, encode } from '@msgpack/msgpack';
 
+import { parseRefusedUpgrades, type RefusedUpgrades } from '../relay/refused-upgrades.js';
 import type { PluginSessionInfo } from '../routing/sessions.js';
 import { ABDICATE_PATH, PING_PATH, RPC_PATH } from './leader-endpoints.js';
 
@@ -32,6 +33,18 @@ export interface LeaderInfo {
   serverVersion: string;
   /** Build stamp of the leader's bundle; undefined on leaders that predate build ids. */
   buildId: number | undefined;
+  /**
+   * Plugin connections the leader turned away; undefined when there were none, on a leader that
+   * predates the field, or when it is malformed. Only the leader holds the relay, so this is how a
+   * follower's ping can say a plugin is being refused.
+   */
+  refusedConnections?: RefusedUpgrades;
+  /**
+   * True when the leader runs with its origin and User-Agent checks lifted
+   * (FIGWRIGHT_ALLOW_ANY_ORIGIN=1). Absent when they are on — and on a leader that predates the
+   * field, so absence means "not reported as lifted", never "known to be on".
+   */
+  accessChecksLifted?: true;
 }
 
 /**
@@ -119,9 +132,12 @@ export class Follower {
     if (body === undefined || body.ok !== true || typeof body.serverVersion !== 'string') {
       return undefined;
     }
+    const refusedConnections = parseRefusedUpgrades(body.refusedConnections);
     return {
       serverVersion: body.serverVersion,
       buildId: typeof body.buildId === 'number' ? body.buildId : undefined,
+      ...(refusedConnections === undefined ? {} : { refusedConnections }),
+      ...(body.accessChecksLifted === true ? { accessChecksLifted: true as const } : {}),
     };
   }
 

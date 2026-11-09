@@ -158,11 +158,45 @@ describe('leader endpoints', () => {
     expect(body.ok).toBe(true);
     expect(body.serverVersion).toBe('1.0.0');
     expect(body.plugins).toBe(0);
+    // Nothing refused: the field is absent, so a clean /ping is unchanged.
+    expect(body).not.toHaveProperty('refusedConnections');
 
     await attachFakePlugin(b, async () => ({ noop: true }));
     const res2 = await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`);
     const body2 = (await res2.json()) as { plugins: number };
     expect(body2.plugins).toBe(1);
+  });
+
+  it('GET /ping reports lifted access checks only while they are lifted', async () => {
+    const b = await startLeader();
+    const read = async () =>
+      (await (await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`)).json()) as Record<
+        string,
+        unknown
+      >;
+    expect(await read()).not.toHaveProperty('accessChecksLifted');
+    process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN = '1';
+    try {
+      expect((await read()).accessChecksLifted).toBe(true);
+    } finally {
+      delete process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN;
+    }
+    expect(await read()).not.toHaveProperty('accessChecksLifted');
+  });
+
+  it('GET /ping reports refused plugin connections once there are some', async () => {
+    const b = await startLeader();
+    await new Promise<void>(resolve => {
+      const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+        headers: { origin: 'null', 'user-agent': 'Mozilla/5.0 Chrome/157.0.0.0 Safari/537.36' },
+      });
+      ws.once('unexpected-response', () => resolve());
+      ws.once('error', () => resolve());
+    });
+    const body = (await (await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`)).json()) as {
+      refusedConnections?: unknown;
+    };
+    expect(body.refusedConnections).toMatchObject({ host: 0, origin: 0, userAgent: 1 });
   });
 
   it('GET /ping exposes activeSessionId for follower-side pin resolution', async () => {

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { dispatchTargeted } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
+import { isAccessGateLifted } from '../local-access.js';
+import { type RefusedUpgrades, userAgentRefusalNotice } from '../relay/refused-upgrades.js';
 import { getFileTarget } from '../routing/target.js';
 import type { ToolSpec } from './spec.js';
 
@@ -102,7 +104,56 @@ export interface PingResult {
   sessions?: PingSessionsInfo;
   plugin: unknown | null;
   dispatchError?: string;
+  /**
+   * Plugin connections the leader refused since it started, by reason with the latest. Absent when
+   * there were none, so a clean ping is unchanged.
+   */
+  refusedConnections?: RefusedUpgrades;
+  /**
+   * Present when some of those were refused for not coming from the Figma desktop app — the one
+   * reason that could be a real plugin — saying what, if anything, to do about it.
+   */
+  refusedConnectionsNotice?: string;
+  /**
+   * True when the process enforcing the checks — the leader — runs with them lifted
+   * (FIGWRIGHT_ALLOW_ANY_ORIGIN=1). Absent otherwise, so a normal ping is unchanged.
+   */
+  accessChecksLifted?: true;
+  /** Present with `accessChecksLifted`: what that means and when to undo it. */
+  accessChecksNotice?: string;
 }
+
+const ACCESS_CHECKS_LIFTED_NOTICE =
+  'FIGWRIGHT_ALLOW_ANY_ORIGIN=1 is set on the server holding port 3055, so its origin and ' +
+  'User-Agent checks are off and a web page can pose as the Figma plugin. If it was set because ' +
+  'the plugin was being refused, remove it once the plugin connects without it.';
+
+/**
+ * Marks the result when the checks are lifted. `lifted` is the enforcing process's state — the
+ * leader's own setting on the leader path, the leader's report on a follower — never a follower's
+ * own variable, which enforces nothing.
+ */
+const withAccessState = (result: PingResult, lifted: boolean): PingResult =>
+  lifted
+    ? { ...result, accessChecksLifted: true, accessChecksNotice: ACCESS_CHECKS_LIFTED_NOTICE }
+    : result;
+
+/**
+ * Adds the leader's refusals, and the guidance when they could be a real plugin, when there are
+ * any.
+ */
+const withRefusals = (
+  result: PingResult,
+  refused: RefusedUpgrades | null | undefined,
+): PingResult => {
+  if (refused === null || refused === undefined) return result;
+  const notice = userAgentRefusalNotice(refused);
+  return {
+    ...result,
+    refusedConnections: refused,
+    ...(notice === null ? {} : { refusedConnectionsNotice: notice }),
+  };
+};
 
 export interface PingContext {
   node: Node;
@@ -141,9 +192,13 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const relay = ctx.node.isLeader() ? ctx.node.getLeader()?.relay : undefined;
 
   if (relay !== undefined) {
+    const refused = relay.refusedUpgrades();
+    // This process is the leader, so its own setting is the one in force.
+    const finish = (result: PingResult): PingResult =>
+      withAccessState(withRefusals(result, refused), isAccessGateLifted());
     const connected = relay.sessions.connected();
     if (connected.length === 0) {
-      return {
+      return finish({
         ok: true,
         hop: 'server-only',
         server,
@@ -157,7 +212,7 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
           all: [],
         },
         plugin: null,
-      };
+      });
     }
     const routed = relay.pickActiveSession();
     const all: PingSessionInfo[] = connected
@@ -192,11 +247,18 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       // No skew warning in here on purpose: every tool result already carries one when it applies,
       // ping included, and repeating the same paragraph inside the payload it is appended to reads
       // as two separate problems. `pluginVersion` above is the fact; the warning is the prose.
-      return { ok: true, hop: 'e2e', server, sessions, plugin };
+      return finish({ ok: true, hop: 'e2e', server, sessions, plugin });
     } catch (err) {
       const dispatchError = err instanceof Error ? err.message : String(err);
       ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
-      return { ok: true, hop: 'server-only', server, sessions, plugin: null, dispatchError };
+      return finish({
+        ok: true,
+        hop: 'server-only',
+        server,
+        sessions,
+        plugin: null,
+        dispatchError,
+      });
     }
   }
 
@@ -229,6 +291,13 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
               }),
         };
 
+  // The leader enforces, so its report is the state in force; this process's own variable is not.
+  const finish = (result: PingResult): PingResult =>
+    withAccessState(
+      withRefusals(result, leader?.refusedConnections),
+      leader?.accessChecksLifted === true,
+    );
+
   try {
     const plugin = await dispatchTargeted(
       {
@@ -239,11 +308,17 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       'ping',
       {},
     );
-    return { ok: true, hop: 'e2e', server: followerServer, plugin };
+    return finish({ ok: true, hop: 'e2e', server: followerServer, plugin });
   } catch (err) {
     const dispatchError = err instanceof Error ? err.message : String(err);
     ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
-    return { ok: true, hop: 'server-only', server: followerServer, plugin: null, dispatchError };
+    return finish({
+      ok: true,
+      hop: 'server-only',
+      server: followerServer,
+      plugin: null,
+      dispatchError,
+    });
   }
 };
 
