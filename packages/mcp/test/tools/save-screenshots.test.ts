@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -97,6 +97,22 @@ describe('writeScreenshots', () => {
     const result = await writeScreenshots(dir, [{ nodeId: '1:1', format: 'WEBP', base64: 'AAAA' }]);
     expect(result.saved).toEqual([{ nodeId: '1:1', format: 'WEBP', path: null }]);
     await expect(readFile(join(dir, '1-1.webp'))).rejects.toThrow(/ENOENT/);
+  });
+
+  it('treats an inherited-property format name as non-exportable, writing nothing', async () => {
+    const dir = await makeDir();
+    // The extension table is a Map, so these resolve to undefined. A plain object would answer
+    // `__proto__` / `constructor` with a prototype value, slip past the guard, and write a file.
+    const result = await writeScreenshots(dir, [
+      { nodeId: '1:1', format: '__proto__', base64: 'AAAA' },
+      { nodeId: '2:2', format: 'constructor', base64: 'BBBB' },
+    ]);
+    expect(result.saved).toEqual([
+      { nodeId: '1:1', format: '__proto__', path: null },
+      { nodeId: '2:2', format: 'constructor', path: null },
+    ]);
+    const entries = await readdir(dir);
+    expect(entries).toEqual([]);
   });
 
   it('passes the empty flag through (file still written, but flagged blank)', async () => {

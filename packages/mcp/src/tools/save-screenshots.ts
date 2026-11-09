@@ -45,8 +45,17 @@ export const saveScreenshotsTool: ToolSpec = {
  * It is a closed allow-list, not a convenience lookup: a format absent here is never written (see
  * writeScreenshots), which is what keeps a plugin-supplied `format` string out of the filesystem
  * path. Keep its keys in step with `SCREENSHOT_FORMATS` — a new export format is added to both.
+ *
+ * A Map, not a plain object: `format` is untrusted (the reply is cast, not parsed), and a plain
+ * object answers inherited keys like `__proto__` or `constructor` with a prototype value instead of
+ * undefined — enough to slip past an `=== undefined` guard and reach `writeFile`. `Map.get` returns
+ * undefined for every key that was not explicitly set.
  */
-const EXTENSIONS: Record<string, string> = { PNG: 'png', JPG: 'jpg', SVG: 'svg' };
+const EXTENSIONS = new Map<string, string>([
+  ['PNG', 'png'],
+  ['JPG', 'jpg'],
+  ['SVG', 'svg'],
+]);
 
 /** Map a Figma node id (e.g. "1:2") to a filesystem-safe basename, blocking path traversal. */
 const sanitize = (id: string): string => id.replace(/[^\w.-]/g, '-');
@@ -75,7 +84,7 @@ export const writeScreenshots = async (
       // fixed table, never from `format` itself. A real export is unaffected — get_screenshot clamps
       // its answer to SCREENSHOT_FORMATS (PNG / JPG / SVG), the exact keys here — and anything else
       // is reported non-exportable, the same path:null a missing node already returns.
-      const ext = EXTENSIONS[img.format];
+      const ext = EXTENSIONS.get(img.format);
       if (payload === null || ext === undefined) {
         return { nodeId: img.nodeId, format: img.format, path: null, ...flags };
       }
