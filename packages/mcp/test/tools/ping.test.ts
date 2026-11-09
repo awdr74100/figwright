@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Follower } from '../../src/election/follower.js';
 import { portConflictMessage } from '../../src/election/leader-lock.js';
@@ -98,6 +98,83 @@ describe('ping tool', () => {
     });
     expect(result.refusedConnections).toEqual(refused);
     expect(result).not.toHaveProperty('refusedConnectionsNotice');
+  });
+
+  describe('lifted access checks (FIGWRIGHT_ALLOW_ANY_ORIGIN=1)', () => {
+    afterEach(() => {
+      delete process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN;
+    });
+
+    const cleanLeader = (): Node =>
+      makeNode({
+        role: NodeRole.Leader,
+        isLeader: () => true,
+        getLeader: () =>
+          ({
+            port: 3055,
+            relay: { sessions: { connected: () => [] }, refusedUpgrades: () => null },
+            http: undefined as never,
+          }) as unknown as ReturnType<Node['getLeader']>,
+      });
+    const follower = (leaderReport: Record<string, unknown>): Follower =>
+      makeFollower({
+        leaderInfo: async () => ({ serverVersion: '1.0.0', buildId: 0, ...leaderReport }),
+        sendRpc: async () => ({ kind: 'ok' as const, requestId: 'r', result: {} }),
+      });
+    const followerNode = (): Node =>
+      makeNode({ role: NodeRole.Follower, isLeader: () => false, getLeader: () => null });
+
+    it('says so on the leader, which is the process that would have checked', async () => {
+      process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN = '1';
+      const result = await handlePing({
+        node: cleanLeader(),
+        follower: makeFollower({}),
+        serverVersion: '1.0.0',
+      });
+      expect(result.accessChecksLifted).toBe(true);
+      expect(result.accessChecksNotice).toContain('origin and User-Agent checks are off');
+    });
+
+    it('adds nothing when the checks are on, so a normal ping is unchanged', async () => {
+      const result = await handlePing({
+        node: cleanLeader(),
+        follower: makeFollower({}),
+        serverVersion: '1.0.0',
+      });
+      expect(result).not.toHaveProperty('accessChecksLifted');
+      expect(result).not.toHaveProperty('accessChecksNotice');
+    });
+
+    it('uses exactly the predicate the checks use: only "1" lifts them', async () => {
+      process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN = 'true';
+      const result = await handlePing({
+        node: cleanLeader(),
+        follower: makeFollower({}),
+        serverVersion: '1.0.0',
+      });
+      expect(result).not.toHaveProperty('accessChecksLifted');
+    });
+
+    it('takes a follower’s answer from the leader’s report', async () => {
+      const result = await handlePing({
+        node: followerNode(),
+        follower: follower({ accessChecksLifted: true }),
+        serverVersion: '1.0.0',
+      });
+      expect(result.accessChecksLifted).toBe(true);
+      expect(result.accessChecksNotice).toContain('holding port 3055');
+    });
+
+    it('ignores a follower’s own setting, which enforces nothing', async () => {
+      process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN = '1';
+      const result = await handlePing({
+        node: followerNode(),
+        follower: follower({}),
+        serverVersion: '1.0.0',
+      });
+      expect(result).not.toHaveProperty('accessChecksLifted');
+      expect(result).not.toHaveProperty('accessChecksNotice');
+    });
   });
 
   it('carries the leader’s refusals to a follower’s ping', async () => {

@@ -36,6 +36,13 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
  */
 const allowAnyOrigin = (): boolean => process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN === '1';
 
+/**
+ * Whether this process has the origin and User-Agent checks lifted. The very predicate the checks
+ * use, exported so that reporting it can never disagree with enforcing it. Only meaningful in the
+ * leader — the process holding the port is the one that enforces.
+ */
+export const isAccessGateLifted = allowAnyOrigin;
+
 /** Strip the port, keeping an IPv6 literal's brackets intact. */
 const hostnameFromHostHeader = (host: string): string => {
   if (host.startsWith('[')) {

@@ -95,8 +95,9 @@ export const userAgentRefusalNotice = (refused: RefusedUpgrades | null): string 
     `Figma desktop app${last}. The Figwright plugin runs only in that app, so a browser tab is ` +
     'refused by design and needs nothing done. If the Figma desktop app is open and its plugin ' +
     'cannot connect, a Figma update may have changed its User-Agent: set ' +
-    'FIGWRIGHT_ALLOW_ANY_ORIGIN=1 in this MCP server’s environment to connect anyway (it lifts ' +
-    'this check, so remove it once fixed), and report the User-Agent above at ' +
-    'https://github.com/awdr74100/figwright/issues.'
+    'FIGWRIGHT_ALLOW_ANY_ORIGIN=1 in the environment of every Figwright MCP server and restart ' +
+    'them — the one holding port 3055 is the one that checks — to connect anyway (it lifts this ' +
+    'check, and ping reports while it is set, so remove it once fixed), and report the ' +
+    'User-Agent above at https://github.com/awdr74100/figwright/issues.'
   );
 };

@@ -39,6 +39,12 @@ export interface LeaderInfo {
    * follower's ping can say a plugin is being refused.
    */
   refusedConnections?: RefusedUpgrades;
+  /**
+   * True when the leader runs with its origin and User-Agent checks lifted
+   * (FIGWRIGHT_ALLOW_ANY_ORIGIN=1). Absent when they are on — and on a leader that predates the
+   * field, so absence means "not reported as lifted", never "known to be on".
+   */
+  accessChecksLifted?: true;
 }
 
 /**
@@ -131,6 +137,7 @@ export class Follower {
       serverVersion: body.serverVersion,
       buildId: typeof body.buildId === 'number' ? body.buildId : undefined,
       ...(refusedConnections === undefined ? {} : { refusedConnections }),
+      ...(body.accessChecksLifted === true ? { accessChecksLifted: true as const } : {}),
     };
   }
 

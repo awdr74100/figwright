@@ -59,6 +59,10 @@ describe('userAgentRefusalNotice', () => {
     expect(notice).toContain('1970-01-01T00:00:00.000Z');
     expect(notice).toContain('"Mozilla/5.0 Chrome/157"');
     expect(notice).toContain('FIGWRIGHT_ALLOW_ANY_ORIGIN=1');
+    // The leader is the one that checks, so the escape hatch has to reach it: set on every
+    // server, not only on the one the user happens to be talking to.
+    expect(notice).toContain('every Figwright MCP server');
+    expect(notice).toContain('holding port 3055');
     expect(notice).toContain('github.com/awdr74100/figwright/issues');
   });
 

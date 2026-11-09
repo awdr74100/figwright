@@ -31,7 +31,7 @@ Figwright runs **entirely on your machine**; there is no Figwright cloud service
 
   These checks run in the process that holds port 3055 (the leader), so after updating, restart every Figwright MCP server so the leader runs the new version.
 
-  If the Figma desktop app's plugin is ever refused — for instance after a Figma update changes its User-Agent — `ping` reports the refused connections with the User-Agent that was seen, and `FIGWRIGHT_ALLOW_ANY_ORIGIN=1` lifts the origin and User-Agent checks so you can keep working. Please report it rather than leaving it set. It deliberately does not lift the host gate.
+  If the Figma desktop app's plugin is ever refused — for instance after a Figma update changes its User-Agent — `ping` reports the refused connections with the User-Agent that was seen, and `FIGWRIGHT_ALLOW_ANY_ORIGIN=1` lifts the origin and User-Agent checks so you can keep working. Set it for every Figwright MCP server, since the one holding the port is the one that checks; while it is in effect there, `ping` says so on every call. Please report it rather than leaving it set. It deliberately does not lift the host gate.
 
   What none of this defends against: another program already running as you on the same machine (see the note on a compromised machine below), and other code running inside the Figma desktop app itself, which presents the app's own User-Agent.
 

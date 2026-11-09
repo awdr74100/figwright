@@ -167,6 +167,23 @@ describe('leader endpoints', () => {
     expect(body2.plugins).toBe(1);
   });
 
+  it('GET /ping reports lifted access checks only while they are lifted', async () => {
+    const b = await startLeader();
+    const read = async () =>
+      (await (await fetch(`http://127.0.0.1:${b.port}${PING_PATH}`)).json()) as Record<
+        string,
+        unknown
+      >;
+    expect(await read()).not.toHaveProperty('accessChecksLifted');
+    process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN = '1';
+    try {
+      expect((await read()).accessChecksLifted).toBe(true);
+    } finally {
+      delete process.env.FIGWRIGHT_ALLOW_ANY_ORIGIN;
+    }
+    expect(await read()).not.toHaveProperty('accessChecksLifted');
+  });
+
   it('GET /ping reports refused plugin connections once there are some', async () => {
     const b = await startLeader();
     await new Promise<void>(resolve => {

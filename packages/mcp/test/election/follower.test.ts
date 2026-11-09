@@ -301,6 +301,35 @@ describe('Follower HTTP client', () => {
     });
   });
 
+  it('leaderInfo reports lifted access checks only for a literal true', async () => {
+    for (const [value, expected] of [
+      [true, true],
+      ['true', undefined],
+      [1, undefined],
+      [false, undefined],
+    ] as const) {
+      const http = createServer((_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            serverVersion: '9.9.9',
+            buildId: 5,
+            accessChecksLifted: value,
+          }),
+        );
+      });
+      await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+      const port = (http.address() as AddressInfo).port;
+      try {
+        const info = await new Follower({ leaderUrl: `http://127.0.0.1:${port}` }).leaderInfo();
+        expect(info?.accessChecksLifted).toBe(expected);
+      } finally {
+        await new Promise<void>(resolve => http.close(() => resolve()));
+      }
+    }
+  });
+
   it('leaderInfo still confirms a leader whose refusal field is malformed', async () => {
     const http = createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
