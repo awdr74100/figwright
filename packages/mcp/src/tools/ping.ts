@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dispatchTargeted } from '../dispatch.js';
 import type { Follower } from '../election/follower.js';
 import { type Node, NodeRole } from '../election/node.js';
+import { type RefusedUpgrades, userAgentRefusalNotice } from '../relay/refused-upgrades.js';
 import { getFileTarget } from '../routing/target.js';
 import type { ToolSpec } from './spec.js';
 
@@ -102,7 +103,34 @@ export interface PingResult {
   sessions?: PingSessionsInfo;
   plugin: unknown | null;
   dispatchError?: string;
+  /**
+   * Plugin connections the leader refused since it started, by reason with the latest. Absent when
+   * there were none, so a clean ping is unchanged.
+   */
+  refusedConnections?: RefusedUpgrades;
+  /**
+   * Present when some of those were refused for not coming from the Figma desktop app — the one
+   * reason that could be a real plugin — saying what, if anything, to do about it.
+   */
+  refusedConnectionsNotice?: string;
 }
+
+/**
+ * Adds the leader's refusals, and the guidance when they could be a real plugin, when there are
+ * any.
+ */
+const withRefusals = (
+  result: PingResult,
+  refused: RefusedUpgrades | null | undefined,
+): PingResult => {
+  if (refused === null || refused === undefined) return result;
+  const notice = userAgentRefusalNotice(refused);
+  return {
+    ...result,
+    refusedConnections: refused,
+    ...(notice === null ? {} : { refusedConnectionsNotice: notice }),
+  };
+};
 
 export interface PingContext {
   node: Node;
@@ -141,23 +169,27 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
   const relay = ctx.node.isLeader() ? ctx.node.getLeader()?.relay : undefined;
 
   if (relay !== undefined) {
+    const refused = relay.refusedUpgrades();
     const connected = relay.sessions.connected();
     if (connected.length === 0) {
-      return {
-        ok: true,
-        hop: 'server-only',
-        server,
-        sessions: {
-          connectedCount: 0,
-          routedSessionId: null,
-          routedFileName: null,
-          routedPageName: null,
-          boundSessionId: target?.sessionId ?? null,
-          boundFileName: target?.fileName ?? null,
-          all: [],
+      return withRefusals(
+        {
+          ok: true,
+          hop: 'server-only',
+          server,
+          sessions: {
+            connectedCount: 0,
+            routedSessionId: null,
+            routedFileName: null,
+            routedPageName: null,
+            boundSessionId: target?.sessionId ?? null,
+            boundFileName: target?.fileName ?? null,
+            all: [],
+          },
+          plugin: null,
         },
-        plugin: null,
-      };
+        refused,
+      );
     }
     const routed = relay.pickActiveSession();
     const all: PingSessionInfo[] = connected
@@ -192,11 +224,14 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       // No skew warning in here on purpose: every tool result already carries one when it applies,
       // ping included, and repeating the same paragraph inside the payload it is appended to reads
       // as two separate problems. `pluginVersion` above is the fact; the warning is the prose.
-      return { ok: true, hop: 'e2e', server, sessions, plugin };
+      return withRefusals({ ok: true, hop: 'e2e', server, sessions, plugin }, refused);
     } catch (err) {
       const dispatchError = err instanceof Error ? err.message : String(err);
       ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
-      return { ok: true, hop: 'server-only', server, sessions, plugin: null, dispatchError };
+      return withRefusals(
+        { ok: true, hop: 'server-only', server, sessions, plugin: null, dispatchError },
+        refused,
+      );
     }
   }
 
@@ -239,11 +274,17 @@ export const handlePing = async (ctx: PingContext): Promise<PingResult> => {
       'ping',
       {},
     );
-    return { ok: true, hop: 'e2e', server: followerServer, plugin };
+    return withRefusals(
+      { ok: true, hop: 'e2e', server: followerServer, plugin },
+      leader?.refusedConnections,
+    );
   } catch (err) {
     const dispatchError = err instanceof Error ? err.message : String(err);
     ctx.log?.(`[ping] dispatch failed, falling back to server-only: ${dispatchError}`);
-    return { ok: true, hop: 'server-only', server: followerServer, plugin: null, dispatchError };
+    return withRefusals(
+      { ok: true, hop: 'server-only', server: followerServer, plugin: null, dispatchError },
+      leader?.refusedConnections,
+    );
   }
 };
 

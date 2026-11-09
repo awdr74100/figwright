@@ -278,6 +278,46 @@ describe('Follower HTTP client', () => {
     expect(await f.leaderInfo()).toEqual({ serverVersion: 'test-2.0.0', buildId: 777 });
   });
 
+  it('leaderInfo carries the plugin connections the leader refused', async () => {
+    const http = createServer();
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    const relay = new Relay({ serverVersion: 'test-2.0.0', server: http });
+    const detach = attachLeaderEndpoints(http, { relay, serverVersion: 'test-2.0.0', buildId: 1 });
+    all.push({ http, relay, port, detach, plugins: [] });
+
+    await new Promise<void>(resolve => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}`, {
+        headers: { origin: 'null', 'user-agent': 'Mozilla/5.0 Chrome/157.0.0.0 Safari/537.36' },
+      });
+      ws.once('unexpected-response', () => resolve());
+      ws.once('error', () => resolve());
+    });
+
+    const info = await new Follower({ leaderUrl: `http://127.0.0.1:${port}` }).leaderInfo();
+    expect(info?.refusedConnections).toMatchObject({
+      userAgent: 1,
+      last: { reason: 'user-agent', origin: 'null' },
+    });
+  });
+
+  it('leaderInfo still confirms a leader whose refusal field is malformed', async () => {
+    const http = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({ ok: true, serverVersion: '9.9.9', buildId: 5, refusedConnections: 'x' }),
+      );
+    });
+    await new Promise<void>(resolve => http.listen(0, '127.0.0.1', () => resolve()));
+    const port = (http.address() as AddressInfo).port;
+    try {
+      const f = new Follower({ leaderUrl: `http://127.0.0.1:${port}` });
+      expect(await f.leaderInfo()).toEqual({ serverVersion: '9.9.9', buildId: 5 });
+    } finally {
+      await new Promise<void>(resolve => http.close(() => resolve()));
+    }
+  });
+
   it('leaderInfo is undefined for a non-figwright responder and an unreachable leader', async () => {
     const http = createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });

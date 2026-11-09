@@ -128,6 +128,7 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
     }
 
     if (req.method === 'GET' && req.url === PING_PATH) {
+      const refused = relay.refusedUpgrades();
       writeJson(res, 200, {
         ok: true,
         serverVersion,
@@ -142,6 +143,9 @@ export const attachLeaderEndpoints = (http: HttpServer, deps: LeaderEndpointDeps
         // of its own. `plugins` above is this list's length and stays for older followers, which
         // read it and would not know what to do with this.
         sessions: relay.listSessionInfo(),
+        // Only the leader turns plugin connections away, so a follower's ping learns of refusals
+        // here. Omitted when there were none, so a clean /ping is unchanged.
+        ...(refused === null ? {} : { refusedConnections: refused }),
       });
       return;
     }

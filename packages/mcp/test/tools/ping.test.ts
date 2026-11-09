@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Follower } from '../../src/election/follower.js';
 import { portConflictMessage } from '../../src/election/leader-lock.js';
 import { type Node, NodeRole } from '../../src/election/node.js';
+import type { RefusedUpgrades } from '../../src/relay/refused-upgrades.js';
 import { handlePing, pingTool } from '../../src/tools/ping.js';
 import { toToolDefinition } from '../tool-schema.js';
 
@@ -32,7 +33,7 @@ describe('ping tool', () => {
       getLeader: () =>
         ({
           port: 3055,
-          relay: { sessions: { connected: () => [] } },
+          relay: { sessions: { connected: () => [] }, refusedUpgrades: () => null },
           http: undefined as never,
         }) as unknown as ReturnType<Node['getLeader']>,
     });
@@ -48,6 +49,78 @@ describe('ping tool', () => {
     expect(result.server.role).toBe(NodeRole.Leader);
     expect(result.server.port).toBe(3055);
     expect(result.sessions?.connectedCount).toBe(0);
+    // Nothing refused: a clean ping carries nothing new.
+    expect(result).not.toHaveProperty('refusedConnections');
+    expect(result).not.toHaveProperty('refusedConnectionsNotice');
+  });
+
+  const leaderWithRefusals = (refused: RefusedUpgrades): Node =>
+    makeNode({
+      role: NodeRole.Leader,
+      isLeader: () => true,
+      getLeader: () =>
+        ({
+          port: 3055,
+          relay: { sessions: { connected: () => [] }, refusedUpgrades: () => refused },
+          http: undefined as never,
+        }) as unknown as ReturnType<Node['getLeader']>,
+    });
+
+  it('reports a plugin refused for its User-Agent, with what to do about it', async () => {
+    const refused: RefusedUpgrades = {
+      host: 0,
+      origin: 0,
+      userAgent: 2,
+      last: { reason: 'user-agent', at: 0, origin: 'null', userAgent: 'Mozilla/5.0 Chrome/157' },
+    };
+    const result = await handlePing({
+      node: leaderWithRefusals(refused),
+      follower: makeFollower({}),
+      serverVersion: '1.0.0',
+    });
+    expect(result.refusedConnections).toEqual(refused);
+    expect(result.refusedConnectionsNotice).toMatch(/^2 plugin connection\(s\) were refused/);
+    expect(result.refusedConnectionsNotice).toContain('"Mozilla/5.0 Chrome/157"');
+    expect(result.refusedConnectionsNotice).toContain('FIGWRIGHT_ALLOW_ANY_ORIGIN=1');
+  });
+
+  it('counts web-page refusals without guidance, since none of them could be the plugin', async () => {
+    const refused: RefusedUpgrades = {
+      host: 1,
+      origin: 3,
+      userAgent: 0,
+      last: { reason: 'origin', at: 0, origin: 'https://evil.example', userAgent: null },
+    };
+    const result = await handlePing({
+      node: leaderWithRefusals(refused),
+      follower: makeFollower({}),
+      serverVersion: '1.0.0',
+    });
+    expect(result.refusedConnections).toEqual(refused);
+    expect(result).not.toHaveProperty('refusedConnectionsNotice');
+  });
+
+  it('carries the leader’s refusals to a follower’s ping', async () => {
+    const refused: RefusedUpgrades = {
+      host: 0,
+      origin: 0,
+      userAgent: 1,
+      last: { reason: 'user-agent', at: 0, origin: 'null', userAgent: null },
+    };
+    const result = await handlePing({
+      node: makeNode({ role: NodeRole.Follower, isLeader: () => false, getLeader: () => null }),
+      follower: makeFollower({
+        leaderInfo: async () => ({
+          serverVersion: '1.0.0',
+          buildId: 0,
+          refusedConnections: refused,
+        }),
+        sendRpc: async () => ({ kind: 'ok' as const, requestId: 'r', result: {} }),
+      }),
+      serverVersion: '1.0.0',
+    });
+    expect(result.refusedConnections).toEqual(refused);
+    expect(result.refusedConnectionsNotice).toContain('"(none)"');
   });
 
   it('surfaces a portConflict warning when the node is conflicted', async () => {
@@ -104,6 +177,7 @@ describe('ping tool', () => {
             pickActiveSession: () => sessB,
             skewNotice: () => null,
             sendRequest: async () => pluginInfo,
+            refusedUpgrades: () => null,
           },
           http: undefined as never,
         }) as unknown as ReturnType<Node['getLeader']>,

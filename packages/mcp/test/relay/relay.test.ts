@@ -132,15 +132,98 @@ describe('Relay upgrade gating', () => {
     expect(status).toBe(403);
   });
 
-  it('admits the plugin, whose sandboxed origin is the literal "null"', async () => {
+  it('admits the plugin: a "null" origin from the Figma desktop app', async () => {
     const b = await startRelay();
-    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, { headers: { origin: 'null' } });
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+      headers: {
+        origin: 'null',
+        // Captured from the desktop app's own plugin handshake.
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+          'Figma/126.11.8 Chrome/152.0.7977.169 Electron/44.10.0 Safari/537.36 FigmaARM',
+      },
+    });
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve());
       ws.once('error', reject);
     });
     expect(ws.readyState).toBe(WebSocket.OPEN);
     ws.close();
+  });
+
+  it('records each refusal by reason, and a clean relay records none', async () => {
+    const b = await startRelay();
+    expect(b.relay.refusedUpgrades()).toBeNull();
+    const refuse = (headers: Record<string, string>) =>
+      new Promise<void>(resolve => {
+        const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, { headers });
+        ws.once('unexpected-response', () => resolve());
+        ws.once('error', () => resolve());
+        ws.once('open', () => resolve());
+      });
+    await refuse({ host: `evil.example:${b.port}` });
+    await refuse({ origin: 'https://evil.example' });
+    await refuse({ origin: 'null', 'user-agent': 'Mozilla/5.0 Chrome/157.0.0.0 Safari/537.36' });
+    expect(b.relay.refusedUpgrades()).toMatchObject({
+      host: 1,
+      origin: 1,
+      userAgent: 1,
+      last: {
+        reason: 'user-agent',
+        origin: 'null',
+        userAgent: 'Mozilla/5.0 Chrome/157.0.0.0 Safari/537.36',
+      },
+    });
+  });
+
+  it('names a refused plugin in the timeout of a call no plugin received', async () => {
+    const b = await startRelay();
+    await new Promise<void>(resolve => {
+      const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+        headers: { origin: 'null', 'user-agent': 'Mozilla/5.0 Chrome/157.0.0.0 Safari/537.36' },
+      });
+      ws.once('unexpected-response', () => resolve());
+      ws.once('error', () => resolve());
+    });
+    await expect(b.relay.sendRequest('get_pages', {}, 50)).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /^plugin request timeout \(method=get_pages\) — 1 plugin connection.*FIGWRIGHT_ALLOW_ANY_ORIGIN=1/,
+      ),
+    });
+  });
+
+  it('leaves that timeout exactly as it was when nothing was refused for its User-Agent', async () => {
+    const b = await startRelay();
+    await new Promise<void>(resolve => {
+      const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+        headers: { origin: 'https://evil.example' },
+      });
+      ws.once('unexpected-response', () => resolve());
+      ws.once('error', () => resolve());
+    });
+    await expect(b.relay.sendRequest('get_pages', {}, 50)).rejects.toMatchObject({
+      message: 'plugin request timeout (method=get_pages)',
+    });
+  });
+
+  it('refuses a "null" origin from a browser tab before it becomes a session', async () => {
+    const b = await startRelay();
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+      headers: {
+        origin: 'null',
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+          'Chrome/157.0.0.0 Safari/537.36',
+      },
+    });
+
+    const status = await new Promise<number>((resolve, reject) => {
+      ws.once('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+      ws.once('open', () => reject(new Error('upgrade should have been refused')));
+      ws.once('error', () => resolve(0));
+    });
+    expect(status).toBe(403);
+    expect(b.relay.sessions.connected()).toHaveLength(0);
   });
 });
 
