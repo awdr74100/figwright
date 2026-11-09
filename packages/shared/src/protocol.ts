@@ -31,10 +31,34 @@ export const SystemMethod = {
 } as const;
 export type SystemMethod = (typeof SystemMethod)[keyof typeof SystemMethod];
 
-declare const crypto: { randomUUID?: () => string } | undefined;
-// Figma's UI iframe is a null-origin sandbox where crypto.randomUUID may be absent (non-secure
-// context); fall back to a timestamp+random id so id generation never throws on the plugin side.
-export const newId = (): string =>
-  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+declare const crypto:
+  | { randomUUID?: () => string; getRandomValues?: (array: Uint8Array) => Uint8Array }
+  | undefined;
+
+/** 16 bytes from the platform CSPRNG as hex, or null where there is none. */
+const randomHex128 = (): string | null => {
+  if (typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') return null;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let hex = '';
+  for (const b of bytes) hex += b.toString(16).padStart(2, '0');
+  return hex;
+};
+
+/**
+ * A fresh id. The plugin's session id is one, and resuming a session needs only that id, so it must
+ * be unguessable, not merely unique.
+ *
+ * Figma's plugin UI is a `data:` document — not a secure context — so `crypto.randomUUID` is absent
+ * there (measured in the desktop app), while `crypto.getRandomValues`, which needs no secure
+ * context, is present: that is where the 128-bit branch is taken. The timestamp+Math.random form
+ * (~41 bits, from a non-cryptographic generator) remains only so id generation can never throw in
+ * an environment with neither.
+ */
+export const newId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const hex = randomHex128();
+  if (hex !== null) return `id-${hex}`;
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+};
