@@ -412,11 +412,10 @@ export const SerializedAutoLayoutSchema = z.object({
   gridRowSizes: z.array(SerializedGridTrackSchema).optional(),
   gridColumnSizes: z.array(SerializedGridTrackSchema).optional(),
   /**
-   * True when gridRowSizes / gridColumnSizes were left out: Figma desktop spends a slot of a
-   * fixed-size table on every read of a track's fields and frees none until the plugin closes, so
-   * each plugin session reads a limited number of tracks. Counts, gaps and modes are still exact;
-   * reopening the Figwright plugin restores the sizes. Never treat the missing sizes as equal
-   * tracks.
+   * True when gridRowSizes / gridColumnSizes were left out: Figma's plugin runtime spends callback
+   * ids on every grid track it hands out and never returns them, and this plugin session has run
+   * out (after about 4,400 track reads). Counts, gaps and modes are still exact; reopening the
+   * Figwright plugin restores the sizes. Never treat the missing sizes as equal tracks.
    */
   gridTrackSizesUnavailable: z.literal(true).optional(),
 });

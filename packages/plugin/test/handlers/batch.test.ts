@@ -4,6 +4,7 @@ import type { BatchResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxHandlers } from '../../src/dispatcher.js';
+import { readTracks, resetGridTrackReadsForTests } from '../../src/grid-tracks.js';
 import { createAddComponentPropertyHandler } from '../../src/handlers/add-component-property.js';
 import { createAddVariableModeHandler } from '../../src/handlers/add-variable-mode.js';
 import { createApplyAnimationStyleHandler } from '../../src/handlers/apply-animation-style.js';
@@ -2098,7 +2099,14 @@ const makeGrid = (init: {
   const page = node('P0', 'PAGE', null);
   node('F', 'RECTANGLE', page, { fills: [] });
   const grid = node('G', 'FRAME', page);
-  const st = { positioning: init.positioning, autoTracks: init.autoTracks, rows: 2, columns: 3 };
+  const st = {
+    positioning: init.positioning,
+    autoTracks: init.autoTracks,
+    rows: 2,
+    columns: 3,
+    sizeWrites: 0,
+    applied: false,
+  };
   const cell = new Map<TreeNode, [number, number]>();
   const memory = new Map<TreeNode, [number, number]>();
   const kids = ['c0', 'c1', 'c2', 'c3', 'c4'].map(id => node(id, 'RECTANGLE', grid));
@@ -2124,6 +2132,17 @@ const makeGrid = (init: {
     };
   });
   const tracks = (n: number) => Array.from({ length: n }, () => ({ type: 'FLEX', value: 1 }));
+  // Set by a test: the column tracks the grid holds until the first write lands on it, after which
+  // it reads Figma's defaults — enough to make an undo find them different and write them back.
+  let columnTracks: { type: string; value: number }[] | null = null;
+  let lastSizeWrite: unknown = undefined;
+  // Figma's runtime once its callback ids are spent: reads after the first `spendAfter` throw.
+  let spendAfter = Infinity;
+  const trackRead = (n: number) => {
+    if (spendAfter-- <= 0)
+      throw new Error('in <unknown>: Attempted to invoke callback with invalid id -32761');
+    return tracks(n);
+  };
   const props: Record<string, { get: () => unknown; set: (v: never) => void }> = {
     layoutMode: {
       get: () => 'GRID',
@@ -2176,12 +2195,27 @@ const makeGrid = (init: {
         flow();
       },
     },
-    gridRowSizes: { get: () => tracks(st.rows), set: () => undefined },
-    gridColumnSizes: { get: () => tracks(st.columns), set: () => undefined },
+    gridRowSizes: { get: () => trackRead(st.rows), set: () => void st.sizeWrites++ },
+    gridColumnSizes: {
+      get: () => (columnTracks !== null && !st.applied ? columnTracks : trackRead(st.columns)),
+      set: (v: never) => {
+        st.sizeWrites++;
+        lastSizeWrite = v;
+      },
+    },
   };
   for (const [k, d] of Object.entries(props))
     Object.defineProperty(grid, k, { ...d, enumerable: true });
-  Object.assign(grid, { paddingTop: 0, gridRowGap: 0, gridColumnGap: 0 });
+  Object.assign(grid, { paddingTop: 0, gridRowGap: 0 });
+  let columnGap = 0;
+  Object.defineProperty(grid, 'gridColumnGap', {
+    enumerable: true,
+    get: () => columnGap,
+    set: (v: number) => {
+      columnGap = v;
+      st.applied = true;
+    },
+  });
   const handler = createBatchHandler(figmaCtx, {
     set_auto_layout: createSetAutoLayoutHandler(figmaCtx),
     set_fills: createSetFillsHandler(figmaCtx),
@@ -2193,7 +2227,18 @@ const makeGrid = (init: {
     columns: st.columns,
     cells: kids.map(k => cell.get(k)),
   });
-  return { handler, state };
+  return {
+    handler,
+    state,
+    sizeWrites: () => st.sizeWrites,
+    spendOnNextTrackRead: (after: number) => {
+      spendAfter = after;
+    },
+    setColumnTracks: (t: { type: string; value: number }[]) => {
+      columnTracks = t;
+    },
+    lastSizeWrite: () => lastSizeWrite,
+  };
 };
 
 describe('batch inverse for GRID placement modes', () => {
@@ -2247,6 +2292,88 @@ describe('batch inverse for GRID placement modes', () => {
     );
     expect(state()).toEqual(before);
     expect(before.rows).toBe(4);
+  });
+
+  // Each grid track Figma hands out spends callback ids that only reopening the plugin returns
+  // (grid-tracks.ts): once they are spent, a capture cannot read the tracks to promise an undo.
+  const spendRuntime = (): void => {
+    readTracks(() => {
+      throw new Error('in <unknown>: Attempted to invoke callback with invalid id -32761');
+    });
+  };
+
+  it('refuses, before applying anything, a grid op once the runtime has run out', async () => {
+    resetGridTrackReadsForTests();
+    try {
+      const { handler, state } = makeGrid({ positioning: 'MANUAL', autoTracks: 'NONE' });
+      spendRuntime();
+      const before = state();
+      await expect(handler({ ops: [layout({ gridColumnGap: 8 })] })).rejects.toThrow(
+        /can no longer read, so the batch could not be undone exactly and was not applied.*reopen/,
+      );
+      expect(state()).toEqual(before);
+    } finally {
+      resetGridTrackReadsForTests();
+    }
+  });
+
+  it('leaves equal track sizes alone on undo, as write-if-different always did', async () => {
+    resetGridTrackReadsForTests();
+    const { handler, state, sizeWrites } = makeGrid({ positioning: 'MANUAL', autoTracks: 'NONE' });
+    const before = state();
+    await expect(handler({ ops: [layout({ gridColumnGap: 8 }), FAIL] })).rejects.toThrow(
+      /rolled back 1 applied op\(s\)/,
+    );
+    expect(state()).toEqual(before);
+    expect(sizeWrites()).toBe(0);
+  });
+
+  it('leaves the sizes alone and says so when the runtime runs out during the undo', async () => {
+    resetGridTrackReadsForTests();
+    try {
+      const { handler, state, sizeWrites, spendOnNextTrackRead } = makeGrid({
+        positioning: 'MANUAL',
+        autoTracks: 'NONE',
+      });
+      const before = state();
+      // The capture reads both axes; the undo's comparison is the first read to find it spent.
+      spendOnNextTrackRead(2);
+      const error = await Promise.resolve(
+        handler({ ops: [layout({ gridColumnGap: 8 }), FAIL] }),
+      ).catch((e: unknown) => e);
+      // Everything else is put back, and the error says which sizes went unchecked and why.
+      expect(String(error)).toMatch(/rolled back 1 applied op\(s\) \(restored with residue: /);
+      expect(String(error)).toMatch(/gridColumnSizes \/ gridRowSizes of grid G not checked/);
+      expect(String(error)).toMatch(/reopen the Figwright plugin/);
+      expect(state()).toEqual(before);
+      expect(sizeWrites()).toBe(0);
+    } finally {
+      resetGridTrackReadsForTests();
+    }
+  });
+
+  // Figma reads a HUG track with value 1 but takes a written track that has a value as FIXED
+  // (measured on rows and columns alike), so a rollback must hand HUG back without one.
+  it('puts a HUG track back as HUG, without the value Figma would read as FIXED', async () => {
+    resetGridTrackReadsForTests();
+    const { handler, lastSizeWrite, setColumnTracks } = makeGrid({
+      positioning: 'MANUAL',
+      autoTracks: 'NONE',
+    });
+    setColumnTracks([
+      { type: 'FIXED', value: 64 },
+      { type: 'HUG', value: 1 },
+      { type: 'FLEX', value: 2.5 },
+    ]);
+    await expect(handler({ ops: [layout({ gridColumnGap: 8 }), FAIL] })).rejects.toThrow(
+      /rolled back 1 applied op\(s\)/,
+    );
+    // The op left the live tracks reading as Figma's defaults, so the undo writes them back.
+    expect(lastSizeWrite()).toEqual([
+      { type: 'FIXED', value: 64 },
+      { type: 'HUG' },
+      { type: 'FLEX', value: 2.5 },
+    ]);
   });
 });
 

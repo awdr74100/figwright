@@ -8,6 +8,7 @@ import {
   type PluginToolResult,
 } from '../protocol/bridge.js';
 import { withEditorContext } from '../protocol/editor-context.js';
+import { isCallbackIdsSpent } from './grid-tracks.js';
 import { ownValue } from './own-value.js';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
@@ -60,29 +61,27 @@ const FIGMA_SERVER_SILENT_NOTE =
   'Check the id, then retry; bringing the file to the front can help.';
 
 /**
- * Figma desktop's wording once its plugin runtime has run out of callback slots (see
- * grid-tracks.ts): every later call that needs one fails this way until the plugin is reopened, so
- * the bare message leaves an agent retrying a read that cannot succeed.
+ * What an agent needs once Figma's plugin runtime has run out of callback ids (grid-tracks.ts): the
+ * bare "Attempted to invoke callback with invalid id" reads as a broken tool and invites a retry
+ * that cannot succeed, while the one step that recovers is the user's.
  */
-const FIGMA_CALLBACKS_SPENT = /Attempted to invoke callback with invalid id/;
-
-const FIGMA_CALLBACKS_SPENT_NOTE =
-  "Figma's plugin runtime has run out of callback slots for this plugin session, and only " +
-  'reopening the Figwright plugin frees them; retrying will fail the same way. Ask the user to ' +
-  'close and reopen the plugin. Until then, reads that do not reach these slots may still work.';
+const CALLBACK_IDS_SPENT_NOTE =
+  "Figma's plugin runtime has run out of callback ids for this plugin session, and only " +
+  'reopening the Figwright plugin resets them: retrying fails the same way, and Figma APIs this ' +
+  'session had not used yet can fail too. Ask the user to close and reopen the plugin.';
 
 /**
  * A handler error as the reply carries it: Figma's "check your internet connection" gets what it
  * means appended and is a TIMEOUT — Figma's own 10 s ran out — rather than an INTERNAL_ERROR that
- * reads as a fault in the plugin. Spent callback slots get the one step that recovers them.
- * Anything else is INTERNAL_ERROR, as before.
+ * reads as a fault in the plugin. Spent callback ids get the one step that recovers them. Anything
+ * else is INTERNAL_ERROR, as before.
  */
 const toolErrorOf = (message: string): { code: ErrorCode; message: string } => {
   if (FIGMA_SERVER_SILENT.test(message)) {
     return { code: ErrorCode.Timeout, message: `${message} (${FIGMA_SERVER_SILENT_NOTE})` };
   }
-  if (FIGMA_CALLBACKS_SPENT.test(message)) {
-    return { code: ErrorCode.Internal, message: `${message} (${FIGMA_CALLBACKS_SPENT_NOTE})` };
+  if (isCallbackIdsSpent(message)) {
+    return { code: ErrorCode.Internal, message: `${message} (${CALLBACK_IDS_SPENT_NOTE})` };
   }
   return { code: ErrorCode.Internal, message };
 };

@@ -1,62 +1,84 @@
 import type { SerializedGridTrack } from '@figwright/shared';
 
 /**
- * Figma desktop's plugin runtime spends an entry of a fixed-size table every time a plugin reads a
- * field of a GridTrackSize — the objects in `gridRowSizes` / `gridColumnSizes`, whose `type` and
- * `value` are accessors — and frees none of them until the plugin closes. Measured on a page with
- * 64 grid frames and 448 tracks: each page-wide get_document spent ~3,640 entries (~8 per track),
- * and the tenth one in a plugin session ran the table (32,767 entries) out. From then on every read
- * that touches a track throws "Attempted to invoke callback with invalid id", and keeps doing so
- * until the plugin is reopened — so a whole-page read stays broken. Plain grid fields (counts,
- * gaps, placement modes) do not spend entries, and neither did 100,000 other host calls
- * (getNodeByIdAsync / getMainComponentAsync) in the same session.
+ * Figma's plugin runtime numbers its host callbacks from one signed 16-bit counter that never
+ * reuses an id, and some of the objects it hands out spend ids just by existing: a GridTrackSize
+ * carries its own native get/set pair for `type` and `value`, minted with the object. Measured in
+ * Figma desktop (macOS; it reproduces the Windows report in issue #367 exactly): reading
+ * `gridRowSizes` / `gridColumnSizes` costs 1.2 ids per track and taking each element out of the
+ * array 2.4 more — 3.6 per track read, linear whatever the grid's size — while reading a field of a
+ * track already in hand costs nothing. A fresh plugin has about 15,900 ids left (Figma's own API
+ * holds the rest), so about 4,400 track reads fit in one plugin session. A track object is a
+ * snapshot, not a view of the node, and editing a track fires no nodechange, so a read cannot be
+ * served from an earlier one.
  *
- * Track sizes are therefore read against an allowance per plugin session, kept well under the table
- * so other reads in the session have room: each track's two fields are read once, and once the
- * allowance is spent a grid still reports its counts, gaps and modes, but marks its sizes
- * unavailable instead of taking every later read down with it.
+ * Past that the counter overflows: a track read throws "Attempted to invoke callback with invalid
+ * id", and so does any Figma API the session had not used yet. Every further track read spends
+ * more, and once the counter wraps round a track's accessor calls whichever API function now holds
+ * its id (get_removed, group and setFillStyleIdAsync were among those hit) and the runtime
+ * eventually dies. Only reopening the plugin resets it.
+ *
+ * Tracks are read exactly as before until the runtime says it has run out; from then on no track is
+ * ever made again in this session — a grid reports its sizes unavailable instead — so the first
+ * overflow is the last. Nothing that read before stops reading earlier.
  */
-export const GRID_TRACK_ALLOWANCE = 3000;
+let runtimeSpent = false;
 
-let tracksRead = 0;
+// The overflowed counter is the only source measured, and its ids are negative (int16 past
+// 32,767); any other wording is left to propagate as it always did.
+const CALLBACK_IDS_SPENT = /Attempted to invoke callback with invalid id -\d/;
 
-/** What reading one grid's tracks gave: both size lists, or why they were left out. */
+/** Whether an error is the runtime reporting its callback ids spent. */
+export const isCallbackIdsSpent = (message: string): boolean => CALLBACK_IDS_SPENT.test(message);
+
+/** What a read gives back when the tracks were left unread. */
+export const TRACKS_UNREAD = Symbol('tracks unread');
+
+/**
+ * Run `read`, which makes track objects, unless the runtime has already run out of callback ids.
+ * The runtime's own error marks the session spent and reads as unread; any other error is thrown,
+ * as it always was.
+ */
+export const readTracks = <T>(read: () => T): T | typeof TRACKS_UNREAD => {
+  if (runtimeSpent) return TRACKS_UNREAD;
+  try {
+    return read();
+  } catch (error) {
+    if (!isCallbackIdsSpent(error instanceof Error ? error.message : String(error))) throw error;
+    runtimeSpent = true;
+    return TRACKS_UNREAD;
+  }
+};
+
+/** GridTrackSize[] → `{ type, value }[]` (FLEX = fr fraction, FIXED = px), as it always read. */
+const serializeTracks = (tracks: unknown): SerializedGridTrack[] | undefined => {
+  if (!Array.isArray(tracks)) return undefined;
+  return tracks
+    .filter(
+      (t): t is { type: unknown; value: unknown } =>
+        typeof t === 'object' && t !== null && 'type' in t && 'value' in t,
+    )
+    .map(t => ({ type: String(t.type), value: Number(t.value) }));
+};
+
+/** What reading one grid's tracks gave: both size lists, or that they were left unread. */
 export type GridTrackRead =
   | { rows: SerializedGridTrack[] | undefined; columns: SerializedGridTrack[] | undefined }
   | { unavailable: true };
 
-const readTracks = (raw: unknown): SerializedGridTrack[] | undefined => {
-  if (!Array.isArray(raw)) return undefined;
-  const out: SerializedGridTrack[] = [];
-  for (const track of raw as unknown[]) {
-    if (typeof track !== 'object' || track === null) continue;
-    // One read per field: every read costs Figma a table entry (see above).
-    const { type, value } = track as { type?: unknown; value?: unknown };
-    if (type === undefined || value === undefined) continue;
-    out.push({ type: String(type), value: Number(value) });
-  }
-  return out;
+/** A grid's row and column sizes for a read — both, or neither. */
+export const readGridTrackSizes = (grid: {
+  gridRowSizes?: unknown;
+  gridColumnSizes?: unknown;
+}): GridTrackRead => {
+  const read = readTracks(() => ({
+    rows: serializeTracks(grid.gridRowSizes),
+    columns: serializeTracks(grid.gridColumnSizes),
+  }));
+  return read === TRACKS_UNREAD ? { unavailable: true } : read;
 };
 
-/**
- * Read a grid's row and column sizes, or report them unavailable once this session's allowance is
- * spent. `rowCount` / `columnCount` are the grid's own counts, read by the caller: they size the
- * read up front, so a grid that would overrun the allowance is never touched at all.
- */
-export const readGridTrackSizes = (
-  grid: { gridRowSizes?: unknown; gridColumnSizes?: unknown },
-  rowCount: number | undefined,
-  columnCount: number | undefined,
-): GridTrackRead => {
-  const expected = (rowCount ?? 0) + (columnCount ?? 0);
-  if (tracksRead + expected > GRID_TRACK_ALLOWANCE) return { unavailable: true };
-  const rows = readTracks(grid.gridRowSizes);
-  const columns = readTracks(grid.gridColumnSizes);
-  tracksRead += (rows?.length ?? 0) + (columns?.length ?? 0);
-  return { rows, columns };
-};
-
-/** Test seam: start a fresh plugin session's allowance. */
-export const resetGridTrackAllowanceForTests = (): void => {
-  tracksRead = 0;
+/** Test seam: start a fresh plugin session. */
+export const resetGridTrackReadsForTests = (): void => {
+  runtimeSpent = false;
 };

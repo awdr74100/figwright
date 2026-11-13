@@ -880,6 +880,85 @@ describe('get_design_context handler', () => {
     await expect(handler({ nodeId: '0:1' })).rejects.toThrow(/is a PAGE/);
   });
 
+  // Figma's runtime, once its callback ids are spent, fails an API the session had not used yet
+  // (measured: the first variable lookup after the overflow) — the names are missing for a reason
+  // that has nothing to do with the file, so the result says so.
+  describe('names lost to a spent plugin runtime', () => {
+    const SPENT = 'in <unknown>: Attempted to invoke callback with invalid id -32751';
+    const bound = (id: string, width = 10) =>
+      node({ id, type: 'FRAME', width, boundVariables: { fills: [{ id: 'VariableID:1' }] } });
+    const ctxThrowing = (message: string, selection: SceneNode[]) => {
+      const figmaCtx = fakeFigma({ selection });
+      (figmaCtx.variables as unknown as Record<string, unknown>).getVariableByIdAsync =
+        async () => {
+          throw new Error(message);
+        };
+      return figmaCtx;
+    };
+
+    it('adds a hint when a variable lookup finds the runtime spent', async () => {
+      const result = (await createGetDesignContextHandler(ctxThrowing(SPENT, [bound('a')]))({
+        detail: 'full',
+      })) as GetDesignContextResult;
+      expect(result.variables).toBeUndefined();
+      expect(result.hint).toMatch(/run out of callback ids/);
+      expect(result.hint).toMatch(/reopen the Figwright plugin/);
+    });
+
+    it('adds a hint when a style lookup finds the runtime spent', async () => {
+      const figmaCtx = fakeFigma({ selection: [node({ id: 'a', fillStyleId: 'S:x,' })] });
+      (figmaCtx as unknown as Record<string, unknown>).getStyleByIdAsync = async () => {
+        throw new Error(SPENT);
+      };
+      const result = (await createGetDesignContextHandler(figmaCtx)({
+        detail: 'full',
+      })) as GetDesignContextResult;
+      expect(result.hint).toMatch(/run out of callback ids/);
+    });
+
+    it('adds a hint when a variable-mode collection finds the runtime spent', async () => {
+      const figmaCtx = fakeFigma({
+        selection: [node({ id: 'a', explicitVariableModes: { 'VariableCollectionId:1': '1:0' } })],
+      });
+      (figmaCtx.variables as unknown as Record<string, unknown>).getVariableCollectionByIdAsync =
+        async () => {
+          throw new Error(SPENT);
+        };
+      const result = (await createGetDesignContextHandler(figmaCtx)({
+        detail: 'full',
+      })) as GetDesignContextResult;
+      expect(result.hint).toMatch(/run out of callback ids/);
+    });
+
+    it.each([
+      ['an unresolved ref', 'Variable not found'],
+      [
+        'a positive id, which the overflow never produces',
+        'Attempted to invoke callback with invalid id 12',
+      ],
+    ])('stays silent on %s, as it always did', async (_label, message) => {
+      const result = (await createGetDesignContextHandler(ctxThrowing(message, [bound('a')]))({
+        detail: 'full',
+      })) as GetDesignContextResult;
+      expect(result.hint).toBeUndefined();
+      expect(result.variables).toBeUndefined();
+    });
+
+    it('keeps a breakpoint hint ahead of it', async () => {
+      const result = (await createGetDesignContextHandler(
+        ctxThrowing(SPENT, [bound('d', 1440), bound('m', 375)]),
+      )({ detail: 'full' })) as GetDesignContextResult;
+      expect(result.hint).toMatch(/^.*these are breakpoints.*run out of callback ids/s);
+    });
+
+    it('adds nothing below full detail, where no names are resolved', async () => {
+      const result = (await createGetDesignContextHandler(ctxThrowing(SPENT, [bound('a')]))({
+        detail: 'compact',
+      })) as GetDesignContextResult;
+      expect(result.hint).toBeUndefined();
+    });
+  });
+
   it('attaches a breakpoint hint when the selection spans width buckets — even at compact', async () => {
     const desktop = node({ id: 'd', name: 'W_Home', width: 1440 });
     const mobile = node({ id: 'm', name: 'M_Home', width: 375 });

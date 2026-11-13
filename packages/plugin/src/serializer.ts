@@ -307,7 +307,7 @@ const serializeAutoLayout = (
     if (n.gridAutoTracks === 'ROWS') out.gridAutoTracks = 'ROWS';
     if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
     if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
-    const sizes = readGridTrackSizes(n, gridRowCount, gridColumnCount);
+    const sizes = readGridTrackSizes(n);
     if ('unavailable' in sizes) {
       out.gridTrackSizesUnavailable = true;
     } else {
