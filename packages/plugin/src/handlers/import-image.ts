@@ -1,6 +1,7 @@
 import type { CreateResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { isRuntimeSpent, runtimeSpentError } from '../runtime-ids.js';
 import { readCreateSize } from './create-size.js';
 import { placeNode } from './place.js';
 
@@ -34,6 +35,9 @@ export const createImportImageHandler =
       ? (p.scaleMode as ScaleMode)
       : 'FILL';
 
+    // Once the runtime has run out of callback ids every new image fails as soon as it is used
+    // (measured, used before the overflow or not), and spends more ids doing so (runtime-ids.ts).
+    if (isRuntimeSpent()) throw runtimeSpentError('import_image', 'create the image');
     const image =
       typeof p.data === 'string'
         ? figmaCtx.createImage(figmaCtx.base64Decode(p.data))

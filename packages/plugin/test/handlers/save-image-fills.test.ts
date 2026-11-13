@@ -2,6 +2,7 @@ import type { ImageFillsResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSaveImageFillsHandler } from '../../src/handlers/save-image-fills.js';
+import { noteRuntimeError, resetRuntimeForTests } from '../../src/runtime-ids.js';
 
 const MIXED = Symbol('figma.mixed');
 
@@ -35,6 +36,62 @@ const imagePaint = (imageHash: string | null, scaleMode = 'FILL'): unknown => ({
 });
 
 describe('save_image_fills handler', () => {
+  // Once Figma's runtime has run out of callback ids, an existing image fails as soon as it is read
+  // (measured); only that read is refused — what answered without one answers as before.
+  describe('after the runtime ran out of callback ids', () => {
+    const image = {
+      getBytesAsync: async () => new Uint8Array([1]),
+      getSizeAsync: async () => ({ width: 1, height: 1 }),
+    };
+
+    it('refuses an image the file has, without reading its bytes', async () => {
+      try {
+        const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([1]));
+        const f = makeFigma({ '1:1': { fills: [imagePaint('h1')] } }, { h1: image }, getBytes);
+        noteRuntimeError(
+          new Error('in <unknown>: Attempted to invoke callback with invalid id -32761'),
+        );
+        await expect(createSaveImageFillsHandler(f)({ nodeIds: ['1:1'] })).rejects.toThrow(
+          /^save_image_fills: could not read image h1\. .*reopen the plugin/,
+        );
+        expect(getBytes).not.toHaveBeenCalled();
+      } finally {
+        resetRuntimeForTests();
+      }
+    });
+
+    it('still answers what needs no image: no image fills, a hash the file lacks, no hash', async () => {
+      try {
+        const f = makeFigma(
+          {
+            '1:1': { fills: [{ type: 'SOLID' }] },
+            '2:2': { fills: [imagePaint('gone'), imagePaint(null)] },
+          },
+          { gone: null },
+        );
+        noteRuntimeError(
+          new Error('in <unknown>: Attempted to invoke callback with invalid id -32761'),
+        );
+        const result = (await createSaveImageFillsHandler(f)({
+          nodeIds: ['1:1', '2:2', '9:9'],
+        })) as ImageFillsResult;
+        expect(result.nodes).toEqual([
+          { nodeId: '1:1', images: [] },
+          {
+            nodeId: '2:2',
+            images: [
+              { index: 0, imageHash: 'gone', base64: null, scaleMode: 'FILL' },
+              { index: 1, imageHash: null, base64: null, scaleMode: 'FILL' },
+            ],
+          },
+          { nodeId: '9:9', images: [] },
+        ]);
+      } finally {
+        resetRuntimeForTests();
+      }
+    });
+  });
+
   it('extracts original bytes + intrinsic size + scaleMode per IMAGE fill, skipping non-image paints', async () => {
     const getBytes = vi.fn<() => Promise<Uint8Array>>(async () => new Uint8Array([1, 2, 3]));
     const f = makeFigma(

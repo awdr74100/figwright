@@ -1,7 +1,8 @@
 import type { GetStylesResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createGetStylesHandler } from '../../src/handlers/get-styles.js';
+import { isRuntimeSpent, resetRuntimeForTests } from '../../src/runtime-ids.js';
 
 const fakeFigma = (
   over: Partial<Record<string, unknown[]>> = {},
@@ -323,6 +324,9 @@ describe('get_styles handler — variable bindings', () => {
   // (measured: the first variable lookup after the overflow). Those names are missing for a reason
   // that has nothing to do with the file, so the result leads with a hint saying so.
   describe('variable names lost to a spent plugin runtime', () => {
+    // A lost name marks the whole plugin session spent (runtime-ids.ts); later tests start fresh.
+    afterEach(resetRuntimeForTests);
+
     const SPENT = 'in <unknown>: Attempted to invoke callback with invalid id -32751';
     const throwing = (fail: (id: string) => Error | null): typeof figma => {
       const figmaCtx = fakeFigma(boundStyles, varTable);
@@ -344,6 +348,7 @@ describe('get_styles handler — variable bindings', () => {
       expect(result.hint).toMatch(/^Some variable names could not be resolved/);
       expect(result.hint).toMatch(/reopen the Figwright plugin/);
       expect(result.variables).toBeUndefined();
+      expect(isRuntimeSpent()).toBe(true);
     });
 
     it('keeps the names it did resolve, behind the hint', async () => {

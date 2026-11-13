@@ -1,5 +1,7 @@
 import type { SerializedGridTrack } from '@figwright/shared';
 
+import { isRuntimeSpent, noteRuntimeError, resetRuntimeForTests } from './runtime-ids.js';
+
 /**
  * Figma's plugin runtime numbers its host callbacks from one signed 16-bit counter that never
  * reuses an id, and some of the objects it hands out spend ids just by existing: a GridTrackSize
@@ -22,30 +24,20 @@ import type { SerializedGridTrack } from '@figwright/shared';
  * ever made again in this session — a grid reports its sizes unavailable instead — so the first
  * overflow is the last. Nothing that read before stops reading earlier.
  */
-let runtimeSpent = false;
-
-// The overflowed counter is the only source measured, and its ids are negative (int16 past
-// 32,767); any other wording is left to propagate as it always did.
-const CALLBACK_IDS_SPENT = /Attempted to invoke callback with invalid id -\d/;
-
-/** Whether an error is the runtime reporting its callback ids spent. */
-export const isCallbackIdsSpent = (message: string): boolean => CALLBACK_IDS_SPENT.test(message);
-
 /** What a read gives back when the tracks were left unread. */
 export const TRACKS_UNREAD = Symbol('tracks unread');
 
 /**
- * Run `read`, which makes track objects, unless the runtime has already run out of callback ids.
- * The runtime's own error marks the session spent and reads as unread; any other error is thrown,
- * as it always was.
+ * Run `read`, which makes track objects, unless the runtime has already run out of callback ids
+ * (runtime-ids.ts — whatever surfaced it first). The runtime's own error marks the session spent
+ * and reads as unread; any other error is thrown, as it always was.
  */
 export const readTracks = <T>(read: () => T): T | typeof TRACKS_UNREAD => {
-  if (runtimeSpent) return TRACKS_UNREAD;
+  if (isRuntimeSpent()) return TRACKS_UNREAD;
   try {
     return read();
   } catch (error) {
-    if (!isCallbackIdsSpent(error instanceof Error ? error.message : String(error))) throw error;
-    runtimeSpent = true;
+    if (!noteRuntimeError(error)) throw error;
     return TRACKS_UNREAD;
   }
 };
@@ -80,5 +72,5 @@ export const readGridTrackSizes = (grid: {
 
 /** Test seam: start a fresh plugin session. */
 export const resetGridTrackReadsForTests = (): void => {
-  runtimeSpent = false;
+  resetRuntimeForTests();
 };
