@@ -7,6 +7,7 @@ import type {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { createNameLoss, type NameLoss, namesLostHint, noteNameLoss } from '../names-lost.js';
 import {
   collectBindings,
   serializeCodeSyntax,
@@ -56,6 +57,7 @@ const collectVariableIds = (result: GetStylesResult): Set<string> => {
 const resolveVariables = async (
   figmaCtx: typeof figma,
   ids: ReadonlySet<string>,
+  loss: NameLoss,
 ): Promise<Record<string, ResolvedToken> | undefined> => {
   const getVar = figmaCtx.variables?.getVariableByIdAsync;
   if (ids.size === 0 || typeof getVar !== 'function') return undefined;
@@ -72,7 +74,8 @@ const resolveVariables = async (
         const codeSyntax = serializeCodeSyntax((v as { codeSyntax?: unknown }).codeSyntax);
         if (codeSyntax !== undefined) token.codeSyntax = codeSyntax;
         return token;
-      } catch {
+      } catch (error) {
+        noteNameLoss(loss, error);
         /* unresolved ref — skip, the inline value remains the fallback */
         return undefined;
       }
@@ -85,6 +88,8 @@ const resolveVariables = async (
   }
   return Object.keys(variables).length > 0 ? variables : undefined;
 };
+
+const STYLE_NAMES_LOST_HINT = namesLostHint('variable');
 
 export const createGetStylesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -145,6 +150,10 @@ export const createGetStylesHandler =
     // Ids are only worth resolving once the styles are serialized — that's what says which
     // variables this document's styles actually reference. The table goes FIRST so a reader meets
     // `VariableID:5:12` already knowing what it names, instead of after every style that cites it.
-    const variables = await resolveVariables(figmaCtx, collectVariableIds(result));
-    return variables === undefined ? result : { variables, ...result };
+    const loss = createNameLoss();
+    const variables = await resolveVariables(figmaCtx, collectVariableIds(result), loss);
+    const resolved = variables === undefined ? result : { variables, ...result };
+    // A name lost to the runtime running out of callback ids leads the result, ahead of the table
+    // it is missing from, so it is read before any binding it leaves without a name.
+    return loss.spent ? { hint: STYLE_NAMES_LOST_HINT, ...resolved } : resolved;
   };

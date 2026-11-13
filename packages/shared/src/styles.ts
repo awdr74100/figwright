@@ -59,6 +59,12 @@ export const SerializedGridStyleSchema = z.object({
 export type SerializedGridStyle = z.infer<typeof SerializedGridStyleSchema>;
 
 export const GetStylesResultSchema = z.object({
+  /**
+   * Set, and first, only when some variable names could not be resolved because Figma's plugin
+   * runtime ran out of callback ids this plugin session — not because the variables are gone. Bound
+   * values are then missing from `variables`; the plugin must be reopened to read them.
+   */
+  hint: z.string().optional(),
   /** See {@link DisplayP3MarkerSchema}: every colour below is P3 when present. */
   colorProfile: DisplayP3MarkerSchema.optional(),
   paints: z.array(SerializedPaintStyleSchema),

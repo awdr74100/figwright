@@ -319,6 +319,57 @@ describe('get_styles handler — variable bindings', () => {
     expect(Object.keys(result)[0]).toBe('variables');
   });
 
+  // Figma's runtime, once its callback ids are spent, fails an API the session had not used yet
+  // (measured: the first variable lookup after the overflow). Those names are missing for a reason
+  // that has nothing to do with the file, so the result leads with a hint saying so.
+  describe('variable names lost to a spent plugin runtime', () => {
+    const SPENT = 'in <unknown>: Attempted to invoke callback with invalid id -32751';
+    const throwing = (fail: (id: string) => Error | null): typeof figma => {
+      const figmaCtx = fakeFigma(boundStyles, varTable);
+      (figmaCtx.variables as unknown as Record<string, unknown>).getVariableByIdAsync = async (
+        id: string,
+      ) => {
+        const error = fail(id);
+        if (error !== null) throw error;
+        return varTable[id as keyof typeof varTable] ?? null;
+      };
+      return figmaCtx;
+    };
+
+    it('leads with a hint when every lookup finds the runtime spent', async () => {
+      const result = (await createGetStylesHandler(throwing(() => new Error(SPENT)))(
+        undefined,
+      )) as GetStylesResult;
+      expect(Object.keys(result)[0]).toBe('hint');
+      expect(result.hint).toMatch(/^Some variable names could not be resolved/);
+      expect(result.hint).toMatch(/reopen the Figwright plugin/);
+      expect(result.variables).toBeUndefined();
+    });
+
+    it('keeps the names it did resolve, behind the hint', async () => {
+      const result = (await createGetStylesHandler(
+        throwing(id => (id === 'VariableID:grid' ? new Error(SPENT) : null)),
+      )(undefined)) as GetStylesResult;
+      expect(Object.keys(result).slice(0, 2)).toEqual(['hint', 'variables']);
+      expect(Object.keys(result.variables ?? {})).not.toContain('VariableID:grid');
+      expect(result.variables?.['VariableID:paint']?.name).toBe('color/brand');
+    });
+
+    it.each([
+      ['an unresolved ref', 'Variable not found'],
+      [
+        'a positive id, which the overflow never produces',
+        'Attempted to invoke callback with invalid id 12',
+      ],
+    ])('stays silent on %s, as it always did', async (_label, message) => {
+      const result = (await createGetStylesHandler(throwing(() => new Error(message)))(
+        undefined,
+      )) as GetStylesResult;
+      expect(result).not.toHaveProperty('hint');
+      expect(result.variables).toBeUndefined();
+    });
+  });
+
   it('keys the variables table in a stable order, not in lookup-completion order', async () => {
     // Resolution is parallel; a table assembled as promises settle would reorder run to run.
     const slow = {

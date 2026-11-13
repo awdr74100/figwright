@@ -16,7 +16,7 @@ import {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { isCallbackIdsSpent } from '../grid-tracks.js';
+import { createNameLoss, type NameLoss, namesLostHint, noteNameLoss } from '../names-lost.js';
 import { inheritRepeat, serializeCodeSyntax, serializeFlatSync } from '../serializer.js';
 import { displayP3Marker } from './color-profile.js';
 
@@ -264,25 +264,7 @@ const collectRefs = (
   return { varIds, styleIds };
 };
 
-/**
- * Whether a token, style or mode name was lost to Figma's plugin runtime running out of callback
- * ids (grid-tracks.ts). Every other failed lookup is an unresolved ref, skipped as it always was;
- * this one is not about the ref at all — the API itself has stopped answering this session, so the
- * result says so instead of reading as a file whose bound values have no names.
- */
-interface NameLoss {
-  spent: boolean;
-}
-
-const noteLoss = (loss: NameLoss, error: unknown): void => {
-  if (isCallbackIdsSpent(error instanceof Error ? error.message : String(error))) loss.spent = true;
-};
-
-const NAMES_LOST_HINT =
-  "Some variable, style or variable-mode names could not be resolved: Figma's plugin runtime has " +
-  'run out of callback ids for this plugin session, so bound values here may lack their token ' +
-  'names. Ask the user to close and reopen the Figwright plugin, then read again before ' +
-  'generating code.';
+const NAMES_LOST_HINT = namesLostHint('variable, style or variable-mode');
 
 /**
  * Resolve referenced variable + style ids to names (deduped, top-level). Handles both local and
@@ -313,7 +295,7 @@ const resolveTokens = async (
             variables[id] = token;
           }
         } catch (error) {
-          noteLoss(loss, error);
+          noteNameLoss(loss, error);
           /* unresolved ref — skip, inline value remains the fallback */
         }
       }),
@@ -330,7 +312,7 @@ const resolveTokens = async (
           const s = await getStyle.call(figmaCtx, id);
           if (s !== null) styles[id] = { name: s.name, type: s.type };
         } catch (error) {
-          noteLoss(loss, error);
+          noteNameLoss(loss, error);
           /* unresolved ref — skip */
         }
       }),
@@ -372,7 +354,7 @@ const resolveVariableModes = async (
             ? await getCollection.call(figmaCtx.variables, id)
             : null;
       } catch (error) {
-        noteLoss(loss, error);
+        noteNameLoss(loss, error);
         /* unreadable — the ids stand in for the names */
       }
       collections.set(id, collection);
@@ -909,7 +891,7 @@ export const createGetDesignContextHandler =
     // Full detail only: resolve token ids → names (P2), then dedupe styles into globalVars and
     // measure the simplification (P3). Below full, styleIds/boundVariables/fills aren't surfaced.
     if (ctx.detail === 'full') {
-      const loss: NameLoss = { spent: false };
+      const loss = createNameLoss();
       await resolveVariableModes(figmaCtx, roots, nodes, loss);
       Object.assign(result, await resolveTokens(figmaCtx, nodes, loss));
       if (loss.spent) {
