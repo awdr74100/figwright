@@ -1,6 +1,7 @@
 import type { ImageFillBytes, ImageFillsResult, NodeImageFills } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { isRuntimeSpent, runtimeSpentError } from '../runtime-ids.js';
 
 /** The wire payload + intrinsic size for one resolved image hash. */
 interface ResolvedImage {
@@ -58,6 +59,10 @@ export const createSaveImageFillsHandler =
         pending = (async (): Promise<ResolvedImage | null> => {
           const image = figmaCtx.getImageByHash(hash);
           if (image === null) return null;
+          // A hash the file no longer has still answers null, as before; an image that exists would
+          // fail as soon as it is read once the runtime has run out of callback ids (measured), so
+          // it is refused before its methods spend more (runtime-ids.ts).
+          if (isRuntimeSpent()) throw runtimeSpentError('save_image_fills', `read image ${hash}`);
           const [bytes, size] = await Promise.all([image.getBytesAsync(), image.getSizeAsync()]);
           // Encoded inside the memo, not per usage: a logo reused across 50 nodes must cost one
           // base64Encode, not 50. The cache is what makes that true, so the payload belongs in it.

@@ -7,6 +7,7 @@ import {
   markWriteHandler,
   type SandboxHandlers,
 } from '../src/dispatcher.js';
+import { isRuntimeSpent, resetRuntimeForTests } from '../src/runtime-ids.js';
 
 describe('dispatchSandboxMessage', () => {
   it('replies with tool-result when handler resolves', async () => {
@@ -165,6 +166,9 @@ describe('dispatchSandboxMessage', () => {
     expect(outcome.reply.code).toBe(ErrorCode.Internal);
     expect(outcome.reply.message.startsWith(raised)).toBe(true);
     expect(outcome.reply.message).toContain('reopen the plugin');
+    // Whichever handler meets the overflow first marks the session for the rest (runtime-ids.ts).
+    expect(isRuntimeSpent()).toBe(true);
+    resetRuntimeForTests();
   });
 
   // Figma Design is the common case, and it must stay free of the caveat entirely.

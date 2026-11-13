@@ -1,7 +1,8 @@
 import type { GetDesignContextResult } from '@figwright/shared';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createGetDesignContextHandler } from '../../src/handlers/get-design-context.js';
+import { isRuntimeSpent, resetRuntimeForTests } from '../../src/runtime-ids.js';
 
 const node = (over: Record<string, unknown>): SceneNode =>
   ({
@@ -884,6 +885,9 @@ describe('get_design_context handler', () => {
   // (measured: the first variable lookup after the overflow) — the names are missing for a reason
   // that has nothing to do with the file, so the result says so.
   describe('names lost to a spent plugin runtime', () => {
+    // A lost name marks the whole plugin session spent (runtime-ids.ts); later tests start fresh.
+    afterEach(resetRuntimeForTests);
+
     const SPENT = 'in <unknown>: Attempted to invoke callback with invalid id -32751';
     const bound = (id: string, width = 10) =>
       node({ id, type: 'FRAME', width, boundVariables: { fills: [{ id: 'VariableID:1' }] } });
@@ -903,6 +907,8 @@ describe('get_design_context handler', () => {
       expect(result.variables).toBeUndefined();
       expect(result.hint).toMatch(/run out of callback ids/);
       expect(result.hint).toMatch(/reopen the Figwright plugin/);
+      // …and the session is marked, so later image and track reads stop spending ids.
+      expect(isRuntimeSpent()).toBe(true);
     });
 
     it('adds a hint when a style lookup finds the runtime spent', async () => {

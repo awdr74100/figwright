@@ -1,6 +1,7 @@
 import type { ImageFillResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { isRuntimeSpent, runtimeSpentError } from '../runtime-ids.js';
 import { writePaints } from './paints.js';
 
 const SCALE_MODES = ['FILL', 'FIT', 'CROP', 'TILE'] as const;
@@ -86,6 +87,9 @@ export const createSetImageFillHandler =
       );
     }
 
+    // Once the runtime has run out of callback ids every new image fails as soon as it is used
+    // (measured, used before the overflow or not), and spends more ids doing so (runtime-ids.ts).
+    if (isRuntimeSpent()) throw runtimeSpentError('set_image_fill', 'create the image');
     const image =
       typeof p.data === 'string'
         ? figmaCtx.createImage(figmaCtx.base64Decode(p.data))

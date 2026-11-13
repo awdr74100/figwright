@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBatchHandler } from '../../src/handlers/batch.js';
 import { createSetImageFillHandler } from '../../src/handlers/set-image-fill.js';
+import { noteRuntimeError, resetRuntimeForTests } from '../../src/runtime-ids.js';
 
 const MIXED = Symbol('mixed');
 const SOLID = {
@@ -61,6 +62,45 @@ const frame = (fills: unknown, extra: Record<string, unknown> = {}) => ({
 });
 
 describe('set_image_fill handler', () => {
+  // Once Figma's runtime has run out of callback ids, a new image fails as soon as it is used
+  // (measured), spending more ids on the way; it is refused before it exists (runtime-ids.ts).
+  describe('after the runtime ran out of callback ids', () => {
+    const spend = (): boolean =>
+      noteRuntimeError(
+        new Error('in <unknown>: Attempted to invoke callback with invalid id -32761'),
+      );
+
+    it('refuses without creating the image, from data or from a url', async () => {
+      try {
+        const { figmaCtx, createImage, createImageAsync } = makeFigma({ '1:1': frame([SOLID]) });
+        spend();
+        const handler = createSetImageFillHandler(figmaCtx);
+        await expect(handler({ nodeId: '1:1', data: 'abcd' })).rejects.toThrow(
+          /^set_image_fill: could not create the image\. .*reopen the plugin/,
+        );
+        await expect(handler({ nodeId: '1:1', url: 'https://x/y.png' })).rejects.toThrow(
+          /could not create the image/,
+        );
+        expect(createImage).not.toHaveBeenCalled();
+        expect(createImageAsync).not.toHaveBeenCalled();
+      } finally {
+        resetRuntimeForTests();
+      }
+    });
+
+    it('still reports its own argument errors first, as before', async () => {
+      try {
+        const { figmaCtx } = makeFigma({ '1:1': frame([SOLID]) });
+        spend();
+        await expect(
+          createSetImageFillHandler(figmaCtx)({ nodeId: '1:1', data: 'abcd', index: 5 }),
+        ).rejects.toThrow(/out of range/);
+      } finally {
+        resetRuntimeForTests();
+      }
+    });
+  });
+
   it('swaps only the picture in the topmost IMAGE fill, keeping its crop, filters and opacity', async () => {
     const node = frame([SOLID, CROPPED, { ...CROPPED, imageHash: 'top' }]);
     const { figmaCtx } = makeFigma({ '1:1': node });

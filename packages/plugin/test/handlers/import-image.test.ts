@@ -2,6 +2,7 @@ import type { CreateResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createImportImageHandler } from '../../src/handlers/import-image.js';
+import { noteRuntimeError, resetRuntimeForTests } from '../../src/runtime-ids.js';
 
 interface FakeRect {
   id: string;
@@ -77,6 +78,31 @@ describe('import_image handler', () => {
     expect(rect.width).toBe(64);
     expect(rect.height).toBe(64);
     expect(rect.fills).toEqual([{ type: 'IMAGE', scaleMode: 'FIT', imageHash: 'URLHASH' }]);
+  });
+
+  it('refuses without creating the image once the runtime ran out of callback ids', async () => {
+    try {
+      const { figma: f, page } = makeFigma();
+      const created: unknown[] = [];
+      const ctx = f as unknown as Record<string, unknown>;
+      const original = ctx.createImage as (b: Uint8Array) => unknown;
+      ctx.createImage = (b: Uint8Array) => (created.push(b), original(b));
+      noteRuntimeError(
+        new Error('in <unknown>: Attempted to invoke callback with invalid id -32761'),
+      );
+      await expect(createImportImageHandler(f)({ data: 'abc' })).rejects.toThrow(
+        /^import_image: could not create the image\. .*reopen the plugin/,
+      );
+      await expect(createImportImageHandler(f)({ url: 'https://x/y.png' })).rejects.toThrow(
+        /could not create the image/,
+      );
+      // The argument check still comes first.
+      await expect(createImportImageHandler(f)({})).rejects.toThrow(/provide data/);
+      expect(created).toEqual([]);
+      expect(page.appendChild).not.toHaveBeenCalled();
+    } finally {
+      resetRuntimeForTests();
+    }
   });
 
   it('throws when neither data nor url is given', async () => {
