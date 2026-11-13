@@ -1,6 +1,7 @@
 import { MIXED, type SerializedNode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
+import { readTracks, resetGridTrackReadsForTests } from '../src/grid-tracks.js';
 import {
   serializeEffect,
   serializeFlat,
@@ -198,6 +199,113 @@ describe('serializeFlat', () => {
       gridColumnSizes: [{ type: 'FLEX', value: 1 }],
     });
     expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
+  // Every GridTrackSize Figma hands out spends callback ids (grid-tracks.ts), so each axis is taken
+  // out of the node exactly once — and every track it holds comes back, in order.
+  it('reads each axis of a grid once and keeps every track', () => {
+    resetGridTrackReadsForTests();
+    const taken = { gridRowSizes: 0, gridColumnSizes: 0 };
+    const node = fake({ type: 'FRAME', layoutMode: 'GRID', gridRowCount: 1, gridColumnCount: 3 });
+    const axes = {
+      gridRowSizes: [{ type: 'FLEX', value: 1 }],
+      gridColumnSizes: [
+        { type: 'FIXED', value: 128 },
+        { type: 'HUG', value: 1 },
+        { type: 'FLEX', value: 2 },
+      ],
+    };
+    for (const [key, tracks] of Object.entries(axes)) {
+      Object.defineProperty(node, key, {
+        get: () => {
+          taken[key as keyof typeof taken]++;
+          return tracks;
+        },
+      });
+    }
+    expect(serializeFlatSync(node).layout).toMatchObject(axes);
+    expect(taken).toEqual({ gridRowSizes: 1, gridColumnSizes: 1 });
+    resetGridTrackReadsForTests();
+  });
+
+  it('reads a grid as it always did however many tracks the session has read', () => {
+    resetGridTrackReadsForTests();
+    const node = fake({ type: 'FRAME', layoutMode: 'GRID', gridRowCount: 1, gridColumnCount: 1 });
+    Object.defineProperty(node, 'gridRowSizes', { get: () => [{ type: 'FIXED', value: 8 }] });
+    Object.defineProperty(node, 'gridColumnSizes', { get: () => [{ type: 'FLEX', value: 1 }] });
+    for (let i = 0; i < 5000; i++) {
+      expect(serializeFlatSync(node).layout).toMatchObject({
+        gridRowSizes: [{ type: 'FIXED', value: 8 }],
+        gridColumnSizes: [{ type: 'FLEX', value: 1 }],
+      });
+    }
+    expect(serializeFlatSync(node).layout).not.toHaveProperty('gridTrackSizesUnavailable');
+  });
+
+  // Measured: once the runtime's ids are spent, a track read throws this — and every later one
+  // would spend more of a counter that, wrapped round, calls unrelated Figma APIs.
+  it('stops reading tracks for the session once the runtime reports its callback ids spent', () => {
+    resetGridTrackReadsForTests();
+    const touched = vi.fn<() => void>();
+    const grid = (): SceneNode => {
+      const node = fake({
+        type: 'FRAME',
+        layoutMode: 'GRID',
+        gridRowCount: 1,
+        gridColumnCount: 1,
+        gridColumnGap: 6,
+      });
+      Object.defineProperty(node, 'gridRowSizes', {
+        get: () => {
+          touched();
+          throw new Error('in <unknown>: Attempted to invoke callback with invalid id -32761');
+        },
+      });
+      Object.defineProperty(node, 'gridColumnSizes', { get: () => [] });
+      return node;
+    };
+
+    for (let i = 0; i < 2; i++) {
+      const layout = serializeFlatSync(grid()).layout;
+      expect(layout).toMatchObject({
+        mode: 'GRID',
+        gridColumnGap: 6,
+        gridTrackSizesUnavailable: true,
+      });
+      expect(layout).not.toHaveProperty('gridRowSizes');
+    }
+    expect(touched).toHaveBeenCalledTimes(1);
+    resetGridTrackReadsForTests();
+  });
+
+  it('leaves every later grid untouched once any track read found the runtime spent', () => {
+    resetGridTrackReadsForTests();
+    readTracks(() => {
+      throw new Error('in <unknown>: Attempted to invoke callback with invalid id -32761');
+    });
+    const touched = vi.fn<() => unknown[]>(() => [{ type: 'FIXED', value: 8 }]);
+    const node = fake({ type: 'FRAME', layoutMode: 'GRID', gridRowCount: 1, gridColumnCount: 1 });
+    Object.defineProperty(node, 'gridRowSizes', { get: touched });
+    Object.defineProperty(node, 'gridColumnSizes', { get: touched });
+    expect(serializeFlatSync(node).layout).toMatchObject({
+      gridRowCount: 1,
+      gridColumnCount: 1,
+      gridTrackSizesUnavailable: true,
+    });
+    expect(touched).not.toHaveBeenCalled();
+    resetGridTrackReadsForTests();
+  });
+
+  it('still fails a grid read on any other error from its tracks, as it always did', () => {
+    resetGridTrackReadsForTests();
+    const node = fake({ type: 'FRAME', layoutMode: 'GRID', gridRowCount: 1, gridColumnCount: 0 });
+    Object.defineProperty(node, 'gridRowSizes', {
+      get: () => {
+        throw new Error('something else');
+      },
+    });
+    expect(() => serializeFlatSync(node)).toThrow('something else');
+    resetGridTrackReadsForTests();
   });
 
   it('returns only base fields when no mixin properties are present', () => {

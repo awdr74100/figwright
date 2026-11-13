@@ -159,6 +159,28 @@ const flattenResolved = (ctx: GetDesignContextResult): Map<string, FlatNode> => 
   return out;
 };
 
+const GRID_TRACK_SIZE_KEYS = new Set([
+  'gridRowSizes',
+  'gridColumnSizes',
+  'gridTrackSizesUnavailable',
+]);
+
+const tracksUnread = (layout: unknown): boolean =>
+  isPlainObject(layout) && layout['gridTrackSizesUnavailable'] === true;
+
+const withoutTrackSizes = (layout: unknown): unknown =>
+  isPlainObject(layout)
+    ? Object.fromEntries(Object.entries(layout).filter(([k]) => !GRID_TRACK_SIZE_KEYS.has(k)))
+    : layout;
+
+/**
+ * A grid whose track sizes one side could not read (the plugin session's allowance was spent — see
+ * gridTrackSizesUnavailable) says nothing about whether they changed: compare both layouts without
+ * them, so a read limit never reads as a design edit.
+ */
+const withoutUnreadTrackSizes = (b: unknown, a: unknown): [unknown, unknown] =>
+  tracksUnread(b) || tracksUnread(a) ? [withoutTrackSizes(b), withoutTrackSizes(a)] : [b, a];
+
 /** The per-field deltas between two flattened nodes: own-field changes plus structural moves. */
 const fieldChanges = (before: FlatNode, after: FlatNode): FieldChange[] => {
   const changes: FieldChange[] = [];
@@ -166,7 +188,8 @@ const fieldChanges = (before: FlatNode, after: FlatNode): FieldChange[] => {
   for (const key of [...keys].toSorted()) {
     const b = before.own[key];
     const a = after.own[key];
-    if (!deepEqual(b, a)) changes.push({ field: key, before: b, after: a });
+    const [cb, ca] = key === 'layout' ? withoutUnreadTrackSizes(b, a) : [b, a];
+    if (!deepEqual(cb, ca)) changes.push({ field: key, before: b, after: a });
   }
   // Structure: a reparent (parent changed) subsumes any index shift; a pure reorder (same parent,
   // new index) is reported on its own. Both are real design edits worth surfacing.

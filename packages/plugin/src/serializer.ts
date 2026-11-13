@@ -9,7 +9,6 @@ import {
   type SerializedEffect,
   type SerializedFontName,
   type SerializedGridChild,
-  type SerializedGridTrack,
   type SerializedLayoutGrid,
   type SerializedLetterSpacing,
   type SerializedLineHeight,
@@ -32,6 +31,7 @@ import {
   serializeVariableWidthStroke,
 } from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
+import { readGridTrackSizes } from './grid-tracks.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
@@ -261,17 +261,6 @@ const cssCropTransform = (
   return `${translate} matrix(${m}, 0, 0)`;
 };
 
-/** GridTrackSize[] (gridRow/ColumnSizes) → `{ type, value }[]` (FLEX = fr fraction, FIXED = px). */
-const serializeGridTracks = (tracks: unknown): SerializedGridTrack[] | undefined => {
-  if (!Array.isArray(tracks)) return undefined;
-  return tracks
-    .filter(
-      (t): t is { type: unknown; value: unknown } =>
-        typeof t === 'object' && t !== null && 'type' in t && 'value' in t,
-    )
-    .map(t => ({ type: String(t.type), value: Number(t.value) }));
-};
-
 const serializeAutoLayout = (
   node: SceneNode,
   mode: 'HORIZONTAL' | 'VERTICAL' | 'GRID',
@@ -318,10 +307,13 @@ const serializeAutoLayout = (
     if (n.gridAutoTracks === 'ROWS') out.gridAutoTracks = 'ROWS';
     if (typeof gridRowGap === 'number') out.gridRowGap = gridRowGap;
     if (typeof gridColumnGap === 'number') out.gridColumnGap = gridColumnGap;
-    const rowSizes = serializeGridTracks(n.gridRowSizes);
-    if (rowSizes !== undefined) out.gridRowSizes = rowSizes;
-    const colSizes = serializeGridTracks(n.gridColumnSizes);
-    if (colSizes !== undefined) out.gridColumnSizes = colSizes;
+    const sizes = readGridTrackSizes(n);
+    if ('unavailable' in sizes) {
+      out.gridTrackSizesUnavailable = true;
+    } else {
+      if (sizes.rows !== undefined) out.gridRowSizes = sizes.rows;
+      if (sizes.columns !== undefined) out.gridColumnSizes = sizes.columns;
+    }
     return out;
   }
   const out: SerializedAutoLayout = {

@@ -147,6 +147,26 @@ describe('dispatchSandboxMessage', () => {
     expect(outcome.reply.message.match(/Figma's server did not answer/g)).toHaveLength(1);
   });
 
+  // Measured in Figma desktop: once the runtime's callback slots are spent (grid-tracks.ts), every
+  // later read that needs one fails with this, and only reopening the plugin recovers.
+  it('says that spent callback slots need the plugin reopened, keeping Figma’s own words', async () => {
+    const raised = 'in <unknown>: Attempted to invoke callback with invalid id -32767';
+    const handlers: SandboxHandlers = {
+      lookup: () => {
+        throw new Error(raised);
+      },
+    };
+    const outcome = (await dispatchSandboxMessage({
+      raw: createToolCall({ id: 's', method: 'lookup' }),
+      handlers,
+      editorType: 'figma',
+    })) as { reply: { code: string; message: string } };
+
+    expect(outcome.reply.code).toBe(ErrorCode.Internal);
+    expect(outcome.reply.message.startsWith(raised)).toBe(true);
+    expect(outcome.reply.message).toContain('reopen the plugin');
+  });
+
   // Figma Design is the common case, and it must stay free of the caveat entirely.
   it('adds nothing to an error raised in Figma Design', async () => {
     const handlers: SandboxHandlers = {

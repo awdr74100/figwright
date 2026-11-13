@@ -386,7 +386,7 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   Don't collapse a wrapping flex to a single-axis `gap` — the track gap is its own value. `mode: 'GRID'` → `display:grid` with
   `gridRowCount`/`gridColumnCount` → `grid-template-rows`/`grid-template-columns: repeat(N, 1fr)`,
   `gridRowGap`/`gridColumnGap` → `gap`, and optional `gridRowSizes`/`gridColumnSizes` tracks
-  (`FIXED`→px, `FLEX`→fr, `HUG`→`auto` — content-sized, measured identical) — **emit a real CSS grid,
+  (`FIXED`→px, `FLEX`→fr, `HUG`→`auto` — content-sized, measured identical; `gridTrackSizesUnavailable: true` means they could not be read this plugin session — never assume equal tracks: ask the user to reopen the plugin and re-read) — **emit a real CSS grid,
   don't flatten it to stacked flex**. A grid child
   carries `gridChild` only when it's pinned or spanning (`rowAnchorIndex`/`columnAnchorIndex` →
   `grid-row`/`grid-column` anchor+1, `rowSpan`/`columnSpan` → span N, `horizontalAlign`/

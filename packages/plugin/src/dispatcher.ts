@@ -8,6 +8,7 @@ import {
   type PluginToolResult,
 } from '../protocol/bridge.js';
 import { withEditorContext } from '../protocol/editor-context.js';
+import { isCallbackIdsSpent } from './grid-tracks.js';
 import { ownValue } from './own-value.js';
 
 export type SandboxToolHandler = (params: unknown) => unknown | Promise<unknown>;
@@ -60,14 +61,30 @@ const FIGMA_SERVER_SILENT_NOTE =
   'Check the id, then retry; bringing the file to the front can help.';
 
 /**
+ * What an agent needs once Figma's plugin runtime has run out of callback ids (grid-tracks.ts): the
+ * bare "Attempted to invoke callback with invalid id" reads as a broken tool and invites a retry
+ * that cannot succeed, while the one step that recovers is the user's.
+ */
+const CALLBACK_IDS_SPENT_NOTE =
+  "Figma's plugin runtime has run out of callback ids for this plugin session, and only " +
+  'reopening the Figwright plugin resets them: retrying fails the same way, and Figma APIs this ' +
+  'session had not used yet can fail too. Ask the user to close and reopen the plugin.';
+
+/**
  * A handler error as the reply carries it: Figma's "check your internet connection" gets what it
  * means appended and is a TIMEOUT — Figma's own 10 s ran out — rather than an INTERNAL_ERROR that
- * reads as a fault in the plugin. Anything else is INTERNAL_ERROR, as before.
+ * reads as a fault in the plugin. Spent callback ids get the one step that recovers them. Anything
+ * else is INTERNAL_ERROR, as before.
  */
-const toolErrorOf = (message: string): { code: ErrorCode; message: string } =>
-  FIGMA_SERVER_SILENT.test(message)
-    ? { code: ErrorCode.Timeout, message: `${message} (${FIGMA_SERVER_SILENT_NOTE})` }
-    : { code: ErrorCode.Internal, message };
+const toolErrorOf = (message: string): { code: ErrorCode; message: string } => {
+  if (FIGMA_SERVER_SILENT.test(message)) {
+    return { code: ErrorCode.Timeout, message: `${message} (${FIGMA_SERVER_SILENT_NOTE})` };
+  }
+  if (isCallbackIdsSpent(message)) {
+    return { code: ErrorCode.Internal, message: `${message} (${CALLBACK_IDS_SPENT_NOTE})` };
+  }
+  return { code: ErrorCode.Internal, message };
+};
 
 export const dispatchSandboxMessage = async (input: DispatchInput): Promise<DispatchOutcome> => {
   if (!isPluginBridgeMessage(input.raw)) return { kind: 'ignore' };
