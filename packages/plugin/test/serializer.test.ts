@@ -1,6 +1,7 @@
 import { MIXED, type SerializedNode } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
+import { GRID_TRACK_ALLOWANCE, resetGridTrackAllowanceForTests } from '../src/grid-tracks.js';
 import {
   serializeEffect,
   serializeFlat,
@@ -198,6 +199,80 @@ describe('serializeFlat', () => {
       gridColumnSizes: [{ type: 'FLEX', value: 1 }],
     });
     expect(reads).toEqual(Object.fromEntries(Object.keys(reads).map(key => [key, 1])));
+  });
+
+  it('reads each field of a grid track once', () => {
+    resetGridTrackAllowanceForTests();
+    const reads: Record<string, number> = {};
+    const track = (type: string, value: number): object => {
+      const t = {};
+      for (const [key, v] of Object.entries({ type, value })) {
+        Object.defineProperty(t, key, {
+          enumerable: true,
+          get: () => {
+            reads[key] = (reads[key] ?? 0) + 1;
+            return v;
+          },
+        });
+      }
+      return t;
+    };
+    const node = fake({
+      type: 'FRAME',
+      layoutMode: 'GRID',
+      gridRowCount: 1,
+      gridColumnCount: 2,
+      gridRowSizes: [track('FLEX', 1)],
+      gridColumnSizes: [track('FIXED', 128), track('FIXED', 224)],
+    });
+    expect(serializeFlatSync(node).layout).toMatchObject({
+      gridRowSizes: [{ type: 'FLEX', value: 1 }],
+      gridColumnSizes: [
+        { type: 'FIXED', value: 128 },
+        { type: 'FIXED', value: 224 },
+      ],
+    });
+    expect(reads).toEqual({ type: 3, value: 3 });
+  });
+
+  it('marks track sizes unavailable, without touching them, once the session allowance is spent', () => {
+    resetGridTrackAllowanceForTests();
+    const touched = vi.fn<() => void>();
+    const grid = (rows: number): SceneNode => {
+      const node = fake({
+        type: 'FRAME',
+        layoutMode: 'GRID',
+        gridRowCount: rows,
+        gridColumnCount: 0,
+        gridRowGap: 4,
+      });
+      Object.defineProperty(node, 'gridRowSizes', {
+        get: () => {
+          touched();
+          return Array.from({ length: rows }, () => ({ type: 'FIXED', value: 1 }));
+        },
+      });
+      Object.defineProperty(node, 'gridColumnSizes', { get: () => [] });
+      return node;
+    };
+
+    // Within the allowance: read.
+    expect(serializeFlatSync(grid(GRID_TRACK_ALLOWANCE - 1)).layout).not.toHaveProperty(
+      'gridTrackSizesUnavailable',
+    );
+    expect(touched).toHaveBeenCalledTimes(1);
+
+    // Past it: counts and gaps stay exact, the sizes are flagged and never read.
+    const layout = serializeFlatSync(grid(2)).layout;
+    expect(layout).toMatchObject({
+      mode: 'GRID',
+      gridRowCount: 2,
+      gridRowGap: 4,
+      gridTrackSizesUnavailable: true,
+    });
+    expect(layout).not.toHaveProperty('gridRowSizes');
+    expect(touched).toHaveBeenCalledTimes(1);
+    resetGridTrackAllowanceForTests();
   });
 
   it('returns only base fields when no mixin properties are present', () => {

@@ -67,6 +67,31 @@ describe('diffDesignContext', () => {
     expect((layout.after as { paddingTop: number }).paddingTop).toBe(24);
   });
 
+  it('does not report unread grid track sizes as a change, but still sees other layout edits', () => {
+    const grid = (layout: Record<string, unknown>): GetDesignContextResult =>
+      ctx({ nodes: [{ id: '1:1', name: 'Grid', type: 'FRAME', layout: layout as never }] });
+    const read = {
+      mode: 'GRID',
+      paddingTop: 0,
+      gridColumnCount: 2,
+      gridColumnSizes: [
+        { type: 'FIXED', value: 128 },
+        { type: 'FLEX', value: 1 },
+      ],
+    };
+    const unread = {
+      mode: 'GRID',
+      paddingTop: 0,
+      gridColumnCount: 2,
+      gridTrackSizesUnavailable: true,
+    };
+
+    expect(diffDesignContext(grid(read), grid(unread)).changed).toEqual([]);
+    expect(diffDesignContext(grid(unread), grid(read)).changed).toEqual([]);
+    const moved = diffDesignContext(grid(read), grid({ ...unread, gridColumnCount: 3 }));
+    expect(moved.changed[0]!.fields!.map(f => f.field)).toEqual(['layout']);
+  });
+
   it('reports a text content change', () => {
     const after = ctx();
     (after.nodes[0]!.children![0] as { characters: string }).characters = 'Hi there';

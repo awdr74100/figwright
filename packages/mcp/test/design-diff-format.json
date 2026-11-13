@@ -247,6 +247,7 @@
     "nodes[].layout.gridRowSizes",
     "nodes[].layout.gridRowSizes[].type",
     "nodes[].layout.gridRowSizes[].value",
+    "nodes[].layout.gridTrackSizesUnavailable",
     "nodes[].layout.itemReverseZIndex",
     "nodes[].layout.itemSpacing",
     "nodes[].layout.layoutWrap",
