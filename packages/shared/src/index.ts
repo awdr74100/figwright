@@ -1,3 +1,4 @@
+export * from './batch-refs.js';
 export * from './codec.js';
 export * from './components.js';
 export * from './design-context.js';

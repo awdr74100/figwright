@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import {
+  BATCH_REFS_VERSION,
   createEvent,
   createRequest,
   createResponse,
@@ -1329,5 +1330,98 @@ describe('Relay session pinning', () => {
       relay.sendRequest('get_design_context', {}, 5_000, 'ghost-session'),
     ).rejects.toThrow(/pinned session not connected/);
     wsA.close();
+  });
+});
+
+describe('Relay — batch references and plugins that predate them', () => {
+  /** A plugin of `version` that answers every request `{ ok: true }` and records what it was sent. */
+  const plugin = async (port: number, version: string) => {
+    const ws = await connect(port);
+    const sessionId = newId();
+    ws.send(
+      encodeEnvelope(
+        createRequest({
+          id: 'h',
+          sessionId,
+          method: SystemMethod.Hello,
+          params: helloParams({ clientVersion: version }),
+        }),
+      ),
+    );
+    await nextMessage(ws);
+    const received: string[] = [];
+    ws.on('message', data => {
+      const env = decodeEnvelope(data as ArrayBuffer);
+      if (env.kind !== 'req') return;
+      received.push(env.method);
+      ws.send(encodeEnvelope(createResponse({ id: env.id, sessionId, result: { ok: true } })));
+    });
+    return { sessionId, received };
+  };
+
+  const WITH_REFS = {
+    ops: [
+      { tool: 'create_frame', params: { name: 'Card' } },
+      { tool: 'group_nodes', params: { nodeIds: ['$0', '1:2'] } },
+    ],
+  };
+
+  it('never sends a batch with references to a plugin that would read them as missing ids', async () => {
+    // Measured on a plugin without references: group_nodes with ['$0', real] grouped the real node
+    // alone and answered ok. So the batch must not reach it at all.
+    const b = await startRelay();
+    const old = await plugin(b.port, '0.7.0');
+
+    let served: string | undefined;
+    await expect(
+      b.relay.sendRequest('batch', WITH_REFS, 5000, old.sessionId, s => {
+        served = s;
+      }),
+    ).rejects.toThrow(
+      /this batch refers to earlier ops' results \("\$0"\), and the Figwright plugin in this file \(v0\.7\.0\) cannot resolve them.*Nothing was applied/,
+    );
+    expect(old.received).toEqual([]);
+    // Attributed to that plugin, so the result also carries the update notice.
+    expect(served).toBe(old.sessionId);
+    expect(b.relay.skewNotice(served)).toMatch(/older than this server/i);
+    expect(b.relay.pendingCount()).toBe(0);
+  });
+
+  it('still sends that plugin a batch without references, as it always did', async () => {
+    const b = await startRelay();
+    const old = await plugin(b.port, '0.7.0');
+
+    await expect(
+      b.relay.sendRequest(
+        'batch',
+        { ops: [{ tool: 'create_text', params: { characters: '$0' } }] },
+        5000,
+        old.sessionId,
+      ),
+    ).resolves.toEqual({ ok: true });
+    expect(old.received).toEqual(['batch']);
+  });
+
+  it('sends a batch with references to a plugin that resolves them', async () => {
+    const b = await startRelay();
+    const current = await plugin(b.port, BATCH_REFS_VERSION);
+
+    await expect(b.relay.sendRequest('batch', WITH_REFS, 5000)).resolves.toEqual({ ok: true });
+    expect(current.received).toEqual(['batch']);
+  });
+
+  it('decides it for the plugin a queued batch is finally delivered to', async () => {
+    // Queued with no plugin connected, then flushed to whoever shows up — the check runs there.
+    const b = await startRelay();
+    // Settled into a value at once: it rejects during the plugin's hello, before anything awaits it.
+    const outcome = b.relay.sendRequest('batch', WITH_REFS, 5000).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    const old = await plugin(b.port, '0.7.0');
+
+    expect(await outcome).toBeInstanceOf(Error);
+    expect(String(await outcome)).toMatch(/cannot resolve/);
+    expect(old.received).toEqual([]);
   });
 });

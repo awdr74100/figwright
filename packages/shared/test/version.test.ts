@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BATCH_REFS_VERSION,
   checkPluginCompatibility,
   compareVersions,
   MIN_PLUGIN_VERSION,
+  handlesBatchRefs,
   pluginSkewNotice,
   pluginSkewSummary,
   requiredPluginVersion,
+  versionLabel,
 } from '../src/version.js';
 
 describe('compareVersions', () => {
@@ -100,6 +103,16 @@ describe('pluginSkewNotice', () => {
   });
 });
 
+describe('versionLabel', () => {
+  it('prefixes a real version and quotes anything else', () => {
+    expect(versionLabel('0.7.0')).toBe('v0.7.0');
+    expect(versionLabel('0.8.0-beta.1')).toBe('v0.8.0-beta.1');
+    // What the follower records for a leader-listed plugin that reported no version.
+    expect(versionLabel('unknown')).toBe('"unknown"');
+    expect(versionLabel('nightly')).toBe('"nightly"');
+  });
+});
+
 describe('checkPluginCompatibility', () => {
   it('is satisfied at or above the threshold', () => {
     expect(checkPluginCompatibility('0.4.0', '0.4.0')).toBe(true);
@@ -126,5 +139,29 @@ describe('checkPluginCompatibility', () => {
     // fine, and the whole point is that skew is never silent.
     expect(checkPluginCompatibility('unknown', '0.4.0')).toBe(false);
     expect(checkPluginCompatibility('', '0.4.0')).toBe(false);
+  });
+});
+
+describe('handlesBatchRefs', () => {
+  it('is never stricter than the skew floor, so a plugin it refuses is one being warned about', () => {
+    expect(compareVersions(BATCH_REFS_VERSION, MIN_PLUGIN_VERSION)).toBeLessThanOrEqual(0);
+  });
+
+  it('refuses a plugin from before references, once a server carrying them is released', () => {
+    expect(handlesBatchRefs('0.7.0', BATCH_REFS_VERSION)).toBe(false);
+    expect(handlesBatchRefs('0.1.0', '9.9.9')).toBe(false);
+    expect(handlesBatchRefs(BATCH_REFS_VERSION, BATCH_REFS_VERSION)).toBe(true);
+    expect(handlesBatchRefs('9.9.9', BATCH_REFS_VERSION)).toBe(true);
+  });
+
+  it('lets the dev plugin built beside the dev server through before the release is cut', () => {
+    // Both halves report the previous version until `pnpm release` bumps it.
+    expect(handlesBatchRefs('0.7.0', '0.7.0')).toBe(true);
+    expect(handlesBatchRefs('0.6.0', '0.7.0')).toBe(false);
+  });
+
+  it('refuses a version it cannot read', () => {
+    expect(handlesBatchRefs('unknown', BATCH_REFS_VERSION)).toBe(false);
+    expect(handlesBatchRefs('', '9.9.9')).toBe(false);
   });
 });

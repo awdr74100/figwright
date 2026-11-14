@@ -11,7 +11,8 @@ export const addComponentPropertyTool: ToolSpec = {
     'TEXT (editable text), or INSTANCE_SWAP (swappable nested instance). The property starts inert — ' +
     'attach it to a layer with bind_component_property (BOOLEAN→visible, TEXT→characters, ' +
     'INSTANCE_SWAP→mainComponent) for it to do anything. defaultValue must match the type (boolean / ' +
-    'string / a component key string); preferredValues (INSTANCE_SWAP only) pre-populates the swap ' +
+    "string / the default component's node id — not its key); preferredValues (INSTANCE_SWAP only, " +
+    'by component key) pre-populates the swap ' +
     'menu. VARIANT properties come from combine_as_variants, not here. Returns { ok, componentId, ' +
     'propertyId, name } — pass propertyId to bind / edit / delete / set_instance_properties.',
   inputSchema: z.object({
@@ -22,7 +23,11 @@ export const addComponentPropertyTool: ToolSpec = {
     type: z.enum(['BOOLEAN', 'TEXT', 'INSTANCE_SWAP']).describe('Property type'),
     defaultValue: z
       .union([z.boolean(), z.string()])
-      .describe('Default: boolean (BOOLEAN), string (TEXT), or a component key (INSTANCE_SWAP)'),
+      .describe(
+        "Default: boolean (BOOLEAN), string (TEXT), or the component's node id (INSTANCE_SWAP, e.g. " +
+          '"12:34" — a component key is refused; a library component\'s id is the mainComponent id ' +
+          'of an instance of it)',
+      ),
     preferredValues: z
       .array(z.object({ type: z.enum(['COMPONENT', 'COMPONENT_SET']), key: z.string() }))
       .describe('INSTANCE_SWAP only: components/sets offered in the swap menu')

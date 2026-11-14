@@ -29,6 +29,39 @@ Build the collection top-down — the collection hands you the mode id you need 
 Then **bind** the new variable the same way you'd bind an existing one — colour via
 `bind_variable_to_paint`, scalars via `bind_variable_to_node` (see `write-rules.md`).
 
+The whole chain fits in **one `batch`**, each op naming what an earlier one created as `"$N"`: a
+bare `"$0"` reads the id its argument asks for (`collectionId` → the collection, `modeId` → the mode
+`add_variable_mode` made, or a new collection's default mode), `"$N.key"` names any result key.
+
+```json
+{
+  "ops": [
+    { "tool": "create_variable_collection", "params": { "name": "Color" } },
+    { "tool": "add_variable_mode", "params": { "collectionId": "$0", "name": "Dark" } },
+    {
+      "tool": "create_variable",
+      "params": { "name": "color/primary", "collectionId": "$0", "resolvedType": "COLOR" }
+    },
+    {
+      "tool": "set_variable_value",
+      "params": {
+        "variableId": "$2",
+        "modeId": "$0.defaultModeId",
+        "value": { "r": 0.2, "g": 0.4, "b": 1, "a": 1, "space": "SRGB" }
+      }
+    },
+    {
+      "tool": "set_variable_value",
+      "params": {
+        "variableId": "$2",
+        "modeId": "$1",
+        "value": { "r": 0.5, "g": 0.7, "b": 1, "a": 1, "space": "SRGB" }
+      }
+    }
+  ]
+}
+```
+
 **Known limits (grounded, expected — not bugs):**
 
 - **No scope control.** `create_variable` has no `scopes` parameter, so a new variable defaults to
@@ -115,6 +148,13 @@ bind** pair:
    to confirm the property and its default read back.
 3. **`edit_component_property`** renames / re-defaults (returns a new `propertyId` on rename);
    **`delete_component_property`** removes it. VARIANT properties stay the domain of `combine_as_variants`.
+
+Declare and bind in **one `batch`**: `bind_component_property`'s `propertyId` can be `"$N"` — the
+property an earlier `add_component_property` declared — and so can a `set_instance_properties` key.
+An INSTANCE_SWAP value or `defaultValue` takes the component's **node id** (`"$N"` for one made in
+the batch — a component, never an instance). A library component's id is the `mainComponent` id of an
+instance of it in this file (`get_node`); its key is refused. A TEXT value stays text even when it
+reads `"$5"`.
 
 Once authored, switch back to the reuse path: `create_instance` the new component, bind the new
 tokens, and assemble (see `assemble-screens.md`).

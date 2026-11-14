@@ -1,4 +1,4 @@
-import { ErrorCode } from '@figwright/shared';
+import { batchRefOrderError, ErrorCode } from '@figwright/shared';
 import { z } from 'zod';
 
 import { BATCH_TOOL_NAME } from './batch.js';
@@ -131,6 +131,11 @@ export const checkBatchOps = (args: unknown): WireRejection | null => {
       };
     }
   }
+
+  // A reference (`"$0"`) can only name an op that runs before the one holding it. Whether the op it
+  // names produces the id it wants is only known once that op has run, which the sandbox reports.
+  const misordered = batchRefOrderError(ops as readonly { params?: unknown }[]);
+  if (misordered !== null) return { code: ErrorCode.InvalidParams, message: misordered };
 
   return null;
 };

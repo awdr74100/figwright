@@ -120,6 +120,11 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
   also `cornerRadius`; a frame also `autoLayout` and `clipsContent`; text its typography incl.
   `textAlignHorizontal`, and the `width` it wraps at) — each meaning what it means on its `set_*`
   tool. Use them instead of a create plus a chain of follow-ups.
+- **One section, one `batch`.** A whole subtree — container → rows → text, the sizing and bindings
+  on them — goes in a single atomic `batch`: an op names what an earlier op created as `"$N"` (op N's
+  id) in any id argument, e.g. `parentId: "$0"`, `nodeIds: ["$2", "$3"]`, `variableId: "$1"`, or
+  `"$0.defaultModeId"` for a named result key. One call, one Cmd+Z step, and a failure rolls the whole
+  section back instead of leaving half of it behind. Text is never read as a reference.
 - **`ok: true` is not proof.** Confirm layout-sensitive writes by screenshot or read-back, and report
   anything the tools could not express instead of claiming it done.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from

@@ -3,6 +3,7 @@ import type { ComponentPropertyResult } from '@figwright/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 import {
   type AuthorablePropertyType,
+  instanceSwapDefaultError,
   PROPERTY_TYPES,
   resolveComponentOwner,
 } from './component-property.js';
@@ -37,8 +38,9 @@ export const createAddComponentPropertyHandler =
     }
     const type = p.type as AuthorablePropertyType;
 
-    // defaultValue must match the type: BOOLEAN → boolean, TEXT → string, INSTANCE_SWAP → a
-    // component key string. A mismatch is the easy caller error, so reject it with a precise message.
+    // defaultValue must match the type: BOOLEAN → boolean, TEXT → string, INSTANCE_SWAP → the
+    // default component's node id (a component key is refused by Figma — measured). A mismatch is the
+    // easy caller error, so reject it with a precise message.
     if (type === 'BOOLEAN' && typeof p.defaultValue !== 'boolean') {
       throw new TypeError(
         'add_component_property: a BOOLEAN property needs a boolean defaultValue',
@@ -47,7 +49,7 @@ export const createAddComponentPropertyHandler =
     if ((type === 'TEXT' || type === 'INSTANCE_SWAP') && typeof p.defaultValue !== 'string') {
       throw new TypeError(
         `add_component_property: a ${type} property needs a string defaultValue` +
-          (type === 'INSTANCE_SWAP' ? ' (a component key)' : ''),
+          (type === 'INSTANCE_SWAP' ? " (the default component's node id)" : ''),
       );
     }
     if (p.preferredValues !== undefined && type !== 'INSTANCE_SWAP') {
@@ -64,12 +66,17 @@ export const createAddComponentPropertyHandler =
       type === 'INSTANCE_SWAP' && Array.isArray(p.preferredValues)
         ? { preferredValues: p.preferredValues as InstanceSwapPreferredValue[] }
         : undefined;
-    const propertyId = owner.addComponentProperty(
-      p.name,
-      type,
-      p.defaultValue as string | boolean,
-      options,
-    );
+    let propertyId: string;
+    try {
+      propertyId = owner.addComponentProperty(
+        p.name,
+        type,
+        p.defaultValue as string | boolean,
+        options,
+      );
+    } catch (err) {
+      throw instanceSwapDefaultError('add_component_property', type, p.defaultValue, err);
+    }
 
     const result: ComponentPropertyResult = {
       ok: true,

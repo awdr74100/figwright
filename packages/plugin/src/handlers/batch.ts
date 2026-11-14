@@ -1,4 +1,4 @@
-import type { BatchResult, FlowStartingPoint } from '@figwright/shared';
+import { type BatchResult, batchRefOrderError, type FlowStartingPoint } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 import { readTracks, TRACKS_UNREAD } from '../grid-tracks.js';
@@ -8,6 +8,7 @@ import {
   type InstanceGuard,
   restoreOverrideGuard,
 } from './batch-overrides.js';
+import { opNeedsEarlierResults, resolveOpRefs } from './batch-refs.js';
 import {
   type BindingSnapshot,
   captureBindings,
@@ -2269,6 +2270,11 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
 interface ParsedOp {
   tool: string;
   params: unknown;
+  /**
+   * The op names an earlier op's result (`"$0"`, batch-refs.ts), so it is resolved and captured
+   * just before it applies rather than up front, when what it names does not exist yet.
+   */
+  deferred: boolean;
 }
 
 /**
@@ -2284,7 +2290,7 @@ const parseOps = (params: unknown): ParsedOp[] => {
   const ops = (params as { ops?: unknown } | null)?.ops;
   if (!Array.isArray(ops)) throw new TypeError('batch: ops must be an array');
   if (ops.length === 0) throw new TypeError('batch: ops must not be empty');
-  return ops.map((op, i) => {
+  const parsed = ops.map((op, i) => {
     const o = op as { tool?: unknown; params?: unknown } | null;
     if (typeof o?.tool !== 'string') throw new TypeError(`batch: ops[${i}].tool must be a string`);
     // Own keys only, in both tables: an inherited name (`constructor`, `__proto__`) is neither
@@ -2294,8 +2300,15 @@ const parseOps = (params: unknown): ParsedOp[] => {
       const why = ownValue(NON_BATCHABLE, o.tool) ?? 'only write tools can be batched';
       throw new Error(`batch: op '${o.tool}' (index ${i}) is not batchable — ${why}`);
     }
-    return { tool: o.tool, params: o.params ?? {} };
+    const parsedOp: ParsedOp = { tool: o.tool, params: o.params ?? {}, deferred: false };
+    parsedOp.deferred = opNeedsEarlierResults(parsedOp, i);
+    return parsedOp;
   });
+  // Checked here as well as on the server: a call can reach this handler without passing a server
+  // that knows references (an older leader forwards a newer follower's batch as it came).
+  const misordered = batchRefOrderError(parsed);
+  if (misordered !== null) throw new Error(misordered);
+  return parsed;
 };
 
 /** Containers Figma deletes once their last child leaves — and a deleted node's id is gone. */
@@ -2308,14 +2321,14 @@ const SELF_DELETING = new Set(['GROUP', 'BOOLEAN_OPERATION', 'TRANSFORM_GROUP', 
  */
 const refuseEmptiedContainers = async (
   figmaCtx: typeof figma,
-  ops: readonly ParsedOp[],
+  ops: readonly (readonly [index: number, op: ParsedOp])[],
 ): Promise<void> => {
   const leaving = new Map<
     string,
     { container: BaseNode & ChildrenMixin; ids: Set<string>; ops: Set<string> }
   >();
   /* eslint-disable no-await-in-loop -- few structural ops per batch; read-only */
-  for (const [i, op] of ops.entries()) {
+  for (const [i, op] of ops) {
     const moves = INVERSES[op.tool]!.moves;
     if (moves === undefined) continue;
     const { nodeIds, destinationId } = await moves(figmaCtx, op.params);
@@ -2395,14 +2408,27 @@ export const createBatchHandler =
         throw new Error(`batch: no handler for op '${op.tool}'`);
       }
     }
-    await refuseEmptiedContainers(figmaCtx, ops);
+    // A deferred op's moves cannot be known before what it names exists, so the batch-wide count
+    // covers the others — with none deferred, exactly the count it always was. From the first
+    // deferred op on, each op is checked again against the file as it stands when it is about to
+    // run (below), which is exact without any counting across ops.
+    await refuseEmptiedContainers(
+      figmaCtx,
+      [...ops.entries()].filter(([, op]) => !op.deferred),
+    );
+    const firstDeferred = ops.findIndex(op => op.deferred);
 
     // Phase 1 — capture (read-only). Reads are independent, so resolve them together. A Figma API
     // can reject with a bare string (measured: "Unable to establish connection to Figma after 10
     // seconds"); pass that on as an Error that says nothing was applied yet, rather than raw.
-    let captured: Captured[];
+    // A deferred op is captured in phase 2, just before it applies: the earlier ops are what make
+    // its target exist, and undo runs in reverse, so the state right before it is the state its
+    // undo has to put back.
+    let captured: (Captured | undefined)[];
     try {
-      captured = await Promise.all(ops.map(async op => captureOp(figmaCtx, op)));
+      captured = await Promise.all(
+        ops.map(async op => (op.deferred ? undefined : captureOp(figmaCtx, op))),
+      );
     } catch (err) {
       if (err instanceof Error) throw err;
       throw new Error(`batch: capture failed before any op was applied: ${String(err)}`, {
@@ -2413,10 +2439,19 @@ export const createBatchHandler =
 
     // Phase 2 — apply in order; roll back already-applied ops on the first failure.
     const results: unknown[] = [];
+    const tools = ops.map(op => op.tool);
     /* eslint-disable no-await-in-loop -- apply order is significant and rollback needs partial results */
     for (let i = 0; i < ops.length; i += 1) {
-      const op = ops[i]!;
+      let op = ops[i]!;
       try {
+        if (op.deferred) {
+          // Undo is handed the arguments the op actually ran with, never the references.
+          op = { ...op, params: await resolveOpRefs(figmaCtx, op, i, results, tools) };
+          ops[i] = op;
+        }
+        if (firstDeferred !== -1 && i >= firstDeferred)
+          await refuseEmptiedContainers(figmaCtx, [[i, op]]);
+        if (op.deferred) captured[i] = await captureOp(figmaCtx, op);
         results.push(await apply[op.tool]!(op.params));
       } catch (err) {
         // Unwind applied ops in reverse. Keep going even if one undo throws, but record which ones

@@ -143,11 +143,17 @@ export const pluginSkewNotice = (pluginVersion: string, serverVersion: string): 
  * once, and the long form has already been shown by the time this is used.
  */
 export const pluginSkewSummary = (pluginVersion: string, serverVersion: string): string =>
-  // `v`-prefixed only when it is really a version. Whatever the peer claimed is echoed as-is
-  // otherwise, because an unreadable one dressed up as a version reads as `vnightly`.
-  `Figwright plugin ${parse(pluginVersion) === null ? `"${pluginVersion}"` : `v${pluginVersion}`} ` +
+  `Figwright plugin ${versionLabel(pluginVersion)} ` +
   `is older than this server (v${serverVersion}), so this result is unverified — an edit may have ` +
   'applied only part of what was asked, and reads can be incomplete.';
+
+/**
+ * A version a peer reported, as prose: `v`-prefixed only when it is really a version. Whatever the
+ * peer claimed is echoed as-is otherwise, because an unreadable one dressed up as a version reads
+ * as `vnightly` (or `vunknown`, for a peer that reported none).
+ */
+export const versionLabel = (version: string): string =>
+  parse(version) === null ? `"${version}"` : `v${version}`;
 
 /**
  * The threshold this server can honestly apply: never newer than the server itself.
@@ -165,6 +171,43 @@ export const requiredPluginVersion = (serverVersion: string): string => {
   if (order === null) return MIN_PLUGIN_VERSION;
   return order <= 0 ? MIN_PLUGIN_VERSION : serverVersion;
 };
+
+/**
+ * The first release that handles references between batch ops (`"$0"`, see batch-refs.ts): its
+ * plugin resolves them, and its server refuses to send them to a plugin that cannot.
+ *
+ * The one argument shape the skew notice is not enough for. An older plugin reads `"$0"` as an id
+ * that does not exist, and the tools that skip ids they cannot find — reparent / move / group /
+ * lock and every other `nodeIds` tool — then answer `ok` having left that node out (measured
+ * against the pre-reference build: `group_nodes` grouped the one real node and reported success).
+ * So such a batch is not sent to it at all; see {@linkcode handlesBatchRefs}. Never above
+ * `MIN_PLUGIN_VERSION` (a test holds that), so a plugin this refuses is also one being warned
+ * about.
+ */
+export const BATCH_REFS_VERSION = '0.8.0';
+
+/**
+ * Does a build reporting `version` handle batch references — a plugin that resolves them, or a
+ * leader that will not send them to a plugin that cannot? Capped at this server's own version for
+ * the reason `requiredPluginVersion` gives: until the release carrying references is cut, the dev
+ * server and the dev plugin built beside it both report the previous version, and they are in
+ * lockstep. An unreadable version is refused, like everywhere else here.
+ */
+export const handlesBatchRefs = (version: string, serverVersion: string): boolean => {
+  const order = compareVersions(BATCH_REFS_VERSION, serverVersion);
+  const required = order === null || order <= 0 ? BATCH_REFS_VERSION : serverVersion;
+  const found = compareVersions(version, required);
+  return found !== null && found >= 0;
+};
+
+/**
+ * Why a batch with references was not sent — the same words from the leader that knows the plugin
+ * is too old, and from a follower whose older leader could not be trusted to check.
+ */
+export const batchRefsRefusal = (why: string): string =>
+  `batch: this batch refers to earlier ops' results ("$0"), and ${why}. Nothing was applied. ` +
+  'Update the Figwright plugin (and any older Figwright server still running), or send the batch ' +
+  'with real ids — one batch per level of the tree.';
 
 /**
  * Does a plugin reporting `pluginVersion` act on everything a server on `serverVersion` sends?

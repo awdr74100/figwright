@@ -1570,6 +1570,45 @@ describe('batch inverses for the newly batchable writes', () => {
     ]);
   });
 
+  it('undoes a referring op with the ids it ran with, not the references', async () => {
+    // add_variable_mode's undo finds its collection through its own arguments. A reference left in
+    // them ("$0.collectionId") would look up nothing, and the mode would stay in a collection the
+    // batch did not create.
+    const { figmaCtx, store, collections } = makeWide();
+    failingFrame(store);
+    const collection: Record<string, unknown> = {
+      id: 'C:1',
+      name: 'Colour',
+      modes: [{ modeId: 'm1', name: 'Light' }],
+      renameMode: vi.fn<(modeId: string, name: string) => void>(),
+      addMode(name: string) {
+        (collection.modes as unknown[]).push({ modeId: 'm2', name });
+        return 'm2';
+      },
+      removeMode: vi.fn<(id: string) => void>(id => {
+        collection.modes = (collection.modes as { modeId: string }[]).filter(m => m.modeId !== id);
+      }),
+    };
+    collections.set('C:1', collection);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
+      add_variable_mode: createAddVariableModeHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_variable_collection', params: { collectionId: 'C:1', name: 'Color' } },
+          { tool: 'add_variable_mode', params: { collectionId: '$0.collectionId', name: 'Dark' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/op 2 \(set_fills\) failed, rolled back 2 applied op\(s\): /);
+    expect(collection.removeMode).toHaveBeenCalledWith('m2');
+    expect(collection).toMatchObject({ name: 'Colour', modes: [{ modeId: 'm1', name: 'Light' }] });
+  });
+
   // No collection is registered on purpose: the refusal comes from the inverse map, before any
   // lookup, so a batch naming this tool never reaches the document at all.
   it('refuses delete_variable_mode, whose mode id cannot be minted again', async () => {
@@ -3143,5 +3182,167 @@ describe('batch inverse for flip_nodes', () => {
       [0, 1, 50],
       [-1, 0, 80],
     ]);
+  });
+});
+
+describe('batch references to earlier ops ("$N")', () => {
+  /** MakeTree plus createFrame, so a create can make a real container later ops move nodes into. */
+  const makeBuildTree = () => {
+    const tree = makeTree();
+    const page = tree.node('P0', 'PAGE', null);
+    let seq = 0;
+    Object.assign(tree.figmaCtx, {
+      currentPage: page,
+      createFrame: () => tree.node(`N:${(seq += 1)}`, 'FRAME', null, { x: 0, y: 0 }),
+    });
+    const handler = createBatchHandler(tree.figmaCtx, {
+      create_frame: createCreateFrameHandler(tree.figmaCtx),
+      reparent_nodes: createReparentNodesHandler(tree.figmaCtx),
+      group_nodes: createGroupNodesHandler(tree.figmaCtx),
+      rename_node: createRenameNodeHandler(tree.figmaCtx),
+      set_position: createSetPositionHandler(tree.figmaCtx),
+      set_fills: createSetFillsHandler(tree.figmaCtx),
+    });
+    return { ...tree, page, handler };
+  };
+
+  it('builds a nested tree in one batch, each op landing in what an earlier one made', async () => {
+    const { page, store, handler } = makeBuildTree();
+
+    const result = (await handler({
+      ops: [
+        { tool: 'create_frame', params: { name: 'Card', parentId: 'P0' } },
+        { tool: 'create_frame', params: { name: 'Row', parentId: '$0' } },
+        { tool: 'create_frame', params: { name: 'Cell', parentId: '$1' } },
+        { tool: 'rename_node', params: { nodeId: '$2', name: 'Cell 1' } },
+        { tool: 'set_position', params: { nodeId: '$1.nodeId', x: 8, y: 4 } },
+      ],
+    })) as BatchResult;
+
+    expect(result.ok).toBe(true);
+    const card = store.get('N:1')!;
+    expect(ids(page)).toEqual(['N:1']);
+    expect(ids(card)).toEqual(['N:2']);
+    expect(ids(store.get('N:2')!)).toEqual(['N:3']);
+    expect(store.get('N:3')!.name).toBe('Cell 1');
+    expect(store.get('N:2')!).toMatchObject({ x: 8, y: 4 });
+  });
+
+  it('rolls the whole tree back when a later op fails, through the ids the references named', async () => {
+    const { page, store, node, handler } = makeBuildTree();
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const a = node('a', 'RECTANGLE', page);
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: { name: 'Card', parentId: 'P0' } },
+          { tool: 'create_frame', params: { name: 'Row', parentId: '$0' } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['a'], newParentId: '$1' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/op 3 \(set_fills\) failed, rolled back 3 applied op\(s\)/);
+
+    expect(ids(page)).toEqual(['F', 'a']);
+    expect(a.parent).toBe(page);
+    expect([...store.keys()].filter(k => k.startsWith('N:'))).toEqual([]);
+  });
+
+  it('rolls back what ran when a reference names an id its op did not produce', async () => {
+    const { page, store, handler } = makeBuildTree();
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: { name: 'Card', parentId: 'P0' } },
+          { tool: 'rename_node', params: { nodeId: '$0.styleId', name: 'x' } },
+        ],
+      }),
+    ).rejects.toThrow(
+      'batch: op 1 (rename_node) failed, rolled back 1 applied op(s): batch ops[1]: ' +
+        'params.nodeId is "$0.styleId", but op 0 (create_frame) returned no styleId — name one ' +
+        'of its ids instead: "$0.nodeId"',
+    );
+    expect(ids(page)).toEqual([]);
+    expect([...store.keys()].filter(k => k.startsWith('N:'))).toEqual([]);
+  });
+
+  it('refuses a reference to its own or a later op before anything runs', async () => {
+    const { page, handler } = makeBuildTree();
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: { name: 'Card', parentId: '$1' } },
+          { tool: 'create_frame', params: { name: 'Row', parentId: 'P0' } },
+        ],
+      }),
+    ).rejects.toThrow('batch ops[0]: params.parentId is "$1", which names op 1');
+    expect(ids(page)).toEqual([]);
+  });
+
+  it('checks a container against the file as it is when the op runs, naming the real op', async () => {
+    // op 1 alone leaves G a child, and op 2 would take the last one: only the file as it stands
+    // when op 2 is about to run shows that — op 1's destination did not exist before the batch.
+    const { page, store, node, handler } = makeBuildTree();
+    const group = node('G', 'GROUP', page);
+    node('a', 'RECTANGLE', group);
+    node('b', 'RECTANGLE', group);
+    const target = node('T', 'FRAME', page);
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: { name: 'Holder', parentId: 'P0' } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['a'], newParentId: '$0' } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['b'], newParentId: 'T' } },
+        ],
+      }),
+    ).rejects.toThrow(
+      'batch: op 2 (reparent_nodes) failed, rolled back 2 applied op(s): batch: op 2 ' +
+        '(reparent_nodes) would empty GROUP G, which Figma then deletes',
+    );
+
+    expect(ids(group)).toEqual(['a', 'b']);
+    expect(ids(target)).toEqual([]);
+    expect(store.has('G')).toBe(true);
+    expect([...store.keys()].filter(k => k.startsWith('N:'))).toEqual([]);
+  });
+
+  it('captures a deferred op just before it runs, so the undos unwind in order', async () => {
+    // op 1 (captured up front) moves `a`; op 2 (deferred) takes it into a frame op 0 made. Undoing
+    // op 2 has to put `a` back where op 1 left it, then op 1's undo restores the original x / y.
+    const { page, store, node, handler } = makeBuildTree();
+    node('F', 'RECTANGLE', page, { fills: [] });
+    const a = node('a', 'RECTANGLE', page, { x: 1, y: 2 });
+    node('b', 'RECTANGLE', page);
+
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_frame', params: { name: 'Holder', parentId: 'P0' } },
+          { tool: 'set_position', params: { nodeId: 'a', x: 30, y: 40 } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['a'], newParentId: '$0' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/op 3 \(set_fills\) failed, rolled back 3 applied op\(s\)/);
+
+    expect(ids(page)).toEqual(['F', 'a', 'b']);
+    expect(a).toMatchObject({ x: 1, y: 2 });
+    expect([...store.keys()].filter(k => k.startsWith('N:'))).toEqual([]);
+  });
+
+  it('leaves "$N" in text and names as the text it is', async () => {
+    const { store, handler } = makeBuildTree();
+
+    await handler({
+      ops: [
+        { tool: 'create_frame', params: { name: '$0', parentId: 'P0' } },
+        { tool: 'rename_node', params: { nodeId: '$0', name: '$5' } },
+      ],
+    });
+    expect(store.get('N:1')!.name).toBe('$5');
   });
 });
