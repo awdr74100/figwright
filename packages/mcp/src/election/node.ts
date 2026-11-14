@@ -55,6 +55,11 @@ export class Node {
     };
   }
 
+  /** This node's own release — what it judges another build's version against. */
+  get serverVersion(): string {
+    return this.opts.serverVersion;
+  }
+
   get role(): NodeRole {
     return this.currentRole;
   }

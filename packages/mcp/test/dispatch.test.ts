@@ -691,3 +691,106 @@ describe('ambiguous-routing notice', () => {
     expect(text).toContain('(unnamed, session s-2)');
   });
 });
+
+describe('dispatchTool — a batch with references, forwarded by a follower', () => {
+  const REFS = {
+    ops: [
+      { tool: 'create_frame', params: { name: 'Card' } },
+      { tool: 'group_nodes', params: { nodeIds: ['$0', '1:2'] } },
+    ],
+  };
+  const session = (id: string, pluginVersion: string): PluginSessionInfo => ({
+    id,
+    fileName: `file ${id}`,
+    pageName: null,
+    lastActivityAt: 0,
+    pluginVersion,
+  });
+
+  /** A follower on 1.0.0 whose leader reports `leaderVersion` and these sessions. */
+  const setup = (leaderVersion: string | undefined, sessions: PluginSessionInfo[]) => {
+    const seen = { forwarded: 0, pings: 0 };
+    const node = makeNode({ isLeader: () => false, serverVersion: '1.0.0' } as Partial<Node>);
+    const follower = makeFollower({
+      leaderInfo: async () => {
+        seen.pings += 1;
+        return leaderVersion === undefined
+          ? undefined
+          : { serverVersion: leaderVersion, buildId: 1 };
+      },
+      listSessions: async () => sessions,
+      sendRpc: async (): Promise<RpcResponse> => {
+        seen.forwarded += 1;
+        return { kind: 'ok', requestId: 'r', result: { ok: true } };
+      },
+    });
+    return { ctx: { node, follower }, seen };
+  };
+
+  it('leaves the check to a leader that handles references', async () => {
+    const { ctx, seen } = setup('1.0.0', [session('a', '0.1.0')]);
+    await expect(dispatchTool(ctx, 'batch', REFS)).resolves.toEqual({ ok: true });
+    expect(seen.forwarded).toBe(1);
+  });
+
+  it('refuses for an older leader when the pinned plugin cannot resolve them', async () => {
+    const { ctx, seen } = setup('0.7.0', [session('a', '1.0.0'), session('b', '0.7.0')]);
+    await expect(dispatchTool(ctx, 'batch', REFS, { sessionId: 'b' })).rejects.toThrow(
+      /refers to earlier ops' results.*the Figwright plugin in "file b" \(v0\.7\.0\) cannot resolve them.*Nothing was applied/,
+    );
+    expect(seen.forwarded).toBe(0);
+  });
+
+  it('refuses for an older leader when any plugin it could route to cannot resolve them', async () => {
+    const { ctx, seen } = setup('0.7.0', [session('a', '1.0.0'), session('b', '0.7.0')]);
+    await expect(dispatchTool(ctx, 'batch', REFS)).rejects.toThrow(/"file b" \(v0\.7\.0\)/);
+    expect(seen.forwarded).toBe(0);
+  });
+
+  it('forwards through an older leader when every plugin resolves them', async () => {
+    const { ctx, seen } = setup('0.7.0', [session('a', '1.0.0')]);
+    await expect(dispatchTool(ctx, 'batch', REFS)).resolves.toEqual({ ok: true });
+    expect(seen.forwarded).toBe(1);
+  });
+
+  it('refuses for an older leader with no plugin connected to check', async () => {
+    const { ctx, seen } = setup('0.7.0', []);
+    await expect(dispatchTool(ctx, 'batch', REFS)).rejects.toThrow(
+      /an older Figwright server \(v0\.7\.0\) holds the connection to Figma/,
+    );
+    expect(seen.forwarded).toBe(0);
+  });
+
+  it('names a plugin that reported no version without dressing it up as one', async () => {
+    const { ctx, seen } = setup('0.7.0', [session('a', 'unknown')]);
+    const refused = dispatchTool(ctx, 'batch', REFS);
+    await expect(refused).rejects.toThrow(/"file a" \("unknown"\) cannot resolve them/);
+    await expect(refused).rejects.not.toThrow(/vunknown/);
+    expect(seen.forwarded).toBe(0);
+  });
+
+  it('refuses for a leader too old to list its plugins, without claiming none are connected', async () => {
+    // Leaders before 0.6.0 report no `sessions` in /ping, which reads as an empty list here.
+    const { ctx } = setup('0.5.0', []);
+    const refused = dispatchTool(ctx, 'batch', REFS);
+    await expect(refused).rejects.toThrow(
+      /older Figwright server \(v0\.5\.0\).*lists no connected plugin whose version could be checked/,
+    );
+  });
+
+  it('does not judge a leader it cannot reach — the forward reports that', async () => {
+    const { ctx, seen } = setup(undefined, []);
+    await expect(dispatchTool(ctx, 'batch', REFS)).resolves.toEqual({ ok: true });
+    expect(seen.forwarded).toBe(1);
+  });
+
+  it('costs nothing for a batch without references, or any other tool', async () => {
+    const { ctx, seen } = setup('0.7.0', []);
+    await dispatchTool(ctx, 'batch', {
+      ops: [{ tool: 'create_text', params: { characters: '$0' } }],
+    });
+    await dispatchTool(ctx, 'set_fills', { nodeId: '$0' });
+    expect(seen.pings).toBe(0);
+    expect(seen.forwarded).toBe(2);
+  });
+});

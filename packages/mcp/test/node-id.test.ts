@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeIdArgs, normalizeNodeId, STRING_ID_FIELDS } from '../src/node-id.js';
+import {
+  normalizeBatchOpIds,
+  normalizeIdArgs,
+  normalizeNodeId,
+  STRING_ID_FIELDS,
+} from '../src/node-id.js';
 import { ALL_TOOL_SPECS } from '../src/tools/registry.js';
 
 describe('normalizeNodeId', () => {
@@ -129,5 +134,31 @@ describe('normalizeIdArgs', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('normalizeBatchOpIds', () => {
+  it('normalizes each op the way the tool called on its own would be', () => {
+    const url = 'https://www.figma.com/design/K/N?node-id=1-42';
+    expect(
+      normalizeBatchOpIds({
+        ops: [
+          { tool: 'rename_node', params: { nodeId: url, name: '1-2' } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['3-4', '$0'], newParentId: '5-6' } },
+        ],
+      }),
+    ).toEqual({
+      ops: [
+        // `name` is not an id field, so its dash stays.
+        { tool: 'rename_node', params: { nodeId: '1:42', name: '1-2' } },
+        { tool: 'reparent_nodes', params: { nodeIds: ['3:4', '$0'], newParentId: '5:6' } },
+      ],
+    });
+  });
+
+  it('hands back the same object when no op has anything to normalize', () => {
+    const args = { ops: [{ tool: 'create_frame', params: { parentId: '$0' } }, { tool: 'x' }] };
+    expect(normalizeBatchOpIds(args)).toBe(args);
+    expect(normalizeBatchOpIds({})).toEqual({});
   });
 });

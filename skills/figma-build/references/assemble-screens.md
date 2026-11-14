@@ -87,3 +87,29 @@ your summary instead of reporting it done.
 Build a big screen the way codegen grounds one — **a section at a time**, verifying each before moving
 on, rather than emitting the whole tree blind and screenshotting at the end. Assemble the first
 section, screenshot, fix, then the next — errors stay local and cheap to correct.
+
+A section is **one `batch`**, not one call per level: each op names the parent an earlier op created
+as `"$N"`, so the container, its rows, their text and the `set_layout_props` that fills them go in a
+single atomic call — one undo step, rolled back whole if any op fails.
+
+```json
+{
+  "ops": [
+    {
+      "tool": "create_frame",
+      "params": {
+        "name": "Footer",
+        "parentId": "12:3",
+        "autoLayout": { "layoutMode": "VERTICAL", "itemSpacing": 24 }
+      }
+    },
+    {
+      "tool": "create_frame",
+      "params": { "name": "Links", "parentId": "$0", "autoLayout": { "layoutMode": "HORIZONTAL" } }
+    },
+    { "tool": "set_layout_props", "params": { "nodeId": "$1", "layoutSizingHorizontal": "FILL" } },
+    { "tool": "create_text", "params": { "parentId": "$1", "characters": "Pricing" } },
+    { "tool": "create_instance", "params": { "componentId": "40:2", "parentId": "$1" } }
+  ]
+}
+```

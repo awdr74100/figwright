@@ -99,3 +99,24 @@ export const normalizeIdArgs = <T>(args: T): T => {
 
   return (out ?? args) as T;
 };
+
+/**
+ * The same normalization for each op of a `batch`, whose `ops[].params` are another tool's
+ * arguments one level down — so a Figma URL or dash-form id pasted into an op works as it does in
+ * the tool called on its own, instead of reaching the plugin as an id that matches nothing.
+ * Normalizing an op's arguments, not every nested field, is the same scope as a direct call's.
+ */
+export const normalizeBatchOpIds = <T>(args: T): T => {
+  const ops = (args as { ops?: unknown } | null)?.ops;
+  if (!Array.isArray(ops)) return args;
+  let changed = false;
+  const mapped = ops.map((op: unknown) => {
+    if (typeof op !== 'object' || op === null) return op;
+    const params = (op as { params?: unknown }).params;
+    const normalized = normalizeIdArgs(params);
+    if (normalized === params) return op;
+    changed = true;
+    return Object.assign({}, op, { params: normalized });
+  });
+  return changed ? ({ ...(args as object), ops: mapped } as T) : args;
+};

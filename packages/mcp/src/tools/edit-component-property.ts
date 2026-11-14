@@ -18,7 +18,11 @@ export const editComponentPropertyTool: ToolSpec = {
     name: z.string().describe('New property name').optional(),
     defaultValue: z
       .union([z.boolean(), z.string()])
-      .describe('New default (boolean / string / component key, matching the property type)')
+      .describe(
+        "New default matching the property type: boolean / string / the component's node id " +
+          "(INSTANCE_SWAP — a component key is refused; a library component's id is the " +
+          'mainComponent id of an instance of it)',
+      )
       .optional(),
     preferredValues: z
       .array(z.object({ type: z.enum(['COMPONENT', 'COMPONENT_SET']), key: z.string() }))

@@ -1,4 +1,12 @@
-import { ErrorCode, getFollowerBudget, getRelayBudget } from '@figwright/shared';
+import {
+  batchHasRefs,
+  batchRefsRefusal,
+  ErrorCode,
+  getFollowerBudget,
+  getRelayBudget,
+  handlesBatchRefs,
+  versionLabel,
+} from '@figwright/shared';
 
 import type { Follower } from './election/follower.js';
 import { type Node, NodeRole } from './election/node.js';
@@ -34,6 +42,52 @@ export class DispatchError extends Error {
     this.name = 'DispatchError';
   }
 }
+
+/**
+ * A follower's own guard for a batch with references (`"$0"`), for the one case the leader cannot
+ * be trusted with it: a leader on a build from before references. A current leader refuses to send
+ * such a batch to a plugin too old to resolve it — the plugin would read `"$0"` as a missing id,
+ * and the tools that skip missing ids answer `ok` with that node left out — but an older leader
+ * does not know references exist, forwards the batch as it came, and judges skew against its own
+ * older version, so the result would not even carry the update notice. The newest build normally
+ * holds the port, but a continuously busy older leader keeps it.
+ *
+ * So, only then, the follower checks the plugins itself from the leader's session list: the one the
+ * call is pinned to, else every connected one (which one the leader routes to is its decision).
+ * With none to check, it refuses rather than guess — a plugin connecting later could be old.
+ * Returns the refusal, or null to forward. A leader that cannot be reached is not judged here: the
+ * forward that follows fails on its own and says why.
+ */
+const refuseBatchRefsForOldLeader = async (
+  ctx: DispatchContext,
+  toolName: string,
+  args: unknown,
+  sessionId: string | undefined,
+): Promise<string | null> => {
+  if (toolName !== 'batch' || !batchHasRefs(args)) return null;
+  const own = ctx.node.serverVersion;
+  const leader = await ctx.follower.leaderInfo();
+  if (leader === undefined || handlesBatchRefs(leader.serverVersion, own)) return null;
+
+  const sessions = await ctx.follower.listSessions();
+  const targets = sessionId === undefined ? sessions : sessions.filter(s => s.id === sessionId);
+  const old = targets.find(s => !handlesBatchRefs(s.pluginVersion, own));
+  if (old !== undefined) {
+    return batchRefsRefusal(
+      `the Figwright plugin in ${old.fileName === null ? 'that file' : `"${old.fileName}"`} ` +
+        `(${versionLabel(old.pluginVersion)}) cannot resolve them — it would read them as ids ` +
+        'that do not exist',
+    );
+  }
+  if (targets.length > 0) return null;
+  // No plugin listed: none connected, or a leader too old to list them (before 0.6.0) — either way
+  // nothing here can vouch for whichever plugin it routes to.
+  return batchRefsRefusal(
+    `an older Figwright server (${versionLabel(leader.serverVersion)}) holds the connection to ` +
+      'Figma, does not check whether the plugin can resolve them, and lists no connected plugin ' +
+      'whose version could be checked here',
+  );
+};
 
 export const dispatchTool = async (
   ctx: DispatchContext,
@@ -104,6 +158,9 @@ export const dispatchTool = async (
           break;
         }
       }
+
+      const refused = await refuseBatchRefsForOldLeader(ctx, toolName, args, opts.sessionId);
+      if (refused !== null) throw new DispatchError(ErrorCode.Internal, refused);
 
       // Follower→leader budget = B + two margins (outermost layer), so it outlives the leader's own
       // relay timer for the same tool.

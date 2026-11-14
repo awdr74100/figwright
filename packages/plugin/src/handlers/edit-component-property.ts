@@ -1,7 +1,11 @@
 import type { ComponentPropertyResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
-import { propertyDisplayName, resolveComponentOwner } from './component-property.js';
+import {
+  instanceSwapDefaultError,
+  propertyDisplayName,
+  resolveComponentOwner,
+} from './component-property.js';
 
 /**
  * Rename a component property, change its default value, or (INSTANCE_SWAP only) its preferred
@@ -58,7 +62,12 @@ export const createEditComponentPropertyHandler =
     if (redefaulting) newValue.defaultValue = p.defaultValue as string | boolean;
     if (repreferring) newValue.preferredValues = p.preferredValues as InstanceSwapPreferredValue[];
 
-    const propertyId = owner.editComponentProperty(p.propertyId, newValue);
+    let propertyId: string;
+    try {
+      propertyId = owner.editComponentProperty(p.propertyId, newValue);
+    } catch (err) {
+      throw instanceSwapDefaultError('edit_component_property', def.type, p.defaultValue, err);
+    }
 
     const result: ComponentPropertyResult = {
       ok: true,

@@ -26,7 +26,7 @@ import { writeLeaderLock } from './election/leader-lock.js';
 import { Node, NodeRole } from './election/node.js';
 import { SERVER_INSTRUCTIONS } from './instructions.js';
 import { wireShutdown } from './lifecycle.js';
-import { normalizeIdArgs } from './node-id.js';
+import { normalizeBatchOpIds, normalizeIdArgs } from './node-id.js';
 import { PROMPTS } from './prompts/registry.js';
 import { ANALYZE_PROJECT_TOOL_NAME, handleAnalyzeProject } from './tools/analyze-project.js';
 import { annotationsFor } from './tools/annotations.js';
@@ -255,7 +255,8 @@ const createMcpServer = (): McpServer => {
         }
       });
     // Normalize id args (a pasted Figma URL or dash-form node id → canonical colon id) once here, so
-    // every tool — generic or special-cased — accepts them without per-handler conversion.
+    // every tool — generic or special-cased — accepts them without per-handler conversion, and so
+    // does each op of a batch.
     // An older plugin drops arguments it predates and still answers `{ ok: true }`, so the result
     // cannot be trusted on its face and nothing in it says so. Saying it here, on every affected
     // call, is what replaces the refusal this used to be: the agent is told before it reports
@@ -266,7 +267,12 @@ const createMcpServer = (): McpServer => {
       assertWithinLimit(
         spec.name,
         await captureNotices(
-          () => run(normalizeIdArgs(args)),
+          () =>
+            run(
+              spec.name === BATCH_TOOL_NAME
+                ? normalizeBatchOpIds(normalizeIdArgs(args))
+                : normalizeIdArgs(args),
+            ),
           (result, notices) =>
             withSkewNotice(withRoutingNotice(result, notices.routing), notices.skew),
         ),

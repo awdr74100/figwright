@@ -12,7 +12,7 @@ import type { PromptArgs } from './registry.js';
 export const CODE_TO_FIGMA_PROMPT_NAME = 'code_to_figma';
 
 const promptText = (): string =>
-  `Build a Figma design from the provided code or description, into the connected Figma file — reuse the file's existing design system, build only what is missing. Don't draw primitives with hardcoded values; ground every decision in the file's own components and tokens. You operate on the connected file (there is no fetch-by-URL); confirm a plugin is connected (ping) before building, and work incrementally — validate each step rather than emitting a whole tree blind.
+  `Build a Figma design from the provided code or description, into the connected Figma file — reuse the file's existing design system, build only what is missing. Don't draw primitives with hardcoded values; ground every decision in the file's own components and tokens. You operate on the connected file (there is no fetch-by-URL); confirm a plugin is connected (ping) before building, and work incrementally — a section at a time, validating each rather than emitting a whole tree blind (a section can be one atomic batch: an op names what an earlier op in it created as "$N", e.g. parentId "$0").
 
 1. Ground in the design system first (reuse beats regenerate). get_variable_defs — the file's colour / spacing / radius / typography variables (names + values + hex) you bind to. scan_components / get_local_components — existing components to instance instead of rebuilding; match each source UI pattern (a card, a list row, a nav, a button) to one. get_styles — shared paint / text / effect styles to apply. Decide per element: reuse an existing component/variable/style, or build new only what the system genuinely lacks (named to fit its conventions).
 

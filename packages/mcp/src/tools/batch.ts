@@ -19,15 +19,26 @@ export const batchTool: ToolSpec = {
     'style, variable, component, structure and create writes (e.g. set_fills, set_text, ' +
     'set_auto_layout, reparent_nodes, create_frame). Ops that delete something (delete_*, ' +
     'ungroup_nodes, detach_instance, remove_animation_style) are refused, since what they delete ' +
-    'cannot come back under its id. Returns { ok, results } with one result per op in order; on ' +
-    'failure the error says what was rolled back.',
+    'cannot come back under its id. An op can use what an earlier op in the same batch created: ' +
+    'in an id argument, "$N" is op N\'s id (0-based) — so a whole tree (frame → row → text, a ' +
+    'collection → variable → binding) goes in one batch and one undo step. "$N" reads the id the ' +
+    'argument asks for (nodeId for parentId / nodeIds, variableId for variableId or an alias id, ' +
+    'modeId else defaultModeId for modeId, …); "$N.key" names a result key instead (e.g. ' +
+    '"$0.defaultModeId"). It works in id arguments only, at any depth (boundVariables values, ' +
+    'reaction destinationId, set_instance_properties keys, an INSTANCE_SWAP value or defaultValue), ' +
+    'never in text. ' +
+    'Returns { ok, results } with one result per op in order; on failure the error says what was ' +
+    'rolled back.',
   inputSchema: z.object({
     ops: z
       .array(
         z.object({
           tool: z.string().describe('The name of the write tool to run'),
           // Free-form: each tool validates its own params (and, post-McpServer, the inner tool's spec).
-          params: z.record(z.string(), z.unknown()).optional().describe("The tool's parameters"),
+          params: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe('The tool\'s parameters; an id may be "$N" — the id op N created'),
         }),
       )
       .min(1)

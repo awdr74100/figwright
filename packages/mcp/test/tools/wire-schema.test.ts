@@ -337,4 +337,47 @@ describe('checkBatchOps', () => {
     expect(checkBatchOps({ ops: 'nope' })).toBeNull();
     expect(checkBatchOps(batch([{ params: {} }]))).toBeNull();
   });
+
+  it('passes references to earlier ops — "$0" is a string wherever an id is', () => {
+    expect(
+      checkBatchOps(
+        batch([
+          { tool: 'create_frame', params: { name: 'Card' } },
+          { tool: 'create_text', params: { parentId: '$0', characters: 'Title' } },
+          { tool: 'reparent_nodes', params: { nodeIds: ['$1'], newParentId: '$0.nodeId' } },
+        ]),
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses a reference to its own op or a later one before anything is sent', () => {
+    const rejection = checkBatchOps(
+      batch([
+        { tool: 'create_text', params: { parentId: '$1', characters: 'Title' } },
+        { tool: 'create_frame', params: { name: 'Card' } },
+      ]),
+    );
+    expect(rejection?.code).toBe(ErrorCode.InvalidParams);
+    expect(rejection?.message).toContain('batch ops[0]: params.parentId is "$1", which names op 1');
+  });
+
+  it('reads "$N" in text as the text it is', () => {
+    expect(
+      checkBatchOps(batch([{ tool: 'create_text', params: { characters: '$9' } }])),
+    ).toBeNull();
+  });
+
+  it('lets through a VARIANT property literally called "$N", wherever in the batch it is edited', () => {
+    // A call that worked before references; the first build of them refused it as misordered.
+    expect(
+      checkBatchOps(
+        batch([
+          {
+            tool: 'edit_component_property',
+            params: { componentId: '1:2', propertyId: '$0', name: 'Size' },
+          },
+        ]),
+      ),
+    ).toBeNull();
+  });
 });

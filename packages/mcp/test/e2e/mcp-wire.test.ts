@@ -1,11 +1,12 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { once as onExit } from 'node:events';
 import { existsSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { CLIENT_MESSAGE_LIMIT_BYTES, NODE_LIST_BUDGET_BYTES } from '@figwright/shared';
+import { decode, encode } from '@msgpack/msgpack';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { leaderLockPath } from '../../src/election/leader-lock.js';
@@ -60,8 +61,9 @@ class WireClient {
   /** Relay port this server owns, so a test can attach a plugin to the process it is driving. */
   port = 0;
 
-  async start(): Promise<void> {
-    const port = await freePort();
+  /** `port`: join a relay port something else already holds (a fake leader), instead of a free one. */
+  async start(port?: number): Promise<void> {
+    port ??= await freePort();
     this.port = port;
     const child = spawn(process.execPath, [DIST_ENTRY], {
       env: { ...process.env, FIGWRIGHT_PORT: String(port) },
@@ -534,6 +536,203 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       await server.stop();
     }
   }, 30_000);
+
+  it('hands a batch with references to the plugin as sent, with pasted ids normalized', async () => {
+    // References are resolved in the sandbox, so the server must deliver "$N" untouched — while
+    // still normalizing a pasted URL in an op, as it does for the tool called on its own.
+    const received: unknown[] = [];
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      handlers: {
+        batch: params => {
+          received.push(params);
+          return { ok: true, results: [] };
+        },
+      },
+    });
+    try {
+      const res = await server.send('tools/call', {
+        name: 'batch',
+        arguments: {
+          ops: [
+            { tool: 'create_frame', params: { name: 'Card', parentId: '12-34' } },
+            { tool: 'create_text', params: { parentId: '$0', characters: '$5' } },
+          ],
+        },
+      });
+      expect(res.result?.isError).toBeUndefined();
+      expect(received).toEqual([
+        {
+          ops: [
+            { tool: 'create_frame', params: { name: 'Card', parentId: '12:34' } },
+            { tool: 'create_text', params: { parentId: '$0', characters: '$5' } },
+          ],
+          requestId: expect.any(String),
+        },
+      ]);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
+  it('does not send a batch with references to a plugin that predates them', async () => {
+    const received: unknown[] = [];
+    const server = new WireClient();
+    await server.start();
+    await server.handshake(LATEST_CLIENT_PROTOCOL);
+    const plugin = await connectFakePlugin({
+      port: server.port,
+      clientVersion: '0.0.1',
+      handlers: {
+        batch: params => {
+          received.push(params);
+          return { ok: true, results: [] };
+        },
+      },
+    });
+    try {
+      const res = await server.send('tools/call', {
+        name: 'batch',
+        arguments: {
+          ops: [
+            { tool: 'create_frame', params: { name: 'Card' } },
+            { tool: 'group_nodes', params: { nodeIds: ['$0', '1:2'] } },
+          ],
+        },
+      });
+      expect(res.result?.isError).toBe(true);
+      const content = res.result?.content as { type: string; text: string }[];
+      const text = content.map(c => c.text).join('\n');
+      expect(text).toMatch(/cannot resolve/);
+      expect(text).toMatch(/Nothing was applied/);
+      // And the plugin-update notice rides along, attributed to that plugin.
+      expect(text).toMatch(/older than this server/);
+      expect(received).toEqual([]);
+    } finally {
+      closeSocket(plugin);
+      await server.stop();
+    }
+  }, 30_000);
+
+  it('refuses a batch whose reference names a later op, without a plugin in the room', async () => {
+    const res = await client.send('tools/call', {
+      name: 'batch',
+      arguments: {
+        ops: [
+          { tool: 'create_text', params: { parentId: '$1', characters: 'Title' } },
+          { tool: 'create_frame', params: { name: 'Card' } },
+        ],
+      },
+    });
+    expect(res.result?.isError).toBe(true);
+    const content = res.result?.content as { type: string; text: string }[];
+    expect(content[0]?.text).toMatch(/ops\[0\]: params\.parentId is "\$1", which names op 1/);
+  });
+
+  describe('a batch with references, forwarded through a leader from before references', () => {
+    // A real follower process (the built dist) behind a fake leader that answers like a release
+    // without references: it would forward the batch as it came and never check the plugin. The
+    // follower has to make that check itself, from the session list the leader's /ping reports.
+    const fakeOldLeader = async (
+      pluginVersion: string,
+    ): Promise<{ port: number; rpcs: unknown[]; close: () => Promise<void> }> => {
+      const port = await freePort();
+      const rpcs: unknown[] = [];
+      const body = async (req: IncomingMessage): Promise<Buffer> => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        return Buffer.concat(chunks);
+      };
+      const server: HttpServer = createServer((req, res) => {
+        if (req.method === 'GET' && req.url === '/ping') {
+          res.setHeader('content-type', 'application/json');
+          res.end(
+            JSON.stringify({
+              ok: true,
+              serverVersion: '0.6.0',
+              buildId: 1,
+              sessions: [
+                { id: 's1', fileName: 'Old', pageName: null, lastActivityAt: 1, pluginVersion },
+              ],
+            }),
+          );
+          return;
+        }
+        if (req.method === 'POST' && req.url === '/abdicate') {
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ ok: false, reason: 'busy' }));
+          return;
+        }
+        if (req.method === 'POST' && req.url === '/rpc') {
+          const answer = async (): Promise<void> => {
+            const rpc = decode(await body(req)) as { requestId: string; toolName: string };
+            rpcs.push(rpc);
+            res.setHeader('content-type', 'application/msgpack');
+            const result =
+              rpc.toolName === 'list_files' ? { files: [] } : { ok: true, results: [] };
+            res.end(Buffer.from(encode({ kind: 'ok', requestId: rpc.requestId, result })));
+          };
+          void answer();
+          return;
+        }
+        res.statusCode = 404;
+        res.end();
+      });
+      await new Promise<void>(resolve => server.listen(port, '127.0.0.1', () => resolve()));
+      return {
+        port,
+        rpcs,
+        close: async () =>
+          new Promise<void>(resolve => {
+            server.closeAllConnections();
+            server.close(() => resolve());
+          }),
+      };
+    };
+
+    const callBatch = async (pluginVersion: string) => {
+      const leader = await fakeOldLeader(pluginVersion);
+      const follower = new WireClient();
+      try {
+        await follower.start(leader.port);
+        await follower.handshake(LATEST_CLIENT_PROTOCOL);
+        const res = await follower.send('tools/call', {
+          name: 'batch',
+          arguments: {
+            ops: [
+              { tool: 'create_frame', params: { name: 'Card' } },
+              { tool: 'group_nodes', params: { nodeIds: ['$0', '1:2'] } },
+            ],
+          },
+        });
+        const batches = leader.rpcs.filter(r => (r as { toolName: string }).toolName === 'batch');
+        return { res, batches };
+      } finally {
+        await follower.stop();
+        await leader.close();
+      }
+    };
+
+    it('refuses it when the plugin behind that leader predates references', async () => {
+      const { res, batches } = await callBatch('0.6.0');
+      expect(res.result?.isError).toBe(true);
+      const content = (res.result?.content ?? []) as { text: string }[];
+      const text = content.map(c => c.text).join('\n');
+      expect(text).toMatch(/the Figwright plugin in "Old" \(v0\.6\.0\) cannot resolve them/);
+      expect(text).toMatch(/Nothing was applied/);
+      expect(batches).toEqual([]);
+    }, 30_000);
+
+    it('forwards it when the plugin behind that leader resolves them', async () => {
+      const { res, batches } = await callBatch('0.7.0');
+      expect(res.result?.isError).toBeUndefined();
+      expect(batches).toHaveLength(1);
+    }, 30_000);
+  });
 
   it('surfaces a bad-argument call as a tool error the model can read, not a transport failure', async () => {
     const res = await client.send('tools/call', {

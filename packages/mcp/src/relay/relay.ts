@@ -2,14 +2,17 @@ import type { Server as HttpServer } from 'node:http';
 
 import {
   ActivityParamsSchema,
+  batchHasRefs,
+  batchRefsRefusal,
+  checkPluginCompatibility,
   createError,
   createRequest,
   createResponse,
   decodeEnvelope,
   encodeEnvelope,
-  checkPluginCompatibility,
   type Envelope,
   ErrorCode,
+  handlesBatchRefs,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_MAX_MISSES,
   HeartbeatMonitor,
@@ -20,6 +23,7 @@ import {
   pluginSkewSummary,
   PROTOCOL_VERSION,
   SystemMethod,
+  versionLabel,
 } from '@figwright/shared';
 import { WebSocketServer, type WebSocket } from 'ws';
 
@@ -408,6 +412,30 @@ export class Relay {
 
   private dispatchPending(id: string, entry: Pending, session: Session): void {
     if (session.socket === null) return;
+    // A plugin that predates batch references reads `"$0"` as an id that matches nothing, and the
+    // tools that skip ids they cannot find (reparent / move / group / lock …) then answer `ok` with
+    // that node left out — measured. The skew notice would only say the result is unverified after
+    // the file was changed, so this one argument shape is not sent to it at all. Decided here, where
+    // the session that would receive it is known — pinned, routed or flushed from the queue alike.
+    if (
+      entry.method === 'batch' &&
+      !handlesBatchRefs(session.clientVersion, this.opts.serverVersion) &&
+      batchHasRefs(entry.params)
+    ) {
+      clearTimeout(entry.timer);
+      this.pending.delete(id);
+      // Attributed to the session, so the result carries the plugin-update notice as well.
+      entry.served.sessionId = session.id;
+      entry.reject(
+        new Error(
+          batchRefsRefusal(
+            `the Figwright plugin in this file (${versionLabel(session.clientVersion)}) cannot ` +
+              'resolve them — it would read them as ids that do not exist',
+          ),
+        ),
+      );
+      return;
+    }
     entry.dispatched = true;
     entry.dispatchedToSessionId = session.id;
     session.socket.send(
