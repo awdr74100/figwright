@@ -209,7 +209,7 @@ importers:
         specifier: ^0.158.0
         version: 0.158.0
       ws:
-        specifier: ^8.22.2
+        specifier: ^8.23.0
         version: 8.23.0
       zod:
         specifier: ^4.6.7
