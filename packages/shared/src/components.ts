@@ -1,10 +1,29 @@
 import { z } from 'zod';
 
+/** One documentation link, as Figma keeps it (a component, component set or style has at most one). */
+export const DocumentationLinkInfoSchema = z.object({ uri: z.string() });
+export type DocumentationLinkInfo = z.infer<typeof DocumentationLinkInfoSchema>;
+
+/**
+ * The documentation a component or component set carries beside its plain `description`. Both are
+ * omitted when empty, so an entry without formatting or a link reads as it always did.
+ */
+const documentationExtras = {
+  /**
+   * The description as markdown — present only when it says something `description` cannot (bold, a
+   * link, a list, paragraph breaks), i.e. when writing `description` back would lose it.
+   */
+  descriptionMarkdown: z.string().optional(),
+  /** The documentation link (Figma keeps at most one). Omitted when there is none. */
+  documentationLinks: z.array(DocumentationLinkInfoSchema).optional(),
+};
+
 export const SerializedComponentInfoSchema = z.object({
   id: z.string(),
   name: z.string(),
   key: z.string(),
   description: z.string(),
+  ...documentationExtras,
   parentId: z.string().nullable(),
   /** Variant assignments for a component inside a set, e.g. { Size: "Large", State: "Hover" }. */
   variantProperties: z.record(z.string(), z.string()).optional(),
@@ -21,6 +40,7 @@ export const SerializedComponentSetInfoSchema = z.object({
   name: z.string(),
   key: z.string(),
   description: z.string(),
+  ...documentationExtras,
   /** Available values per variant axis, e.g. { Size: { values: ["Small", "Large"] } }. */
   variantGroupProperties: z
     .record(z.string(), z.object({ values: z.array(z.string()) }))
@@ -64,6 +84,9 @@ export const GetComponentApiResultSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.string(),
+  /** The resolved component's / set's own description. Omitted when empty. */
+  description: z.string().optional(),
+  ...documentationExtras,
   /** Property name (verbatim, ready to pass to set_instance_properties) → its definition. */
   properties: z.record(z.string(), ComponentPropertyApiEntrySchema),
 });

@@ -1,6 +1,7 @@
 import type { ComponentPropertyApiEntry, GetComponentApiResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readDocumentationExtras } from '../documentation.js';
 
 /**
  * Resolve a node to the one that owns the full property contract: a COMPONENT_SET as-is, a
@@ -23,6 +24,24 @@ const resolvePropertyOwner = async (
 };
 
 /**
+ * The resolved node's own documentation: its plain description when it has one, plus the fields
+ * readDocumentationExtras adds. Each field is checked rather than assumed, so a runtime without one
+ * reads as it did before.
+ */
+const readComponentDocumentation = (
+  target: ComponentNode | ComponentSetNode,
+): {
+  description?: string;
+  descriptionMarkdown?: string;
+  documentationLinks?: { uri: string }[];
+} => ({
+  ...(typeof target.description === 'string' && target.description !== ''
+    ? { description: target.description }
+    : {}),
+  ...readDocumentationExtras(target),
+});
+
+/**
  * Return a component's full property API (Figma's `componentPropertyDefinitions`), keyed verbatim
  * so the keys can be passed straight to set_instance_properties. Targets a single node — no
  * doc-wide scan, so unlike get_local_components it carries no large-file timeout risk.
@@ -30,7 +49,11 @@ const resolvePropertyOwner = async (
 export const createGetComponentApiHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { nodeId?: unknown };
+    const p = (params ?? {}) as { nodeId?: unknown; documentation?: unknown };
+    // Opt-in, as on get_local_components: reading descriptionMarkdown costs Figma a conversion on
+    // every call (measured 0.1–0.4 ms here, ~0.5–0.9 ms end to end), so a call that did not ask for
+    // the documentation makes exactly the reads it made before the fields existed.
+    const documentation = p.documentation === true;
     if (typeof p.nodeId !== 'string') {
       throw new TypeError('get_component_api: nodeId must be a string');
     }
@@ -62,6 +85,7 @@ export const createGetComponentApiHandler =
       id: target.id,
       name: target.name,
       type: target.type,
+      ...(documentation ? readComponentDocumentation(target) : {}),
       properties,
     };
     return result;

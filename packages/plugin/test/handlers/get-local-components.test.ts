@@ -2,6 +2,7 @@ import type { GetLocalComponentsResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetLocalComponentsHandler } from '../../src/handlers/get-local-components.js';
+import { fakeDocumented } from '../documentation-fake.js';
 
 // A container node (frame) whose findAllWithCriteria returns the components/sets in its subtree.
 const frame = (id: string, found: unknown[]): unknown => ({
@@ -130,6 +131,69 @@ describe('get_local_components handler', () => {
     );
     const result = (await handler({})) as GetLocalComponentsResult;
     expect(result.components.map(c => c.id)).toEqual(['C:3']);
+  });
+
+  it('carries markdown that plain text would lose, and the documentation link, when asked', async () => {
+    const documented = Object.assign(
+      fakeDocumented({
+        id: 'C:7',
+        descriptionMarkdown: '**Primary** action — see [docs](https://a.com)',
+        documentationLinks: [{ uri: 'https://storybook.example.com/button' }],
+      }),
+      { key: 'k7', parent: { id: 'P:1' }, variantProperties: null },
+    );
+    const documentedSet = Object.assign(
+      fakeDocumented({ id: 'CS:7', type: 'COMPONENT_SET', descriptionMarkdown: '- a\n- b' }),
+      { key: 'ks7', variantGroupProperties: {}, children: [] },
+    );
+    const handler = createGetLocalComponentsHandler(
+      fakeFigma({ selection: [frame('F:1', [documented, documentedSet])] }),
+    );
+    // Off unless asked: the listing reads exactly as before, and pays nothing for the fields.
+    const plainListing = (await handler({})) as GetLocalComponentsResult;
+    expect(plainListing.components[0]).toEqual({
+      id: 'C:7',
+      name: 'Button',
+      key: 'k7',
+      description: 'Primary action — see docs',
+      parentId: 'P:1',
+    });
+    expect(plainListing.componentSets[0]).not.toHaveProperty('descriptionMarkdown');
+
+    const result = (await handler({ documentation: true })) as GetLocalComponentsResult;
+    expect(result.components[0]).toEqual({
+      id: 'C:7',
+      name: 'Button',
+      key: 'k7',
+      description: 'Primary action — see docs',
+      descriptionMarkdown: '**Primary** action — see [docs](https://a.com)',
+      documentationLinks: [{ uri: 'https://storybook.example.com/button' }],
+      parentId: 'P:1',
+    });
+    expect(result.componentSets[0]).toMatchObject({
+      description: 'a\nb',
+      descriptionMarkdown: '- a\n- b',
+    });
+    expect(result.componentSets[0]).not.toHaveProperty('documentationLinks');
+  });
+
+  // The listing of a library without formatting or links must read exactly as it did before.
+  it('adds nothing for a plain description without a link, even when asked', async () => {
+    const plain = Object.assign(
+      fakeDocumented({ id: 'C:8', description: 'kbq-arrow_16\n\ndownload, вниз' }),
+      { key: 'k8', parent: { id: 'P:1' }, variantProperties: null },
+    );
+    const handler = createGetLocalComponentsHandler(
+      fakeFigma({ selection: [frame('F:1', [plain])] }),
+    );
+    const result = (await handler({ documentation: true })) as GetLocalComponentsResult;
+    expect(result.components[0]).toEqual({
+      id: 'C:8',
+      name: 'Button',
+      key: 'k8',
+      description: 'kbq-arrow_16\n\ndownload, вниз',
+      parentId: 'P:1',
+    });
   });
 
   it('throws when nothing is selected and no nodeId is given', async () => {

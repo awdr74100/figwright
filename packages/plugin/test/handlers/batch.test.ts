@@ -4,6 +4,7 @@ import type { BatchResult } from '@figwright/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxHandlers } from '../../src/dispatcher.js';
+import { snapshotDocumentation } from '../../src/documentation.js';
 import { readTracks, resetGridTrackReadsForTests } from '../../src/grid-tracks.js';
 import { createAddComponentPropertyHandler } from '../../src/handlers/add-component-property.js';
 import { createAddVariableModeHandler } from '../../src/handlers/add-variable-mode.js';
@@ -31,6 +32,7 @@ import { createReorderNodesHandler } from '../../src/handlers/reorder-nodes.js';
 import { createReparentNodesHandler } from '../../src/handlers/reparent-nodes.js';
 import { createRepeatNodesHandler, createSetRepeatHandler } from '../../src/handlers/repeat.js';
 import { createSetAutoLayoutHandler } from '../../src/handlers/set-auto-layout.js';
+import { createSetComponentDocumentationHandler } from '../../src/handlers/set-component-documentation.js';
 import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
 import { createSetFillsHandler } from '../../src/handlers/set-fills.js';
 import { createSetInstancePropertiesHandler } from '../../src/handlers/set-instance-properties.js';
@@ -56,6 +58,7 @@ import {
   createSetVectorHandler,
 } from '../../src/handlers/vector.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
+import { fakeDocumented } from '../documentation-fake.js';
 import { makeFlowsFigma } from './flows-fake.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
@@ -3344,5 +3347,88 @@ describe('batch references to earlier ops ("$N")', () => {
       ],
     });
     expect(store.get('N:1')!.name).toBe('$5');
+  });
+});
+
+describe('set_component_documentation in a batch', () => {
+  const setUp = (init: Parameters<typeof fakeDocumented>[0]) => {
+    const { figmaCtx, store } = makeWide();
+    failingFrame(store);
+    const node = fakeDocumented({ id: 'C:1', ...init });
+    store.set('C:1', node as unknown as Record<string, unknown>);
+    const handler = createBatchHandler(figmaCtx, {
+      set_component_documentation: createSetComponentDocumentationHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    return { node, handler };
+  };
+
+  // Writing the old plain text back would lose the formatting; writing the old markdown back would
+  // turn the literal "[x](y)" into a link. Each case needs a different one of the two.
+  it.each([
+    ['formatted', { descriptionMarkdown: '**Use** for [primary](https://a.com)\n\n- one\n- two' }],
+    ['plain text that reads as markdown', { description: '[x](y)\n\n1. not a list' }],
+    ['plain with underscores', { description: 'kbq-arrow_16\n\npt-icons_16' }],
+  ])('rolls a %s description and its link back exactly', async (_, init) => {
+    const { node, handler } = setUp({ ...init, documentationLinks: [{ uri: 'https://old.com' }] });
+    const before = snapshotDocumentation(node);
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_component_documentation',
+            params: {
+              nodeId: 'C:1',
+              description: 'replaced',
+              documentationLinks: [{ uri: 'https://new.com' }],
+              replaceFormatting: true,
+            },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
+    expect(snapshotDocumentation(node)).toEqual(before);
+  });
+
+  // The issue's flow over descriptions typed in Figma: read the plain text, edit it, write it back.
+  // Sent as read, every paragraph would gain a blank line; the whole batch is refused instead.
+  it('refuses a batch that would add blank lines to typed paragraphs, and leaves every one as it was', async () => {
+    const { figmaCtx, store } = makeWide();
+    const typed = (id: string) => {
+      const node = fakeDocumented({ id, descriptionMarkdown: `${id}\\_16\n\ntags\n\npt\\_16` });
+      store.set(id, node as unknown as Record<string, unknown>);
+      return node;
+    };
+    const nodes = [typed('C:1'), typed('C:2')];
+    const before = nodes.map(snapshotDocumentation);
+    const handler = createBatchHandler(figmaCtx, {
+      set_component_documentation: createSetComponentDocumentationHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: nodes.map(node => ({
+          tool: 'set_component_documentation',
+          params: {
+            nodeId: node.id,
+            description: node.description.replace('tags', 'sorted, tags'),
+          },
+        })),
+      }),
+    ).rejects.toThrow(
+      /op 0 \(set_component_documentation\) failed, rolled back 0 applied op\(s\): .*paragraph breaks/,
+    );
+    expect(nodes.map(snapshotDocumentation)).toEqual(before);
+  });
+
+  it('refuses a node it cannot document before anything runs', async () => {
+    const { handler } = setUp({});
+    await expect(
+      handler({
+        ops: [
+          { tool: 'set_component_documentation', params: { nodeId: 'X:404', description: 'x' } },
+        ],
+      }),
+    ).rejects.toThrow(/node X:404 not found/);
   });
 });

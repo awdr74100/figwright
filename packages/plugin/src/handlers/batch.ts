@@ -1,6 +1,11 @@
 import { type BatchResult, batchRefOrderError, type FlowStartingPoint } from '@figwright/shared';
 
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
+import {
+  type DocumentationSnapshot,
+  restoreDocumentation,
+  snapshotDocumentation,
+} from '../documentation.js';
 import { readTracks, TRACKS_UNREAD } from '../grid-tracks.js';
 import { ownValue } from '../own-value.js';
 import {
@@ -44,6 +49,7 @@ import {
   isMotionNode,
   toPlainJson,
 } from './motion-shared.js';
+import { resolveDocumentedComponent } from './set-component-documentation.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
@@ -1693,6 +1699,40 @@ const updateVariableCollectionInverse: BatchInverse = {
   },
 };
 
+// ── Component documentation ──────────────────────────────────────────────────
+
+interface DocumentationState extends DocumentationSnapshot {
+  id: string;
+}
+
+/**
+ * Undo for set_component_documentation: the description (both forms) and the link, whatever the op
+ * names — a plain description rewrites the markdown too. Writing the old plain text back would lose
+ * the old formatting, and writing the old markdown back would turn plain text such as `[x](y)` into
+ * a link (both measured), so restoreDocumentation writes whichever reproduces the snapshot and
+ * checks that it did; a description it cannot put back exactly is reported, not claimed restored.
+ */
+const componentDocumentationInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'nodeId', 'set_component_documentation');
+    const node = await resolveDocumentedComponent(
+      figmaCtx,
+      id,
+      'batch/set_component_documentation',
+    );
+    return { id, ...snapshotDocumentation(node) } satisfies DocumentationState;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const was = captured as DocumentationState;
+    const node = await figmaCtx.getNodeByIdAsync(was.id);
+    if (node?.type !== 'COMPONENT' && node?.type !== 'COMPONENT_SET') return undefined;
+    const off = restoreDocumentation(node, was);
+    return off === undefined
+      ? undefined
+      : `${node.type === 'COMPONENT' ? 'component' : 'component set'} ${was.id}: ${off}`;
+  },
+};
+
 // ── Prototype flows ──────────────────────────────────────────────────────────
 
 /** Every page's flow list, keyed by page id, as the batch found it. */
@@ -2218,6 +2258,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   rename_variable: renameVariableInverse,
   update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
+  set_component_documentation: componentDocumentationInverse,
   edit_component_property: editPropertyInverse,
   bind_component_property: bindPropertyInverse,
   // Prototype and pages.

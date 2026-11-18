@@ -224,6 +224,7 @@ const EXPECTED: string[] = [
   'set_auto_layout.nodeId → nodeId',
   'set_blend_mode.nodeId → nodeId',
   'set_complex_stroke.nodeId → nodeId',
+  'set_component_documentation.nodeId → nodeId',
   'set_constraints.nodeId → nodeId',
   'set_corner_radius.nodeId → nodeId',
   'set_effects.effects[].boundVariables{*} → variableId',
