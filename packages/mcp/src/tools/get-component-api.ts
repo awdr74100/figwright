@@ -13,11 +13,18 @@ export const getComponentApiTool: ToolSpec = {
     '{ type (VARIANT|BOOLEAN|TEXT|INSTANCE_SWAP|SLOT), defaultValue, variantOptions?, preferredValues?, ' +
     'description? }. Property names come back verbatim for set_instance_properties: VARIANT by bare name ' +
     '(e.g. "Size"), BOOLEAN/TEXT/INSTANCE_SWAP suffixed with #id (e.g. "Label#2:0"). Unlike ' +
-    'get_local_components (a subtree inventory), this targets one component and is safe on large files.',
+    'get_local_components (a subtree inventory), this targets one component and is safe on large files. ' +
+    "With documentation: true it also returns the resolved component's or set's own description, " +
+    'descriptionMarkdown (when plain text would lose its formatting) and documentationLinks, each ' +
+    'omitted when empty.',
   inputSchema: z.object({
     nodeId: z
       .string()
       .describe('A COMPONENT, COMPONENT_SET, or INSTANCE node id to read the property API of'),
+    documentation: z
+      .boolean()
+      .optional()
+      .describe("Also return the resolved component's or set's description and documentation link"),
   }),
   kind: 'read',
 };

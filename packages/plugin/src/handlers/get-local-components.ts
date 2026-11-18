@@ -5,12 +5,18 @@ import type {
 } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { readDocumentationExtras } from '../documentation.js';
 import { readComponentGetter } from '../serializer.js';
 
 export const createGetLocalComponentsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { nodeId?: string };
+    const p = (params ?? {}) as { nodeId?: string; documentation?: unknown };
+    // Opt-in: Figma converts descriptionMarkdown on every read (measured 2026-11-19: ~0.17 ms per
+    // component, 188 ms over 1,100 — twice the whole listing's cost before), and nothing cheaper says
+    // whether a description has formatting. So a listing that did not ask for it costs, and reads,
+    // exactly what it did before the fields existed.
+    const documentation = p.documentation === true;
 
     // Scope to a node subtree or the current selection — never the whole document. A doc-wide
     // findAllWithCriteria has to loadAllPagesAsync and walk every page, which times out on large
@@ -63,6 +69,7 @@ export const createGetLocalComponentsHandler =
           name: node.name,
           key: node.key,
           description: node.description,
+          ...(documentation ? readDocumentationExtras(node) : {}),
           parentId: node.parent === null ? null : node.parent.id,
         };
         // Figma refuses both reads below while the variant's set has errors; that set is reported
@@ -77,6 +84,7 @@ export const createGetLocalComponentsHandler =
           name: node.name,
           key: node.key,
           description: node.description,
+          ...(documentation ? readDocumentationExtras(node) : {}),
           componentIds: node.children.map(child => child.id),
         };
         const groups = readComponentGetter(() => node.variantGroupProperties);

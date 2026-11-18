@@ -106,6 +106,7 @@ import { setArcTool } from './set-arc.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setBlendModeTool } from './set-blend-mode.js';
 import { setComplexStrokeTool } from './set-complex-stroke.js';
+import { setComponentDocumentationTool } from './set-component-documentation.js';
 import { setConstraintsTool } from './set-constraints.js';
 import { setCornerRadiusTool } from './set-corner-radius.js';
 import { setEffectsTool } from './set-effects.js';
@@ -284,6 +285,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createSectionTool,
   createInstanceTool,
   combineAsVariantsTool,
+  setComponentDocumentationTool,
   // Motion (beta) — Figma Design only
   applyAnimationStyleTool,
   removeAnimationStyleTool,

@@ -2,6 +2,7 @@ import type { GetComponentApiResult } from '@figwright/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createGetComponentApiHandler } from '../../src/handlers/get-component-api.js';
+import { fakeDocumented } from '../documentation-fake.js';
 
 const defs = {
   Size: { type: 'VARIANT', defaultValue: 'md', variantOptions: ['sm', 'md', 'lg'] },
@@ -92,5 +93,52 @@ describe('get_component_api handler', () => {
     await expect(createGetComponentApiHandler(fakeFigma({}))({ nodeId: 'X:9' })).rejects.toThrow(
       /not found/,
     );
+  });
+
+  it("carries the resolved component's own documentation when asked, each field only when present", async () => {
+    const documented = Object.assign(
+      fakeDocumented({
+        id: 'CS:2',
+        type: 'COMPONENT_SET',
+        descriptionMarkdown: '**Primary** button',
+        documentationLinks: [{ uri: 'https://storybook.example.com/button' }],
+      }),
+      { componentPropertyDefinitions: {} },
+    );
+    // Off unless asked: the call makes exactly the reads it made before.
+    const unasked = (await createGetComponentApiHandler(fakeFigma({ 'CS:2': documented }))({
+      nodeId: 'CS:2',
+    })) as GetComponentApiResult;
+    expect(Object.keys(unasked)).toEqual(['id', 'name', 'type', 'properties']);
+
+    const result = (await createGetComponentApiHandler(fakeFigma({ 'CS:2': documented }))({
+      nodeId: 'CS:2',
+      documentation: true,
+    })) as GetComponentApiResult;
+    expect(result).toEqual({
+      id: 'CS:2',
+      name: 'Button',
+      type: 'COMPONENT_SET',
+      description: 'Primary button',
+      descriptionMarkdown: '**Primary** button',
+      documentationLinks: [{ uri: 'https://storybook.example.com/button' }],
+      properties: {},
+    });
+
+    const bare = Object.assign(fakeDocumented({ id: 'C:2' }), { componentPropertyDefinitions: {} });
+    const plain = (await createGetComponentApiHandler(fakeFigma({ 'C:2': bare }))({
+      nodeId: 'C:2',
+      documentation: true,
+    })) as GetComponentApiResult;
+    expect(plain).toEqual({ id: 'C:2', name: 'Button', type: 'COMPONENT', properties: {} });
+  });
+
+  // The fixtures above have no documentation fields at all: the result must not grow keys for them.
+  it('adds no documentation keys for a node without the fields', async () => {
+    const result = (await createGetComponentApiHandler(fakeFigma({ 'C:9': standalone }))({
+      nodeId: 'C:9',
+      documentation: true,
+    })) as GetComponentApiResult;
+    expect(Object.keys(result)).toEqual(['id', 'name', 'type', 'properties']);
   });
 });

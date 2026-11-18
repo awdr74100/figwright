@@ -39,6 +39,16 @@ export const LayoutPropsResultSchema = MutateResultSchema.extend({
 export type LayoutPropsResult = z.infer<typeof LayoutPropsResultSchema>;
 
 /**
+ * Result of set_component_documentation. Figma stores a description in its own form — surrounding
+ * whitespace trimmed, line breaks as `\n`, everything from a NUL dropped, markdown rewritten — and
+ * `adjusted` says which of those happened to this call. Absent when everything landed as sent.
+ */
+export const ComponentDocumentationResultSchema = MutateResultSchema.extend({
+  adjusted: z.string().optional(),
+});
+export type ComponentDocumentationResult = z.infer<typeof ComponentDocumentationResultSchema>;
+
+/**
  * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
  * applyAnimationStyle. batch's inverse uses it to removeAnimationStyle on undo, so it must
  * round-trip.

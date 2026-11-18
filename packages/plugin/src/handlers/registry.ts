@@ -93,6 +93,7 @@ import { createSearchNodesHandler } from './search-nodes.js';
 import { createSetArcHandler } from './set-arc.js';
 import { createSetAutoLayoutHandler } from './set-auto-layout.js';
 import { createSetBlendModeHandler } from './set-blend-mode.js';
+import { createSetComponentDocumentationHandler } from './set-component-documentation.js';
 import { createSetConstraintsHandler } from './set-constraints.js';
 import { createSetCornerRadiusHandler } from './set-corner-radius.js';
 import { createSetEffectsHandler } from './set-effects.js';
@@ -242,6 +243,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     create_section: createCreateSectionHandler(figmaCtx),
     create_instance: createCreateInstanceHandler(figmaCtx),
     combine_as_variants: createCombineAsVariantsHandler(figmaCtx),
+    set_component_documentation: createSetComponentDocumentationHandler(figmaCtx),
     // Motion (beta) — Figma Design only
     apply_animation_style: createApplyAnimationStyleHandler(figmaCtx),
     remove_animation_style: createRemoveAnimationStyleHandler(figmaCtx),
