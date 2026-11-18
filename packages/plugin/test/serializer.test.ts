@@ -1360,6 +1360,54 @@ describe('serializeFlat — layout sizing / constraints / clipsContent', () => {
     expect(serializeFlatSync(fake({ type: 'FRAME', layoutGrids: [] })).layoutGrids).toBeUndefined();
   });
 
+  // The overlay colour, read so a grid written back from get_node keeps it: every write used to
+  // reset it to Figma's red at 10%. As Figma holds it (float32), like a paint's colour.
+  it("carries each grid's colour as Figma holds it, and nothing where a grid has none", () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'FRAME',
+        layoutGrids: [
+          {
+            pattern: 'GRID',
+            visible: true,
+            sectionSize: 8,
+            color: { r: 1, g: 0, b: 0, a: 0.10000000149011612 },
+          },
+          {
+            pattern: 'COLUMNS',
+            visible: false,
+            count: 4,
+            gutterSize: 10,
+            alignment: 'MIN',
+            offset: 8,
+            color: { r: 0.1, g: 0.2, b: 0.3, a: 0.37 },
+            boundVariables: { gutterSize: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
+          },
+          { pattern: 'ROWS', visible: true, count: 2, gutterSize: 4, alignment: 'STRETCH' },
+        ],
+      }),
+    );
+    expect(out.layoutGrids).toEqual([
+      {
+        pattern: 'GRID',
+        visible: true,
+        sectionSize: 8,
+        color: { r: 1, g: 0, b: 0, a: 0.10000000149011612 },
+      },
+      {
+        pattern: 'COLUMNS',
+        visible: false,
+        count: 4,
+        gutterSize: 10,
+        alignment: 'MIN',
+        offset: 8,
+        color: { r: 0.1, g: 0.2, b: 0.3, a: 0.37 },
+        boundVariables: { gutterSize: 'V:1' },
+      },
+      { pattern: 'ROWS', visible: true, count: 2, gutterSize: 4, alignment: 'STRETCH' },
+    ]);
+  });
+
   it('surfaces overflowDirection on a scrolling frame, omits the NONE default', () => {
     expect(
       serializeFlatSync(fake({ type: 'FRAME', overflowDirection: 'VERTICAL' })).overflowDirection,

@@ -124,7 +124,11 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.clipsContent !== undefined) out.clipsContent = flat.clipsContent;
   // A frame's own layout grids (the explicit responsive column system) + scroll overflow — ground
   // truth for breakpoints that codegen otherwise infers from geometry.
-  if (flat.layoutGrids !== undefined) out.layoutGrids = flat.layoutGrids;
+  // Without their colour: it is how the editor draws the overlay, nothing the code renders, and
+  // design_diff compares these snapshots — so they read exactly as they did before it was read.
+  if (flat.layoutGrids !== undefined) {
+    out.layoutGrids = flat.layoutGrids.map(({ color: _color, ...grid }) => grid);
+  }
   if (flat.overflowDirection !== undefined) out.overflowDirection = flat.overflowDirection;
   if (flat.numberOfFixedChildren !== undefined) {
     out.numberOfFixedChildren = flat.numberOfFixedChildren;

@@ -48,6 +48,48 @@ describe('set_layout_grids handler', () => {
     expect(result).toEqual({ ok: true, nodeId: '1:1' });
   });
 
+  // A grid read from get_node carries its colour; writing it back must keep it rather than reset it
+  // to Figma's red at 10%, as every write here used to.
+  it("writes a grid's colour when given, and leaves it to Figma when not", async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    await createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }))({
+      nodeId: '1:1',
+      grids: [
+        { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0.5, b: 1, a: 0.3 } },
+        {
+          pattern: 'ROWS',
+          visible: true,
+          count: 3,
+          gutterSize: 8,
+          alignment: 'CENTER',
+          sectionSize: 40,
+          color: { r: 1, g: 0, b: 1, a: 0.15 },
+        },
+        { pattern: 'COLUMNS', visible: true, count: 2, gutterSize: 4, alignment: 'STRETCH' },
+      ],
+    });
+    expect(frame.layoutGrids).toEqual([
+      { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0.5, b: 1, a: 0.3 } },
+      {
+        pattern: 'ROWS',
+        visible: true,
+        count: 3,
+        gutterSize: 8,
+        alignment: 'CENTER',
+        sectionSize: 40,
+        color: { r: 1, g: 0, b: 1, a: 0.15 },
+      },
+      {
+        pattern: 'COLUMNS',
+        visible: true,
+        count: 2,
+        gutterSize: 4,
+        alignment: 'STRETCH',
+        offset: 0,
+      },
+    ]);
+  });
+
   it('omits offset on a CENTER grid (Figma rejects the key there)', async () => {
     const frame = { id: '1:1', layoutGrids: [] as unknown[] };
     const handler = createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }));
@@ -128,5 +170,95 @@ describe('set_layout_grids handler', () => {
         boundVariables: { gutterSize: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
       }),
     ]);
+  });
+
+  // Figma refuses a colour without alpha or outside 0–1 — and the whole write with it. The colour is
+  // only how the editor draws the overlay, so it alone is left out and named; the grids still land,
+  // as they did before colours were read at all.
+  it('leaves out a colour Figma would refuse, names it, and writes every grid', async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    const result = (await createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }))({
+      nodeId: '1:1',
+      grids: [
+        { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 255, g: 0, b: 0, a: 0.1 } },
+        { pattern: 'GRID', visible: true, sectionSize: 4, color: { r: 0, g: 0, b: 1 } },
+        { pattern: 'GRID', visible: true, sectionSize: 2, color: { r: 0, g: 1, b: 0, a: 0.5 } },
+        { pattern: 'GRID', visible: true, sectionSize: 1, color: 'red' },
+      ],
+    })) as { ok: true; nodeId: string; adjusted?: string };
+    expect(frame.layoutGrids).toEqual([
+      { pattern: 'GRID', visible: true, sectionSize: 8 },
+      { pattern: 'GRID', visible: true, sectionSize: 4 },
+      { pattern: 'GRID', visible: true, sectionSize: 2, color: { r: 0, g: 1, b: 0, a: 0.5 } },
+      { pattern: 'GRID', visible: true, sectionSize: 1 },
+    ]);
+    expect(result.adjusted).toBe(
+      "grids[0].color was not written (r must be a number from 0 to 1), so that grid has Figma's " +
+        "default red at 10%; grids[1].color was not written (it has no a), so that grid has Figma's " +
+        'default red at 10%; grids[3].color was not written (it has no r / g / b / a), so that grid ' +
+        "has Figma's default red at 10%",
+    );
+  });
+
+  it('reports nothing when every colour lands', async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    const result = await createSetLayoutGridsHandler(fakeFigma({ '1:1': frame }))({
+      nodeId: '1:1',
+      grids: [
+        { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0, b: 0, a: 0 } },
+      ],
+    });
+    expect(result).toEqual({ ok: true, nodeId: '1:1' });
+  });
+
+  // `space` means on a grid colour what it means on a paint: an sRGB colour from code is converted
+  // into a Display P3 document's channels by Figma, and only the channels are kept.
+  it("converts a colour that names another space into the document's channels", async () => {
+    const frame = { id: '1:1', layoutGrids: [] as unknown[] };
+    const converted: unknown[] = [];
+    const figmaCtx = {
+      ...fakeFigma({ '1:1': frame }),
+      root: { documentColorProfile: 'DISPLAY_P3' },
+      util: {
+        rgb: (c: { space: string; r: number; g: number; b: number }) => {
+          converted.push(c);
+          return { r: 0.1, g: 0.2, b: 0.3, sourceColor: c };
+        },
+      },
+    } as unknown as typeof figma;
+    const result = await createSetLayoutGridsHandler(figmaCtx)({
+      nodeId: '1:1',
+      grids: [
+        {
+          pattern: 'GRID',
+          visible: true,
+          sectionSize: 8,
+          color: { r: 0, g: 0.5, b: 1, a: 0.3, space: 'SRGB' },
+        },
+        {
+          pattern: 'GRID',
+          visible: true,
+          sectionSize: 4,
+          color: { r: 0, g: 0.5, b: 1, a: 0.3, space: 'DISPLAY_P3' },
+        },
+        {
+          pattern: 'GRID',
+          visible: true,
+          sectionSize: 2,
+          color: { r: 0, g: 0.5, b: 1, a: 0.3, space: 'CMYK' },
+        },
+      ],
+    });
+    expect(converted).toEqual([{ space: 'SRGB', r: 0, g: 0.5, b: 1 }]);
+    expect(frame.layoutGrids).toEqual([
+      { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0.1, g: 0.2, b: 0.3, a: 0.3 } },
+      { pattern: 'GRID', visible: true, sectionSize: 4, color: { r: 0, g: 0.5, b: 1, a: 0.3 } },
+      { pattern: 'GRID', visible: true, sectionSize: 2 },
+    ]);
+    expect(result).toMatchObject({
+      adjusted: expect.stringContaining(
+        'grids[2].color was not written (space must be one of SRGB / DISPLAY_P3)',
+      ) as unknown,
+    });
   });
 });

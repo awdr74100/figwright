@@ -12,10 +12,12 @@ export const createCreateGridStyleHandler =
     if (!Array.isArray(p.grids)) throw new TypeError('create_grid_style: grids must be an array');
 
     // Bindings resolve first, so a bad variable id fails before a half-built style exists.
+    const adjusted: string[] = [];
     const grids = await toFigmaLayoutGridsBound(
       figmaCtx,
       p.grids as SerializedLayoutGrid[],
       'create_grid_style',
+      adjusted,
     );
 
     const style = figmaCtx.createGridStyle();
@@ -24,5 +26,6 @@ export const createCreateGridStyleHandler =
     if (typeof p.description === 'string') style.description = p.description;
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
+    if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
     return result;
   };

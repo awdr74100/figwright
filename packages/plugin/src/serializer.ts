@@ -1439,11 +1439,16 @@ export const serializeCodeSyntax = (raw: unknown): Record<string, string> | unde
 export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
   // sectionSize / count / offset / gutterSize can each be variable-bound, on the grid object.
   const bound = collectBindings((grid as { boundVariables?: unknown }).boundVariables);
+  // The overlay's colour, so a grid read here writes back as it was: set_layout_grids and the grid
+  // styles used to drop it, and every write reset it to Figma's red at 10%. Copied as Figma holds
+  // it, like a paint's colour (document space, no rounding), and absent only where Figma gives none.
+  const color = gridColor(grid);
   if (grid.pattern === 'GRID') {
     return {
       pattern: 'GRID',
       visible: grid.visible ?? true,
       sectionSize: grid.sectionSize,
+      ...(color === undefined ? {} : { color }),
       ...(bound === undefined ? {} : { boundVariables: bound }),
     };
   }
@@ -1460,8 +1465,26 @@ export const serializeLayoutGrid = (grid: LayoutGrid): SerializedLayoutGrid => {
   if (typeof grid.offset === 'number' && grid.offset !== 0 && grid.alignment !== 'CENTER') {
     out.offset = grid.offset;
   }
+  if (color !== undefined) out.color = color;
   // Last, so a bound grid reads as "the grid, then what it binds" — the order every other
   // serializer here emits.
   if (bound !== undefined) out.boundVariables = bound;
   return out;
+};
+
+/** A layout grid's colour as plain RGBA, or undefined when the object carries none. */
+const gridColor = (
+  grid: LayoutGrid,
+): { r: number; g: number; b: number; a: number } | undefined => {
+  const c = (grid as { color?: Partial<RGBA> }).color;
+  if (
+    c === undefined ||
+    typeof c.r !== 'number' ||
+    typeof c.g !== 'number' ||
+    typeof c.b !== 'number' ||
+    typeof c.a !== 'number'
+  ) {
+    return undefined;
+  }
+  return { r: c.r, g: c.g, b: c.b, a: c.a };
 };
