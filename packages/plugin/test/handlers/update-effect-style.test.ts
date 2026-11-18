@@ -67,4 +67,57 @@ describe('update_effect_style handler', () => {
       expect.objectContaining({ boundVariables: { color: { type: 'VARIABLE_ALIAS', id: 'V:1' } } }),
     ]);
   });
+
+  // Measured on main: the style was renamed before the missing variable failed the call.
+  it('leaves every field alone when a bound variable cannot be resolved', async () => {
+    const style = { id: 'S:0', type: 'EFFECT', name: 'n', effects: 'UNTOUCHED', description: 'd' };
+    await expect(
+      createUpdateEffectStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        description: 'changed',
+        effects: [
+          {
+            type: 'DROP_SHADOW',
+            visible: true,
+            radius: 2,
+            color: { r: 0, g: 0, b: 0, a: 1 },
+            offset: { x: 0, y: 1 },
+            boundVariables: { radius: 'V:gone' },
+          },
+        ],
+      }),
+    ).rejects.toThrow('update_effect_style: variable V:gone not found');
+    expect(style).toEqual({
+      id: 'S:0',
+      type: 'EFFECT',
+      name: 'n',
+      effects: 'UNTOUCHED',
+      description: 'd',
+    });
+  });
+
+  it('puts back what it wrote when Figma refuses a later write', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'EFFECT',
+      name: 'n',
+      description: 'd',
+    };
+    Object.defineProperty(style, 'effects', {
+      enumerable: true,
+      get: () => ['old'],
+      set: () => {
+        throw new Error('in set_effects: refused');
+      },
+    });
+    await expect(
+      createUpdateEffectStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        effects: [],
+      }),
+    ).rejects.toThrow(/^in set_effects: refused$/);
+    expect([style.name, style.description]).toEqual(['n', 'd']);
+  });
 });

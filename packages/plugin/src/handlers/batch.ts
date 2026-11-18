@@ -25,7 +25,6 @@ import {
   captureText,
   type GeometrySnapshot,
   type LayoutScope,
-  loadFonts,
   type Placement,
   type PropsSnapshot,
   rebind,
@@ -50,6 +49,13 @@ import {
   toPlainJson,
 } from './motion-shared.js';
 import { resolveDocumentedComponent } from './set-component-documentation.js';
+import {
+  restoreStyle,
+  restoreTextStyle,
+  snapshotStyle,
+  snapshotTextStyle,
+  type TextStyleSnapshot,
+} from './style-snapshot.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 
@@ -1455,7 +1461,8 @@ interface StyleState {
 /**
  * Update_paint_style / update_effect_style: name, description and the value array (bindings ride on
  * its items, measured to round-trip). A style has no `descriptionMarkdown` at runtime, despite the
- * typings — measured — so `description` is the whole of it.
+ * typings — measured — so `description` is the whole of it. What is recorded and how it goes back
+ * is style-snapshot.ts's, shared with the update handlers' own rollback.
  */
 const styleInverse = (tool: string, type: StyleType, valueProp: string): BatchInverse => ({
   async capture(figmaCtx, params) {
@@ -1463,56 +1470,28 @@ const styleInverse = (tool: string, type: StyleType, valueProp: string): BatchIn
     const style = await figmaCtx.getStyleByIdAsync(id);
     if (style?.type !== type)
       throw new Error(`batch/${tool}: ${type.toLowerCase()} style ${id} not found`);
-    const bag = style as unknown as Bag;
     const state: StyleState = {
       id,
-      values: { name: style.name, description: style.description, [valueProp]: bag[valueProp] },
+      values: snapshotStyle(style, ['name', 'description', valueProp]),
     };
     return state;
   },
   async undo(figmaCtx, _params, captured) {
     const { id, values } = captured as StyleState;
     const style = await figmaCtx.getStyleByIdAsync(id);
-    if (style !== null) for (const [k, v] of Object.entries(values)) writeIfDifferent(style, k, v);
+    if (style !== null) restoreStyle(style, values);
     return undefined;
   },
 });
 
-/** Everything update_text_style (or a binding it applies) can change on a text style. */
-const TEXT_STYLE_PROPS = [
-  'name',
-  'description',
-  'fontName',
-  'fontSize',
-  'lineHeight',
-  'letterSpacing',
-  'paragraphSpacing',
-  'paragraphIndent',
-  'textWrapStyle',
-];
-const TEXT_STYLE_BINDABLE: readonly VariableBindableTextField[] = [
-  'fontFamily',
-  'fontSize',
-  'fontStyle',
-  'fontWeight',
-  'letterSpacing',
-  'lineHeight',
-  'paragraphSpacing',
-  'paragraphIndent',
-];
-
-interface TextStyleState extends StyleState {
-  bindings: Record<string, string | null>;
+interface TextStyleState extends TextStyleSnapshot {
+  id: string;
   consumers: string[];
 }
 
-const textStyleBinding = (style: TextStyle, field: VariableBindableTextField): string | null =>
-  style.boundVariables?.[field]?.id ?? null;
-
 /**
- * Update_text_style: unbind what the op bound, put the raw typography back (fonts loaded — measured
- * to be required even for a size-only write), then re-bind what it unbound. Its consumers re-lay
- * out, so their layout regions are guarded.
+ * Update_text_style: unbind what the op bound, put the raw typography back, then re-bind what it
+ * unbound (style-snapshot.ts). Its consumers re-lay out, so their layout regions are guarded.
  */
 const textStyleInverse: BatchInverse = {
   async capture(figmaCtx, params) {
@@ -1521,34 +1500,16 @@ const textStyleInverse: BatchInverse = {
     if (style?.type !== 'TEXT')
       throw new Error(`batch/update_text_style: text style ${id} not found`);
     const text = style as TextStyle;
-    const bag = text as unknown as Bag;
-    const values: Bag = {};
-    for (const k of TEXT_STYLE_PROPS) values[k] = bag[k];
-    const bindings: Record<string, string | null> = {};
-    for (const f of TEXT_STYLE_BINDABLE) bindings[f] = textStyleBinding(text, f);
+    const snapshot = snapshotTextStyle(text);
     const consumers = (await text.getStyleConsumersAsync()).map(c => c.node.id);
-    const state: TextStyleState = { id, values, bindings, consumers };
+    const state: TextStyleState = { id, ...snapshot, consumers };
     return state;
   },
   async undo(figmaCtx, _params, captured) {
     const s = captured as TextStyleState;
     const style = (await figmaCtx.getStyleByIdAsync(s.id)) as TextStyle | null;
     if (style === null) return undefined;
-    await loadFonts(figmaCtx, [s.values.fontName as FontName, style.fontName]);
-    for (const f of TEXT_STYLE_BINDABLE) {
-      if (s.bindings[f] === null && textStyleBinding(style, f) !== null)
-        style.setBoundVariable(f, null);
-    }
-    for (const [k, v] of Object.entries(s.values)) writeIfDifferent(style, k, v);
-    /* eslint-disable no-await-in-loop -- a style has at most eight bindable fields */
-    for (const f of TEXT_STYLE_BINDABLE) {
-      const id = s.bindings[f];
-      if (id === null || id === undefined || textStyleBinding(style, f) === id) continue;
-      const variable = await figmaCtx.variables.getVariableByIdAsync(id);
-      if (variable === null) throw new Error(`variable ${id} bound to ${f} no longer exists`);
-      style.setBoundVariable(f, variable);
-    }
-    /* eslint-enable no-await-in-loop */
+    await restoreTextStyle(figmaCtx, style, s);
     return undefined;
   },
   resizes: (_params, captured) => (captured as TextStyleState).consumers,
