@@ -39,6 +39,15 @@ export const LayoutPropsResultSchema = MutateResultSchema.extend({
 export type LayoutPropsResult = z.infer<typeof LayoutPropsResultSchema>;
 
 /**
+ * Result of set_layout_grids. A grid colour Figma would refuse is left out — the grid gets the
+ * default — rather than failing every grid with it; `adjusted` names each. Absent when none was.
+ */
+export const LayoutGridsResultSchema = MutateResultSchema.extend({
+  adjusted: z.string().optional(),
+});
+export type LayoutGridsResult = z.infer<typeof LayoutGridsResultSchema>;
+
+/**
  * Result of set_component_documentation. Figma stores a description in its own form — surrounding
  * whitespace trimmed, line breaks as `\n`, everything from a NUL dropped, markdown rewritten — and
  * `adjusted` says which of those happened to this call. Absent when everything landed as sent.
@@ -129,6 +138,8 @@ export const StyleResultSchema = z.object({
   ok: z.literal(true),
   styleId: z.string(),
   name: z.string(),
+  /** What did not land as sent — a grid style's colour Figma would refuse. Absent when all did. */
+  adjusted: z.string().optional(),
 });
 export type StyleResult = z.infer<typeof StyleResultSchema>;
 

@@ -471,6 +471,31 @@ describe('get_design_context handler', () => {
     expect(compact.nodes[0]?.layoutGrids).toBeUndefined();
   });
 
+  // How the editor draws a grid is nothing the code renders, and design_diff compares these
+  // snapshots: a grid's colour stays out, so a frame's context reads as it did before it was read.
+  it("leaves a grid's editor colour out of the context", async () => {
+    const frame = node({
+      id: 'fr',
+      type: 'FRAME',
+      layoutGrids: [
+        {
+          pattern: 'COLUMNS',
+          visible: true,
+          count: 12,
+          gutterSize: 24,
+          alignment: 'STRETCH',
+          color: { r: 0, g: 0, b: 1, a: 0.2 },
+        },
+      ],
+    });
+    const full = (await createGetDesignContextHandler(fakeFigma({ selection: [frame] }))({
+      detail: 'full',
+    })) as GetDesignContextResult;
+    expect(full.nodes[0]?.layoutGrids).toEqual([
+      { pattern: 'COLUMNS', visible: true, count: 12, gutterSize: 24, alignment: 'STRETCH' },
+    ]);
+  });
+
   it('carries per-run hyperlink / listOptions / indentation through to the segments (structure survives)', async () => {
     const list = node({
       id: 'lt',

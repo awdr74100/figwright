@@ -12,7 +12,10 @@ export const setLayoutGridsTool: ToolSpec = {
     'grid, the 8pt baseline), distinct from auto-layout (set_auto_layout arranges children). Each ' +
     'grid is COLUMNS / ROWS (count + gutterSize + alignment, e.g. a 12-col grid) or GRID (uniform ' +
     "squares via sectionSize, a baseline). Replaces the frame's grids with the array given; pass [] " +
-    'to clear them. Only frames (and components/instances) carry layout grids. Returns { ok, nodeId }.',
+    "to clear them — a grid's color (its overlay in the editor) included: send the color get_node " +
+    "reports to keep it, or leave it out for Figma's default red. Only frames (and " +
+    'components/instances) carry layout grids. Returns { ok, nodeId, adjusted? } — adjusted names ' +
+    'a color Figma would refuse, left out so the grids around it still land.',
   inputSchema: z.object({
     nodeId: z.string().describe('Frame (or component/instance) node id'),
     grids: z

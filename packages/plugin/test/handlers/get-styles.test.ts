@@ -120,6 +120,7 @@ describe('get_styles handler', () => {
                 count: 12,
                 gutterSize: 20,
                 alignment: 'STRETCH',
+                color: { r: 0, g: 0, b: 1, a: 0.25 },
               },
             ],
           },
@@ -141,6 +142,8 @@ describe('get_styles handler', () => {
     });
     expect(result.effects[0]?.effects[0]?.type).toBe('DROP_SHADOW');
     expect(result.grids[0]?.grids[0]?.count).toBe(12);
+    // A grid style's colour reads back, so update / create with it keeps the overlay as it was.
+    expect(result.grids[0]?.grids[0]?.color).toEqual({ r: 0, g: 0, b: 1, a: 0.25 });
   });
 
   it('serializes AUTO line height without a value', async () => {

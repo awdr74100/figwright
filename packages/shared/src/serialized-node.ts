@@ -353,10 +353,24 @@ export const SerializedLayoutGridSchema = z.object({
   gutterSize: z.number().optional(),
   alignment: z.string().optional(),
   offset: z.number().optional(),
+  /**
+   * The grid's colour in the editor, r / g / b / a in 0–1, in the document's colour space — how the
+   * overlay is drawn on the canvas, not anything rendered, so get_design_context leaves it out.
+   * Figma's default, which a grid written without one gets, is red at 10%.
+   */
+  color: z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number() }).optional(),
   /** Per-field bindings — Figma allows `sectionSize`, `count`, `offset` and `gutterSize`. */
   boundVariables: SerializedBindingsSchema.optional(),
 });
 export type SerializedLayoutGrid = z.infer<typeof SerializedLayoutGridSchema>;
+
+/**
+ * A layout grid as get_design_context carries it: without `color`, which is how the editor draws
+ * the overlay and nothing the code renders. Kept out of the schema as well as the output, so
+ * design_diff baselines keep the shape they were captured in.
+ */
+export const DesignContextLayoutGridSchema = SerializedLayoutGridSchema.omit({ color: true });
+export type DesignContextLayoutGrid = z.infer<typeof DesignContextLayoutGridSchema>;
 
 /** One grid track (a row or column) in a GRID auto-layout: FLEX (fr fraction) or FIXED (px). */
 export const SerializedGridTrackSchema = z.object({

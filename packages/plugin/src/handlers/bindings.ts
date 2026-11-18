@@ -147,10 +147,16 @@ export const toFigmaLayoutGridsBound = async (
   figmaCtx: typeof figma,
   grids: readonly SerializedLayoutGrid[],
   where: string,
+  /** Receives one note per colour that could not be written as given. */
+  adjusted?: string[],
 ): Promise<LayoutGrid[]> => {
   const table = await resolveVariables(figmaCtx, idsIn(grids), where);
-  return grids.map(src => {
-    let grid = toFigmaLayoutGrid(src);
+  return grids.map((src, i) => {
+    let grid = toFigmaLayoutGrid(src, figmaCtx, where, reason =>
+      adjusted?.push(
+        `grids[${i}].color was not written (${reason}), so that grid has Figma's default red at 10%`,
+      ),
+    );
     for (const [field, id] of Object.entries(src.boundVariables ?? {})) {
       grid = figmaCtx.variables.setBoundVariableForLayoutGrid(
         grid,

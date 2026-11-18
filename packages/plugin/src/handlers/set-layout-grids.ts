@@ -1,4 +1,4 @@
-import type { MutateResult, SerializedLayoutGrid } from '@figwright/shared';
+import type { LayoutGridsResult, SerializedLayoutGrid } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaLayoutGridsBound } from './bindings.js';
@@ -28,12 +28,15 @@ export const createSetLayoutGridsHandler =
       );
     }
 
+    const adjusted: string[] = [];
     (node as BaseFrameMixin).layoutGrids = await toFigmaLayoutGridsBound(
       figmaCtx,
       p.grids as SerializedLayoutGrid[],
       'set_layout_grids',
+      adjusted,
     );
 
-    const result: MutateResult = { ok: true, nodeId: node.id };
+    const result: LayoutGridsResult = { ok: true, nodeId: node.id };
+    if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
     return result;
   };

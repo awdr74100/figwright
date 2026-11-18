@@ -10,7 +10,8 @@ export const createGridStyleTool: ToolSpec = {
   description:
     'Create a reusable local layout-grid style for aligning content. Each grid pattern is GRID ' +
     '(uniform squares via sectionSize) or ROWS / COLUMNS (count + gutterSize + alignment). Apply it ' +
-    'to frames with apply_style_to_node. Returns { ok, styleId, name }.',
+    'to frames with apply_style_to_node. Returns { ok, styleId, name, adjusted? } — adjusted ' +
+    'names a grid color Figma would refuse, left out so the style is still created.',
   inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Layout/8pt"'),
     grids: z.array(gridItemSchema),

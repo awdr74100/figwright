@@ -37,6 +37,19 @@ describe('create_grid_style handler', () => {
     expect(result).toEqual({ ok: true, styleId: 'G:0', name: 'Layout/8pt' });
   });
 
+  it("creates a grid style with each grid's colour", async () => {
+    const { figma: f, style } = fakeFigma();
+    await createCreateGridStyleHandler(f)({
+      name: 'Layout/blue',
+      grids: [
+        { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0, b: 1, a: 0.2 } },
+      ],
+    });
+    expect(style.layoutGrids).toEqual([
+      { pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0, b: 1, a: 0.2 } },
+    ]);
+  });
+
   it('throws on bad input', async () => {
     const { figma: f } = fakeFigma();
     const handler = createCreateGridStyleHandler(f);
@@ -84,5 +97,15 @@ describe('create_grid_style handler', () => {
         boundVariables: { gutterSize: { type: 'VARIABLE_ALIAS', id: 'V:1' } },
       }),
     ]);
+  });
+
+  it('still creates the style when a colour cannot be written, and names it', async () => {
+    const { figma: f, style } = fakeFigma();
+    const result = (await createCreateGridStyleHandler(f)({
+      name: 'Layout/x',
+      grids: [{ pattern: 'GRID', visible: true, sectionSize: 8, color: { r: 0, g: 0, b: 1 } }],
+    })) as StyleResult;
+    expect(style.layoutGrids).toEqual([{ pattern: 'GRID', visible: true, sectionSize: 8 }]);
+    expect(result.adjusted).toMatch(/^grids\[0\]\.color was not written \(it has no a\)/);
   });
 });

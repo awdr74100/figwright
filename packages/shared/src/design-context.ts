@@ -14,7 +14,7 @@ import {
   SerializedFontNameSchema,
   SerializedGridChildSchema,
   SerializedHyperlinkSchema,
-  SerializedLayoutGridSchema,
+  DesignContextLayoutGridSchema,
   SerializedLetterSpacingSchema,
   SerializedLineHeightSchema,
   SerializedMainComponentSchema,
@@ -25,6 +25,7 @@ import {
   SerializedVariableWidthStrokeSchema,
 } from './serialized-node.js';
 import type {
+  DesignContextLayoutGrid,
   SerializedAnnotation,
   SerializedAutoLayout,
   SerializedBounds,
@@ -34,7 +35,6 @@ import type {
   SerializedEffect,
   SerializedGridChild,
   SerializedHyperlink,
-  SerializedLayoutGrid,
   SerializedLetterSpacing,
   SerializedLineHeight,
   SerializedMainComponent,
@@ -195,7 +195,7 @@ export interface DesignContextNode {
    * infers; present only on frames that define grids. Distinct from `layout` (auto-layout of
    * children).
    */
-  layoutGrids?: readonly SerializedLayoutGrid[];
+  layoutGrids?: readonly DesignContextLayoutGrid[];
   /**
    * Scroll behaviour of a clipping frame (HORIZONTAL / VERTICAL / BOTH) → overflow; omitted when
    * NONE.
@@ -430,7 +430,7 @@ export const DesignContextNodeSchema = z.lazy(() =>
     gridChild: SerializedGridChildSchema.optional(),
     constraints: SerializedConstraintsSchema.optional(),
     clipsContent: z.boolean().optional(),
-    layoutGrids: z.array(SerializedLayoutGridSchema).optional(),
+    layoutGrids: z.array(DesignContextLayoutGridSchema).optional(),
     overflowDirection: z.string().optional(),
     numberOfFixedChildren: z.number().optional(),
     targetAspectRatio: z.object({ x: z.number(), y: z.number() }).optional(),

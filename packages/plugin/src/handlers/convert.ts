@@ -110,9 +110,57 @@ export const toFigmaEffect = (e: SerializedEffect, figmaCtx: typeof figma): Effe
 };
 
 /** Wire layout grid → Figma LayoutGrid. GRID is uniform; ROWS/COLUMNS carry count + gutter. */
-export const toFigmaLayoutGrid = (g: SerializedLayoutGrid): LayoutGrid => {
+/**
+ * A grid colour as Figma takes it — r / g / b / a, each a number in 0–1, alpha required (measured:
+ * anything else is refused, and the whole layoutGrids write with it) — in the document's channels,
+ * or why this one cannot be. `space` means what it means on a paint (toDocumentRgb); Figma's
+ * conversion clamps into 0–1 (measured: Display P3 pure green comes out as sRGB 0 / 1 / 0), and
+ * only the channels are kept — LayoutGrid.color has no `sourceColor`.
+ */
+const writableGridColor = (
+  raw: unknown,
+  figmaCtx: typeof figma,
+  where: string,
+): { color: RGBA } | { reason: string } => {
+  const c = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const channels = ['r', 'g', 'b', 'a'] as const;
+  const missing = channels.filter(k => c[k] === undefined);
+  if (missing.length > 0) return { reason: `it has no ${missing.join(' / ')}` };
+  const bad = channels.filter(k => {
+    const v = c[k];
+    return typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1;
+  });
+  if (bad.length > 0) return { reason: `${bad.join(' / ')} must be a number from 0 to 1` };
+  const channels3 = { r: c.r as number, g: c.g as number, b: c.b as number };
+  if (c.space !== undefined && !COLOR_SPACES.includes(c.space as (typeof COLOR_SPACES)[number])) {
+    return { reason: `space must be one of ${COLOR_SPACES.join(' / ')}` };
+  }
+  const { r, g, b } =
+    c.space === undefined
+      ? channels3
+      : toDocumentRgb(figmaCtx, { ...channels3, space: c.space }, where);
+  return { color: { r, g, b, a: c.a as number } };
+};
+
+export const toFigmaLayoutGrid = (
+  g: SerializedLayoutGrid,
+  figmaCtx: typeof figma,
+  where: string,
+  /** Told why a colour given was not written (the grid then has Figma's default). */
+  onColorDropped?: (reason: string) => void,
+): LayoutGrid => {
+  // Written as given when Figma takes it. One it would refuse fails the whole write — every grid
+  // on the frame with it — while the colour is only how the editor draws the overlay, so that
+  // colour alone is left out (the grid gets Figma's default red at 10%, as every grid written here
+  // did before colours were read) and the caller says so. Not given, the same default.
+  let color = {};
+  if (g.color !== undefined) {
+    const written = writableGridColor(g.color, figmaCtx, where);
+    if ('color' in written) color = { color: written.color };
+    else onColorDropped?.(written.reason);
+  }
   if (g.pattern === 'GRID') {
-    return { pattern: 'GRID', visible: g.visible, sectionSize: g.sectionSize ?? 10 };
+    return { pattern: 'GRID', visible: g.visible, sectionSize: g.sectionSize ?? 10, ...color };
   }
   if (g.pattern === 'ROWS' || g.pattern === 'COLUMNS') {
     const alignment = g.alignment ?? 'STRETCH';
@@ -126,6 +174,7 @@ export const toFigmaLayoutGrid = (g: SerializedLayoutGrid): LayoutGrid => {
       // accept it. Omit it for CENTER so a valid centered grid isn't rejected for carrying the key.
       ...(alignment === 'CENTER' ? {} : { offset: g.offset ?? 0 }),
       ...(g.sectionSize === undefined ? {} : { sectionSize: g.sectionSize }),
+      ...color,
     } as LayoutGrid;
   }
   throw new TypeError(`unsupported layout grid pattern: ${g.pattern}`);
