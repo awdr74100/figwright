@@ -83,4 +83,163 @@ describe('update_paint_style handler', () => {
     ).rejects.toThrow('update_paint_style: variable V:gone not found');
     expect(style.paints).toBe('UNTOUCHED');
   });
+
+  // Measured on main: the style was renamed before the missing variable failed the call.
+  it('leaves every field alone when a bound variable cannot be resolved', async () => {
+    const style = { id: 'S:0', type: 'PAINT', name: 'n', paints: 'UNTOUCHED', description: 'd' };
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        description: 'changed',
+        paints: [
+          { type: 'SOLID', color: { r: 0, g: 1, b: 0 }, boundVariables: { color: 'V:gone' } },
+        ],
+      }),
+    ).rejects.toThrow('update_paint_style: variable V:gone not found');
+    expect(style).toEqual({
+      id: 'S:0',
+      type: 'PAINT',
+      name: 'n',
+      paints: 'UNTOUCHED',
+      description: 'd',
+    });
+  });
+
+  it('puts back what it wrote when Figma refuses a later write', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'PAINT',
+      name: 'n',
+      description: 'd',
+    };
+    let paints: unknown = ['old'];
+    Object.defineProperty(style, 'paints', {
+      enumerable: true,
+      get: () => paints,
+      set: (value: unknown) => {
+        if (Array.isArray(value) && value.length === 0) throw new Error('in set_paints: refused');
+        paints = value;
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        paints: [],
+      }),
+    ).rejects.toThrow(/^in set_paints: refused$/);
+    expect([style.name, style.description, paints]).toEqual(['n', 'd', ['old']]);
+  });
+
+  it('says so when it cannot put the style back', async () => {
+    let names = 0;
+    const style: Record<string, unknown> = { id: 'S:0', type: 'PAINT', description: 'd' };
+    let name = 'n';
+    Object.defineProperty(style, 'name', {
+      enumerable: true,
+      get: () => name,
+      set: (value: string) => {
+        names += 1;
+        if (names > 1) throw new Error('in set_name: refused');
+        name = value;
+      },
+    });
+    Object.defineProperty(style, 'paints', {
+      enumerable: true,
+      get: () => ['old'],
+      set: () => {
+        throw new Error('in set_paints: refused');
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        paints: [],
+      }),
+    ).rejects.toThrow(
+      'in set_paints: refused — and the style could not be put back: in set_name: refused',
+    );
+  });
+
+  // Dev Mode refuses the first write, so there is nothing to put back and Figma's words stand.
+  it("passes the editor's refusal of the first write through untouched", async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'PAINT',
+      paints: [],
+      description: 'd',
+    };
+    Object.defineProperty(style, 'name', {
+      enumerable: true,
+      get: () => 'n',
+      set: () => {
+        throw new Error('in set_name: Can\'t set "name" in read-only mode');
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'x',
+        description: 'y',
+      }),
+    ).rejects.toThrow(/^in set_name: Can't set "name" in read-only mode$/);
+    expect(style.description).toBe('d');
+  });
+
+  // Resolved before the first write, not merely rolled back after it: a write followed by a restore
+  // still costs the user an empty Cmd+Z step (measured), and Dev Mode lets a description through.
+  it('writes nothing at all when a bound variable cannot be resolved', async () => {
+    const writes: string[] = [];
+    const style = new Proxy(
+      { id: 'S:0', type: 'PAINT', name: 'n', paints: [] as unknown, description: 'd' },
+      {
+        set: (target, key, value) => {
+          writes.push(String(key));
+          return Reflect.set(target, key, value);
+        },
+      },
+    );
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        description: 'changed',
+        paints: [
+          { type: 'SOLID', color: { r: 0, g: 1, b: 0 }, boundVariables: { color: 'V:gone' } },
+        ],
+      }),
+    ).rejects.toThrow('variable V:gone not found');
+    expect(writes).toEqual([]);
+  });
+
+  it('names what it could not put back when the restore lands short', async () => {
+    const style: Record<string, unknown> = { id: 'S:0', type: 'PAINT', description: 'd' };
+    let name = 'n';
+    Object.defineProperty(style, 'name', {
+      enumerable: true,
+      get: () => name,
+      // Takes the first write and silently ignores the restore.
+      set: (value: string) => {
+        if (name === 'n') name = value;
+      },
+    });
+    Object.defineProperty(style, 'paints', {
+      enumerable: true,
+      get: () => ['old'],
+      set: () => {
+        throw new Error('in set_paints: refused');
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        paints: [],
+      }),
+    ).rejects.toThrow(
+      'in set_paints: refused — and the style could not be put back exactly: name still differs',
+    );
+  });
 });
