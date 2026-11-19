@@ -69,6 +69,34 @@ const TEXT_STYLE_LABELS = new Set(['name', 'description', 'documentationLinks'])
 /** The typography a text style's literal writes and bindings move — everything but its labels. */
 const TEXT_STYLE_TYPOGRAPHY = TEXT_STYLE_PROPS.filter(k => !TEXT_STYLE_LABELS.has(k));
 
+/**
+ * What an update_text_style call can move, from its arguments — the one rule both its own rollback
+ * and batch's inverse record by, so neither reads (or, on the way back, loads a face for) more than
+ * the call could have changed. Its labels and the literals it writes, plus the bindings when it
+ * writes a literal (one written to a bound fontSize / lineHeight / letterSpacing / paragraphSpacing
+ * takes the binding off, measured 2026-11-19). Everything (`fields` undefined) when it applies
+ * bindings or changes the font, either of which may move typography it did not name (measured to
+ * keep a fontFamily binding; the rest assumed).
+ */
+export const textStyleWriteScope = (
+  params: unknown,
+): { fields?: string[]; withBindings: boolean } => {
+  const p = (params ?? {}) as Record<string, unknown>;
+  if (p.boundVariables !== undefined || p.fontName !== undefined) return { withBindings: true };
+  const literals = [
+    ...(typeof p.fontSize === 'number' ? ['fontSize'] : []),
+    ...(p.lineHeight !== undefined ? ['lineHeight'] : []),
+    ...(p.letterSpacing !== undefined ? ['letterSpacing'] : []),
+    ...(typeof p.textWrapStyle === 'string' ? ['textWrapStyle'] : []),
+  ];
+  const labels = [
+    ...(p.documentationLinks !== undefined ? ['documentationLinks'] : []),
+    ...(typeof p.name === 'string' ? ['name'] : []),
+    ...(typeof p.description === 'string' ? ['description'] : []),
+  ];
+  return { fields: [...labels, ...literals], withBindings: literals.length > 0 };
+};
+
 export interface TextStyleSnapshot {
   values: Bag;
   /** Absent when the call could not move a binding (it wrote only the name / description). */
