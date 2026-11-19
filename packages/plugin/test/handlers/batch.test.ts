@@ -3611,4 +3611,39 @@ describe('style documentation links in a batch', () => {
     expect(text.fontSize).toBe(18);
     expect(loaded.length).toBeGreaterThan(0);
   });
+
+  // A rollback writes the old name back, and a name write resets hiddenFromPublishing to true in
+  // Figma (measured): the rename and its undo both keep a published collection published.
+  it('rolls a collection rename back without taking it out of the published library', async () => {
+    const { figmaCtx, store, collections } = makeWide();
+    failingFrame(store);
+    let name = 'Colour';
+    const collection: Record<string, unknown> = {
+      id: 'C:1',
+      modes: [{ modeId: 'm1', name: 'Light' }],
+      hiddenFromPublishing: false,
+      renameMode: () => undefined,
+    };
+    Object.defineProperty(collection, 'name', {
+      get: () => name,
+      set: (v: string) => {
+        name = v;
+        collection.hiddenFromPublishing = true;
+      },
+    });
+    collections.set('C:1', collection);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_variable_collection', params: { collectionId: 'C:1', name: 'Color' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
+    expect([name, collection.hiddenFromPublishing]).toEqual(['Colour', false]);
+  });
 });

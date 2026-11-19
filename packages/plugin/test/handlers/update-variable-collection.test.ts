@@ -144,4 +144,30 @@ describe('update_variable_collection handler', () => {
       createUpdateVariableCollectionHandler(fakeFigma(null))({ collectionId: 'VC:9' }),
     ).rejects.toThrow(/not found/);
   });
+
+  // Figma resets hiddenFromPublishing to true on any write to a collection's name, the same name
+  // included (measured 2026-11-20) — which took a published collection out of the library.
+  it('renames a collection without taking it out of the published library', async () => {
+    const writes: string[] = [];
+    let name = 'Colour';
+    const collection = { ...makeCollection(), hiddenFromPublishing: false };
+    Object.defineProperty(collection, 'name', {
+      get: () => name,
+      set: (v: string) => {
+        writes.push(v);
+        name = v;
+        collection.hiddenFromPublishing = true;
+      },
+    });
+    const handler = createUpdateVariableCollectionHandler(fakeFigma(collection));
+    await handler({ collectionId: 'VC:0', name: 'Color' });
+    expect([name, collection.hiddenFromPublishing]).toEqual(['Color', false]);
+    // A name it already has is not written, so it cannot flip the flag either.
+    await handler({ collectionId: 'VC:0', name: 'Color' });
+    expect(writes).toEqual(['Color']);
+    // A collection already hidden stays hidden.
+    collection.hiddenFromPublishing = true;
+    await handler({ collectionId: 'VC:0', name: 'Brand' });
+    expect(collection.hiddenFromPublishing).toBe(true);
+  });
 });
