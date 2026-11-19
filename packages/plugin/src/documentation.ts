@@ -197,3 +197,13 @@ export const writeDocumentationLinks = (
     ? undefined
     : `documentationLinks were stored as ${JSON.stringify(stored)}`;
 };
+
+/**
+ * The note for a plain description Figma stored differently from what was sent, for `adjusted`: it
+ * trims surrounding whitespace, stores line breaks as `\n`, replaces a lone surrogate with U+FFFD
+ * and drops everything from a NUL on — measured on components and on variables alike.
+ */
+export const descriptionStoredNote = (stored: string): string =>
+  `description was stored as ${quoteForMessage(stored)} (Figma trims surrounding whitespace, ` +
+  'stores line breaks as \\n, replaces invalid characters and drops everything from a NUL ' +
+  'character on)';

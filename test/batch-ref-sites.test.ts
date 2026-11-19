@@ -290,6 +290,7 @@ const EXPECTED: string[] = [
   'update_paint_style.styleId → styleId',
   'update_text_style.boundVariables{*} → variableId',
   'update_text_style.styleId → styleId',
+  'update_variable.variableId → variableId',
   'update_variable_collection.collectionId → collectionId',
   'update_variable_collection.modes[].modeId → modeId',
 ];

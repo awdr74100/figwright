@@ -70,7 +70,13 @@ const serializeVariableValue = (value: VariableValue): SerializedVariableValue =
 
 export const createGetVariableDefsHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
-  async () => {
+  async params => {
+    // Opt-in, like get_styles / get_local_components: a call without it makes exactly the variable
+    // reads it made before (token_map is one such call), and returns exactly what it did. Asking
+    // costs two reads per variable and the text they carry: 111 → 155 ms for 600 variables, a
+    // fifth of them described (measured).
+    const documentation =
+      (params as { documentation?: unknown } | undefined)?.documentation === true;
     const [collections, variables] = await Promise.all([
       figmaCtx.variables.getLocalVariableCollectionsAsync(),
       figmaCtx.variables.getLocalVariablesAsync(),
@@ -78,14 +84,21 @@ export const createGetVariableDefsHandler =
 
     const result: GetVariableDefsResult = {
       ...displayP3Marker(figmaCtx),
-      collections: collections.map(c => ({
-        id: c.id,
-        name: c.name,
-        key: c.key,
-        defaultModeId: c.defaultModeId,
-        modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
-        variableIds: [...c.variableIds],
-      })),
+      collections: collections.map(c => {
+        const out: GetVariableDefsResult['collections'][number] = {
+          id: c.id,
+          name: c.name,
+          key: c.key,
+          defaultModeId: c.defaultModeId,
+          modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
+          variableIds: [...c.variableIds],
+        };
+        // Always read — a file holds a handful of collections — and only reported when true: a
+        // collection a plugin creates starts hidden from publishing (measured), so a library built
+        // this way can publish none of its tokens without anyone having asked for that.
+        if (c.hiddenFromPublishing) out.hiddenFromPublishing = true;
+        return out;
+      }),
       variables: variables.map(varDef => {
         const out: GetVariableDefsResult['variables'][number] = {
           id: varDef.id,
@@ -110,6 +123,10 @@ export const createGetVariableDefsHandler =
         // only a deliberate narrowing is reported.
         const scopes = varDef.scopes;
         if (!(scopes.length === 1 && scopes[0] === 'ALL_SCOPES')) out.scopes = [...scopes];
+        if (documentation) {
+          if (varDef.description !== '') out.description = varDef.description;
+          if (varDef.hiddenFromPublishing) out.hiddenFromPublishing = true;
+        }
         return out;
       }),
     };

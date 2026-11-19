@@ -149,6 +149,8 @@ export const CollectionResultSchema = z.object({
   collectionId: z.string(),
   defaultModeId: z.string(),
   name: z.string(),
+  /** Whether the new collection is left out of the published library (create_variable_collection). */
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type CollectionResult = z.infer<typeof CollectionResultSchema>;
 
@@ -179,6 +181,8 @@ export const UpdateCollectionResultSchema = z.object({
   collectionId: z.string(),
   name: z.string(),
   modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
+  /** The collection's publishing flag as it now stands — present when the call set it. */
+  hiddenFromPublishing: z.boolean().optional(),
 });
 export type UpdateCollectionResult = z.infer<typeof UpdateCollectionResultSchema>;
 
@@ -214,6 +218,8 @@ export const VariableResultSchema = z.object({
   name: z.string(),
   /** The per-platform declarations now in effect (set_variable_code_syntax echoes them back). */
   codeSyntax: z.record(z.string(), z.string()).optional(),
+  /** What Figma stored differently from what was sent (a trimmed description, …). */
+  adjusted: z.string().optional(),
 });
 export type VariableResult = z.infer<typeof VariableResultSchema>;
 

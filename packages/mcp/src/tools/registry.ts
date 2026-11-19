@@ -142,6 +142,7 @@ import { updateGridStyleTool } from './update-grid-style.js';
 import { updatePaintStyleTool } from './update-paint-style.js';
 import { updateTextStyleTool } from './update-text-style.js';
 import { updateVariableCollectionTool } from './update-variable-collection.js';
+import { updateVariableTool } from './update-variable.js';
 import { useFileTool } from './use-file.js';
 
 /**
@@ -255,6 +256,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   importVariableTool,
   setNodeVariableModeTool,
   renameVariableTool,
+  updateVariableTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
   deleteVariableModeTool,

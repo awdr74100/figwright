@@ -2,6 +2,7 @@ import type { VariableResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { serializeCodeSyntax } from '../serializer.js';
+import { explainVariableError } from './variable-fields.js';
 
 // The exact platform literals Figma accepts (note the mixed-case 'iOS') — also the wire keys the
 // read side (get_variable_defs / resolveTokens) emits verbatim, keeping write↔read symmetric.
@@ -44,9 +45,14 @@ export const createSetVariableCodeSyntaxHandler =
       throw new Error(`set_variable_code_syntax: variable ${p.variableId} not found`);
     }
 
-    for (const [platform, value] of entries) {
-      if (value === null) variable.removeVariableCodeSyntax(platform as Platform);
-      else variable.setVariableCodeSyntax(platform as Platform, value as string);
+    try {
+      for (const [platform, value] of entries) {
+        if (value === null) variable.removeVariableCodeSyntax(platform as Platform);
+        else variable.setVariableCodeSyntax(platform as Platform, value as string);
+      }
+    } catch (error) {
+      // Figma's own refusal, unchanged — only a library variable's gets a line on where to edit it.
+      throw explainVariableError(error, variable, 'set_variable_code_syntax');
     }
 
     // Echo the declarations now in effect (read back off the variable, same shape as the read side)

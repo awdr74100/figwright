@@ -149,8 +149,8 @@ describe('create_variable handler', () => {
 
   // An empty array is the interesting one: Figma reads it as "offered nowhere", so letting it
   // through would quietly hide the variable from every picker.
-  it('rejects a scopes value that is not a non-empty array of names', async () => {
-    for (const scopes of [[], 'CORNER_RADIUS', [1]]) {
+  it('rejects a scopes value that is not an array of names', async () => {
+    for (const scopes of ['CORNER_RADIUS', [1]]) {
       const createVariable = vi.fn<() => unknown>();
       const f = {
         variables: {
@@ -165,8 +165,90 @@ describe('create_variable handler', () => {
           resolvedType: 'FLOAT',
           scopes,
         }),
-      ).rejects.toThrow(/non-empty array/);
+      ).rejects.toThrow('create_variable: scopes must be an array of scope names');
       expect(createVariable).not.toHaveBeenCalled();
     }
+  });
+
+  // An empty list offers the variable nowhere — a real setting (how a primitive aliased by semantic
+  // tokens is hidden from the pickers), so it is written, not refused.
+  it('writes an empty scopes list', async () => {
+    const variable: Record<string, unknown> = { id: 'V:1', name: 'x', scopes: ['ALL_SCOPES'] };
+    const f = {
+      variables: {
+        getVariableCollectionByIdAsync: async () => ({ id: 'VC:0' }),
+        createVariable: () => variable,
+      },
+    } as unknown as typeof figma;
+    await createCreateVariableHandler(f)({
+      name: 'x',
+      collectionId: 'VC:0',
+      resolvedType: 'FLOAT',
+      scopes: [],
+    });
+    expect(variable.scopes).toEqual([]);
+  });
+
+  it('writes a description and the publishing flag, and says when Figma trims the description', async () => {
+    let description = '';
+    const variable: Record<string, unknown> = { id: 'V:1', name: 'x', hiddenFromPublishing: false };
+    Object.defineProperty(variable, 'description', {
+      get: () => description,
+      set: (v: string) => {
+        description = v.trim();
+      },
+    });
+    const f = {
+      variables: {
+        getVariableCollectionByIdAsync: async () => ({ id: 'VC:0' }),
+        createVariable: () => variable,
+      },
+    } as unknown as typeof figma;
+    const result = await createCreateVariableHandler(f)({
+      name: 'x',
+      collectionId: 'VC:0',
+      resolvedType: 'FLOAT',
+      description: '  spacing step  ',
+      hiddenFromPublishing: true,
+    });
+    expect([description, variable.hiddenFromPublishing]).toEqual(['spacing step', true]);
+    expect(result).toMatchObject({
+      adjusted: expect.stringMatching(/^description was stored as "spacing step"/),
+    });
+  });
+
+  it('removes the new variable when its scopes are refused, and names the scopes the type takes', async () => {
+    let removed = 0;
+    const variable: Record<string, unknown> = {
+      id: 'V:1',
+      name: 'x',
+      resolvedType: 'COLOR',
+      remove: () => {
+        removed += 1;
+      },
+    };
+    Object.defineProperty(variable, 'scopes', {
+      get: () => ['ALL_SCOPES'],
+      set: () => {
+        throw new Error('in set_scopes: Invalid scope for this variable type');
+      },
+    });
+    const f = {
+      variables: {
+        getVariableCollectionByIdAsync: async () => ({ id: 'VC:0' }),
+        createVariable: () => variable,
+      },
+    } as unknown as typeof figma;
+    await expect(
+      createCreateVariableHandler(f)({
+        name: 'x',
+        collectionId: 'VC:0',
+        resolvedType: 'COLOR',
+        scopes: ['GAP'],
+      }),
+    ).rejects.toThrow(
+      /^create_variable: Figma refused scopes \["GAP"\] on the new COLOR variable .* \(create_variable: a COLOR variable takes ALL_SCOPES \/ ALL_FILLS \/ FRAME_FILL \/ SHAPE_FILL \/ TEXT_FILL \/ STROKE_COLOR \/ EFFECT_COLOR, or \[\] to be offered nowhere\)$/,
+    );
+    expect(removed).toBe(1);
   });
 });

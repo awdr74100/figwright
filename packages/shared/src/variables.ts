@@ -91,6 +91,13 @@ export const SerializedVariableCollectionSchema = z.object({
   defaultModeId: z.string(),
   modes: z.array(z.object({ modeId: z.string(), name: z.string() })),
   variableIds: z.array(z.string()),
+  /**
+   * True when the collection is left out of the file's published library. Only emitted when true —
+   * a collection the Figma UI creates starts false, but one a plugin creates starts **true**
+   * (measured 2026-11-20), so a design system built through Figwright publishes nothing until it is
+   * cleared.
+   */
+  hiddenFromPublishing: z.literal(true).optional(),
 });
 export type SerializedVariableCollection = z.infer<typeof SerializedVariableCollectionSchema>;
 
@@ -121,6 +128,13 @@ export const SerializedVariableSchema = z.object({
    * and a narrow enum here would silently reject a scope a future release adds.
    */
   scopes: z.array(z.string()).optional(),
+  /** The variable's description — with get_variable_defs documentation: true, and only when set. */
+  description: z.string().optional(),
+  /**
+   * True when the variable is left out of the published library (with documentation: true, and only
+   * when true). Independent of its collection's own flag (measured).
+   */
+  hiddenFromPublishing: z.literal(true).optional(),
 });
 export type SerializedVariable = z.infer<typeof SerializedVariableSchema>;
 

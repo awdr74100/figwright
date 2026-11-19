@@ -84,4 +84,63 @@ describe('set_variable_code_syntax handler', () => {
     await expect(handler({ variableId: 'V:1' })).rejects.toThrow(/codeSyntax/);
     await expect(handler({ codeSyntax: { WEB: '--x' } })).rejects.toThrow(/variableId/);
   });
+
+  // Figma's refusal of a library variable names "a remote style or component"; the line added says
+  // what the variable is and where it is edited. A local variable's refusal passes through as is.
+  it("explains Figma's refusal of a library variable, and leaves every other refusal as it is", async () => {
+    const refusing = (remote: boolean, message: string): Record<string, unknown> => {
+      const fail = (): never => {
+        throw new Error(message);
+      };
+      const v: Record<string, unknown> = {
+        id: 'V:1',
+        resolvedType: 'FLOAT',
+        remote,
+        codeSyntax: {},
+        setVariableCodeSyntax: fail,
+        removeVariableCodeSyntax: fail,
+      };
+      Object.defineProperty(v, 'name', { get: () => 'space/200', set: fail });
+      return v;
+    };
+    const run = (v: unknown) =>
+      createSetVariableCodeSyntaxHandler({
+        variables: { getVariableByIdAsync: async () => v },
+      } as unknown as typeof figma)({ variableId: 'V:1', codeSyntax: { WEB: '--x' } });
+    await expect(
+      run(
+        refusing(
+          true,
+          'in set_name: Cannot write to internal and read-only node. Are you trying to modify a remote style or component?',
+        ),
+      ),
+    ).rejects.toThrow(
+      /read-only node\. Are you trying to modify a remote style or component\? \(set_variable_code_syntax: variable V:1 "space\/200" comes from a library, and a library variable is edited in the library file that publishes it\)$/,
+    );
+    await expect(run(refusing(false, 'in set_name: invalid variable name'))).rejects.toThrow(
+      /^in set_name: invalid variable name$/,
+    );
+  });
+
+  // setVariableCodeSyntax on a library variable says "No node found" (measured), not read-only.
+  it('explains the "No node found" Figma gives for a library variable, and only for one', async () => {
+    const v = (remote: boolean): Record<string, unknown> => ({
+      id: 'V:1',
+      name: 'Space/200',
+      resolvedType: 'FLOAT',
+      remote,
+      codeSyntax: {},
+      setVariableCodeSyntax: () => {
+        throw new Error('in setVariableCodeSyntax: No node found');
+      },
+    });
+    const run = (variable: unknown) =>
+      createSetVariableCodeSyntaxHandler({
+        variables: { getVariableByIdAsync: async () => variable },
+      } as unknown as typeof figma)({ variableId: 'V:1', codeSyntax: { WEB: '--x' } });
+    await expect(run(v(true))).rejects.toThrow(
+      /^in setVariableCodeSyntax: No node found \(set_variable_code_syntax: variable V:1 "Space\/200" comes from a library/,
+    );
+    await expect(run(v(false))).rejects.toThrow(/^in setVariableCodeSyntax: No node found$/);
+  });
 });
