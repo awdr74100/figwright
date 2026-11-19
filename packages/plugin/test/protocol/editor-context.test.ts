@@ -11,7 +11,9 @@ describe('editorLimitation', () => {
   it('describes what Dev Mode and FigJam refuse', () => {
     expect(editorLimitation('dev')).toContain('blocks every write');
     // Annotations are the writes Dev Mode allows (with a style's description), measured.
-    expect(editorLimitation('dev')).toContain("except annotations and a style's description");
+    expect(editorLimitation('dev')).toContain(
+      "except annotations, measurements and a style's description",
+    );
     expect(editorLimitation('figjam')).toContain(
       'no components, variables, styles, annotations or Figma Motion',
     );

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { SerializedMeasurementSchema } from './queries.js';
 import { FlowStartingPointSchema, SerializedAnnotationSchema } from './serialized-node.js';
 
 // Write tools carry a server-generated requestId so the plugin can dedupe retries (idempotency).
@@ -291,3 +292,21 @@ export const DeleteAnnotationCategoryResultSchema = z.object({
   label: z.string(),
 });
 export type DeleteAnnotationCategoryResult = z.infer<typeof DeleteAnnotationCategoryResultSchema>;
+
+/** Result of add_measurement / update_measurement: the measurement as Figma now holds it. */
+export const MeasurementResultSchema = SerializedMeasurementSchema.omit({ id: true }).extend({
+  ok: z.literal(true),
+  /** The measurement's id — what update_measurement and delete_measurement take. */
+  measurementId: z.string(),
+  /** The page it lives on. */
+  pageId: z.string(),
+});
+export type MeasurementResult = z.infer<typeof MeasurementResultSchema>;
+
+/** Result of delete_measurement. */
+export const DeleteMeasurementResultSchema = z.object({
+  ok: z.literal(true),
+  measurementId: z.string(),
+  pageId: z.string(),
+});
+export type DeleteMeasurementResult = z.infer<typeof DeleteMeasurementResultSchema>;

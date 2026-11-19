@@ -71,8 +71,8 @@ const EDITOR_LIMITATIONS: Readonly<Record<string, EditorLimitation>> = {
   dev: {
     sentence:
       'Dev Mode blocks every write — nodes, pages, variables and styles alike — except ' +
-      "annotations and a style's description. Reads, exports (screenshots, PDF) and plugin data " +
-      'still work. Switch the file to Design mode to make changes.',
+      "annotations, measurements and a style's description. Reads, exports (screenshots, PDF) " +
+      'and plugin data still work. Switch the file to Design mode to make changes.',
     // Measured: `in createFrame: Can't call "createFrame" in read-only mode` for a create, and
     // `in set_name: Can't set "name" in read-only mode` for a property write.
     refusal: /in read-only mode/,

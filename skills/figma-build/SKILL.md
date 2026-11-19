@@ -131,7 +131,9 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
   to keep exactly as returned. File a note under a category from `get_annotations` `categories`, or
   add one with `create_annotation_category`; `properties` pins node fields to the note, and Figma
   takes one only where the node has it set (strokes with a stroke, padding on auto layout). A group,
-  section, boolean group, slice or page holds none — annotate its children.
+  section, boolean group, slice or page holds none — annotate its children. A spacing or size worth
+  calling out gets a measurement: `add_measurement` (two node edges on one axis, or across one node),
+  `update_measurement` / `delete_measurement`; it goes on the nodes' page without switching to it.
 - **`ok: true` is not proof.** Confirm layout-sensitive writes by screenshot or read-back, and report
   anything the tools could not express instead of claiming it done.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from

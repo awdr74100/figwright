@@ -1,6 +1,7 @@
 import type { GetAnnotationsResult, NodeAnnotations } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { pageOf, serializeMeasurement } from '../measurements.js';
 import { serializeAnnotation } from '../serializer.js';
 import { walk } from '../traverse.js';
 
@@ -28,11 +29,20 @@ export const createGetAnnotationsHandler =
       }
     };
 
+    // The page whose measurements this read reports, and which of them: the node's page, filtered
+    // to the ones on that node (getMeasurementsForNode refuses a node off the current page —
+    // measured), or the current page whole.
+    let measured: { page: PageNode; touching?: string } | null = null;
     if (typeof nodeId === 'string') {
       const node = await figmaCtx.getNodeByIdAsync(nodeId);
-      if (node !== null) collect(node);
+      if (node !== null) {
+        collect(node);
+        const page = pageOf(node);
+        if (page !== null) measured = { page, touching: node.id };
+      }
     } else {
       for (const node of walk(figmaCtx.currentPage.children)) collect(node);
+      measured = { page: figmaCtx.currentPage };
     }
 
     const result: GetAnnotationsResult = { annotations: out };
@@ -47,6 +57,24 @@ export const createGetAnnotationsHandler =
         color: c.color,
         isPreset: c.isPreset,
       }));
+    }
+    // Opt-in: reading them costs a trip per end of each measurement (measured: a page with 16 made a
+    // scan 3.7 → 4.8 ms), and a read that did not ask must cost what it did. Even when asked, only
+    // reported when there are any. FigJam has getMeasurements too, always empty (measured).
+    const wantsMeasurements = (params as { measurements?: unknown } | null)?.measurements === true;
+    if (
+      wantsMeasurements &&
+      measured !== null &&
+      typeof measured.page.getMeasurements === 'function'
+    ) {
+      const { page, touching } = measured;
+      const list = page
+        .getMeasurements()
+        .filter(
+          m => touching === undefined || m.start.node.id === touching || m.end.node.id === touching,
+        )
+        .map(serializeMeasurement);
+      if (list.length > 0) result.measurements = list;
     }
     return result;
   };

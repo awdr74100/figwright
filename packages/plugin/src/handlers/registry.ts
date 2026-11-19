@@ -77,6 +77,11 @@ import { createImportSvgHandler } from './import-svg.js';
 import { createImportVariableHandler } from './import-variable.js';
 import { createListFilesHandler } from './list-files.js';
 import { createSetLockedHandler } from './lock-nodes.js';
+import {
+  createAddMeasurementHandler,
+  createDeleteMeasurementHandler,
+  createUpdateMeasurementHandler,
+} from './measurements.js';
 import { createMoveNodesHandler } from './move-nodes.js';
 import { createNavigateToPageHandler } from './navigate-to-page.js';
 import { createPingHandler } from './ping.js';
@@ -147,12 +152,18 @@ import {
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
  */
-/** The writes Dev Mode allows: annotations and their categories, measured; it refuses the rest. */
+/**
+ * The writes Dev Mode allows: annotations, their categories and measurements, measured; it refuses
+ * the rest.
+ */
 const DEV_MODE_WRITES = [
   'set_annotations',
   'create_annotation_category',
   'update_annotation_category',
   'delete_annotation_category',
+  'add_measurement',
+  'update_measurement',
+  'delete_measurement',
 ] as const;
 
 export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers => {
@@ -230,6 +241,9 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     create_annotation_category: createCreateAnnotationCategoryHandler(figmaCtx),
     update_annotation_category: createUpdateAnnotationCategoryHandler(figmaCtx),
     delete_annotation_category: createDeleteAnnotationCategoryHandler(figmaCtx),
+    add_measurement: createAddMeasurementHandler(figmaCtx),
+    update_measurement: createUpdateMeasurementHandler(figmaCtx),
+    delete_measurement: createDeleteMeasurementHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     delete_variable_mode: createDeleteVariableModeHandler(figmaCtx),
