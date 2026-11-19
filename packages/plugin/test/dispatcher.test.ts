@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createToolCall, isPluginBridgeMessage } from '../protocol/bridge.js';
 import {
   dispatchSandboxMessage,
+  markDevModeWrite,
   markWriteHandler,
   type SandboxHandlers,
 } from '../src/dispatcher.js';
@@ -204,5 +205,29 @@ describe('dispatchSandboxMessage', () => {
       editorType: 'figma',
     });
     expect(outcome.kind).toBe('ignore');
+  });
+
+  // Annotations are the writes Dev Mode allows: one refused for its own arguments is not the
+  // editor's doing, so it names Dev Mode only when Figma's read-only refusal is behind it.
+  it('names Dev Mode on a Dev Mode write only when Figma refused it as read-only', async () => {
+    const fail = (message: string) => (): never => {
+      throw new Error(message);
+    };
+    const handlers: SandboxHandlers = {
+      own: markDevModeWrite(markWriteHandler(fail('set_annotations: node 9:9 not found'))),
+      refused: markDevModeWrite(
+        markWriteHandler(fail('in set_annotations: Can\'t set "annotations" in read-only mode')),
+      ),
+    };
+    const reply = async (method: string) =>
+      (
+        (await dispatchSandboxMessage({
+          raw: createToolCall({ id: method, method }),
+          handlers,
+          editorType: 'dev',
+        })) as { reply: { message: string } }
+      ).reply.message;
+    expect(await reply('own')).toBe('set_annotations: node 9:9 not found');
+    expect(await reply('refused')).toContain('(editor: dev — ');
   });
 });

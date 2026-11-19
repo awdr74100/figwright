@@ -29,6 +29,23 @@ export const markWriteHandler = (handler: SandboxToolHandler): SandboxToolHandle
 /** Whether the registry marked this handler as a write. */
 export const isWriteHandler = (handler: SandboxToolHandler): boolean => WRITE_HANDLERS.has(handler);
 
+const DEV_MODE_WRITES = new WeakSet<SandboxToolHandler>();
+
+/**
+ * Mark a write as one Dev Mode allows — annotations and their categories (measured: everything else
+ * is refused there). Its errors in Dev Mode then name the editor only when Figma's own read-only
+ * refusal is behind them, as a read's do: an annotation refused for its own arguments is not the
+ * editor's doing, and blaming it would send the agent off to switch editors for nothing.
+ */
+export const markDevModeWrite = (handler: SandboxToolHandler): SandboxToolHandler => {
+  DEV_MODE_WRITES.add(handler);
+  return handler;
+};
+
+/** Whether the registry marked this write as one Dev Mode allows. */
+export const isDevModeWrite = (handler: SandboxToolHandler): boolean =>
+  DEV_MODE_WRITES.has(handler);
+
 export interface DispatchInput {
   raw: unknown;
   handlers: SandboxHandlers;
@@ -113,7 +130,13 @@ export const dispatchSandboxMessage = async (input: DispatchInput): Promise<Disp
       kind: 'reply',
       reply: createToolError({
         id,
-        ...toolErrorOf(withEditorContext(err, input.editorType, isWriteHandler(handler))),
+        ...toolErrorOf(
+          withEditorContext(
+            err,
+            input.editorType,
+            isWriteHandler(handler) && !isDevModeWrite(handler),
+          ),
+        ),
       }),
     };
   }

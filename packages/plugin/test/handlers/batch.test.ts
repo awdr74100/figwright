@@ -8,6 +8,10 @@ import { snapshotDocumentation } from '../../src/documentation.js';
 import { readTracks, resetGridTrackReadsForTests } from '../../src/grid-tracks.js';
 import { createAddComponentPropertyHandler } from '../../src/handlers/add-component-property.js';
 import { createAddVariableModeHandler } from '../../src/handlers/add-variable-mode.js';
+import {
+  createCreateAnnotationCategoryHandler,
+  createUpdateAnnotationCategoryHandler,
+} from '../../src/handlers/annotation-categories.js';
 import { createApplyAnimationStyleHandler } from '../../src/handlers/apply-animation-style.js';
 import { createApplyManualKeyframeTrackHandler } from '../../src/handlers/apply-manual-keyframe-track.js';
 import { createBatchRenameNodesHandler } from '../../src/handlers/batch-rename-nodes.js';
@@ -31,6 +35,7 @@ import { createRenameVariableHandler } from '../../src/handlers/rename-variable.
 import { createReorderNodesHandler } from '../../src/handlers/reorder-nodes.js';
 import { createReparentNodesHandler } from '../../src/handlers/reparent-nodes.js';
 import { createRepeatNodesHandler, createSetRepeatHandler } from '../../src/handlers/repeat.js';
+import { createSetAnnotationsHandler } from '../../src/handlers/set-annotations.js';
 import { createSetAutoLayoutHandler } from '../../src/handlers/set-auto-layout.js';
 import { createSetComponentDocumentationHandler } from '../../src/handlers/set-component-documentation.js';
 import { createSetCornerRadiusHandler } from '../../src/handlers/set-corner-radius.js';
@@ -60,6 +65,7 @@ import {
   createSetVectorHandler,
 } from '../../src/handlers/vector.js';
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
+import { annotatedNode } from '../annotations-fake.js';
 import { fakeDocumented } from '../documentation-fake.js';
 import { makeFlowsFigma } from './flows-fake.js';
 
@@ -3702,5 +3708,128 @@ describe('style documentation links in a batch', () => {
       }),
     ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
     expect([name, collection.hiddenFromPublishing]).toEqual(['Colour', false]);
+  });
+
+  it('rolls back set_annotations, a new category and a category edit', async () => {
+    const { figmaCtx, store } = makeWide();
+    failingFrame(store);
+    const node = annotatedNode();
+    node.annotations = [
+      { label: 'p1\n\n\np2' },
+      { labelMarkdown: 'p1\n\np2' },
+      { label: 'kept', categoryId: '127:0' },
+    ] as Annotation[];
+    const before = JSON.stringify(node.annotations);
+    const categories = new Map<
+      string,
+      {
+        id: string;
+        label: string;
+        color: string;
+        isPreset: boolean;
+        setLabel: (l: string) => void;
+        setColor: (c: string) => void;
+        remove: () => void;
+      }
+    >();
+    const makeCategory = (id: string, label: string, color: string, isPreset: boolean) => {
+      const c = {
+        id,
+        label,
+        color,
+        isPreset,
+        setLabel(l: string) {
+          c.label = l;
+          c.isPreset = false;
+        },
+        setColor(col: string) {
+          c.color = col;
+          c.isPreset = false;
+        },
+        remove() {
+          categories.delete(id);
+        },
+      };
+      categories.set(id, c);
+      return c;
+    };
+    const custom = makeCategory('134:1', 'Analytics', 'teal', false);
+    Object.assign(figmaCtx, {
+      getNodeByIdAsync: async (id: string) => (id === '1:1' ? node : (store.get(id) ?? null)),
+      annotations: {
+        getAnnotationCategoryByIdAsync: async (id: string) => categories.get(id) ?? null,
+        getAnnotationCategoriesAsync: async () => [...categories.values()],
+        addAnnotationCategoryAsync: async ({ label, color }: { label: string; color: string }) =>
+          makeCategory('134:9', label, color, false),
+      },
+    });
+    makeCategory('127:0', 'Development', 'green', true);
+    const handler = createBatchHandler(figmaCtx, {
+      set_annotations: createSetAnnotationsHandler(figmaCtx),
+      create_annotation_category: createCreateAnnotationCategoryHandler(figmaCtx),
+      update_annotation_category: createUpdateAnnotationCategoryHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'create_annotation_category', params: { label: 'New', color: 'red' } },
+          {
+            tool: 'set_annotations',
+            params: { nodeId: '1:1', annotations: [{ label: 'filed', categoryId: '$0' }] },
+          },
+          {
+            tool: 'update_annotation_category',
+            params: { categoryId: '134:1', label: 'Metrics', color: 'blue' },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 3 applied op\(s\)/);
+    expect(JSON.stringify(node.annotations)).toBe(before);
+    expect(categories.has('134:9')).toBe(false);
+    expect([custom.label, custom.color]).toEqual(['Analytics', 'teal']);
+  });
+
+  it("says a preset it renamed stays a custom category, and refuses to batch a category's deletion", async () => {
+    const { figmaCtx, store } = makeWide();
+    failingFrame(store);
+    const preset = {
+      id: '127:0',
+      label: 'Development',
+      color: 'green',
+      isPreset: true,
+      setLabel(l: string) {
+        preset.label = l;
+        preset.isPreset = false;
+      },
+      setColor(c: string) {
+        preset.color = c;
+        preset.isPreset = false;
+      },
+    };
+    Object.assign(figmaCtx, {
+      annotations: {
+        getAnnotationCategoryByIdAsync: async (id: string) => (id === '127:0' ? preset : null),
+      },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      update_annotation_category: createUpdateAnnotationCategoryHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_annotation_category', params: { categoryId: '127:0', label: 'Dev' } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(
+      /annotation category 127:0 "Development" is no longer one of Figma's presets, and nothing makes it one again/,
+    );
+    expect(preset.label).toBe('Development');
+    await expect(
+      handler({ ops: [{ tool: 'delete_annotation_category', params: { categoryId: '127:0' } }] }),
+    ).rejects.toThrow(/not batchable — a deleted category cannot be brought back under its id/);
   });
 });

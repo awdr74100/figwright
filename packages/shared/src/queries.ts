@@ -255,8 +255,24 @@ export const NodeAnnotationsSchema = z.object({
 });
 export type NodeAnnotations = z.infer<typeof NodeAnnotationsSchema>;
 
+/** One annotation category the file offers — what an annotation's categoryId names. */
+export const AnnotationCategoryInfoSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  color: z.string(),
+  /** One of the four Figma starts every file with, never edited. */
+  isPreset: z.boolean(),
+});
+export type AnnotationCategoryInfo = z.infer<typeof AnnotationCategoryInfoSchema>;
+
 export const GetAnnotationsResultSchema = z.object({
   annotations: z.array(NodeAnnotationsSchema),
+  /**
+   * Every category in the file, so a categoryId resolves to its label and a write can name one. An
+   * id that is not here was deleted after the annotation was made. Omitted where the editor has no
+   * annotations API (FigJam), so a read there returns what it always did.
+   */
+  categories: z.array(AnnotationCategoryInfoSchema).optional(),
 });
 export type GetAnnotationsResult = z.infer<typeof GetAnnotationsResultSchema>;
 

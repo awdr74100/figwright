@@ -21,10 +21,11 @@
  * goes on an error the editor can be behind, decided from what each editor was measured to raise
  * when every tool was called in it with arguments Figma Design accepts:
  *
- * - Dev Mode refuses every write, so any write's error carries it — even one refused for its own
- *   arguments, which would only be refused again once fixed — and a read's only when it has Figma's
- *   refusal ("in read-only mode") somewhere in it, a handler's own wording wrapped round it
- *   included.
+ * - Dev Mode refuses every write but annotations (and a style's description), so any other write's
+ *   error carries it — even one refused for its own arguments, which would only be refused again
+ *   once fixed — and a read's, or an annotation write's (the dispatcher's `markDevModeWrite`), only
+ *   when it has Figma's refusal ("in read-only mode") somewhere in it, a handler's own wording
+ *   wrapped round it included.
  * - FigJam's missing APIs throw "cannot read property 'X' of undefined" or "not a function", and a
  *   handler that reaches for a component, an instance, a variable, a style or Figma Motion first
  *   finds none and says so in its own words ("is not an INSTANCE", "style S:1 not found"). Either
@@ -69,9 +70,9 @@ interface EditorLimitation {
 const EDITOR_LIMITATIONS: Readonly<Record<string, EditorLimitation>> = {
   dev: {
     sentence:
-      'Dev Mode blocks every write — nodes, pages, variables and styles alike. Reads, exports ' +
-      '(screenshots, PDF) and plugin data still work. Switch the file to Design mode to make ' +
-      'changes.',
+      'Dev Mode blocks every write — nodes, pages, variables and styles alike — except ' +
+      "annotations and a style's description. Reads, exports (screenshots, PDF) and plugin data " +
+      'still work. Switch the file to Design mode to make changes.',
     // Measured: `in createFrame: Can't call "createFrame" in read-only mode` for a create, and
     // `in set_name: Can't set "name" in read-only mode` for a property write.
     refusal: /in read-only mode/,
@@ -79,9 +80,9 @@ const EDITOR_LIMITATIONS: Readonly<Record<string, EditorLimitation>> = {
   },
   figjam: {
     sentence:
-      'FigJam has no components, variables, styles or Figma Motion, so the tools that read or ' +
-      'edit them fail there — frames, sections, shapes and text all work. Open a Figma Design file ' +
-      'for the rest.',
+      'FigJam has no components, variables, styles, annotations or Figma Motion, so the tools that ' +
+      'read or edit them fail there — frames, sections, shapes and text all work. Open a Figma ' +
+      'Design file for the rest.',
     // Measured: `cannot read property 'createVariableCollection' of undefined` (figma.variables is
     // missing) and a bare `not a function` (createPaintStyle, createComponent, getLocalPaintStyles
     // are). The V8 wording of the first, "Cannot read properties of undefined", is matched too.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { FlowStartingPointSchema } from './serialized-node.js';
+import { FlowStartingPointSchema, SerializedAnnotationSchema } from './serialized-node.js';
 
 // Write tools carry a server-generated requestId so the plugin can dedupe retries (idempotency).
 // Inputs are validated per-tool in the plugin handlers; this module holds the shared result shapes.
@@ -263,3 +263,31 @@ export const BatchResultSchema = z.object({
   results: z.array(z.unknown()),
 });
 export type BatchResult = z.infer<typeof BatchResultSchema>;
+
+/** Result of set_annotations: the node's annotations as Figma now holds them. */
+export const AnnotationsResultSchema = z.object({
+  ok: z.literal(true),
+  nodeId: z.string(),
+  annotations: z.array(SerializedAnnotationSchema),
+  /** What Figma stored differently from what was sent (a trimmed label, rewritten markdown). */
+  adjusted: z.string().optional(),
+});
+export type AnnotationsResult = z.infer<typeof AnnotationsResultSchema>;
+
+/** Result of create_annotation_category / update_annotation_category. */
+export const AnnotationCategoryResultSchema = z.object({
+  ok: z.literal(true),
+  categoryId: z.string(),
+  label: z.string(),
+  color: z.string(),
+  isPreset: z.boolean(),
+});
+export type AnnotationCategoryResult = z.infer<typeof AnnotationCategoryResultSchema>;
+
+/** Result of delete_annotation_category. */
+export const DeleteAnnotationCategoryResultSchema = z.object({
+  ok: z.literal(true),
+  categoryId: z.string(),
+  label: z.string(),
+});
+export type DeleteAnnotationCategoryResult = z.infer<typeof DeleteAnnotationCategoryResultSchema>;

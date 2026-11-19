@@ -1,4 +1,4 @@
-import { markWriteHandler, type SandboxHandlers } from '../dispatcher.js';
+import { markDevModeWrite, markWriteHandler, type SandboxHandlers } from '../dispatcher.js';
 import { createIdempotencyCache, idempotent } from '../idempotency.js';
 import { withInstanceIdLookup } from '../node-lookup.js';
 import { createUndoSteps } from '../undo-steps.js';
@@ -6,6 +6,11 @@ import { createAddComponentPropertyHandler } from './add-component-property.js';
 import { createAddPageHandler } from './add-page.js';
 import { createAddVariableModeHandler } from './add-variable-mode.js';
 import { createAlignNodesHandler } from './align-nodes.js';
+import {
+  createCreateAnnotationCategoryHandler,
+  createDeleteAnnotationCategoryHandler,
+  createUpdateAnnotationCategoryHandler,
+} from './annotation-categories.js';
 import { createApplyAnimationStyleHandler } from './apply-animation-style.js';
 import { createApplyManualKeyframeTrackHandler } from './apply-manual-keyframe-track.js';
 import { createApplyStyleToNodeHandler } from './apply-style-to-node.js';
@@ -90,6 +95,7 @@ import { createSaveImageFillsHandler } from './save-image-fills.js';
 import { createScanNodesByTypesHandler } from './scan-nodes-by-types.js';
 import { createScanTextNodesHandler } from './scan-text-nodes.js';
 import { createSearchNodesHandler } from './search-nodes.js';
+import { createSetAnnotationsHandler } from './set-annotations.js';
 import { createSetArcHandler } from './set-arc.js';
 import { createSetAutoLayoutHandler } from './set-auto-layout.js';
 import { createSetBlendModeHandler } from './set-blend-mode.js';
@@ -141,6 +147,14 @@ import {
  * Wiring lives here (not in code.ts) so a registry test can enumerate the keys and assert they
  * match the server's advertised tools — a new tool can't be half-wired without a test failing.
  */
+/** The writes Dev Mode allows: annotations and their categories, measured; it refuses the rest. */
+const DEV_MODE_WRITES = [
+  'set_annotations',
+  'create_annotation_category',
+  'update_annotation_category',
+  'delete_annotation_category',
+] as const;
+
 export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers => {
   const figmaCtx = withInstanceIdLookup(figmaApi);
   const cache = createIdempotencyCache();
@@ -212,6 +226,10 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
     update_variable: createUpdateVariableHandler(figmaCtx),
+    set_annotations: createSetAnnotationsHandler(figmaCtx),
+    create_annotation_category: createCreateAnnotationCategoryHandler(figmaCtx),
+    update_annotation_category: createUpdateAnnotationCategoryHandler(figmaCtx),
+    delete_annotation_category: createDeleteAnnotationCategoryHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     delete_variable_mode: createDeleteVariableModeHandler(figmaCtx),
@@ -293,6 +311,8 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
   for (const name of Object.keys(rawWrites)) {
     handlers[name] = markWriteHandler(idempotent(cache, undoStep(rawWrites[name]!)));
   }
+  // The writes Dev Mode allows (measured 2026-11-20; it refuses every other one).
+  for (const name of DEV_MODE_WRITES) markDevModeWrite(handlers[name]!);
   handlers.batch = markWriteHandler(
     idempotent(cache, undoStep(createBatchHandler(figmaCtx, rawWrites))),
   );
