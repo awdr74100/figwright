@@ -23,9 +23,10 @@ export const createAnnotationCategoryTool: ToolSpec = {
 export const updateAnnotationCategoryTool: ToolSpec = {
   name: 'update_annotation_category',
   description:
-    "Rename or recolour an annotation category; either field may be omitted. Renaming one of Figma's " +
-    'four presets (Development, Interaction, Accessibility, Content) makes it a custom category for ' +
-    'good — isPreset goes false and nothing sets it back. Works in Dev Mode too. Returns { ok, ' +
+    'Rename or recolour an annotation category; either field may be omitted, and a field already ' +
+    "holding its value is not written. Renaming or recolouring one of Figma's four presets " +
+    '(Development, Interaction, Accessibility, Content) makes it a custom category for good — ' +
+    'isPreset goes false and nothing sets it back. Works in Dev Mode too. Returns { ok, ' +
     'categoryId, label, color, isPreset }.',
   inputSchema: z.object({
     categoryId: z.string().describe('The category, by id (from get_annotations categories)'),

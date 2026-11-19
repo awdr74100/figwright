@@ -10,8 +10,9 @@ import type { SandboxToolHandler } from '../dispatcher.js';
  *   refused.
  * - A label must not be empty on create; setLabel('') is accepted and leaves a nameless category, so
  *   update refuses it. Labels need not be unique — Figma creates a second "Development".
- * - Renaming a preset, even to its own name, makes it a custom category for good (isPreset goes false
- *   and nothing sets it back), so a field that already holds its value is not written.
+ * - Renaming or recolouring a preset, even to the label or colour it already has, makes it a custom
+ *   category for good (isPreset goes false and nothing sets it back; both measured on a fresh
+ *   file's presets), so a field that already holds its value is not written.
  * - Deleting one leaves its id on the annotations that used it.
  *
  * Allowed in Dev Mode, like annotations themselves.

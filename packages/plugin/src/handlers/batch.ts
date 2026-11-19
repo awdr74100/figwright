@@ -1742,9 +1742,9 @@ interface CategoryState {
 }
 
 /**
- * Undo for update_annotation_category: its label and colour back. A preset that the op renamed
- * stays a custom category — Figma has nothing that makes one a preset again — and that is
- * reported.
+ * Undo for update_annotation_category: its label and colour back. A preset that the op renamed or
+ * recoloured stays a custom category — Figma has nothing that makes one a preset again — and that
+ * is reported.
  */
 const annotationCategoryInverse: BatchInverse = {
   async capture(figmaCtx, params) {
