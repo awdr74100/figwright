@@ -91,4 +91,68 @@ describe('get_annotations handler', () => {
     )) as GetAnnotationsResult;
     expect(result).toEqual({ annotations: [] });
   });
+
+  describe('measurements', () => {
+    const withMeasurements = (list: unknown[]) => {
+      const page = { id: '0:1', type: 'PAGE', parent: null, getMeasurements: () => list };
+      const a = { id: 'a', name: 'a', type: 'FRAME', annotations: [], parent: page };
+      const b = { id: 'b', name: 'b', type: 'FRAME', annotations: [], parent: page };
+      const f = {
+        currentPage: Object.assign(page, { children: [a, b] }),
+        getNodeByIdAsync: async (id: string) => ({ a, b })[id as 'a' | 'b'] ?? null,
+      } as unknown as typeof figma;
+      return { f, a, b };
+    };
+    const m = (id: string, from: unknown, to: unknown, freeText = '') => ({
+      id,
+      start: { node: from, side: 'RIGHT' },
+      end: { node: to, side: 'LEFT' },
+      offset: { type: 'INNER', relative: 0 },
+      freeText,
+    });
+
+    it("lists the page's measurements, and on a node only the ones touching it", async () => {
+      const { f, a, b } = withMeasurements([]);
+      const list = [m('9:0', a, b, 'gap'), m('9:1', b, b)];
+      (f.currentPage as unknown as { getMeasurements: () => unknown[] }).getMeasurements = () =>
+        list;
+      // Opt-in: without it, a read reports none of them and makes no measurement reads.
+      expect(await createGetAnnotationsHandler(f)(undefined)).toEqual({ annotations: [] });
+      expect(await createGetAnnotationsHandler(f)({ nodeId: 'a' })).toEqual({ annotations: [] });
+      const page = (await createGetAnnotationsHandler(f)({
+        measurements: true,
+      })) as GetAnnotationsResult;
+      expect(page.measurements).toEqual([
+        {
+          id: '9:0',
+          start: { nodeId: 'a', side: 'RIGHT' },
+          end: { nodeId: 'b', side: 'LEFT' },
+          offset: { type: 'INNER', relative: 0 },
+          freeText: 'gap',
+        },
+        {
+          id: '9:1',
+          start: { nodeId: 'b', side: 'RIGHT' },
+          end: { nodeId: 'b', side: 'LEFT' },
+          offset: { type: 'INNER', relative: 0 },
+        },
+      ]);
+      const onA = (await createGetAnnotationsHandler(f)({
+        nodeId: 'a',
+        measurements: true,
+      })) as GetAnnotationsResult;
+      expect(onA.measurements?.map(x => x.id)).toEqual(['9:0']);
+    });
+
+    // A page without measurements reads exactly as it did before they were reported.
+    it('leaves measurements out when there are none, even when asked', async () => {
+      const { f } = withMeasurements([]);
+      expect(await createGetAnnotationsHandler(f)({ measurements: true })).toEqual({
+        annotations: [],
+      });
+      expect(await createGetAnnotationsHandler(f)({ nodeId: 'a', measurements: true })).toEqual({
+        annotations: [],
+      });
+    });
+  });
 });

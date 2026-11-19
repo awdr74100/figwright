@@ -18,7 +18,7 @@
     "get_component_api": ["documentation", "nodeId"],
     "get_viewport": [],
     "get_fonts": [],
-    "get_annotations": ["nodeId"],
+    "get_annotations": ["measurements", "nodeId"],
     "get_reactions": ["nodeId"],
     "get_motion_styles": [],
     "get_node_motion": ["nodeId"],
@@ -1104,6 +1104,28 @@
     "create_annotation_category": ["color", "label", "requestId"],
     "update_annotation_category": ["categoryId", "color", "label", "requestId"],
     "delete_annotation_category": ["categoryId", "requestId"],
+    "add_measurement": [
+      "endNodeId",
+      "endSide",
+      "freeText",
+      "offset",
+      "offset.fixed",
+      "offset.relative",
+      "offset.type",
+      "requestId",
+      "startNodeId",
+      "startSide"
+    ],
+    "update_measurement": [
+      "freeText",
+      "measurementId",
+      "offset",
+      "offset.fixed",
+      "offset.relative",
+      "offset.type",
+      "requestId"
+    ],
+    "delete_measurement": ["measurementId", "requestId"],
     "set_variable_code_syntax": [
       "codeSyntax",
       "codeSyntax.ANDROID",

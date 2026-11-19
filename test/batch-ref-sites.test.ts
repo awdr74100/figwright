@@ -127,6 +127,8 @@ describe('batch reference positions', () => {
 
 const EXPECTED: string[] = [
   'add_component_property.componentId → componentId',
+  'add_measurement.endNodeId → endNodeId',
+  'add_measurement.startNodeId → startNodeId',
   'add_variable_mode.collectionId → collectionId',
   'align_nodes.nodeIds[] → nodeIds',
   'apply_animation_style.config.props{*}.id → variableId',
@@ -288,6 +290,7 @@ const EXPECTED: string[] = [
   'update_flows.pageId → pageId',
   'update_grid_style.grids[].boundVariables{*} → variableId',
   'update_grid_style.styleId → styleId',
+  'update_measurement.measurementId → measurementId',
   'update_paint_style.paints[].boundVariables{*} → variableId',
   'update_paint_style.paints[].gradientStops[].boundVariables{*} → variableId',
   'update_paint_style.styleId → styleId',

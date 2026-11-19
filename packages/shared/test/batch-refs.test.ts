@@ -97,7 +97,17 @@ describe('findBatchRefs — where a reference is read', () => {
 
 describe('batchRefResultKeys', () => {
   it('reads the id an argument asks for', () => {
-    for (const f of ['nodeId', 'parentId', 'newParentId', 'nodeIds', 'root', 'pageId']) {
+    // startNodeId / endNodeId: a measurement's two ends, which a batch may have just created.
+    for (const f of [
+      'nodeId',
+      'parentId',
+      'newParentId',
+      'nodeIds',
+      'root',
+      'pageId',
+      'startNodeId',
+      'endNodeId',
+    ]) {
       expect({ f, keys: batchRefResultKeys(f) }).toEqual({ f, keys: ['nodeId'] });
     }
     expect(batchRefResultKeys('componentId')).toEqual(['nodeId', 'componentId']);

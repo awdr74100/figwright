@@ -60,6 +60,8 @@ export const STRING_ID_FIELDS = [
   'componentId',
   'instanceId',
   'fromNodeId',
+  'startNodeId',
+  'endNodeId',
 ] as const;
 
 /**

@@ -86,6 +86,11 @@ import { importSvgTool } from './import-svg.js';
 import { importVariableTool } from './import-variable.js';
 import { listFilesTool } from './list-files.js';
 import { lockNodesTool } from './lock-nodes.js';
+import {
+  addMeasurementTool,
+  deleteMeasurementTool,
+  updateMeasurementTool,
+} from './measurements.js';
 import { moveNodesTool } from './move-nodes.js';
 import { navigateToPageTool } from './navigate-to-page.js';
 import { outlineStrokeTool } from './outline-stroke.js';
@@ -267,6 +272,9 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   createAnnotationCategoryTool,
   updateAnnotationCategoryTool,
   deleteAnnotationCategoryTool,
+  addMeasurementTool,
+  updateMeasurementTool,
+  deleteMeasurementTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
   deleteVariableModeTool,

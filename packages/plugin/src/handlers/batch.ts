@@ -8,6 +8,7 @@ import {
   snapshotDocumentation,
 } from '../documentation.js';
 import { readTracks, TRACKS_UNREAD } from '../grid-tracks.js';
+import { findMeasurement } from '../measurements.js';
 import { ownValue } from '../own-value.js';
 import {
   captureOverrideGuard,
@@ -1772,6 +1773,26 @@ const annotationCategoryInverse: BatchInverse = {
   },
 };
 
+// ── Measurements ─────────────────────────────────────────────────────────────
+
+/** Undo for update_measurement: its offset and text as they were. */
+const measurementInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'measurementId', 'update_measurement');
+    // One no page has is left to the op, whose refusal says so — it can have changed nothing.
+    const found = await findMeasurement(figmaCtx, id, 'batch/update_measurement').catch(() => null);
+    if (found === null) return null;
+    return { id, offset: { ...found.measurement.offset }, freeText: found.measurement.freeText };
+  },
+  async undo(figmaCtx, _params, captured) {
+    if (captured === null) return undefined;
+    const was = captured as { id: string; offset: MeasurementOffset; freeText: string };
+    const { page } = await findMeasurement(figmaCtx, was.id, 'batch/update_measurement');
+    page.editMeasurement(was.id, { offset: was.offset, freeText: was.freeText });
+    return undefined;
+  },
+};
+
 // ── Component documentation ──────────────────────────────────────────────────
 
 interface DocumentationState extends DocumentationSnapshot {
@@ -2337,6 +2358,12 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
     (await figmaCtx.annotations.getAnnotationCategoryByIdAsync(id))?.remove();
   }),
   update_annotation_category: annotationCategoryInverse,
+  // Measurements.
+  add_measurement: createdInverse('measurementId', async (figmaCtx, id) => {
+    const { page } = await findMeasurement(figmaCtx, id, 'batch/add_measurement');
+    page.deleteMeasurement(id);
+  }),
+  update_measurement: measurementInverse,
   update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
   set_component_documentation: componentDocumentationInverse,
@@ -2372,6 +2399,7 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
     'a deleted variable cannot be brought back under its id, and its bindings revert',
   delete_variable_mode:
     'adding a mode back mints a new mode id, so the value every variable held for the removed one does not return',
+  delete_measurement: 'adding a measurement back mints a new id',
   delete_annotation_category:
     'a deleted category cannot be brought back under its id, and the annotations that used it keep the old one',
   delete_variable_collection:

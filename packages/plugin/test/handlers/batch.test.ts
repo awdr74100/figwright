@@ -27,6 +27,10 @@ import { createDeleteNodesHandler } from '../../src/handlers/delete-nodes.js';
 import { createEditComponentPropertyHandler } from '../../src/handlers/edit-component-property.js';
 import { createFlipNodesHandler } from '../../src/handlers/flip-nodes.js';
 import { createGroupNodesHandler } from '../../src/handlers/group-nodes.js';
+import {
+  createAddMeasurementHandler,
+  createUpdateMeasurementHandler,
+} from '../../src/handlers/measurements.js';
 import { createMoveNodesHandler } from '../../src/handlers/move-nodes.js';
 import { createNavigateToPageHandler } from '../../src/handlers/navigate-to-page.js';
 import { createRemoveReactionsHandler } from '../../src/handlers/remove-reactions.js';
@@ -67,6 +71,7 @@ import {
 import { createIdempotencyCache, idempotent } from '../../src/idempotency.js';
 import { annotatedNode } from '../annotations-fake.js';
 import { fakeDocumented } from '../documentation-fake.js';
+import { measuredPages } from '../measurements-fake.js';
 import { makeFlowsFigma } from './flows-fake.js';
 
 /** A mutable node store backing a fake figma whose getNodeByIdAsync / createFrame share one map. */
@@ -3831,5 +3836,76 @@ describe('style documentation links in a batch', () => {
     await expect(
       handler({ ops: [{ tool: 'delete_annotation_category', params: { categoryId: '127:0' } }] }),
     ).rejects.toThrow(/not batchable — a deleted category cannot be brought back under its id/);
+  });
+
+  it('rolls back add_measurement and update_measurement, and refuses to batch a deletion', async () => {
+    const { figmaCtx } = makeWide();
+    const pages = measuredPages();
+    const { home, nodes } = pages;
+    Object.defineProperty(figmaCtx, 'currentPage', { get: () => home, configurable: true });
+    Object.assign(figmaCtx, {
+      root: pages.figmaCtx.root,
+      getNodeByIdAsync: pages.figmaCtx.getNodeByIdAsync,
+    });
+    home.addMeasurement(
+      { node: nodes.get('1:1')!, side: 'TOP' },
+      { node: nodes.get('1:2')!, side: 'TOP' },
+      { freeText: 'kept' },
+    );
+    const shape = () =>
+      JSON.stringify(
+        home.list.map(x => [
+          x.id,
+          x.start.node.id,
+          x.start.side,
+          x.end.node.id,
+          x.end.side,
+          x.offset,
+          x.freeText,
+        ]),
+      );
+    const before = shape();
+    const handler = createBatchHandler(figmaCtx, {
+      add_measurement: createAddMeasurementHandler(figmaCtx),
+      update_measurement: createUpdateMeasurementHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'add_measurement',
+            params: { startNodeId: '1:1', startSide: 'LEFT', endNodeId: '1:2', endSide: 'LEFT' },
+          },
+          { tool: 'update_measurement', params: { measurementId: '$0', freeText: 'via ref' } },
+          {
+            tool: 'update_measurement',
+            params: {
+              measurementId: '9:0',
+              offset: { type: 'OUTER', fixed: 8 },
+              freeText: 'changed',
+            },
+          },
+          // Refused by Figma only when it applies.
+          {
+            tool: 'add_measurement',
+            params: { startNodeId: '1:1', startSide: 'RIGHT', endNodeId: '1:2', endSide: 'TOP' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      /^batch: op 3 \(add_measurement\) failed, rolled back 3 applied op\(s\): .*must be on the same axis/,
+    );
+    expect(shape()).toBe(before);
+    // An id no page has: the op's own refusal, not the inverse's.
+    await expect(
+      handler({
+        ops: [{ tool: 'update_measurement', params: { measurementId: '9:99', freeText: 'x' } }],
+      }),
+    ).rejects.toThrow(
+      /^batch: op 0 \(update_measurement\) failed, rolled back 0 applied op\(s\): update_measurement: no measurement 9:99 in this file$/,
+    );
+    await expect(
+      handler({ ops: [{ tool: 'delete_measurement', params: { measurementId: '9:0' } }] }),
+    ).rejects.toThrow(/not batchable — adding a measurement back mints a new id/);
   });
 });

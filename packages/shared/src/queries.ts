@@ -265,6 +265,30 @@ export const AnnotationCategoryInfoSchema = z.object({
 });
 export type AnnotationCategoryInfo = z.infer<typeof AnnotationCategoryInfoSchema>;
 
+/** One end of a measurement: a node, and the edge the measurement is drawn from. */
+export const MeasurementEndSchema = z.object({
+  nodeId: z.string(),
+  side: z.enum(['TOP', 'RIGHT', 'BOTTOM', 'LEFT']),
+});
+
+/**
+ * A Dev Mode measurement: a dimension line the designer drew between two node edges (or across one
+ * node). Figma draws the distance and keeps no value for it — compute it from the nodes' geometry.
+ */
+export const SerializedMeasurementSchema = z.object({
+  id: z.string(),
+  start: MeasurementEndSchema,
+  end: MeasurementEndSchema,
+  /** INNER: along the span, relative -1…1 (0 is the middle); OUTER: a fixed distance outside it. */
+  offset: z.union([
+    z.object({ type: z.literal('INNER'), relative: z.number() }),
+    z.object({ type: z.literal('OUTER'), fixed: z.number() }),
+  ]),
+  /** The text the designer put on it — only when there is some. */
+  freeText: z.string().optional(),
+});
+export type SerializedMeasurement = z.infer<typeof SerializedMeasurementSchema>;
+
 export const GetAnnotationsResultSchema = z.object({
   annotations: z.array(NodeAnnotationsSchema),
   /**
@@ -273,6 +297,11 @@ export const GetAnnotationsResultSchema = z.object({
    * annotations API (FigJam), so a read there returns what it always did.
    */
   categories: z.array(AnnotationCategoryInfoSchema).optional(),
+  /**
+   * The page's measurements (with nodeId, the ones touching that node) — with measurements: true,
+   * and only when there are any.
+   */
+  measurements: z.array(SerializedMeasurementSchema).optional(),
 });
 export type GetAnnotationsResult = z.infer<typeof GetAnnotationsResultSchema>;
 
