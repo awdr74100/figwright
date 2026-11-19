@@ -7,6 +7,7 @@ import {
   type TextStyleBindings,
 } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
+import { fillNewStyle } from './style-snapshot.js';
 
 export const createCreateTextStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -41,8 +42,11 @@ export const createCreateTextStyleHandler =
     }
 
     const style = figmaCtx.createTextStyle();
-    try {
-      style.name = p.name;
+    // What is left after both hoists: a binding's target FACE is only computable once the style's
+    // base face is known, and that is only after creation when fontName was omitted. So that one
+    // orphan is undone instead of prevented — the same outcome, by the only route left.
+    await fillNewStyle(style, async () => {
+      style.name = p.name as string;
       // `fontName` is declared as `FontName` even though its own JSDoc says the API accepts a
       // `FontNameInput` — the typings widened the setters but not the property. Cast rather than
       // force a `style` the caller may have deliberately left to Figma to resolve.
@@ -66,13 +70,7 @@ export const createCreateTextStyleHandler =
       if (bindings !== undefined && table !== undefined) {
         await applyTextStyleBindings(figmaCtx, style, bindings, table);
       }
-    } catch (error) {
-      // What is left after both hoists: a binding's target FACE is only computable once the
-      // style's base face is known, and that is only after creation when fontName was omitted. So
-      // that one orphan is undone instead of prevented — the same outcome, by the only route left.
-      style.remove();
-      throw error;
-    }
+    });
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
     return result;

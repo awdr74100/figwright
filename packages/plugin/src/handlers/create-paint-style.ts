@@ -2,6 +2,7 @@ import type { SerializedPaint, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
+import { fillNewStyle } from './style-snapshot.js';
 
 export const createCreatePaintStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -21,9 +22,13 @@ export const createCreatePaintStyleHandler =
     );
 
     const style = figmaCtx.createPaintStyle();
-    style.name = p.name;
-    style.paints = paints;
-    if (typeof p.description === 'string') style.description = p.description;
+    // A value Figma refuses only surfaces on the write (an opacity of 2, measured): the style it
+    // would have left behind is removed.
+    await fillNewStyle(style, () => {
+      style.name = p.name as string;
+      style.paints = paints;
+      if (typeof p.description === 'string') style.description = p.description;
+    });
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
     return result;

@@ -171,6 +171,26 @@ describe('create_text_style handler', () => {
     expect(removed()).toBe(1);
   });
 
+  // The removal used to be a bare remove(): had it thrown, its error replaced the call's own, and
+  // the agent learned neither why the create failed nor that a style was left behind.
+  it("keeps the call's own error, and says so, when the style it created cannot be removed", async () => {
+    const variable = { id: 'V:1', name: 'size/lg', resolvedType: 'FLOAT', valuesByMode: {} };
+    const { figma: f, style } = fakeFigma({}, { 'V:1': variable });
+    style.fontName = { family: 'Inter', style: 'Regular' };
+    style.setBoundVariable = () => {
+      throw new Error('in setBoundVariable: unloaded font "Roboto Bold"');
+    };
+    style.remove = () => {
+      throw new Error('in remove: refused');
+    };
+    await expect(
+      createCreateTextStyleHandler(f)({ name: 'Heading/H1', boundVariables: { fontSize: 'V:1' } }),
+    ).rejects.toThrow(
+      'in setBoundVariable: unloaded font "Roboto Bold" — and the new style S:0 could not be ' +
+        'removed: in remove: refused',
+    );
+  });
+
   it('loads the face a fontFamily binding will resolve to before binding it', async () => {
     const variable = {
       id: 'V:f',

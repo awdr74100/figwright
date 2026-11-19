@@ -36,6 +36,29 @@ const fakeFigma = (
   return { figma: figmaCtx, created };
 };
 
+// Measured on main: a value Figma refuses only surfaces on the write, after the style exists, and
+// the failed call left the empty, named style in the file. It is removed now; if even that fails,
+// the error says so.
+const refusingPaintsStyle = (valueProp: string, removable = true) => {
+  const state = { removed: 0 };
+  const style: Record<string, unknown> = {
+    id: 'S:new',
+    name: '',
+    description: '',
+    remove: () => {
+      if (!removable) throw new Error('in remove: refused');
+      state.removed += 1;
+    },
+  };
+  Object.defineProperty(style, valueProp, {
+    get: () => [],
+    set: () => {
+      throw new Error(`in set_${valueProp}: Property "${valueProp}" failed validation`);
+    },
+  });
+  return { style, state };
+};
+
 describe('create_paint_style handler', () => {
   it('creates a paint style with name + SOLID paints and returns styleId + name', async () => {
     const { figma: f, created } = fakeFigma();
@@ -103,5 +126,42 @@ describe('create_paint_style handler', () => {
     expect(created[0]?.paints).toEqual([
       expect.objectContaining({ boundVariables: { color: { type: 'VARIABLE_ALIAS', id: 'V:1' } } }),
     ]);
+  });
+
+  it('removes the style it created when Figma refuses its value, and passes the refusal on', async () => {
+    const { style, state } = refusingPaintsStyle('paints');
+    const figmaCtx = {
+      variables: {
+        getVariableByIdAsync: async () => null,
+        setBoundVariableForPaint: (p: object) => p,
+      },
+      createPaintStyle: () => style,
+    } as unknown as typeof figma;
+    await expect(
+      createCreatePaintStyleHandler(figmaCtx)({
+        name: 'Brand',
+        paints: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 2 }],
+      }),
+    ).rejects.toThrow(/^in set_paints: Property "paints" failed validation$/);
+    expect(state.removed).toBe(1);
+  });
+
+  it('says so when the style it created cannot be removed', async () => {
+    const { style } = refusingPaintsStyle('paints', false);
+    const figmaCtx = {
+      variables: {
+        getVariableByIdAsync: async () => null,
+        setBoundVariableForPaint: (p: object) => p,
+      },
+      createPaintStyle: () => style,
+    } as unknown as typeof figma;
+    await expect(
+      createCreatePaintStyleHandler(figmaCtx)({
+        name: 'Brand',
+        paints: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 2 }],
+      }),
+    ).rejects.toThrow(
+      'failed validation — and the new style S:new could not be removed: in remove: refused',
+    );
   });
 });
