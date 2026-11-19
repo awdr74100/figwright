@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import {
+  DOCUMENTATION_LINKS_DESCRIPTION,
+  documentationLinksSchema,
+} from './documentation-schema.js';
 import { paintItemSchema } from './paint-schema.js';
 import type { ToolSpec } from './spec.js';
 
@@ -10,11 +14,16 @@ export const createPaintStyleTool: ToolSpec = {
   description:
     'Create a reusable local paint (color) style from SOLID or gradient paints (same shape as ' +
     'set_fills); use slashes in the name for folder grouping. Apply it to nodes with ' +
-    'apply_style_to_node, or edit it later with update_paint_style. Returns { ok, styleId, name }.',
+    'apply_style_to_node, or edit it later with update_paint_style. Optionally with a ' +
+    'documentation link. Returns { ok, styleId, name, adjusted? } — adjusted says when the link ' +
+    'was stored differently from what was sent.',
   inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Brand/Primary"'),
     paints: z.array(paintItemSchema).describe('Paints'),
     description: z.string().optional().describe('Optional style description'),
+    documentationLinks: documentationLinksSchema
+      .optional()
+      .describe(DOCUMENTATION_LINKS_DESCRIPTION),
   }),
   kind: 'write',
 };

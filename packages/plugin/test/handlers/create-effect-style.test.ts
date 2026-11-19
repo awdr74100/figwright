@@ -50,6 +50,18 @@ const refusingEffectsStyle = (valueProp: string, removable = true) => {
   return { style, state };
 };
 
+/** A style whose link setter stores something other than what it was sent, as Figma might. */
+const normalizingLinks = (target: Record<string, unknown>): void => {
+  let stored: { uri: string }[] = [];
+  Object.defineProperty(target, 'documentationLinks', {
+    enumerable: true,
+    get: () => stored,
+    set: (v: { uri: string }[]) => {
+      stored = v.map(l => ({ uri: l.uri.toLowerCase() }));
+    },
+  });
+};
+
 describe('create_effect_style handler', () => {
   it('creates an effect style from a blur effect', async () => {
     const { figma: f, style } = fakeFigma();
@@ -148,5 +160,94 @@ describe('create_effect_style handler', () => {
     ).rejects.toThrow(
       'failed validation — and the new style S:new could not be removed: in remove: refused',
     );
+  });
+
+  it('creates the style with its documentation link', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:new',
+      name: '',
+      description: '',
+      documentationLinks: [],
+      remove: () => undefined,
+    };
+    const figmaCtx = {
+      variables: { getVariableByIdAsync: async () => null },
+      createEffectStyle: () => style,
+    } as unknown as typeof figma;
+    await createCreateEffectStyleHandler(figmaCtx)({
+      name: 'Shadow',
+      effects: [],
+      documentationLinks: [{ uri: 'https://sb.example.com/x' }],
+    });
+    expect(style.documentationLinks).toEqual([{ uri: 'https://sb.example.com/x' }]);
+  });
+
+  it('removes the style it created when Figma refuses the link', async () => {
+    let removed = 0;
+    const style: Record<string, unknown> = {
+      id: 'S:new',
+      name: '',
+      description: '',
+      remove: () => {
+        removed += 1;
+      },
+    };
+    Object.defineProperty(style, 'documentationLinks', {
+      get: () => [],
+      set: () => {
+        throw new Error('in set_documentationLinks: Documentation link must be a URL');
+      },
+    });
+    const figmaCtx = {
+      variables: { getVariableByIdAsync: async () => null },
+      createEffectStyle: () => style,
+    } as unknown as typeof figma;
+    await expect(
+      createCreateEffectStyleHandler(figmaCtx)({
+        name: 'Shadow',
+        effects: [],
+        documentationLinks: [{ uri: 'www.a.com' }],
+      }),
+    ).rejects.toThrow(/^in set_documentationLinks: Documentation link must be a URL$/);
+    expect(removed).toBe(1);
+  });
+
+  it('refuses a second link before creating anything', async () => {
+    let created = 0;
+    const figmaCtx = {
+      variables: { getVariableByIdAsync: async () => null },
+      createEffectStyle: () => {
+        created += 1;
+        return {};
+      },
+    } as unknown as typeof figma;
+    await expect(
+      createCreateEffectStyleHandler(figmaCtx)({
+        name: 'Shadow',
+        effects: [],
+        documentationLinks: [{ uri: 'a:' }, { uri: 'b:' }],
+      }),
+    ).rejects.toThrow('at most one link');
+    expect(created).toBe(0);
+  });
+
+  it('says in adjusted when the link was stored differently from what was sent', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:new',
+      name: '',
+      description: '',
+      remove: () => undefined,
+    };
+    normalizingLinks(style);
+    const figmaCtx = {
+      variables: { getVariableByIdAsync: async () => null },
+      createEffectStyle: () => style,
+    } as unknown as typeof figma;
+    const result = (await createCreateEffectStyleHandler(figmaCtx)({
+      name: 'Shadow',
+      effects: [],
+      documentationLinks: [{ uri: 'HTTPS://A.COM' }],
+    })) as { adjusted?: string };
+    expect(result.adjusted).toBe('documentationLinks were stored as ["https://a.com"]');
   });
 });

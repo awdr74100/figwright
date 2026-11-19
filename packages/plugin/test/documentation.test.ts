@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  parseDocumentationLinks,
   plainToMarkdown,
   readDocumentationExtras,
   restoreDocumentation,
   snapshotDocumentation,
   writeDescription,
+  writeDocumentationLinks,
 } from '../src/documentation.js';
 import { fakeDocumented } from './documentation-fake.js';
 
@@ -126,5 +128,50 @@ describe('restoreDocumentation', () => {
     };
     // The markdown lands (it is written last); the plain text it implies is not the recorded one.
     expect(restoreDocumentation(node, was)).toBe('description could not be put back exactly');
+  });
+});
+
+describe('parseDocumentationLinks', () => {
+  it('leaves an omitted argument alone and takes at most one { uri }', () => {
+    expect(parseDocumentationLinks(undefined, 't')).toBeUndefined();
+    expect(parseDocumentationLinks([], 't')).toEqual([]);
+    expect(parseDocumentationLinks([{ uri: 'https://a.com', extra: 1 }], 't')).toEqual([
+      { uri: 'https://a.com' },
+    ]);
+  });
+
+  it('refuses what Figma would, before anything is written', () => {
+    expect(() => parseDocumentationLinks({}, 't')).toThrow(
+      't: documentationLinks must be an array of { uri }',
+    );
+    expect(() => parseDocumentationLinks([{ uri: 'a:' }, { uri: 'b:' }], 't')).toThrow(
+      "t: documentationLinks holds at most one link (Figma's limit)",
+    );
+    expect(() => parseDocumentationLinks([null], 't')).toThrow(
+      't: documentationLinks[0].uri must be a string',
+    );
+  });
+});
+
+describe('writeDocumentationLinks', () => {
+  it('writes the links and says nothing when Figma stores them as sent', () => {
+    const target = { documentationLinks: [] as { uri: string }[] };
+    expect(writeDocumentationLinks(target, [{ uri: 'https://a.com' }])).toBeUndefined();
+    expect(target.documentationLinks).toEqual([{ uri: 'https://a.com' }]);
+  });
+
+  it('says what Figma stored when it is not what was sent', () => {
+    let stored: { uri: string }[] = [];
+    const target = {
+      get documentationLinks() {
+        return stored;
+      },
+      set documentationLinks(v: { uri: string }[]) {
+        stored = v.map(l => ({ uri: l.uri.toLowerCase() }));
+      },
+    };
+    expect(writeDocumentationLinks(target, [{ uri: 'HTTPS://A.COM' }])).toBe(
+      'documentationLinks were stored as ["https://a.com"]',
+    );
   });
 });

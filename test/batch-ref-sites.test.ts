@@ -283,6 +283,8 @@ const EXPECTED: string[] = [
   'update_effect_style.styleId → styleId',
   'update_flows.flows[].nodeId → nodeId',
   'update_flows.pageId → pageId',
+  'update_grid_style.grids[].boundVariables{*} → variableId',
+  'update_grid_style.styleId → styleId',
   'update_paint_style.paints[].boundVariables{*} → variableId',
   'update_paint_style.paints[].gradientStops[].boundVariables{*} → variableId',
   'update_paint_style.styleId → styleId',

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 import { textStyleBindingsSchema } from './binding-schema.js';
+import {
+  DOCUMENTATION_LINKS_DESCRIPTION,
+  documentationLinksSchema,
+} from './documentation-schema.js';
 import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
 
@@ -13,7 +17,9 @@ export const createTextStyleTool: ToolSpec = {
     'apply_style_to_node. The font is loaded before assignment. lineHeight unit is AUTO / PIXELS / ' +
     'PERCENT (AUTO omits value); letterSpacing unit is PIXELS / PERCENT; textWrapStyle is the wrap ' +
     'balancing (CSS text-wrap) every bound node inherits. For one-off formatting of a ' +
-    'single node use set_text_properties instead. Returns { ok, styleId, name }.',
+    'single node use set_text_properties instead. Optionally with a documentation link. Returns { ok, ' +
+    'styleId, name, adjusted? } — adjusted says when the link was stored differently from what was ' +
+    'sent.',
   inputSchema: z.object({
     name: z.string().describe('Style name, e.g. "Heading/H1"'),
     fontName: fontNameSchema.optional(),
@@ -30,6 +36,9 @@ export const createTextStyleTool: ToolSpec = {
       ),
     boundVariables: textStyleBindingsSchema.optional(),
     description: z.string().optional(),
+    documentationLinks: documentationLinksSchema
+      .optional()
+      .describe(DOCUMENTATION_LINKS_DESCRIPTION),
   }),
   kind: 'write',
 };

@@ -204,6 +204,74 @@ describe('get_styles handler', () => {
 // them per paint / effect / grid, and — for typography, whose values are scalars — on the text
 // style itself; get_styles used to drop all of them, so a shadow colour bound to a variable was
 // indistinguishable from a hard-coded RGBA (issue #164).
+describe('get_styles handler — documentation links', () => {
+  const linked = { uri: 'https://sb.example.com/brand' };
+  const styles = {
+    paints: [
+      {
+        id: 'S:1',
+        name: 'Brand',
+        key: 'k1',
+        description: '',
+        paints: [],
+        documentationLinks: [linked],
+      },
+    ],
+    texts: [
+      {
+        id: 'S:2',
+        name: 'Body',
+        key: 'k2',
+        description: '',
+        fontName: { family: 'Inter', style: 'Regular' },
+        fontSize: 16,
+        lineHeight: { unit: 'AUTO' },
+        letterSpacing: { unit: 'PIXELS', value: 0 },
+        textWrapStyle: 'AUTO',
+        documentationLinks: [linked],
+      },
+    ],
+    effects: [
+      {
+        id: 'S:3',
+        name: 'Shadow',
+        key: 'k3',
+        description: '',
+        effects: [],
+        documentationLinks: [],
+      },
+    ],
+    grids: [
+      {
+        id: 'S:4',
+        name: '12 Col',
+        key: 'k4',
+        description: '',
+        layoutGrids: [],
+        documentationLinks: [linked],
+      },
+    ],
+  };
+
+  // Opt-in, so a listing that did not ask reads exactly as it did before the field existed.
+  it('leaves links out unless asked, even where a style has one', async () => {
+    const result = (await createGetStylesHandler(fakeFigma(styles))(undefined)) as GetStylesResult;
+    expect(JSON.stringify(result)).not.toContain('documentationLinks');
+    const empty = (await createGetStylesHandler(fakeFigma(styles))({})) as GetStylesResult;
+    expect(JSON.stringify(empty)).not.toContain('documentationLinks');
+  });
+
+  it("carries each style's link when asked, and nothing for a style without one", async () => {
+    const result = (await createGetStylesHandler(fakeFigma(styles))({
+      documentation: true,
+    })) as GetStylesResult;
+    expect(result.paints[0]?.documentationLinks).toEqual([linked]);
+    expect(result.texts[0]?.documentationLinks).toEqual([linked]);
+    expect(result.effects[0]).not.toHaveProperty('documentationLinks');
+    expect(result.grids[0]?.documentationLinks).toEqual([linked]);
+  });
+});
+
 describe('get_styles handler — variable bindings', () => {
   const boundStyles = {
     paints: [

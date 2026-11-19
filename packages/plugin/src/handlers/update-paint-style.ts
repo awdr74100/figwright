@@ -1,6 +1,7 @@
 import type { SerializedPaint, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { parseDocumentationLinks, writeDocumentationLinks } from '../documentation.js';
 import { toFigmaPaintsBound } from './bindings.js';
 import {
   restoreStyle,
@@ -17,10 +18,14 @@ export const createUpdatePaintStyleHandler =
       name?: unknown;
       paints?: unknown;
       description?: unknown;
+      documentationLinks?: unknown;
     };
     if (typeof p.styleId !== 'string') {
       throw new TypeError('update_paint_style: styleId must be a string');
     }
+
+    // Checked before anything is looked up, so a malformed link is named as the argument error it is.
+    const links = parseDocumentationLinks(p.documentationLinks, 'update_paint_style');
 
     const style = await figmaCtx.getStyleByIdAsync(p.styleId);
     if (style === null || style.type !== 'PAINT') {
@@ -34,12 +39,20 @@ export const createUpdatePaintStyleHandler =
       : undefined;
     // Only the fields this call writes: each read is a trip to Figma.
     const before = snapshotStyle(ps, [
+      ...(links !== undefined ? ['documentationLinks'] : []),
       ...(typeof p.name === 'string' ? ['name'] : []),
       ...(paints !== undefined ? ['paints'] : []),
       ...(typeof p.description === 'string' ? ['description'] : []),
     ]);
+    const adjusted: string[] = [];
     await writeStyleAtomically(
       () => {
+        // Written first, so a link Figma refuses ("Documentation link must be a URL") fails the call
+        // before anything else is written.
+        if (links !== undefined) {
+          const note = writeDocumentationLinks(ps, links);
+          if (note !== undefined) adjusted.push(note);
+        }
         if (typeof p.name === 'string') ps.name = p.name;
         if (paints !== undefined) ps.paints = paints;
         if (typeof p.description === 'string') ps.description = p.description;
@@ -49,5 +62,6 @@ export const createUpdatePaintStyleHandler =
     );
 
     const result: StyleResult = { ok: true, styleId: ps.id, name: ps.name };
+    if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
     return result;
   };

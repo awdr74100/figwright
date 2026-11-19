@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import {
+  DOCUMENTATION_LINKS_DESCRIPTION,
+  documentationLinksSchema,
+} from './documentation-schema.js';
 import type { ToolSpec } from './spec.js';
 
 export const SET_COMPONENT_DOCUMENTATION_TOOL_NAME = 'set_component_documentation';
@@ -32,15 +36,9 @@ export const setComponentDocumentationTool: ToolSpec = {
       .string()
       .optional()
       .describe('The description as markdown, keeping formatting; "" clears it'),
-    documentationLinks: z
-      .array(
-        z.object({
-          uri: z.string().describe('A URL with its scheme, e.g. "https://storybook.example.com/…"'),
-        }),
-      )
-      .max(1)
+    documentationLinks: documentationLinksSchema
       .optional()
-      .describe("The documentation link — at most one (Figma's limit); [] removes it"),
+      .describe(DOCUMENTATION_LINKS_DESCRIPTION),
     replaceFormatting: z
       .boolean()
       .optional()

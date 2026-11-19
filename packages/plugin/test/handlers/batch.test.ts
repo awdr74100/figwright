@@ -49,6 +49,7 @@ import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
 import { createSwapComponentHandler } from '../../src/handlers/swap-component.js';
 import { createSetTextPathHandler } from '../../src/handlers/text-path.js';
 import { createUpdateFlowsHandler } from '../../src/handlers/update-flows.js';
+import { createUpdateGridStyleHandler } from '../../src/handlers/update-grid-style.js';
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
 import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
@@ -3430,5 +3431,101 @@ describe('set_component_documentation in a batch', () => {
         ],
       }),
     ).rejects.toThrow(/node X:404 not found/);
+  });
+});
+
+describe('style documentation links in a batch', () => {
+  // The batch inverse records every field a style update can write, the link included, so a
+  // rollback puts the link, the grids (colour and binding on them) and the labels back as they were.
+  it('rolls update_grid_style and update_paint_style back, links and grids included', async () => {
+    const { figmaCtx, store, styles } = makeWide();
+    failingFrame(store);
+    const grids = [
+      { pattern: 'GRID', visible: true, sectionSize: 4, color: { r: 0, g: 1, b: 0, a: 0.5 } },
+    ];
+    const grid: Record<string, unknown> = {
+      id: 'S:g',
+      type: 'GRID',
+      name: 'Layout',
+      description: 'grid',
+      documentationLinks: [{ uri: 'https://old.com/grid' }],
+      layoutGrids: grids,
+    };
+    const paint: Record<string, unknown> = {
+      id: 'S:p',
+      type: 'PAINT',
+      name: 'Brand',
+      description: 'paint',
+      documentationLinks: [],
+      paints: [],
+    };
+    styles.set('S:g', grid);
+    styles.set('S:p', paint);
+    const handler = createBatchHandler(figmaCtx, {
+      update_grid_style: createUpdateGridStyleHandler(figmaCtx),
+      update_paint_style: createUpdatePaintStyleHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_grid_style',
+            params: {
+              styleId: 'S:g',
+              name: 'Layout/2',
+              description: 'changed',
+              documentationLinks: [],
+              grids: [{ pattern: 'GRID', visible: true, sectionSize: 16 }],
+            },
+          },
+          {
+            tool: 'update_paint_style',
+            params: { styleId: 'S:p', documentationLinks: [{ uri: 'https://new.com' }] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2 applied op\(s\)/);
+    expect(grid).toEqual({
+      id: 'S:g',
+      type: 'GRID',
+      name: 'Layout',
+      description: 'grid',
+      documentationLinks: [{ uri: 'https://old.com/grid' }],
+      layoutGrids: grids,
+    });
+    expect(paint.documentationLinks).toEqual([]);
+  });
+
+  it('rolls an update_text_style link back', async () => {
+    const { figmaCtx, store, styles } = makeWide();
+    failingFrame(store);
+    const text: Record<string, unknown> = {
+      id: 'S:t',
+      type: 'TEXT',
+      name: 'Body',
+      description: '',
+      documentationLinks: [{ uri: 'https://old.com/text' }],
+      fontName: { family: 'Inter', style: 'Regular' },
+      boundVariables: {},
+      getStyleConsumersAsync: async () => [],
+    };
+    styles.set('S:t', text);
+    // The text-style inverse loads the face before writing typography back.
+    Object.assign(figmaCtx, { loadFontAsync: async () => undefined });
+    const handler = createBatchHandler(figmaCtx, {
+      update_text_style: createUpdateTextStyleHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          { tool: 'update_text_style', params: { styleId: 'S:t', documentationLinks: [] } },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
+    expect(text.documentationLinks).toEqual([{ uri: 'https://old.com/text' }]);
   });
 });

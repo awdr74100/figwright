@@ -41,6 +41,7 @@ export const styleResidue = (style: BaseStyle, values: Bag): string[] =>
 export const TEXT_STYLE_PROPS = [
   'name',
   'description',
+  'documentationLinks',
   'fontName',
   'fontSize',
   'lineHeight',
@@ -60,8 +61,13 @@ export const TEXT_STYLE_BINDABLE: readonly VariableBindableTextField[] = [
   'paragraphIndent',
 ];
 
+/**
+ * The fields that are not typography: writing them needs no face loaded (a name, a description and
+ * a documentation link were measured to write with none), so a restore of only these loads none.
+ */
+const TEXT_STYLE_LABELS = new Set(['name', 'description', 'documentationLinks']);
 /** The typography a text style's literal writes and bindings move — everything but its labels. */
-const TEXT_STYLE_TYPOGRAPHY = TEXT_STYLE_PROPS.filter(k => k !== 'name' && k !== 'description');
+const TEXT_STYLE_TYPOGRAPHY = TEXT_STYLE_PROPS.filter(k => !TEXT_STYLE_LABELS.has(k));
 
 export interface TextStyleSnapshot {
   values: Bag;
