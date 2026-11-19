@@ -24,6 +24,29 @@ const fakeFigma = (
   return { figma: figmaCtx, style, creations: () => created };
 };
 
+// Measured on main: a value Figma refuses only surfaces on the write, after the style exists, and
+// the failed call left the empty, named style in the file. It is removed now; if even that fails,
+// the error says so.
+const refusingLayoutgridsStyle = (valueProp: string, removable = true) => {
+  const state = { removed: 0 };
+  const style: Record<string, unknown> = {
+    id: 'S:new',
+    name: '',
+    description: '',
+    remove: () => {
+      if (!removable) throw new Error('in remove: refused');
+      state.removed += 1;
+    },
+  };
+  Object.defineProperty(style, valueProp, {
+    get: () => [],
+    set: () => {
+      throw new Error(`in set_${valueProp}: Property "${valueProp}" failed validation`);
+    },
+  });
+  return { style, state };
+};
+
 describe('create_grid_style handler', () => {
   it('creates a grid style from a uniform GRID', async () => {
     const { figma: f, style } = fakeFigma();
@@ -107,5 +130,42 @@ describe('create_grid_style handler', () => {
     })) as StyleResult;
     expect(style.layoutGrids).toEqual([{ pattern: 'GRID', visible: true, sectionSize: 8 }]);
     expect(result.adjusted).toMatch(/^grids\[0\]\.color was not written \(it has no a\)/);
+  });
+
+  it('removes the style it created when Figma refuses its value, and passes the refusal on', async () => {
+    const { style, state } = refusingLayoutgridsStyle('layoutGrids');
+    const figmaCtx = {
+      variables: {
+        getVariableByIdAsync: async () => null,
+        setBoundVariableForLayoutGrid: (g: object) => g,
+      },
+      createGridStyle: () => style,
+    } as unknown as typeof figma;
+    await expect(
+      createCreateGridStyleHandler(figmaCtx)({
+        name: 'Cols',
+        grids: [{ pattern: 'GRID', visible: true, sectionSize: 8 }],
+      }),
+    ).rejects.toThrow(/^in set_layoutGrids: Property "layoutGrids" failed validation$/);
+    expect(state.removed).toBe(1);
+  });
+
+  it('says so when the style it created cannot be removed', async () => {
+    const { style } = refusingLayoutgridsStyle('layoutGrids', false);
+    const figmaCtx = {
+      variables: {
+        getVariableByIdAsync: async () => null,
+        setBoundVariableForLayoutGrid: (g: object) => g,
+      },
+      createGridStyle: () => style,
+    } as unknown as typeof figma;
+    await expect(
+      createCreateGridStyleHandler(figmaCtx)({
+        name: 'Cols',
+        grids: [{ pattern: 'GRID', visible: true, sectionSize: 8 }],
+      }),
+    ).rejects.toThrow(
+      'failed validation — and the new style S:new could not be removed: in remove: refused',
+    );
   });
 });

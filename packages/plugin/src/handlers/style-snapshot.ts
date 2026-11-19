@@ -180,3 +180,33 @@ export const writeStyleAtomically = async (
     throw error;
   }
 };
+
+/**
+ * Fill in a style that was just created, removing it if any write fails, so a failed create leaves
+ * nothing behind. Before this, create_paint_style, create_effect_style and create_grid_style set
+ * the style's value after creating it, and a value Figma refuses (an opacity of 2, a negative blur,
+ * a stretch grid with a sectionSize — measured on main, 2026-11-19) failed the call with the empty,
+ * named style left in the file's style panel and in whatever it publishes to. If the style cannot
+ * be removed either, the error says so rather than passing for a clean refusal.
+ */
+export const fillNewStyle = async (
+  style: BaseStyle,
+  writes: () => Promise<void> | void,
+): Promise<void> => {
+  try {
+    await writes();
+  } catch (error) {
+    try {
+      style.remove();
+    } catch (removeError) {
+      // The call's own failure is the cause, as in writeStyleAtomically.
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(
+        `${messageOf(error)} — and the new style ${style.id} could not be removed: ` +
+          messageOf(removeError),
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+};

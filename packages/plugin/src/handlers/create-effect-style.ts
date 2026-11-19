@@ -2,10 +2,10 @@ import type { SerializedEffect, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaEffectsBound } from './bindings.js';
+import { fillNewStyle } from './style-snapshot.js';
 
 export const createCreateEffectStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
-  // eslint-disable-next-line @typescript-eslint/require-await
   async params => {
     const p = (params ?? {}) as { name?: unknown; effects?: unknown; description?: unknown };
     if (typeof p.name !== 'string')
@@ -21,9 +21,13 @@ export const createCreateEffectStyleHandler =
     );
 
     const style = figmaCtx.createEffectStyle();
-    style.name = p.name;
-    style.effects = effects;
-    if (typeof p.description === 'string') style.description = p.description;
+    // A value Figma refuses only surfaces on the write (a negative blur radius, measured): the style
+    // it would have left behind is removed.
+    await fillNewStyle(style, () => {
+      style.name = p.name as string;
+      style.effects = effects;
+      if (typeof p.description === 'string') style.description = p.description;
+    });
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
     return result;

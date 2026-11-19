@@ -2,10 +2,10 @@ import type { SerializedLayoutGrid, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaLayoutGridsBound } from './bindings.js';
+import { fillNewStyle } from './style-snapshot.js';
 
 export const createCreateGridStyleHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
-  // eslint-disable-next-line @typescript-eslint/require-await
   async params => {
     const p = (params ?? {}) as { name?: unknown; grids?: unknown; description?: unknown };
     if (typeof p.name !== 'string') throw new TypeError('create_grid_style: name must be a string');
@@ -21,9 +21,13 @@ export const createCreateGridStyleHandler =
     );
 
     const style = figmaCtx.createGridStyle();
-    style.name = p.name;
-    style.layoutGrids = grids;
-    if (typeof p.description === 'string') style.description = p.description;
+    // A grid Figma refuses only surfaces on the write (a stretch grid with a sectionSize,
+    // measured): the style it would have left behind is removed.
+    await fillNewStyle(style, () => {
+      style.name = p.name as string;
+      style.layoutGrids = grids;
+      if (typeof p.description === 'string') style.description = p.description;
+    });
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
     if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
