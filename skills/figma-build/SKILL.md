@@ -125,6 +125,13 @@ hierarchy. An `empty: true` export means the node rendered nothing (hidden / off
   id) in any id argument, e.g. `parentId: "$0"`, `nodeIds: ["$2", "$3"]`, `variableId: "$1"`, or
   `"$0.defaultModeId"` for a named result key. One call, one Cmd+Z step, and a failure rolls the whole
   section back instead of leaving half of it behind. Text is never read as a reference.
+- **Notes for whoever builds it go in annotations**, not in a text layer on the canvas:
+  `set_annotations` (`nodeId`, `annotations: [{ label | labelMarkdown, categoryId?, properties? }]`)
+  **replaces** the node's whole list, so read it first with `get_annotations` and send back the ones
+  to keep exactly as returned. File a note under a category from `get_annotations` `categories`, or
+  add one with `create_annotation_category`; `properties` pins node fields to the note, and Figma
+  takes one only where the node has it set (strokes with a stroke, padding on auto layout). A group,
+  section, boolean group, slice or page holds none — annotate its children.
 - **`ok: true` is not proof.** Confirm layout-sensitive writes by screenshot or read-back, and report
   anything the tools could not express instead of claiming it done.
 - **Build incrementally and validate** (screenshot) — recognise the UI pattern and assemble it from

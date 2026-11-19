@@ -10,6 +10,11 @@ import { addPageTool } from './add-page.js';
 import { addVariableModeTool } from './add-variable-mode.js';
 import { alignNodesTool } from './align-nodes.js';
 import { analyzeProjectTool } from './analyze-project.js';
+import {
+  createAnnotationCategoryTool,
+  deleteAnnotationCategoryTool,
+  updateAnnotationCategoryTool,
+} from './annotation-categories.js';
 import { applyAnimationStyleTool } from './apply-animation-style.js';
 import { applyManualKeyframeTrackTool } from './apply-manual-keyframe-track.js';
 import { applyStyleToNodeTool } from './apply-style-to-node.js';
@@ -102,6 +107,7 @@ import { scanComponentsTool } from './scan-components.js';
 import { scanNodesByTypesTool } from './scan-nodes-by-types.js';
 import { scanTextNodesTool } from './scan-text-nodes.js';
 import { searchNodesTool } from './search-nodes.js';
+import { setAnnotationsTool } from './set-annotations.js';
 import { setArcTool } from './set-arc.js';
 import { setAutoLayoutTool } from './set-auto-layout.js';
 import { setBlendModeTool } from './set-blend-mode.js';
@@ -257,6 +263,10 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setNodeVariableModeTool,
   renameVariableTool,
   updateVariableTool,
+  setAnnotationsTool,
+  createAnnotationCategoryTool,
+  updateAnnotationCategoryTool,
+  deleteAnnotationCategoryTool,
   setVariableCodeSyntaxTool,
   deleteVariableTool,
   deleteVariableModeTool,

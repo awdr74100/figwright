@@ -61,4 +61,34 @@ describe('get_annotations handler', () => {
     )) as GetAnnotationsResult;
     expect(result.annotations).toEqual([]);
   });
+
+  it('lists every category in the file, cited or not', async () => {
+    const categories = [
+      {
+        id: '127:0',
+        label: 'Development',
+        color: 'green',
+        isPreset: true,
+        remove: () => undefined,
+      },
+      { id: '134:1', label: 'Analytics', color: 'teal', isPreset: false, remove: () => undefined },
+    ];
+    const f = {
+      ...fakeFigma([node('1', [{ label: 'x', categoryId: '127:0' }])]),
+      annotations: { getAnnotationCategoriesAsync: async () => categories },
+    } as unknown as typeof figma;
+    const result = (await createGetAnnotationsHandler(f)(undefined)) as GetAnnotationsResult;
+    expect(result.categories).toEqual([
+      { id: '127:0', label: 'Development', color: 'green', isPreset: true },
+      { id: '134:1', label: 'Analytics', color: 'teal', isPreset: false },
+    ]);
+  });
+
+  // FigJam has no annotations API; a read there answers exactly as it did before categories.
+  it('leaves categories out where the editor has no annotations API', async () => {
+    const result = (await createGetAnnotationsHandler(fakeFigma([]))(
+      undefined,
+    )) as GetAnnotationsResult;
+    expect(result).toEqual({ annotations: [] });
+  });
 });

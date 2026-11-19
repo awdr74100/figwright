@@ -444,7 +444,8 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   carry `annotations` (`{ label, labelMarkdown, categoryId, properties }[]`): explicit developer
   instructions pinned in Dev Mode ("use the brand token here", "only visible on hover", "this is the
   live region"). Treat them as authoritative — they outrank anything you'd infer from geometry or a
-  screenshot, and `properties` names the fields the note is about (e.g. `["fills"]`). Reflect the
+  screenshot, and `properties` names the fields the note is about (e.g. `["fills"]`). A `categoryId`
+  resolves to its label (`Accessibility`, `Interaction`, …) in `get_annotations` `categories`. Reflect the
   intent in the code (the right token, the right state, the right ARIA) and surface anything you
   can't express as a TODO rather than dropping it.
 - **Absolute positioning & constraints — a node placed by coordinates, not flow.** Two

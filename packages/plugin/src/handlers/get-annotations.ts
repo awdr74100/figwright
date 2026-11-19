@@ -36,5 +36,17 @@ export const createGetAnnotationsHandler =
     }
 
     const result: GetAnnotationsResult = { annotations: out };
+    // Every category, not only the ones cited: a write names a category by id, and a file holds a
+    // handful. One call (under a millisecond, measured). FigJam has no annotations API at all, and a
+    // read there must keep answering as it did, so the table is left out rather than failing it.
+    const api = (figmaCtx as { annotations?: AnnotationsAPI }).annotations;
+    if (api !== undefined) {
+      result.categories = (await api.getAnnotationCategoriesAsync()).map(c => ({
+        id: c.id,
+        label: c.label,
+        color: c.color,
+        isPreset: c.isPreset,
+      }));
+    }
     return result;
   };

@@ -1092,6 +1092,18 @@
       "scopes",
       "variableId"
     ],
+    "set_annotations": [
+      "annotations",
+      "annotations[].categoryId",
+      "annotations[].label",
+      "annotations[].labelMarkdown",
+      "annotations[].properties",
+      "nodeId",
+      "requestId"
+    ],
+    "create_annotation_category": ["color", "label", "requestId"],
+    "update_annotation_category": ["categoryId", "color", "label", "requestId"],
+    "delete_annotation_category": ["categoryId", "requestId"],
     "set_variable_code_syntax": [
       "codeSyntax",
       "codeSyntax.ANDROID",

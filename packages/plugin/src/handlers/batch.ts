@@ -1,5 +1,6 @@
 import { type BatchResult, batchRefOrderError, type FlowStartingPoint } from '@figwright/shared';
 
+import { isAnnotatable, restoreAnnotations } from '../annotations.js';
 import type { SandboxHandlers, SandboxToolHandler } from '../dispatcher.js';
 import {
   type DocumentationSnapshot,
@@ -1707,6 +1708,70 @@ const updateVariableCollectionInverse: BatchInverse = {
   },
 };
 
+// ── Annotations ──────────────────────────────────────────────────────────────
+
+/**
+ * Undo for set_annotations: the node's annotations as they were, written back by the side each was
+ * written with (annotations.ts) — writing every one back as markdown, or every one as plain text,
+ * changes some (measured). A list that still differs is reported, not claimed restored.
+ */
+const annotationsInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'nodeId', 'set_annotations');
+    const node = await figmaCtx.getNodeByIdAsync(id);
+    // A node that is missing or keeps no annotations is left to the op, whose refusal says which —
+    // nothing can have been written to it, so there is nothing to undo.
+    if (node === null || !isAnnotatable(node)) return null;
+    return { id, annotations: JSON.parse(JSON.stringify(node.annotations)) as Annotation[] };
+  },
+  async undo(figmaCtx, _params, captured) {
+    if (captured === null) return undefined;
+    const was = captured as { id: string; annotations: Annotation[] };
+    const node = await figmaCtx.getNodeByIdAsync(was.id);
+    if (node === null || !isAnnotatable(node)) return undefined;
+    const off = restoreAnnotations(node, was.annotations);
+    return off === undefined ? undefined : `node ${was.id}: ${off}`;
+  },
+};
+
+interface CategoryState {
+  id: string;
+  label: string;
+  color: AnnotationCategoryColor;
+  isPreset: boolean;
+}
+
+/**
+ * Undo for update_annotation_category: its label and colour back. A preset that the op renamed or
+ * recoloured stays a custom category — Figma has nothing that makes one a preset again — and that
+ * is reported.
+ */
+const annotationCategoryInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'categoryId', 'update_annotation_category');
+    const category = await figmaCtx.annotations.getAnnotationCategoryByIdAsync(id);
+    if (category === null) {
+      throw new Error(`batch/update_annotation_category: annotation category ${id} not found`);
+    }
+    return {
+      id,
+      label: category.label,
+      color: category.color,
+      isPreset: category.isPreset,
+    } satisfies CategoryState;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const was = captured as CategoryState;
+    const category = await figmaCtx.annotations.getAnnotationCategoryByIdAsync(was.id);
+    if (category === null) return undefined;
+    if (category.color !== was.color) category.setColor(was.color);
+    if (category.label !== was.label) category.setLabel(was.label);
+    return was.isPreset && !category.isPreset
+      ? `annotation category ${was.id} "${was.label}" is no longer one of Figma's presets, and nothing makes it one again`
+      : undefined;
+  },
+};
+
 // ── Component documentation ──────────────────────────────────────────────────
 
 interface DocumentationState extends DocumentationSnapshot {
@@ -2266,6 +2331,12 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_variable_code_syntax: codeSyntaxInverse,
   rename_variable: renameVariableInverse,
   update_variable: updateVariableInverse,
+  // Annotations.
+  set_annotations: annotationsInverse,
+  create_annotation_category: createdInverse('categoryId', async (figmaCtx, id) => {
+    (await figmaCtx.annotations.getAnnotationCategoryByIdAsync(id))?.remove();
+  }),
+  update_annotation_category: annotationCategoryInverse,
   update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
   set_component_documentation: componentDocumentationInverse,
@@ -2301,6 +2372,8 @@ export const NON_BATCHABLE: Readonly<Record<string, string>> = {
     'a deleted variable cannot be brought back under its id, and its bindings revert',
   delete_variable_mode:
     'adding a mode back mints a new mode id, so the value every variable held for the removed one does not return',
+  delete_annotation_category:
+    'a deleted category cannot be brought back under its id, and the annotations that used it keep the old one',
   delete_variable_collection:
     'a deleted collection cannot be brought back under its id, nor its variables and modes',
   delete_component_property:
