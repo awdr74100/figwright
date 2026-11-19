@@ -19,7 +19,13 @@ export const getStylesTool: ToolSpec = {
     'not all shared styles used by imported instances. To use a published style in another file, ' +
     'pass its key to import_style in that target file and use the returned styleId. A result led ' +
     'by colorProfile: "DISPLAY_P3" comes from a Display P3 file: its colours are P3, so emit one ' +
-    'as color(display-p3 r g b), not the plain hex.',
-  inputSchema: z.object({}),
+    'as color(display-p3 r g b), not the plain hex. With documentation: true each style also ' +
+    'carries documentationLinks when it has a link.',
+  inputSchema: z.object({
+    documentation: z
+      .boolean()
+      .optional()
+      .describe("Also return each style's documentation link (only where it has one)"),
+  }),
   kind: 'read',
 };

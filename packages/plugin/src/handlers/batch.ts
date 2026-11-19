@@ -1459,10 +1459,12 @@ interface StyleState {
 }
 
 /**
- * Update_paint_style / update_effect_style: name, description and the value array (bindings ride on
- * its items, measured to round-trip). A style has no `descriptionMarkdown` at runtime, despite the
- * typings — measured — so `description` is the whole of it. What is recorded and how it goes back
- * is style-snapshot.ts's, shared with the update handlers' own rollback.
+ * Update_paint_style / update_effect_style / update_grid_style: name, description, documentation
+ * link and the value array (bindings ride on its items, and a grid's colour on its grid, both
+ * measured to round-trip; a link written back from a snapshot lands as it was, measured). A style
+ * has no `descriptionMarkdown` at runtime, despite the typings — measured — so `description` is the
+ * whole of it. What is recorded and how it goes back is style-snapshot.ts's, shared with the update
+ * handlers' own rollback.
  */
 const styleInverse = (tool: string, type: StyleType, valueProp: string): BatchInverse => ({
   async capture(figmaCtx, params) {
@@ -1472,7 +1474,7 @@ const styleInverse = (tool: string, type: StyleType, valueProp: string): BatchIn
       throw new Error(`batch/${tool}: ${type.toLowerCase()} style ${id} not found`);
     const state: StyleState = {
       id,
-      values: snapshotStyle(style, ['name', 'description', valueProp]),
+      values: snapshotStyle(style, ['name', 'description', 'documentationLinks', valueProp]),
     };
     return state;
   },
@@ -2212,6 +2214,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   // Styles.
   update_paint_style: styleInverse('update_paint_style', 'PAINT', 'paints'),
   update_effect_style: styleInverse('update_effect_style', 'EFFECT', 'effects'),
+  update_grid_style: styleInverse('update_grid_style', 'GRID', 'layoutGrids'),
   update_text_style: textStyleInverse,
   // Variables.
   set_variable_value: variableValueInverse,

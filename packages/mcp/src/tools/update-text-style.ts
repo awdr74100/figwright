@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 import { textStyleBindingsSchema } from './binding-schema.js';
+import {
+  DOCUMENTATION_LINKS_DESCRIPTION,
+  documentationLinksSchema,
+} from './documentation-schema.js';
 import { fontNameSchema } from './font-name-schema.js';
 import type { ToolSpec } from './spec.js';
 
@@ -13,7 +17,9 @@ export const updateTextStyleTool: ToolSpec = {
     'lineHeight / letterSpacing / textWrapStyle / description may be omitted to leave unchanged. A new font is ' +
     'loaded before assignment. lineHeight unit is AUTO / PIXELS / PERCENT (AUTO omits value); ' +
     'letterSpacing unit is PIXELS / PERCENT. Use this to keep a shared style in sync with code ' +
-    'instead of creating a duplicate. Returns { ok, styleId, name }.',
+    'instead of creating a duplicate. documentationLinks may be given too ([] removes the link). ' +
+    'A call that fails part-way leaves the style as it was. Returns { ok, styleId, name, ' +
+    'adjusted? } — adjusted says when the link was stored differently from what was sent.',
   inputSchema: z.object({
     styleId: z.string().describe('Text style id to update'),
     name: z.string().optional(),
@@ -31,6 +37,9 @@ export const updateTextStyleTool: ToolSpec = {
       ),
     boundVariables: textStyleBindingsSchema.optional(),
     description: z.string().optional(),
+    documentationLinks: documentationLinksSchema
+      .optional()
+      .describe(DOCUMENTATION_LINKS_DESCRIPTION),
   }),
   kind: 'write',
 };

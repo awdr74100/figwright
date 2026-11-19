@@ -15,6 +15,18 @@ const fakeFigma = (style: unknown, variables: Record<string, unknown> = {}): typ
     },
   }) as unknown as typeof figma;
 
+/** A style whose link setter stores something other than what it was sent, as Figma might. */
+const normalizingLinks = (target: Record<string, unknown>): void => {
+  let stored: { uri: string }[] = [];
+  Object.defineProperty(target, 'documentationLinks', {
+    enumerable: true,
+    get: () => stored,
+    set: (v: { uri: string }[]) => {
+      stored = v.map(l => ({ uri: l.uri.toLowerCase() }));
+    },
+  });
+};
+
 describe('update_paint_style handler', () => {
   it('updates name + paints of an existing paint style', async () => {
     const style = { id: 'S:0', type: 'PAINT', name: 'old', paints: [] as unknown, description: '' };
@@ -241,5 +253,91 @@ describe('update_paint_style handler', () => {
     ).rejects.toThrow(
       'in set_paints: refused — and the style could not be put back exactly: name still differs',
     );
+  });
+
+  it('sets, replaces and clears the documentation link', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'PAINT',
+      name: 'n',
+      paints: [],
+      description: '',
+      documentationLinks: [],
+    };
+    await createUpdatePaintStyleHandler(fakeFigma(style))({
+      styleId: 'S:0',
+      documentationLinks: [{ uri: 'https://a.com' }],
+    });
+    expect(style.documentationLinks).toEqual([{ uri: 'https://a.com' }]);
+    await createUpdatePaintStyleHandler(fakeFigma(style))({
+      styleId: 'S:0',
+      documentationLinks: [],
+    });
+    expect(style.documentationLinks).toEqual([]);
+  });
+
+  it('leaves the style as it was when Figma refuses the link', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'PAINT',
+      name: 'n',
+      paints: ['old'],
+      description: 'd',
+    };
+    Object.defineProperty(style, 'documentationLinks', {
+      get: () => [],
+      set: () => {
+        throw new Error('in set_documentationLinks: Documentation link must be a URL');
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        name: 'renamed',
+        description: 'x',
+        documentationLinks: [{ uri: 'www.a.com' }],
+      }),
+    ).rejects.toThrow('Documentation link must be a URL');
+    expect([style.name, style.description]).toEqual(['n', 'd']);
+  });
+
+  it('puts the link back when a later write is refused', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'PAINT',
+      name: 'n',
+      description: 'd',
+      documentationLinks: [{ uri: 'https://old.com' }],
+    };
+    Object.defineProperty(style, 'paints', {
+      enumerable: true,
+      get: () => [],
+      set: () => {
+        throw new Error('in set_paints: refused');
+      },
+    });
+    await expect(
+      createUpdatePaintStyleHandler(fakeFigma(style))({
+        styleId: 'S:0',
+        documentationLinks: [{ uri: 'https://new.com' }],
+        paints: [],
+      }),
+    ).rejects.toThrow(/^in set_paints: refused$/);
+    expect(style.documentationLinks).toEqual([{ uri: 'https://old.com' }]);
+  });
+
+  it('says in adjusted when the link was stored differently from what was sent', async () => {
+    const style: Record<string, unknown> = { id: 'S:0', type: 'PAINT', name: 'n' };
+    normalizingLinks(style);
+    const result = await createUpdatePaintStyleHandler(fakeFigma(style))({
+      styleId: 'S:0',
+      documentationLinks: [{ uri: 'HTTPS://A.COM' }],
+    });
+    expect(result).toEqual({
+      ok: true,
+      styleId: 'S:0',
+      name: 'n',
+      adjusted: 'documentationLinks were stored as ["https://a.com"]',
+    });
   });
 });

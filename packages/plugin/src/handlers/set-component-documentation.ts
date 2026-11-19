@@ -4,10 +4,12 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 import {
   type DescriptionRequest,
   hasFormatting,
+  parseDocumentationLinks,
   quoteForMessage,
   restoreDocumentation,
   snapshotDocumentation,
   writeDescription,
+  writeDocumentationLinks,
 } from '../documentation.js';
 
 const TOOL = 'set_component_documentation';
@@ -90,23 +92,7 @@ const parse = (params: unknown): Request => {
   if (p.descriptionMarkdown !== undefined && typeof p.descriptionMarkdown !== 'string') {
     throw new TypeError(`${TOOL}: descriptionMarkdown must be a string`);
   }
-  let links: DocumentationLinkInfo[] | undefined;
-  if (p.documentationLinks !== undefined) {
-    if (!Array.isArray(p.documentationLinks)) {
-      throw new TypeError(`${TOOL}: documentationLinks must be an array of { uri }`);
-    }
-    // Figma's limit, checked here so a second link is refused before anything is written.
-    if (p.documentationLinks.length > 1) {
-      throw new TypeError(`${TOOL}: documentationLinks holds at most one link (Figma's limit)`);
-    }
-    links = p.documentationLinks.map((link, i) => {
-      const uri = (link as { uri?: unknown } | null)?.uri;
-      if (typeof uri !== 'string') {
-        throw new TypeError(`${TOOL}: documentationLinks[${i}].uri must be a string`);
-      }
-      return { uri };
-    });
-  }
+  const links = parseDocumentationLinks(p.documentationLinks, TOOL);
   if (p.description === undefined && p.descriptionMarkdown === undefined && links === undefined) {
     throw new TypeError(
       `${TOOL}: supply at least one of description / descriptionMarkdown / documentationLinks`,
@@ -156,12 +142,8 @@ export const createSetComponentDocumentationHandler =
 
     try {
       if (request.links !== undefined) {
-        node.documentationLinks = request.links.map(link => ({ uri: link.uri }));
-        const stored = node.documentationLinks.map(link => link.uri);
-        const sent = request.links.map(link => link.uri);
-        if (stored.join('\n') !== sent.join('\n')) {
-          adjusted.push(`documentationLinks were stored as ${JSON.stringify(stored)}`);
-        }
+        const note = writeDocumentationLinks(node, request.links);
+        if (note !== undefined) adjusted.push(note);
       }
 
       const { description, markdown } = request.description;

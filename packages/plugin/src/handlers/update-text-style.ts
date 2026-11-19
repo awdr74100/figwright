@@ -1,6 +1,7 @@
 import type { SerializedLetterSpacing, SerializedLineHeight, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { parseDocumentationLinks, writeDocumentationLinks } from '../documentation.js';
 import {
   applyTextStyleBindings,
   resolveTextStyleBindings,
@@ -27,10 +28,14 @@ export const createUpdateTextStyleHandler =
       textWrapStyle?: unknown;
       boundVariables?: unknown;
       description?: unknown;
+      documentationLinks?: unknown;
     };
     if (typeof p.styleId !== 'string') {
       throw new TypeError('update_text_style: styleId must be a string');
     }
+
+    // Checked before anything is looked up, so a malformed link is named as the argument error it is.
+    const links = parseDocumentationLinks(p.documentationLinks, 'update_text_style');
 
     const style = await figmaCtx.getStyleByIdAsync(p.styleId);
     if (style === null || style.type !== 'TEXT') {
@@ -87,6 +92,7 @@ export const createUpdateTextStyleHandler =
       ...(typeof p.textWrapStyle === 'string' ? ['textWrapStyle'] : []),
     ];
     const labels = [
+      ...(links !== undefined ? ['documentationLinks'] : []),
       ...(typeof p.name === 'string' ? ['name'] : []),
       ...(typeof p.description === 'string' ? ['description'] : []),
     ];
@@ -94,8 +100,15 @@ export const createUpdateTextStyleHandler =
       bindings !== undefined || fontName !== undefined
         ? snapshotTextStyle(ts)
         : snapshotTextStyle(ts, [...labels, ...literals], literals.length > 0);
+    const adjusted: string[] = [];
     await writeStyleAtomically(
       async () => {
+        // Written first, so a link Figma refuses ("Documentation link must be a URL") fails the call
+        // before anything else is written.
+        if (links !== undefined) {
+          const note = writeDocumentationLinks(ts, links);
+          if (note !== undefined) adjusted.push(note);
+        }
         if (typeof p.name === 'string') ts.name = p.name;
         if (fontName !== undefined) {
           // Declared as `FontName` though the API accepts a `FontNameInput` — see create_text_style.
@@ -123,5 +136,6 @@ export const createUpdateTextStyleHandler =
     );
 
     const result: StyleResult = { ok: true, styleId: ts.id, name: ts.name };
+    if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
     return result;
   };

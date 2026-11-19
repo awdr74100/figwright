@@ -22,6 +22,18 @@ const fakeFigma = (
   return { figma: figmaCtx, loaded, bound };
 };
 
+/** A style whose link setter stores something other than what it was sent, as Figma might. */
+const normalizingLinks = (target: Record<string, unknown>): void => {
+  let stored: { uri: string }[] = [];
+  Object.defineProperty(target, 'documentationLinks', {
+    enumerable: true,
+    get: () => stored,
+    set: (v: { uri: string }[]) => {
+      stored = v.map(l => ({ uri: l.uri.toLowerCase() }));
+    },
+  });
+};
+
 describe('update_text_style handler', () => {
   it("assigns a variable font's axis values onto the style", async () => {
     const style: Record<string, unknown> = {
@@ -460,5 +472,114 @@ describe('update_text_style handler', () => {
       }),
     ).rejects.toThrow(/^in set_lineHeight: refused$/);
     expect(boundVariables.fontSize).toEqual({ type: 'VARIABLE_ALIAS', id: 'V:1' });
+  });
+
+  // A link is not typography: a call that changes only it (and labels) loads no font, so a style
+  // whose font cannot be loaded can still be given one.
+  it('sets the documentation link without loading the font', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Not Installed', style: 'Regular' },
+      documentationLinks: [],
+    };
+    const { figma: f, loaded } = fakeFigma(style);
+    await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      name: 'Heading',
+      documentationLinks: [{ uri: 'https://sb.example.com/heading' }],
+    });
+    expect(style.documentationLinks).toEqual([{ uri: 'https://sb.example.com/heading' }]);
+    expect(loaded).toEqual([]);
+  });
+
+  it('puts the link back when a later write fails', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+      documentationLinks: [{ uri: 'https://old.com' }],
+    };
+    Object.defineProperty(style, 'fontSize', {
+      enumerable: true,
+      get: () => 12,
+      set: () => {
+        throw new Error('in set_fontSize: refused');
+      },
+    });
+    const { figma: f } = fakeFigma(style);
+    await expect(
+      createUpdateTextStyleHandler(f)({
+        styleId: 'S:0',
+        fontSize: 30,
+        documentationLinks: [{ uri: 'https://new.com' }],
+      }),
+    ).rejects.toThrow(/^in set_fontSize: refused$/);
+    expect(style.documentationLinks).toEqual([{ uri: 'https://old.com' }]);
+  });
+
+  it('says in adjusted when the link was stored differently from what was sent', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+    };
+    normalizingLinks(style);
+    const { figma: f } = fakeFigma(style);
+    const result = await createUpdateTextStyleHandler(f)({
+      styleId: 'S:0',
+      documentationLinks: [{ uri: 'HTTPS://A.COM' }],
+    });
+    expect(result).toEqual({
+      ok: true,
+      styleId: 'S:0',
+      name: 'Body',
+      adjusted: 'documentationLinks were stored as ["https://a.com"]',
+    });
+  });
+
+  // Putting a link back is not typography either: a refused label write after the link loads no
+  // font on the way back, so a style whose font is not installed is still restored whole.
+  it('puts a link back without loading the font', async () => {
+    const style: Record<string, unknown> = {
+      id: 'S:0',
+      type: 'TEXT',
+      fontName: { family: 'Not Installed', style: 'Regular' },
+      documentationLinks: [{ uri: 'https://old.com' }],
+    };
+    Object.defineProperty(style, 'name', {
+      enumerable: true,
+      get: () => 'Body',
+      set: () => {
+        throw new Error('in set_name: refused');
+      },
+    });
+    const { figma: f, loaded } = fakeFigma(style);
+    await expect(
+      createUpdateTextStyleHandler(f)({
+        styleId: 'S:0',
+        name: 'Heading',
+        documentationLinks: [{ uri: 'https://new.com' }],
+      }),
+    ).rejects.toThrow(/^in set_name: refused$/);
+    expect(style.documentationLinks).toEqual([{ uri: 'https://old.com' }]);
+    expect(loaded).toEqual([]);
+  });
+
+  it('names a malformed link before it loads a font or looks the style up', async () => {
+    const { figma: f, loaded } = fakeFigma(null);
+    await expect(
+      createUpdateTextStyleHandler(f)({
+        styleId: 'S:0',
+        fontName: { family: 'Not Installed', style: 'Regular' },
+        documentationLinks: [{ uri: 'https://a.com' }, { uri: 'https://b.com' }],
+      }),
+    ).rejects.toThrow(
+      "update_text_style: documentationLinks holds at most one link (Figma's limit)",
+    );
+    expect(loaded).toEqual([]);
   });
 });

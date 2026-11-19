@@ -1,8 +1,12 @@
 import type {
+  DocumentationLinkInfo,
   GetStylesResult,
   ResolvedToken,
   SerializedBindings,
+  SerializedEffectStyle,
+  SerializedGridStyle,
   SerializedLineHeight,
+  SerializedPaintStyle,
   SerializedTextStyle,
 } from '@figwright/shared';
 
@@ -93,7 +97,23 @@ const STYLE_NAMES_LOST_HINT = namesLostHint('variable');
 
 export const createGetStylesHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
-  async () => {
+  async params => {
+    // Opt-in, as on get_local_components / get_component_api: a listing that did not ask for the
+    // links makes exactly the reads it made before and reads exactly as it did. Asking costs a read
+    // per style — measured at 34 → 43 ms for 200 styles, about a quarter more.
+    const documentation =
+      (params as { documentation?: unknown } | undefined)?.documentation === true;
+    /** Adds the style's link to its entry, when asked for and when it has one. */
+    const addLinks = (
+      entry: { documentationLinks?: DocumentationLinkInfo[] | undefined },
+      s: BaseStyle,
+    ): void => {
+      if (!documentation) return;
+      const all = (s as { documentationLinks?: unknown }).documentationLinks;
+      if (Array.isArray(all) && all.length > 0) {
+        entry.documentationLinks = (all as DocumentationLink[]).map(l => ({ uri: l.uri }));
+      }
+    };
     const [paintStyles, textStyles, effectStyles, gridStyles] = await Promise.all([
       figmaCtx.getLocalPaintStylesAsync(),
       figmaCtx.getLocalTextStylesAsync(),
@@ -103,16 +123,20 @@ export const createGetStylesHandler =
 
     const result: GetStylesResult = {
       ...displayP3Marker(figmaCtx),
-      paints: paintStyles.map(s => ({
-        id: s.id,
-        name: s.name,
-        key: s.key,
-        description: s.description,
-        // A paint style belongs to no node, so it has no aspect ratio and no derivable gradient
-        // angle — hence the explicit null. Called through an arrow, never point-free: map would
-        // otherwise pass the array index as the second argument.
-        paints: s.paints.map(p => serializePaint(p, null)),
-      })),
+      paints: paintStyles.map(s => {
+        const entry: SerializedPaintStyle = {
+          id: s.id,
+          name: s.name,
+          key: s.key,
+          description: s.description,
+          // A paint style belongs to no node, so it has no aspect ratio and no derivable gradient
+          // angle — hence the explicit null. Called through an arrow, never point-free: map would
+          // otherwise pass the array index as the second argument.
+          paints: s.paints.map(p => serializePaint(p, null)),
+        };
+        addLinks(entry, s);
+        return entry;
+      }),
       texts: textStyles.map(s => {
         const style: SerializedTextStyle = {
           id: s.id,
@@ -129,23 +153,32 @@ export const createGetStylesHandler =
         // unlike a paint / effect / grid style, where they sit on the individual object.
         const bound = collectBindings(s.boundVariables);
         if (bound !== undefined) style.boundVariables = bound;
+        addLinks(style, s);
         return style;
       }),
-      effects: effectStyles.map(s => ({
-        id: s.id,
-        name: s.name,
-        key: s.key,
-        description: s.description,
-        // An effect style belongs to no node, so a progressive blur in it has no ready-made CSS.
-        effects: s.effects.map(e => serializeEffect(e, null)),
-      })),
-      grids: gridStyles.map(s => ({
-        id: s.id,
-        name: s.name,
-        key: s.key,
-        description: s.description,
-        grids: s.layoutGrids.map(serializeLayoutGrid),
-      })),
+      effects: effectStyles.map(s => {
+        const entry: SerializedEffectStyle = {
+          id: s.id,
+          name: s.name,
+          key: s.key,
+          description: s.description,
+          // An effect style belongs to no node, so a progressive blur in it has no ready-made CSS.
+          effects: s.effects.map(e => serializeEffect(e, null)),
+        };
+        addLinks(entry, s);
+        return entry;
+      }),
+      grids: gridStyles.map(s => {
+        const entry: SerializedGridStyle = {
+          id: s.id,
+          name: s.name,
+          key: s.key,
+          description: s.description,
+          grids: s.layoutGrids.map(serializeLayoutGrid),
+        };
+        addLinks(entry, s);
+        return entry;
+      }),
     };
     // Ids are only worth resolving once the styles are serialized — that's what says which
     // variables this document's styles actually reference. The table goes FIRST so a reader meets

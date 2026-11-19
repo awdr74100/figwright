@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { DocumentationLinkInfoSchema } from './components.js';
 import { ResolvedTokenSchema } from './design-context.js';
 // SerializedEffect / SerializedLayoutGrid / SerializedLineHeight / SerializedLetterSpacing now live
 // in serialized-node.ts (shared by node + style serialization) and reach consumers via the barrel.
@@ -19,6 +20,11 @@ const styleBase = {
   name: z.string(),
   key: z.string(),
   description: z.string(),
+  /**
+   * The style's documentation link (Figma keeps at most one) — with get_styles documentation: true,
+   * and only when the style has one.
+   */
+  documentationLinks: z.array(DocumentationLinkInfoSchema).optional(),
 } as const;
 
 export const SerializedPaintStyleSchema = z.object({

@@ -89,10 +89,14 @@ an orphan collection behind.
   the closest named instance. `get_fonts` reports which axes a family accepts under `variationAxes`.
 - Effect / grid styles have their own create tools.
 - **Editing an existing style** (the design system already has it, and code changed its value): use
-  `update_paint_style` / `update_text_style` / `update_effect_style` (`styleId` + only the fields that
-  changed; omitted fields stay as-is) — **don't** `create_*` a second style with the same name, which
-  leaves a duplicate. Re-syncing a style ramp from code is the common case; `get_styles` gives you the
-  `styleId`s to target.
+  `update_paint_style` / `update_text_style` / `update_effect_style` / `update_grid_style`
+  (`styleId` + only the fields that changed; omitted fields stay as-is) — **don't** `create_*` a
+  second style with the same name, which leaves a duplicate, and don't delete and recreate one: a new
+  style is a new id, and every node that used the old one loses it. Re-syncing a style ramp from code
+  is the common case; `get_styles` gives you the `styleId`s to target.
+- **Documenting a style**: every style `create_*` / `update_*` takes `description` (plain text — a
+  style has no rich-text description) and `documentationLinks` (at most one `{ uri }`, scheme
+  included; `[]` removes it). `get_styles` returns the links only with `documentation: true`.
 - **A value the style binds to a variable is a reference, not a literal.** `get_styles` reports those
   bindings as `boundVariables` (`{ field: variableId }`) on the paint / effect / layout grid that
   owns them — and on the text style itself for typography — with `variables` naming each id. Paints

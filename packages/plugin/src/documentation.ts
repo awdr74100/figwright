@@ -153,3 +153,47 @@ export const restoreDocumentation = (
 /** A string for a message: quoted, and cut short past `max` characters. */
 export const quoteForMessage = (text: string, max = 80): string =>
   JSON.stringify(text.length > max ? `${text.slice(0, max)}…` : text);
+
+/**
+ * A write's `documentationLinks` argument, checked before anything is written: an array of at most
+ * one `{ uri }` (Figma's limit — more is refused, measured), or undefined when the call leaves the
+ * link alone. Whether a uri is a URL is Figma's to say — any scheme passes, while one with no
+ * scheme, a leading space or nothing at all is refused (measured) — and its refusal ("Documentation
+ * link must be a URL") is passed on.
+ */
+export const parseDocumentationLinks = (
+  raw: unknown,
+  tool: string,
+): DocumentationLinkInfo[] | undefined => {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new TypeError(`${tool}: documentationLinks must be an array of { uri }`);
+  }
+  if (raw.length > 1) {
+    throw new TypeError(`${tool}: documentationLinks holds at most one link (Figma's limit)`);
+  }
+  return raw.map((link, i) => {
+    const uri = (link as { uri?: unknown } | null)?.uri;
+    if (typeof uri !== 'string') {
+      throw new TypeError(`${tool}: documentationLinks[${i}].uri must be a string`);
+    }
+    return { uri };
+  });
+};
+
+/**
+ * Write a node's or style's documentation link. Returns a note when Figma stored something other
+ * than what was sent, for the caller's `adjusted` (it was measured to keep a link verbatim — case,
+ * spaces and non-ASCII included — so this is the check, not an expected path).
+ */
+export const writeDocumentationLinks = (
+  target: { documentationLinks: ReadonlyArray<DocumentationLink> },
+  links: readonly DocumentationLinkInfo[],
+): string | undefined => {
+  target.documentationLinks = links.map(link => ({ uri: link.uri }));
+  const stored = target.documentationLinks.map(link => link.uri);
+  const sent = links.map(link => link.uri);
+  return stored.join('\n') === sent.join('\n')
+    ? undefined
+    : `documentationLinks were stored as ${JSON.stringify(stored)}`;
+};

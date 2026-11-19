@@ -120,6 +120,7 @@ import { createCreateTextPathHandler, createSetTextPathHandler } from './text-pa
 import { createUngroupNodesHandler } from './ungroup-nodes.js';
 import { createUpdateEffectStyleHandler } from './update-effect-style.js';
 import { createUpdateFlowsHandler } from './update-flows.js';
+import { createUpdateGridStyleHandler } from './update-grid-style.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
 import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
@@ -194,6 +195,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     update_paint_style: createUpdatePaintStyleHandler(figmaCtx),
     update_text_style: createUpdateTextStyleHandler(figmaCtx),
     update_effect_style: createUpdateEffectStyleHandler(figmaCtx),
+    update_grid_style: createUpdateGridStyleHandler(figmaCtx),
     apply_style_to_node: createApplyStyleToNodeHandler(figmaCtx),
     import_style: createImportStyleHandler(figmaCtx),
     delete_style: createDeleteStyleHandler(figmaCtx),

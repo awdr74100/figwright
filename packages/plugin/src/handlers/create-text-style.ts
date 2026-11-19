@@ -1,6 +1,7 @@
 import type { SerializedLetterSpacing, SerializedLineHeight, StyleResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { parseDocumentationLinks, writeDocumentationLinks } from '../documentation.js';
 import {
   applyTextStyleBindings,
   resolveTextStyleBindings,
@@ -21,8 +22,12 @@ export const createCreateTextStyleHandler =
       textWrapStyle?: unknown;
       boundVariables?: unknown;
       description?: unknown;
+      documentationLinks?: unknown;
     };
     if (typeof p.name !== 'string') throw new TypeError('create_text_style: name must be a string');
+    // Checked before anything is resolved or created, so a malformed link is named as the argument
+    // error it is.
+    const links = parseDocumentationLinks(p.documentationLinks, 'create_text_style');
 
     // Everything that can fail on caller input happens BEFORE anything is created. Creating first
     // would leave an orphan style behind in the document's style panel (and in whatever it
@@ -40,6 +45,8 @@ export const createCreateTextStyleHandler =
       fontName = toFigmaFontName(p.fontName as Record<string, unknown>);
       await figmaCtx.loadFontAsync(fontName);
     }
+
+    const adjusted: string[] = [];
 
     const style = figmaCtx.createTextStyle();
     // What is left after both hoists: a binding's target FACE is only computable once the style's
@@ -70,8 +77,13 @@ export const createCreateTextStyleHandler =
       if (bindings !== undefined && table !== undefined) {
         await applyTextStyleBindings(figmaCtx, style, bindings, table);
       }
+      if (links !== undefined) {
+        const note = writeDocumentationLinks(style, links);
+        if (note !== undefined) adjusted.push(note);
+      }
     });
 
     const result: StyleResult = { ok: true, styleId: style.id, name: style.name };
+    if (adjusted.length > 0) result.adjusted = adjusted.join('; ');
     return result;
   };
