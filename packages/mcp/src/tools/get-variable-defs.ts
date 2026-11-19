@@ -18,7 +18,14 @@ export const getVariableDefsTool: ToolSpec = {
     'not all shared library references. To use a published variable in another file, pass its key ' +
     'to import_variable in that target file and use the returned variableId. A result led by ' +
     'colorProfile: "DISPLAY_P3" comes from a Display P3 file: its COLOR values are P3, so emit ' +
-    'one as color(display-p3 r g b), not the plain hex.',
-  inputSchema: z.object({}),
+    'one as color(display-p3 r g b), not the plain hex. A collection left out of the published ' +
+    'library carries hiddenFromPublishing: true. With documentation: true each variable also ' +
+    'carries its description and hiddenFromPublishing: true, where set.',
+  inputSchema: z.object({
+    documentation: z
+      .boolean()
+      .optional()
+      .describe("Also return each variable's description and publishing flag (only where set)"),
+  }),
   kind: 'read',
 };

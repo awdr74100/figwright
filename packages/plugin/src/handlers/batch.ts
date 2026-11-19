@@ -60,6 +60,13 @@ import {
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
 import { renameCollection } from './update-variable-collection.js';
+import {
+  parseVariableFields,
+  snapshotVariableFields,
+  type VariableFields,
+  variableFieldsResidue,
+  writeVariableFields,
+} from './variable-fields.js';
 
 /**
  * Atomic batch: apply several invertible write ops as a unit. Two phases —
@@ -1627,10 +1634,38 @@ const renameVariableInverse: BatchInverse = {
   },
 };
 
+interface VariableFieldsState {
+  id: string;
+  before: VariableFields;
+}
+
+/**
+ * Undo for update_variable: the fields the op names, as they were — the handler's own rule
+ * (variable-fields.ts), so a rollback and the handler's own put back the same thing.
+ */
+const updateVariableInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const id = stringParam(params, 'variableId', 'update_variable');
+    const variable = await figmaCtx.variables.getVariableByIdAsync(id);
+    if (variable === null) throw new Error(`batch/update_variable: variable ${id} not found`);
+    const fields = parseVariableFields(params, 'batch/update_variable');
+    return { id, before: snapshotVariableFields(variable, fields) } satisfies VariableFieldsState;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const was = captured as VariableFieldsState;
+    const variable = await figmaCtx.variables.getVariableByIdAsync(was.id);
+    if (variable === null) return undefined;
+    writeVariableFields(variable, was.before);
+    const left = variableFieldsResidue(variable, was.before);
+    return left.length === 0 ? undefined : `variable ${was.id}: ${left.join(', ')} still differ`;
+  },
+};
+
 interface CollectionNames {
   id: string;
   name: string;
   modes: { modeId: string; name: string }[];
+  hiddenFromPublishing: boolean;
 }
 
 /**
@@ -1652,6 +1687,7 @@ const updateVariableCollectionInverse: BatchInverse = {
       id,
       name: collection.name,
       modes: collection.modes.map(mode => ({ modeId: mode.modeId, name: mode.name })),
+      hiddenFromPublishing: collection.hiddenFromPublishing,
     } satisfies CollectionNames;
   },
   async undo(figmaCtx, _params, captured) {
@@ -1663,6 +1699,9 @@ const updateVariableCollectionInverse: BatchInverse = {
       if (collection.modes.some(m => m.modeId === mode.modeId && m.name !== mode.name)) {
         collection.renameMode(mode.modeId, mode.name);
       }
+    }
+    if (collection.hiddenFromPublishing !== was.hiddenFromPublishing) {
+      collection.hiddenFromPublishing = was.hiddenFromPublishing;
     }
     return undefined;
   },
@@ -2226,6 +2265,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_variable_value: variableValueInverse,
   set_variable_code_syntax: codeSyntaxInverse,
   rename_variable: renameVariableInverse,
+  update_variable: updateVariableInverse,
   update_variable_collection: updateVariableCollectionInverse,
   // Component properties.
   set_component_documentation: componentDocumentationInverse,

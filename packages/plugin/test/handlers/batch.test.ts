@@ -53,6 +53,7 @@ import { createUpdateGridStyleHandler } from '../../src/handlers/update-grid-sty
 import { createUpdatePaintStyleHandler } from '../../src/handlers/update-paint-style.js';
 import { createUpdateTextStyleHandler } from '../../src/handlers/update-text-style.js';
 import { createUpdateVariableCollectionHandler } from '../../src/handlers/update-variable-collection.js';
+import { createUpdateVariableHandler } from '../../src/handlers/update-variable.js';
 import {
   createCreateVectorHandler,
   createOutlineStrokeHandler,
@@ -3610,6 +3611,62 @@ describe('style documentation links in a batch', () => {
     ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
     expect(text.fontSize).toBe(18);
     expect(loaded.length).toBeGreaterThan(0);
+  });
+
+  it('rolls back update_variable and a collection publishing flag', async () => {
+    const { figmaCtx, store, variables, collections } = makeWide();
+    failingFrame(store);
+    const collection: Record<string, unknown> = {
+      id: 'C:1',
+      name: 'Colour',
+      modes: [{ modeId: 'm1', name: 'Light' }],
+      hiddenFromPublishing: true,
+      renameMode: () => undefined,
+    };
+    collections.set('C:1', collection);
+    const variable: Record<string, unknown> = {
+      id: 'V:1',
+      name: 'color/brand',
+      description: 'orig',
+      scopes: ['ALL_SCOPES'],
+      hiddenFromPublishing: false,
+      resolvedType: 'COLOR',
+      remote: false,
+    };
+    variables.set('V:1', variable);
+    const handler = createBatchHandler(figmaCtx, {
+      update_variable: createUpdateVariableHandler(figmaCtx),
+      update_variable_collection: createUpdateVariableCollectionHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_variable',
+            params: {
+              variableId: 'V:1',
+              name: 'color/primary',
+              description: 'new',
+              scopes: ['FRAME_FILL'],
+              hiddenFromPublishing: true,
+            },
+          },
+          {
+            tool: 'update_variable_collection',
+            params: { collectionId: 'C:1', hiddenFromPublishing: false },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 2 applied op\(s\)/);
+    expect(variable).toMatchObject({
+      name: 'color/brand',
+      description: 'orig',
+      scopes: ['ALL_SCOPES'],
+      hiddenFromPublishing: false,
+    });
+    expect(collection.hiddenFromPublishing).toBe(true);
   });
 
   // A rollback writes the old name back, and a name write resets hiddenFromPublishing to true in

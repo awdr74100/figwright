@@ -12,7 +12,7 @@ export const CREATE_VARIABLE_TOOL_NAME = 'create_variable';
 // worth the cost of this list going stale — a scope a future release adds simply can't be set until
 // the list is updated, which is a loud gap, not a silent one. On the way out the opposite holds:
 // a narrow enum would reject a value Figma really returned.
-const VARIABLE_SCOPES = [
+export const VARIABLE_SCOPES = [
   'ALL_SCOPES',
   'TEXT_CONTENT',
   'CORNER_RADIUS',
@@ -38,6 +38,12 @@ const VARIABLE_SCOPES = [
   'PARAGRAPH_INDENT',
 ] as const;
 
+/**
+ * The scopes a variable may be offered in. Which of them a type takes is Figma's to say — its
+ * refusal is passed on with the accepted list (variable-fields.ts) — so this checks names only.
+ */
+export const variableScopesSchema = z.array(z.enum(VARIABLE_SCOPES));
+
 export const createVariableTool: ToolSpec = {
   name: CREATE_VARIABLE_TOOL_NAME,
   description:
@@ -47,22 +53,29 @@ export const createVariableTool: ToolSpec = {
     '(seconds), as a { type: "VARIABLE_ALIAS", id } in a Motion easing or a preset\'s delay / ' +
     'duration. Optionally pass ' +
     'scopes to narrow where Figma offers the variable in its picker (a radius token scoped to ' +
-    'CORNER_RADIUS stops being suggested for width or gap); omit it to leave the variable in every ' +
-    "scope, which is Figma's default. Returns { ok, variableId, name }.",
+    'CORNER_RADIUS stops being suggested for width or gap; [] offers it nowhere, the usual way to ' +
+    'keep a primitive that semantic tokens alias out of the pickers); omit it to leave the variable ' +
+    "in every scope, which is Figma's default. description and hiddenFromPublishing may be set " +
+    'too. Returns { ok, variableId, name, adjusted? } — adjusted says when Figma stored the ' +
+    'description differently from what was sent (it trims surrounding whitespace).',
   inputSchema: z.object({
     name: z.string().describe('Variable name, e.g. "color/primary"'),
     collectionId: z.string().describe('Variable collection id'),
     resolvedType: z
       .enum(['BOOLEAN', 'FLOAT', 'STRING', 'COLOR', 'EASING', 'TIMING'])
       .describe('Variable data type'),
-    scopes: z
-      .array(z.enum(VARIABLE_SCOPES))
-      .nonempty()
+    scopes: variableScopesSchema
       .optional()
       .describe(
         'Where Figma offers this variable in its picker, e.g. ["CORNER_RADIUS"] or ' +
-          '["FRAME_FILL","SHAPE_FILL"]. Omit for all scopes. Not available for EASING / TIMING.',
+          '["FRAME_FILL","SHAPE_FILL"]; [] for nowhere (not BOOLEAN). Omit for all scopes. Not ' +
+          'available for EASING / TIMING.',
       ),
+    description: z.string().optional().describe("The variable's description, as plain text"),
+    hiddenFromPublishing: z
+      .boolean()
+      .optional()
+      .describe('true leaves the variable out of the published library'),
   }),
   kind: 'write',
 };

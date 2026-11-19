@@ -78,12 +78,20 @@ export const renameCollection = (collection: VariableCollection, name: string): 
 export const createUpdateVariableCollectionHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
   async params => {
-    const p = (params ?? {}) as { collectionId?: unknown; name?: unknown; modes?: unknown };
+    const p = (params ?? {}) as {
+      collectionId?: unknown;
+      name?: unknown;
+      modes?: unknown;
+      hiddenFromPublishing?: unknown;
+    };
     if (typeof p.collectionId !== 'string') {
       throw new TypeError('update_variable_collection: collectionId must be a string');
     }
     if (p.name !== undefined && (typeof p.name !== 'string' || p.name.length === 0)) {
       throw new TypeError('update_variable_collection: name must be a non-empty string');
+    }
+    if (p.hiddenFromPublishing !== undefined && typeof p.hiddenFromPublishing !== 'boolean') {
+      throw new TypeError('update_variable_collection: hiddenFromPublishing must be a boolean');
     }
 
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(p.collectionId);
@@ -95,6 +103,13 @@ export const createUpdateVariableCollectionHandler =
 
     if (typeof p.name === 'string') renameCollection(collection, p.name);
     for (const rename of renames) collection.renameMode(rename.modeId, rename.name);
+    // Last: Figma refuses it on no content (measured), so nothing before it is left for it to undo.
+    if (
+      typeof p.hiddenFromPublishing === 'boolean' &&
+      collection.hiddenFromPublishing !== p.hiddenFromPublishing
+    ) {
+      collection.hiddenFromPublishing = p.hiddenFromPublishing;
+    }
 
     const result: UpdateCollectionResult = {
       ok: true,
@@ -102,5 +117,8 @@ export const createUpdateVariableCollectionHandler =
       name: collection.name,
       modes: collection.modes.map(mode => ({ modeId: mode.modeId, name: mode.name })),
     };
+    if (typeof p.hiddenFromPublishing === 'boolean') {
+      result.hiddenFromPublishing = collection.hiddenFromPublishing;
+    }
     return result;
   };

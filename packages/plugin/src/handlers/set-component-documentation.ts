@@ -3,6 +3,7 @@ import type { ComponentDocumentationResult, DocumentationLinkInfo } from '@figwr
 import type { SandboxToolHandler } from '../dispatcher.js';
 import {
   type DescriptionRequest,
+  descriptionStoredNote,
   hasFormatting,
   parseDocumentationLinks,
   quoteForMessage,
@@ -175,11 +176,7 @@ export const createSetComponentDocumentationHandler =
           );
         }
         if (description !== undefined && node.description !== description) {
-          adjusted.push(
-            `description was stored as ${quoteForMessage(node.description)} (Figma trims ` +
-              'surrounding whitespace, stores line breaks as \\n, replaces invalid characters and ' +
-              'drops everything from a NUL character on)',
-          );
+          adjusted.push(descriptionStoredNote(node.description));
         }
         if (markdown !== undefined && node.descriptionMarkdown !== markdown) {
           adjusted.push(

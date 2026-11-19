@@ -1,6 +1,7 @@
 import type { VariableResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
+import { explainVariableError } from './variable-fields.js';
 
 export const createRenameVariableHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -13,7 +14,12 @@ export const createRenameVariableHandler =
     }
     const variable = await figmaCtx.variables.getVariableByIdAsync(p.variableId);
     if (variable === null) throw new Error(`rename_variable: variable ${p.variableId} not found`);
-    variable.name = p.name;
+    try {
+      variable.name = p.name;
+    } catch (error) {
+      // Figma's own refusal, unchanged — only a library variable's gets a line on where to edit it.
+      throw explainVariableError(error, variable, 'rename_variable');
+    }
 
     const result: VariableResult = { ok: true, variableId: variable.id, name: variable.name };
     return result;

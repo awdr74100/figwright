@@ -124,6 +124,7 @@ import { createUpdateGridStyleHandler } from './update-grid-style.js';
 import { createUpdatePaintStyleHandler } from './update-paint-style.js';
 import { createUpdateTextStyleHandler } from './update-text-style.js';
 import { createUpdateVariableCollectionHandler } from './update-variable-collection.js';
+import { createUpdateVariableHandler } from './update-variable.js';
 import {
   createCreateVectorHandler,
   createGetVectorHandler,
@@ -210,6 +211,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     import_variable: createImportVariableHandler(figmaCtx),
     set_node_variable_mode: createSetNodeVariableModeHandler(figmaCtx),
     rename_variable: createRenameVariableHandler(figmaCtx),
+    update_variable: createUpdateVariableHandler(figmaCtx),
     set_variable_code_syntax: createSetVariableCodeSyntaxHandler(figmaCtx),
     delete_variable: createDeleteVariableHandler(figmaCtx),
     delete_variable_mode: createDeleteVariableModeHandler(figmaCtx),

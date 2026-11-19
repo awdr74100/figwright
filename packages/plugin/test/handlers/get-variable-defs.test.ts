@@ -299,4 +299,84 @@ describe('get_variable_defs handler', () => {
     expect(Object.keys(result)[0]).toBe(marked ? 'colorProfile' : 'collections');
     expect('colorProfile' in result).toBe(marked);
   });
+
+  describe('publishing and documentation', () => {
+    const collections = [
+      {
+        id: 'VC:1',
+        name: 'A',
+        key: 'a',
+        defaultModeId: 'm',
+        modes: [],
+        variableIds: [],
+        hiddenFromPublishing: true,
+      },
+      {
+        id: 'VC:2',
+        name: 'B',
+        key: 'b',
+        defaultModeId: 'm',
+        modes: [],
+        variableIds: [],
+        hiddenFromPublishing: false,
+      },
+    ];
+    const variables = [
+      {
+        id: 'V:1',
+        name: 'a',
+        key: 'k',
+        resolvedType: 'FLOAT',
+        variableCollectionId: 'VC:1',
+        valuesByMode: {},
+        codeSyntax: {},
+        description: 'Step 1',
+        hiddenFromPublishing: true,
+      },
+      {
+        id: 'V:2',
+        name: 'b',
+        key: 'k',
+        resolvedType: 'FLOAT',
+        variableCollectionId: 'VC:1',
+        valuesByMode: {},
+        codeSyntax: {},
+        description: '',
+        hiddenFromPublishing: false,
+      },
+    ];
+
+    it('marks a collection hidden from publishing, and only that one', async () => {
+      const result = (await createGetVariableDefsHandler(fakeFigma(collections, variables))(
+        {},
+      )) as GetVariableDefsResult;
+      expect(result.collections[0]?.hiddenFromPublishing).toBe(true);
+      expect(result.collections[1]).not.toHaveProperty('hiddenFromPublishing');
+    });
+
+    // Opt-in: a call without it reads and returns exactly what it did (token_map makes one).
+    it('leaves descriptions and the variable flag out unless asked', async () => {
+      for (const params of [undefined, {}, { documentation: false }]) {
+        const result = (await createGetVariableDefsHandler(fakeFigma(collections, variables))(
+          params,
+        )) as GetVariableDefsResult;
+        for (const v of result.variables) {
+          expect(v).not.toHaveProperty('description');
+          expect(v).not.toHaveProperty('hiddenFromPublishing');
+        }
+      }
+    });
+
+    it('carries them when asked, only where set', async () => {
+      const result = (await createGetVariableDefsHandler(fakeFigma(collections, variables))({
+        documentation: true,
+      })) as GetVariableDefsResult;
+      expect(result.variables[0]).toMatchObject({
+        description: 'Step 1',
+        hiddenFromPublishing: true,
+      });
+      expect(result.variables[1]).not.toHaveProperty('description');
+      expect(result.variables[1]).not.toHaveProperty('hiddenFromPublishing');
+    });
+  });
 });

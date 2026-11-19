@@ -187,6 +187,7 @@ export const writeStyleAtomically = async (
   writes: () => Promise<void> | void,
   restore: () => Promise<void> | void,
   residue: () => string[],
+  what = 'style',
 ): Promise<void> => {
   try {
     await writes();
@@ -200,13 +201,13 @@ export const writeStyleAtomically = async (
       // editor-context check looks for under the message; the restore's failure is in the text.
       // eslint-disable-next-line preserve-caught-error
       throw new Error(
-        `${messageOf(error)} — and the style could not be put back: ${messageOf(restoreError)}`,
+        `${messageOf(error)} — and the ${what} could not be put back: ${messageOf(restoreError)}`,
         { cause: error },
       );
     }
     if (left.length > 0) {
       throw new Error(
-        `${messageOf(error)} — and the style could not be put back exactly: ${left.join(', ')} ` +
+        `${messageOf(error)} — and the ${what} could not be put back exactly: ${left.join(', ')} ` +
           (left.length === 1 ? 'still differs' : 'still differ'),
         { cause: error },
       );

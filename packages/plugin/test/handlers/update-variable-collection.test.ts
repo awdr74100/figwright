@@ -145,6 +145,21 @@ describe('update_variable_collection handler', () => {
     ).rejects.toThrow(/not found/);
   });
 
+  it('sets the publishing flag, reporting it only when the call set it', async () => {
+    const collection = { ...makeCollection(), hiddenFromPublishing: true };
+    const handler = createUpdateVariableCollectionHandler(fakeFigma(collection));
+    expect(await handler({ collectionId: 'VC:0', hiddenFromPublishing: false })).toMatchObject({
+      hiddenFromPublishing: false,
+    });
+    expect(collection.hiddenFromPublishing).toBe(false);
+    expect(await handler({ collectionId: 'VC:0', name: 'Brand' })).not.toHaveProperty(
+      'hiddenFromPublishing',
+    );
+    await expect(handler({ collectionId: 'VC:0', hiddenFromPublishing: 1 })).rejects.toThrow(
+      'update_variable_collection: hiddenFromPublishing must be a boolean',
+    );
+  });
+
   // Figma resets hiddenFromPublishing to true on any write to a collection's name, the same name
   // included (measured 2026-11-20) — which took a published collection out of the library.
   it('renames a collection without taking it out of the published library', async () => {
