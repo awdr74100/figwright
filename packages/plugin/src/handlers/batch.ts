@@ -54,6 +54,7 @@ import {
   restoreTextStyle,
   snapshotStyle,
   snapshotTextStyle,
+  textStyleWriteScope,
   type TextStyleSnapshot,
 } from './style-snapshot.js';
 import { isTextLike, type TextLike } from './text-like.js';
@@ -1502,7 +1503,11 @@ const textStyleInverse: BatchInverse = {
     if (style?.type !== 'TEXT')
       throw new Error(`batch/update_text_style: text style ${id} not found`);
     const text = style as TextStyle;
-    const snapshot = snapshotTextStyle(text);
+    // What the op can move, by the handler's own rule: a full record used to be taken for every op,
+    // so undoing a rename or a new description loaded the style's face to write typography back
+    // unchanged — and failed, leaving the batch half undone, on a style whose font is not installed.
+    const scope = textStyleWriteScope(params);
+    const snapshot = snapshotTextStyle(text, scope.fields, scope.withBindings);
     const consumers = (await text.getStyleConsumersAsync()).map(c => c.node.id);
     const state: TextStyleState = { id, ...snapshot, consumers };
     return state;

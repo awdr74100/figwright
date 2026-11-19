@@ -11,6 +11,7 @@ import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
 import {
   restoreTextStyle,
   snapshotTextStyle,
+  textStyleWriteScope,
   textStyleResidue,
   writeStyleAtomically,
 } from './style-snapshot.js';
@@ -79,27 +80,9 @@ export const createUpdateTextStyleHandler =
         ? undefined
         : await resolveTextStyleBindings(figmaCtx, bindings, 'update_text_style');
 
-    // Only what this call can move, read once: its labels and the literals it writes, plus the
-    // bindings — a literal written to a bound fontSize / lineHeight / letterSpacing /
-    // paragraphSpacing takes the binding off (measured 2026-11-19), so a later failure has one to
-    // put back. Everything when it applies bindings or changes the font, either of which may move
-    // typography it did not name (measured to keep a fontFamily binding; the rest assumed).
-    const literals = [
-      ...(fontName !== undefined ? ['fontName'] : []),
-      ...(typeof p.fontSize === 'number' ? ['fontSize'] : []),
-      ...(lineHeight !== undefined ? ['lineHeight'] : []),
-      ...(p.letterSpacing !== undefined ? ['letterSpacing'] : []),
-      ...(typeof p.textWrapStyle === 'string' ? ['textWrapStyle'] : []),
-    ];
-    const labels = [
-      ...(links !== undefined ? ['documentationLinks'] : []),
-      ...(typeof p.name === 'string' ? ['name'] : []),
-      ...(typeof p.description === 'string' ? ['description'] : []),
-    ];
-    const before =
-      bindings !== undefined || fontName !== undefined
-        ? snapshotTextStyle(ts)
-        : snapshotTextStyle(ts, [...labels, ...literals], literals.length > 0);
+    // Only what this call can move, read once (textStyleWriteScope says what that is).
+    const scope = textStyleWriteScope(p);
+    const before = snapshotTextStyle(ts, scope.fields, scope.withBindings);
     const adjusted: string[] = [];
     await writeStyleAtomically(
       async () => {

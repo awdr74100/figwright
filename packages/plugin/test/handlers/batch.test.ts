@@ -3528,4 +3528,87 @@ describe('style documentation links in a batch', () => {
     ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
     expect(text.documentationLinks).toEqual([{ uri: 'https://old.com/text' }]);
   });
+
+  // A face that cannot be loaded — a font that is not installed on this machine — must not stop a
+  // batch from undoing a rename, a new description or a link: none of them is typography, so the
+  // way back writes no typography and loads no face. On main the inverse recorded every field and
+  // loaded the face to write them back, so the undo failed and the batch stayed half applied.
+  it('undoes an update_text_style that wrote only labels without loading the font', async () => {
+    const { figmaCtx, store, styles } = makeWide();
+    failingFrame(store);
+    const text: Record<string, unknown> = {
+      id: 'S:t',
+      type: 'TEXT',
+      name: 'Body',
+      description: 'orig',
+      documentationLinks: [{ uri: 'https://old.com' }],
+      fontName: { family: 'Not Installed', style: 'Regular' },
+      fontSize: 18,
+      boundVariables: {},
+      getStyleConsumersAsync: async () => [],
+    };
+    styles.set('S:t', text);
+    const loaded: unknown[] = [];
+    Object.assign(figmaCtx, {
+      loadFontAsync: async (f: unknown) => {
+        loaded.push(f);
+        throw new Error('font not available');
+      },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      update_text_style: createUpdateTextStyleHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'update_text_style',
+            params: { styleId: 'S:t', name: 'Heading', description: 'new', documentationLinks: [] },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/^batch: op 1 \(set_fills\) failed, rolled back 1 applied op\(s\): /);
+    expect([text.name, text.description, text.documentationLinks]).toEqual([
+      'Body',
+      'orig',
+      [{ uri: 'https://old.com' }],
+    ]);
+    expect(loaded).toEqual([]);
+  });
+
+  // A literal is typography: its way back still loads the face, as the handler's own rollback does.
+  it('still loads the font to undo a literal', async () => {
+    const { figmaCtx, store, styles } = makeWide();
+    failingFrame(store);
+    const text: Record<string, unknown> = {
+      id: 'S:t',
+      type: 'TEXT',
+      name: 'Body',
+      fontName: { family: 'Inter', style: 'Regular' },
+      fontSize: 18,
+      boundVariables: {},
+      setBoundVariable: () => undefined,
+      getStyleConsumersAsync: async () => [],
+    };
+    styles.set('S:t', text);
+    const loaded: unknown[] = [];
+    Object.assign(figmaCtx, {
+      loadFontAsync: async (f: unknown) => {
+        loaded.push(f);
+      },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      update_text_style: createUpdateTextStyleHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'update_text_style', params: { styleId: 'S:t', fontSize: 30 } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\)/);
+    expect(text.fontSize).toBe(18);
+    expect(loaded.length).toBeGreaterThan(0);
+  });
 });
