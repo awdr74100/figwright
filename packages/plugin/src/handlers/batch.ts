@@ -59,6 +59,7 @@ import {
 } from './style-snapshot.js';
 import { isTextLike, type TextLike } from './text-like.js';
 import { readFlows, sameFlows } from './update-flows.js';
+import { renameCollection } from './update-variable-collection.js';
 
 /**
  * Atomic batch: apply several invertible write ops as a unit. Two phases —
@@ -1657,7 +1658,7 @@ const updateVariableCollectionInverse: BatchInverse = {
     const was = captured as CollectionNames;
     const collection = await figmaCtx.variables.getVariableCollectionByIdAsync(was.id);
     if (collection === null) return undefined;
-    if (collection.name !== was.name) collection.name = was.name;
+    renameCollection(collection, was.name);
     for (const mode of was.modes) {
       if (collection.modes.some(m => m.modeId === mode.modeId && m.name !== mode.name)) {
         collection.renameMode(mode.modeId, mode.name);

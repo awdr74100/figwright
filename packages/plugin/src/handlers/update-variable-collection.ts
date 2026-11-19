@@ -50,6 +50,20 @@ const parseModes = (raw: unknown, collection: VariableCollection): ModeRename[] 
 };
 
 /**
+ * Rename a collection without the side effect Figma attaches to the write: setting
+ * `collection.name` — even to the name it already has — resets `hiddenFromPublishing` to true
+ * (measured 2026-11-20; no other collection or variable write touches it). Renaming through
+ * Figwright used to take a published collection out of the library without a word. The flag is put
+ * back as it was, and a name the collection already has is not written at all.
+ */
+export const renameCollection = (collection: VariableCollection, name: string): void => {
+  if (collection.name === name) return;
+  const hidden = collection.hiddenFromPublishing;
+  collection.name = name;
+  if (collection.hiddenFromPublishing !== hidden) collection.hiddenFromPublishing = hidden;
+};
+
+/**
  * Rename a variable collection and/or its modes.
  *
  * Renaming changes no id, which is the whole point: a mis-named collection can be corrected in
@@ -79,7 +93,7 @@ export const createUpdateVariableCollectionHandler =
 
     const renames = parseModes(p.modes, collection);
 
-    if (typeof p.name === 'string') collection.name = p.name;
+    if (typeof p.name === 'string') renameCollection(collection, p.name);
     for (const rename of renames) collection.renameMode(rename.modeId, rename.name);
 
     const result: UpdateCollectionResult = {
