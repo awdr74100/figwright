@@ -198,13 +198,13 @@ describe('set_text handler', () => {
   });
 
   it('writes through the text sublayer of a SHAPE_WITH_TEXT node, keyed by the container id', async () => {
-    const sublayer = {
-      fontName: { family: 'Inter', style: 'Regular' },
-      characters: 'old',
-    };
+    const fonts = { loaded: false };
+    const sublayer = makeText('1:9', [['old', 'plain']], fonts);
     const node = { id: '1:9', type: 'SHAPE_WITH_TEXT', text: sublayer };
-    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {});
-    const handler = createSetTextHandler(fakeFigma({ '1:9': node }, loadFontAsync));
+    const loadFontAsync = vi.fn<() => Promise<void>>(async () => {
+      fonts.loaded = true;
+    });
+    const handler = createSetTextHandler(fakeFigma({ '1:9': node }, fonts, loadFontAsync));
     const result = (await handler({ nodeId: '1:9', characters: 'new' })) as MutateResult;
 
     expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Regular' });

@@ -32,10 +32,10 @@ import {
 } from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { readGridTrackSizes } from './grid-tracks.js';
+import { getTextHost } from './handlers/text-sublayer.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { flattenForest } from './traverse.js';
-import { getTextHost } from './handlers/text-sublayer.js';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
   paint.type === 'GRADIENT_LINEAR' ||

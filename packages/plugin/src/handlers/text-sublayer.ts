@@ -14,7 +14,12 @@ export const TEXT_SUBLAYER_TYPES = new Set<string>([
 
 export type TextHost = Pick<
   TextNode,
-  'characters' | 'fontName' | 'getRangeAllFontNames' | 'getStyledTextSegments'
+  | 'characters'
+  | 'fontName'
+  | 'getRangeAllFontNames'
+  | 'getStyledTextSegments'
+  | 'insertCharacters'
+  | 'deleteCharacters'
 >;
 
 /** The mutable text surface of `node` — itself for a TEXT node, its sublayer for a container type. */
