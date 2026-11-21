@@ -10,9 +10,11 @@
 // (breaking → minor, see below), and runs the same command that was in the
 // `release` script before.
 //
-// It writes CHANGELOG.md, commits and tags locally, then offers to push. The
-// push is what triggers .github/workflows/release.yml, so it is a separate
-// prompt that defaults to no — see the comment above it.
+// It writes CHANGELOG.md, commits and tags locally, runs the build and tests
+// release.yml runs (release-checks.mjs) on the bumped version, then offers to
+// push. A failing check stops it there, with the tag still local. The push is
+// what triggers .github/workflows/release.yml, so it is a separate prompt that
+// defaults to no — see the comment above it.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -24,6 +26,8 @@ import { fileURLToPath } from 'node:url';
 import { styleText } from 'node:util';
 
 import { determineSemverChange, getGitDiff, loadChangelogConfig, parseCommits } from 'changelogen';
+
+import { pnpmFailure, runPnpm, runReleaseChecks } from './release-checks.mjs';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/;
 
@@ -235,8 +239,30 @@ console.log();
 const confirmed = await ask(`  Continue? ${styleText('dim', '(y/N)')} `);
 if (!/^y(es)?$/i.test(confirmed)) abort();
 
-const { status } = spawnSync('pnpm', args, { cwd: repoRoot, stdio: 'inherit' });
-if (status !== 0) process.exit(status ?? 1);
+// Through runPnpm, not spawn('pnpm'): on Windows pnpm is a .cmd shim spawn cannot start.
+const changelog = pnpmFailure(args, runPnpm(args, repoRoot));
+if (changelog !== null) fail(changelog);
+
+// release.yml builds and tests the tagged commit before it publishes, and only the bumped version
+// can reveal a test that breaks on it (v0.8.0's first release job did). So the same two steps run
+// here, while the tag is still local and undoing it costs nothing.
+console.log();
+console.log(
+  `  ${styleText('dim', 'pnpm build && pnpm test — what release.yml runs before it publishes')}`,
+);
+console.log();
+const failedCheck = runReleaseChecks(repoRoot);
+if (failedCheck !== null) {
+  console.log();
+  console.error(styleText('red', `✖ ${failedCheck} on ${tag} — nothing was pushed.`));
+  console.error(
+    `  The release workflow would fail the same way. Undo this release, fix what failed, then ` +
+      `run ${styleText('bold', 'pnpm release')} again:`,
+  );
+  console.error(`    ${styleText('bold', `git tag -d ${tag} && git reset --hard HEAD~1`)}`);
+  console.log();
+  process.exit(1);
+}
 
 // The push is the irreversible half: the tag landing on GitHub starts
 // release.yml, which publishes to npm — and npm forbids reusing a version even
