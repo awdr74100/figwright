@@ -28,16 +28,19 @@ Read the real values from the source (the keyframe stops, the duration, the easi
      `config.duration` are both given, the props win (measured on Position).
 2. Otherwise **`apply_manual_keyframe_track`** per animated property. Map source → Figma field:
 
-   | Source                                                      | Figma `field` (`{ type:'PROPERTY', name }`)     | `value` type       |
-   | ----------------------------------------------------------- | ----------------------------------------------- | ------------------ |
-   | `translateX/Y`, Framer `x`/`y`                              | `TRANSLATION_X` / `TRANSLATION_Y`               | `FLOAT`            |
-   | `translate(x, y)` together                                  | `TRANSLATION_XY`                                | `VECTOR` `{x, y}`  |
-   | `scale`                                                     | `SCALE_XY`                                      | `VECTOR` `{x, y}`  |
-   | `scaleX/Y`                                                  | `SCALE_X` / `SCALE_Y`                           | `FLOAT`            |
-   | `rotate` (deg)                                              | `ROTATION` (**degrees, sign flipped**: below)   | `FLOAT`            |
-   | `opacity`                                                   | `OPACITY`                                       | `FLOAT`            |
-   | `border-radius`, `border-width`, width/height, gap, padding | `CORNER_RADIUS` / `STROKE_WEIGHT` / `WIDTH` / … | `FLOAT`            |
-   | colour                                                      | an indexed `fills` item                         | `COLOR` (RGBA 0–1) |
+   | Source                                                      | Figma `field` (`{ type:'PROPERTY', name }`)         | `value` type       |
+   | ----------------------------------------------------------- | --------------------------------------------------- | ------------------ |
+   | `translateX/Y`, Framer `x`/`y`                              | `TRANSLATION_X` / `TRANSLATION_Y`                   | `FLOAT`            |
+   | `translate(x, y)` together                                  | `TRANSLATION_XY`                                    | `VECTOR` `{x, y}`  |
+   | `scale`                                                     | `SCALE_XY`                                          | `VECTOR` `{x, y}`  |
+   | `scaleX/Y`                                                  | `SCALE_X` / `SCALE_Y`                               | `FLOAT`            |
+   | `rotate` (deg)                                              | `ROTATION` (**degrees, sign flipped**: below)       | `FLOAT`            |
+   | `opacity`                                                   | `OPACITY`                                           | `FLOAT`            |
+   | `rotateX/Y/Z` (deg, in 3D)                                  | `TRANSFORM_3D_ROTATION_X` / `_Y` / `_Z` (CSS signs) | `FLOAT`            |
+   | `translateZ` (px)                                           | `TRANSFORM_3D_TRANSLATION_Z`                        | `FLOAT`            |
+   | the container's `perspective` (px)                          | `SCENE_3D_PERSPECTIVE` on that container (≥ 0)      | `FLOAT`            |
+   | `border-radius`, `border-width`, width/height, gap, padding | `CORNER_RADIUS` / `STROKE_WEIGHT` / `WIDTH` / …     | `FLOAT`            |
+   | colour                                                      | an indexed `fills` item                             | `COLOR` (RGBA 0–1) |
 
    Each `track` = `{ baseValue, keyframes: [{ timelinePosition (s), value, easing? }] }`. A CSS
    `@keyframes` `%` stop → `timelinePosition = pct/100 * duration`. Measured against Figma's render:
@@ -45,6 +48,10 @@ Read the real values from the source (the keyframe stops, the duration, the easi
      clockwise-positive, so `rotate(30deg)` → `ROTATION -30`.
    - **Translation values are offsets from the layer's layout position**, as CSS `translate` is.
    - A value of the wrong type for the field is refused by Figma (`SCALE_XY` takes a `VECTOR`).
+   - **A 3D track's `baseValue` is the layer's static 3D value itself** (`set_transform_3d`'s
+     number, or the scene's perspective): giving one rewrites it, and a layer with no 3D transform
+     is given one (all 0) for the track to drive. The result's `adjusted` says when either
+     happened.
 
 3. **`set_timeline_duration`** to match the source's total duration.
 

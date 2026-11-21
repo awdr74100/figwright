@@ -275,6 +275,7 @@ const EXPECTED: string[] = [
   'set_text_range.ranges[].textStyleId → textStyleId',
   'set_timeline_duration.nodeId → nodeId',
   'set_timeline_duration.timelineId → timelineId',
+  'set_transform_3d.nodeId → nodeId',
   'set_variable_code_syntax.variableId → variableId',
   'set_variable_value.modeId → modeId',
   'set_variable_value.value.color.id → variableId',

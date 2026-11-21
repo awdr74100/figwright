@@ -124,6 +124,7 @@ import { createSetTextPropertiesHandler } from './set-text-properties.js';
 import { createSetTextRangeHandler } from './set-text-range.js';
 import { createSetTextHandler } from './set-text.js';
 import { createSetTimelineDurationHandler } from './set-timeline-duration.js';
+import { createSetTransform3dHandler } from './set-transform-3d.js';
 import { createSetVariableCodeSyntaxHandler } from './set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from './set-variable-value.js';
 import { createSetVisibleHandler } from './set-visible.js';
@@ -204,6 +205,7 @@ export const createSandboxHandlers = (figmaApi: typeof figma): SandboxHandlers =
     create_text_path: createCreateTextPathHandler(figmaCtx),
     set_text_path: createSetTextPathHandler(figmaCtx),
     set_complex_stroke: createSetComplexStrokeHandler(figmaCtx),
+    set_transform_3d: createSetTransform3dHandler(figmaCtx),
     create_vector: createCreateVectorHandler(figmaCtx),
     set_vector: createSetVectorHandler(figmaCtx),
     outline_stroke: createOutlineStrokeHandler(figmaCtx),

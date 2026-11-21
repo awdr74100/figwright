@@ -52,6 +52,9 @@ If the inventory is complete and empty, there's no animation to carry — don't 
 - **Units**: `ROTATION` is degrees with positive = counterclockwise on screen — CSS `rotate` is
   clockwise-positive, so negate. Translation is an offset from the layer's layout position, as CSS
   `translate` is. `SCALE_XY` / `TRANSLATION_XY` values are `{x, y}`.
+  `TRANSFORM_3D_ROTATION_X` / `_Y` / `_Z` are degrees with CSS's own signs (not negated, as in
+  `transform3d`); `TRANSFORM_3D_TRANSLATION_Z` and `SCENE_3D_PERSPECTIVE` are pixels. A 3D track
+  animates one term of the node's `transform3d`, whose static value is the track's `baseValue`.
 - **`HOLD`** keeps the previous value up to its keyframe and switches exactly there.
 
 ### Map to the detected stack
@@ -65,6 +68,8 @@ CSS `@keyframes` / `transition`, Framer Motion, GSAP, Vue `<transition>`, Svelte
 | `SCALE_X` / `SCALE_Y` / `SCALE_XY`                                                | `scaleX/Y`                      | `scaleX` / `scaleY` / `scale` |
 | `ROTATION`                                                                        | `rotate` (deg, **negated**)     | `rotate` (deg, **negated**)   |
 | `OPACITY`                                                                         | `opacity`                       | `opacity`                     |
+| `TRANSFORM_3D_ROTATION_X/Y/Z`, `TRANSFORM_3D_TRANSLATION_Z`                       | that term of `cssTransform3d`   | the whole `transform` string  |
+| `SCENE_3D_PERSPECTIVE`                                                            | the container's `perspective`   | `perspective` style value     |
 | `CORNER_RADIUS`, `STROKE_WEIGHT`, `WIDTH`/`HEIGHT`, `STACK_SPACING`, padding, gap | the matching CSS prop           | style value                   |
 | effect fields (shadow `OFFSET_X`/`RADIUS`/`COLOR`, …)                             | animate `box-shadow` / `filter` | `boxShadow` etc.              |
 

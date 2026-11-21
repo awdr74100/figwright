@@ -19,9 +19,12 @@ import {
   SerializedLineHeightSchema,
   SerializedMainComponentSchema,
   SerializedPaintSchema,
+  SerializedScene3dSchema,
   SerializedStyleIdsSchema,
   SerializedTextPathStartSchema,
+  SerializedTransform3dSchema,
   SerializedTransformModifierSchema,
+  SerializedTransformOriginSchema,
   SerializedVariableWidthStrokeSchema,
 } from './serialized-node.js';
 import type {
@@ -38,6 +41,9 @@ import type {
   SerializedLetterSpacing,
   SerializedLineHeight,
   SerializedMainComponent,
+  SerializedScene3d,
+  SerializedTransform3d,
+  SerializedTransformOrigin,
   SerializedPaint,
   SerializedStyleIds,
   SerializedTextPathStart,
@@ -121,6 +127,17 @@ export interface DesignContextNode {
   cssTransform?: string;
   /** With cssTransform: the turned box's bounding box, as offsets from x / y. */
   boundingBox?: SerializedBounds;
+  /** A 3D transform (beta), as Figma holds it; omitted when there is none. */
+  transform3d?: SerializedTransform3d;
+  /** Where transform3d turns about, when not the centre. */
+  transformOrigin?: SerializedTransformOrigin;
+  /**
+   * CSS drawing transform3d: with transform-origin 0 0 at x / y, `transform: <cssTransform>
+   * <cssTransform3d>`. On a GROUP, applied to its unturned wrapper.
+   */
+  cssTransform3d?: string;
+  /** A container's 3D scene (beta): perspective and preserve-3d. */
+  scene3d?: SerializedScene3d;
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
   /** Figma corner smoothing, 0–1; omitted when 0 (circular). */
@@ -382,6 +399,10 @@ export const DesignContextNodeSchema = z.lazy(() =>
     flipped: z.boolean().optional(),
     cssTransform: z.string().optional(),
     boundingBox: SerializedBoundsSchema.optional(),
+    transform3d: SerializedTransform3dSchema.optional(),
+    transformOrigin: SerializedTransformOriginSchema.optional(),
+    cssTransform3d: z.string().optional(),
+    scene3d: SerializedScene3dSchema.optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
     cornerSmoothing: z.number().min(0).max(1).optional(),
@@ -671,6 +692,12 @@ export const LAYOUT_FIELDS = [
   'flipped',
   'cssTransform',
   'boundingBox',
+  // Which way it faces in depth, and the scene it is seen in: tiny, present only on 3D nodes, and
+  // without them a card drawn turned in perspective comes out flat.
+  'transform3d',
+  'transformOrigin',
+  'cssTransform3d',
+  'scene3d',
 ] as const satisfies readonly (keyof DesignContextNode)[];
 
 /**

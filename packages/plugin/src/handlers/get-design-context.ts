@@ -77,6 +77,10 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.flipped === true) out.flipped = true;
   if (flat.cssTransform !== undefined) out.cssTransform = flat.cssTransform;
   if (flat.boundingBox !== undefined) out.boundingBox = flat.boundingBox;
+  if (flat.transform3d !== undefined) out.transform3d = flat.transform3d;
+  if (flat.transformOrigin !== undefined) out.transformOrigin = flat.transformOrigin;
+  if (flat.cssTransform3d !== undefined) out.cssTransform3d = flat.cssTransform3d;
+  if (flat.scene3d !== undefined) out.scene3d = flat.scene3d;
   if (flat.opacity !== undefined && flat.opacity !== 1) out.opacity = flat.opacity;
   if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
     out.cornerRadius = flat.cornerRadius;
@@ -489,6 +493,19 @@ interface BuildCtx {
   detail: DetailLevel;
   dedupe: boolean;
   seen: Set<string>;
+  /**
+   * A main component's 3D state, read once per component per call; null in a Figma without 3D,
+   * where there is nothing to compare.
+   */
+  depthShape: (main: ComponentNode) => DepthShape | null;
+  /**
+   * Per main component, whether its first instance — the one expanded — came out with anything 3D
+   * in it: settled once that instance is built (full detail only), null when its output cannot tell
+   * (cut off by the depth limit).
+   */
+  firstDepth: Map<string, Promise<boolean | null>>;
+  /** Whether a deduped instance's collapsed layers are in 3D: known from the dedupe decision. */
+  dedupedDepth: WeakMap<DesignContextNode, boolean>;
   /** Node lookup, for what a node inside an instance keeps on its main component's node. */
   lookup: (id: string) => Promise<BaseNode | null>;
 }
@@ -640,17 +657,55 @@ export const motionSummary = (node: SceneNode): MotionSummary | undefined => {
   return out;
 };
 
+/** Frames, components and instances: the nodes that can hold a 3D scene. */
+const SCENE_TYPES = new Set(['FRAME', 'COMPONENT', 'INSTANCE']);
+
 /**
- * Whether a visible brush, wobble or width profile is drawn anywhere in this subtree. An instance's
- * overrides do not list a changed brush, and every custom brush reads the same ('CUSTOM'), so two
- * instances that draw different brushes look identical to dedupe — measured on a published brush
- * kit, where ten cards of one component, each with its own brush, collapsed into the first. Such an
- * instance is expanded instead, every stroke with its own renderBounds to export from.
+ * A layer's own 3D state as one comparable string — its transform, the origin it turns about and
+ * its scene — or null for none. The origin is read only beside a transform (it draws nothing
+ * without one), and the scene only on a type that can hold one, to keep the read count down.
  */
-const hasDrawStroke = (root: SceneNode): boolean => {
-  const stack: SceneNode[] = [root];
+const depthOf = (node: SceneNode): string | null => {
+  const t = (node as { transform3d?: Transform3d }).transform3d;
+  const turned = t !== undefined && t.type !== 'NONE';
+  const scene = SCENE_TYPES.has(node.type) ? (node as { scene3d?: unknown }).scene3d : undefined;
+  if (!turned && (scene === undefined || scene === null)) return null;
+  const origin = turned ? (node as { transformOrigin?: unknown }).transformOrigin : null;
+  return JSON.stringify([turned ? t : null, origin, scene ?? null]);
+};
+
+/** A main component's layers' 3D state, in the shape of its tree: read once per component. */
+interface DepthShape {
+  depth: string | null;
+  kids: readonly DepthShape[] | null;
+  /** Whether this layer or any below it is in 3D. */
+  any: boolean;
+}
+
+const depthShapeOf = (node: SceneNode): DepthShape => {
+  const depth = depthOf(node);
+  const kids = 'children' in node ? (node as ChildrenMixin).children.map(depthShapeOf) : null;
+  return { depth, kids, any: depth !== null || (kids?.some(k => k.any) ?? false) };
+};
+
+/**
+ * Whether an instance draws something of its own that its overrides do not list, so deduping it
+ * would draw the main component's instead. Such an instance is expanded. One walk over its visible
+ * layers looks for two such things:
+ *
+ * - A brush, wobble or width profile. A changed brush is not in an instance's overrides, and every
+ *   custom brush reads the same ('CUSTOM') — measured on a published brush kit, where ten cards of
+ *   one component, each with its own brush, collapsed into the first.
+ * - A layer turned in 3D, or a 3D scene, unlike the main component's. Figma's `instance.overrides`
+ *   lists none of these (measured: a sublayer's transform3d and transformOrigin overridden, and a
+ *   nested scene, left `overrides` empty). The instance's own fields are projected on it anyway, so
+ *   only its layers are compared, by position in the main component's tree (`main`); a branch whose
+ *   shape differs (a swapped nested instance) is not compared. Pass null to skip the comparison.
+ */
+const drawsItsOwn = (root: SceneNode, main: DepthShape | null): boolean => {
+  const stack: [SceneNode, DepthShape | null][] = [[root, null]];
   while (stack.length > 0) {
-    const node = stack.pop()!;
+    const [node, shape] = stack.pop()!;
     if (node.visible === false) continue;
     const complex = (node as { complexStrokeProperties?: { type?: unknown } })
       .complexStrokeProperties;
@@ -658,9 +713,62 @@ const hasDrawStroke = (root: SceneNode): boolean => {
     const width = (node as { variableWidthStrokeProperties?: { widthProfile?: unknown } | null })
       .variableWidthStrokeProperties;
     if (width != null && width.widthProfile !== 'UNIFORM') return true;
-    if ('children' in node) stack.push(...(node as ChildrenMixin).children);
+    if (shape !== null && depthOf(node) !== shape.depth) return true;
+    if (!('children' in node)) continue;
+    const children = (node as ChildrenMixin).children;
+    // The root's layers line up with the main component's; below that, with the shape they sit in.
+    const kids = node === root ? (main?.kids ?? null) : (shape?.kids ?? null);
+    const aligned = kids !== null && kids.length === children.length ? kids : null;
+    for (let i = 0; i < children.length; i++) stack.push([children[i]!, aligned?.[i] ?? null]);
   }
   return false;
+};
+
+/**
+ * Whether a built subtree carries anything 3D, or null when its output cannot tell: a branch cut
+ * off by the depth limit. A deduped instance's layers are not in it, but whether they are in 3D was
+ * settled when it was deduped (`dedupedDepth`).
+ */
+const depthIn = (out: DesignContextNode, ctx: BuildCtx): boolean | null => {
+  let unknown = false;
+  const stack: DesignContextNode[] = [out];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    if (n.transform3d !== undefined || n.scene3d !== undefined) return true;
+    if (n.truncated === true) unknown = true;
+    if (n.deduped === true) {
+      const collapsed = ctx.dedupedDepth.get(n);
+      if (collapsed === true) return true;
+      if (collapsed === undefined) unknown = true;
+    }
+    if (n.children !== undefined) stack.push(...n.children);
+  }
+  return unknown ? null : false;
+};
+
+/**
+ * The main component's 3D shape to compare an instance's layers against, or null to skip that.
+ * Reading a layer's transform3d costs about 14 µs, so neither tree is read unless 3D is in play:
+ * the component's first instance (expanded, so its output is already in hand) came out with 3D in
+ * it, or cannot tell, or the instance itself is turned or holds a scene. Measured on 60 components
+ * of 37 layers each used twice, reading every main component regardless cost 4% of the read. What
+ * that leaves deduped is an instance turned in 3D only on an inner layer, of a component whose
+ * first instance has no 3D at all. Below full detail nothing 3D is reported: nothing to compare.
+ */
+const depthToCompare = async (
+  out: DesignContextNode,
+  ctx: BuildCtx,
+  main: ComponentNode,
+): Promise<{ shape: DepthShape | null; layersIn3d: boolean }> => {
+  const skip = { shape: null, layersIn3d: false };
+  if (ctx.detail !== 'full') return skip;
+  const own = out.transform3d !== undefined || out.scene3d !== undefined;
+  if (!own && (await ctx.firstDepth.get(main.id)) === false) return skip;
+  const shape = ctx.depthShape(main);
+  if (shape === null) return skip;
+  // Deduped, the instance's layers match the main component's, so they are in 3D exactly when its.
+  const layersIn3d = shape.kids?.some(k => k.any) ?? false;
+  return { shape: layersIn3d || own ? shape : null, layersIn3d };
 };
 
 /** RemainingDepth: -1 = unlimited; otherwise levels of children still allowed below this node. */
@@ -680,6 +788,9 @@ const buildNode = async (
   }
 
   let expandChildren = true;
+  // Set when this is the first instance of its main component: its output, once built, says
+  // whether the component's later instances need their 3D compared (depthToCompare).
+  let settleFirst: ((depth: boolean | null) => void) | undefined;
   // Resolve the main component when deduping (needs the id) or at full detail (needs name/key for
   // component_map). componentProperties on the instance itself are surfaced in project() and survive
   // dedup — only the expanded child subtree below is collapsed.
@@ -704,8 +815,10 @@ const buildNode = async (
         out.mainComponent = mc;
       }
       if (ctx.dedupe) {
-        if (ctx.seen.has(main.id) && !hasDrawStroke(node)) {
+        const depth = ctx.seen.has(main.id) ? await depthToCompare(out, ctx, main) : null;
+        if (depth !== null && !drawsItsOwn(node, depth.shape)) {
           out.deduped = true;
+          ctx.dedupedDepth.set(out, depth.layersIn3d);
           expandChildren = false;
           const overrides = collectTextOverrides(node);
           if (overrides.length > 0) out.textOverrides = overrides;
@@ -717,6 +830,9 @@ const buildNode = async (
           }
         } else {
           ctx.seen.add(main.id);
+          if (ctx.detail === 'full' && !ctx.firstDepth.has(main.id)) {
+            ctx.firstDepth.set(main.id, new Promise(resolve => (settleFirst = resolve)));
+          }
         }
       }
     }
@@ -733,6 +849,9 @@ const buildNode = async (
       }
     }
   }
+  // A build that throws fails the whole read, so an instance left waiting on this one has no
+  // result to give anyway.
+  settleFirst?.(depthIn(out, ctx));
 
   return out;
 };
@@ -835,10 +954,22 @@ export const createGetDesignContextHandler =
 
     // depth omitted or 0 → unlimited (-1); positive → that many levels of children.
     const remainingDepth = typeof p.depth === 'number' && p.depth > 0 ? p.depth : -1;
+    const depthShapes = new Map<string, DepthShape>();
     const ctx: BuildCtx = {
       detail: isDetailLevel(p.detail) ? p.detail : 'compact',
       dedupe: p.dedupeComponents === true,
       seen: new Set<string>(),
+      firstDepth: new Map(),
+      dedupedDepth: new WeakMap(),
+      depthShape: main => {
+        if (!('transform3d' in main)) return null;
+        let shape = depthShapes.get(main.id);
+        if (shape === undefined) {
+          shape = depthShapeOf(main);
+          depthShapes.set(main.id, shape);
+        }
+        return shape;
+      },
       lookup: id => figmaCtx.getNodeByIdAsync(id),
     };
 

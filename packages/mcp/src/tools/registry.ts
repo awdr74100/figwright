@@ -139,6 +139,7 @@ import { setTextPropertiesTool } from './set-text-properties.js';
 import { setTextRangeTool } from './set-text-range.js';
 import { setTextTool } from './set-text.js';
 import { setTimelineDurationTool } from './set-timeline-duration.js';
+import { setTransform3dTool } from './set-transform-3d.js';
 import { setVariableCodeSyntaxTool } from './set-variable-code-syntax.js';
 import { setVariableValueTool } from './set-variable-value.js';
 import { setVectorTool } from './set-vector.js';
@@ -227,6 +228,7 @@ const DECLARED_TOOL_SPECS: readonly ToolSpec[] = [
   setRepeatTool,
   createTextPathTool,
   setTextPathTool,
+  setTransform3dTool,
   setComplexStrokeTool,
   // Vector geometry
   createVectorTool,

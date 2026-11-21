@@ -52,6 +52,7 @@ import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
 import { createSetTextHandler } from '../../src/handlers/set-text.js';
 import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
+import { createSetTransform3dHandler } from '../../src/handlers/set-transform-3d.js';
 import { createSetVariableCodeSyntaxHandler } from '../../src/handlers/set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';
 import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
@@ -2941,6 +2942,116 @@ describe('batch inverses for Figma Draw', () => {
       brushType: 'SCATTER',
       brushName: 'CUSTOM',
     });
+  });
+
+  /**
+   * An instance whose layer `I9:9;1:1` is `layer`, its main component's layer `1:1` the same. A
+   * stroke or a text path's start written on such a layer is never listed in the instance's
+   * overrides (measured), so writing the old value back leaves no mark — and leaves it the
+   * instance's own, no longer following the main. The rollback resets the instance to undo that.
+   */
+  const insideInstance = (layer: Record<string, unknown>) => {
+    const instance: Record<string, unknown> = {
+      type: 'INSTANCE',
+      id: '9:9',
+      name: 'Card',
+      parent: null,
+      removed: false,
+      overrides: [],
+      componentProperties: {},
+      findAllWithCriteria: () => [],
+      removeOverrides: vi.fn<() => void>(),
+    };
+    const node = { ...layer, id: 'I9:9;1:1', parent: instance };
+    instance.findAll = () => [node];
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('9:9', instance);
+    store.set('I9:9;1:1', node);
+    store.set('1:1', { ...layer, id: '1:1' });
+    (figmaCtx as unknown as { loadBrushesAsync: unknown }).loadBrushesAsync = async () => {};
+    return { figmaCtx, store, instance };
+  };
+
+  it('resets the instance a rolled-back set_complex_stroke wrote into, though it left no override mark', async () => {
+    const { figmaCtx, store, instance } = insideInstance({
+      type: 'VECTOR',
+      strokes: [{ type: 'SOLID', visible: true, color: { r: 0, g: 0, b: 0 } }],
+      complexStrokeProperties: { type: 'BASIC' },
+      variableWidthStrokeProperties: { widthProfile: 'UNIFORM' },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      set_complex_stroke: createSetComplexStrokeHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_complex_stroke',
+            params: { nodeId: 'I9:9;1:1', complexStrokeProperties: { type: 'DYNAMIC' } },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
+    expect(instance.removeOverrides).toHaveBeenCalledOnce();
+    expect(store.get('I9:9;1:1')!.complexStrokeProperties).toEqual({ type: 'BASIC' });
+  });
+
+  it('resets the instance a rolled-back set_text_path wrote into, though it left no override mark', async () => {
+    const { figmaCtx, instance } = insideInstance({
+      type: 'TEXT_PATH',
+      textPathStartData: { segment: 1, position: 0.25 },
+      vectorNetwork: { segments: [{}, {}, {}, {}] },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      set_text_path: createSetTextPathHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'set_text_path', params: { nodeId: 'I9:9;1:1', startSegment: 3 } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
+    expect(instance.removeOverrides).toHaveBeenCalledOnce();
+  });
+
+  it('resets the instance a rolled-back set_transform_3d wrote into, though it left no override mark', async () => {
+    const { figmaCtx, instance } = insideInstance({
+      type: 'RECTANGLE',
+      transform3d: { type: 'NONE' },
+      transformOrigin: { x: { unit: 'PERCENT', value: 50 }, y: { unit: 'PERCENT', value: 50 } },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      set_transform_3d: createSetTransform3dHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_transform_3d',
+            params: { nodeId: 'I9:9;1:1', transform3d: { rotateY: 30 } },
+          },
+          FAIL,
+        ],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
+    expect(instance.removeOverrides).toHaveBeenCalledOnce();
+  });
+
+  it('leaves the instance unreset after an ordinary op that left no override mark', async () => {
+    const { figmaCtx, instance } = insideInstance({ type: 'RECTANGLE', opacity: 1 });
+    const handler = createBatchHandler(figmaCtx, {
+      set_opacity: createSetOpacityHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [{ tool: 'set_opacity', params: { nodeId: 'I9:9;1:1', opacity: 0.5 } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1/);
+    expect(instance.removeOverrides).not.toHaveBeenCalled();
   });
 
   it('puts a pattern fill back through the async setter, the only one Figma lets take it', async () => {
