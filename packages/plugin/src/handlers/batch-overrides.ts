@@ -1,4 +1,5 @@
 import { readComponentGetter } from '../serializer.js';
+import { animatedBefore, readHidden, restoreHidden, unrestorable } from './batch-hidden.js';
 import {
   type BindingSnapshot,
   captureBindings,
@@ -27,6 +28,13 @@ import { isTextLike } from './text-like.js';
  * every overridden field, and the main component of every nested instance. On undo, if the list
  * changed, it resets and re-applies. A field with no verified writer is never guessed at: an
  * instance carrying one is left with the residue, and the rollback message names it.
+ *
+ * Some fields are never listed at all, yet the reset puts them back to the main's: a 3D transform
+ * and scene, a dynamic stroke or brush, a width profile, a text path's start, and the instance's
+ * own Motion (batch-hidden.ts). Their values are read just before a reset and written back after
+ * it; an instance holding one that cannot be written back is not reset. Since an op that writes one
+ * of them leaves no mark in the list, such an op (`hidden`) has its instance reset regardless: a
+ * value written back stays the instance's own, where it had followed the main component.
  */
 
 /** Overridden fields put back by plain assignment. */
@@ -149,6 +157,10 @@ export interface InstanceGuard {
   entries: Entry[];
   swaps: { id: string; mainId: string }[];
   unsupported: string[];
+  /** Reset on undo even if the list is unchanged: an op wrote a field the list never shows. */
+  hidden: boolean;
+  /** Whether the instance had Motion of its own before the batch (see `animatedBefore`). */
+  animated: boolean;
 }
 
 const byId = (a: Override, b: Override): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -242,7 +254,11 @@ const captureEntry = async (
   return entry;
 };
 
-const guardFor = async (figmaCtx: typeof figma, inst: InstanceNode): Promise<InstanceGuard> => {
+const guardFor = async (
+  figmaCtx: typeof figma,
+  inst: InstanceNode,
+  hidden: boolean,
+): Promise<InstanceGuard> => {
   const overrides = normalize(inst.overrides);
   const unsupported: string[] = [];
   const nodes = await Promise.all(overrides.map(async o => figmaCtx.getNodeByIdAsync(o.id)));
@@ -270,20 +286,35 @@ const guardFor = async (figmaCtx: typeof figma, inst: InstanceNode): Promise<Ins
     entries,
     swaps,
     unsupported,
+    hidden,
+    animated: animatedBefore(inst),
   };
 };
 
-/** Snapshot the override state of every instance containing (or being) one of `ids`. */
+/**
+ * Snapshot the override state of every instance containing (or being) one of `ids`. `hidden`: the
+ * op writes a field the override list never shows, so the outermost instance of each — the one that
+ * holds an override made anywhere inside it — is reset on undo whatever its list says.
+ */
 export const captureOverrideGuard = async (
   figmaCtx: typeof figma,
   ids: readonly string[],
+  hidden = false,
 ): Promise<InstanceGuard[]> => {
   const instances = new Map<string, InstanceNode>();
+  const outermost = new Set<string>();
   const nodes = await Promise.all(ids.map(async id => figmaCtx.getNodeByIdAsync(id)));
   for (const node of nodes) {
-    if (node !== null) for (const inst of instanceChain(node)) instances.set(inst.id, inst);
+    if (node === null) continue;
+    const chain = instanceChain(node);
+    for (const inst of chain) instances.set(inst.id, inst);
+    if (chain.length > 0) outermost.add(chain.at(-1)!.id);
   }
-  return Promise.all([...instances.values()].map(async inst => guardFor(figmaCtx, inst)));
+  return Promise.all(
+    [...instances.values()].map(async inst =>
+      guardFor(figmaCtx, inst, hidden && outermost.has(inst.id)),
+    ),
+  );
 };
 
 const reswap = async (
@@ -375,12 +406,28 @@ export const restoreOverrideGuard = async (
     const inst = await figmaCtx.getNodeByIdAsync(guard.instanceId);
     if (inst?.type !== 'INSTANCE' || inst.removed) continue;
     const now = normalize(inst.overrides);
-    if (same(now, guard.overrides)) continue;
+    const marked = !same(now, guard.overrides);
+    if (!marked && !guard.hidden) continue;
+    const residue = marked
+      ? `keeps override marks [${describeDiff(now, guard.overrides)}]`
+      : 'keeps the value written back as one of its own — if it followed its main component' +
+        ' before, it no longer does';
     if (guard.unsupported.length > 0) {
       notes.push(
-        `instance ${guard.instanceId} keeps override marks [${describeDiff(now, guard.overrides)}]` +
-          ` — it was not reset because it also overrides ${guard.unsupported.join(', ')}, which` +
-          ' have no verified writer',
+        `instance ${guard.instanceId} ${residue} — it was not reset because it also overrides` +
+          ` ${guard.unsupported.join(', ')}, which have no verified writer`,
+      );
+      continue;
+    }
+    // Every layer, the instance itself first: read once, for both what a reset would erase and
+    // what it changes that can be written back.
+    const layers: readonly BaseNode[] = [inst, ...inst.findAll()];
+    const hidden = readHidden(layers);
+    const lost = await unrestorable(inst, layers, hidden, guard.animated);
+    if (lost.length > 0) {
+      notes.push(
+        `instance ${guard.instanceId} ${residue} — it was not reset because a reset would also` +
+          ` erase ${lost.join(', ')}, which the plugin API cannot set back`,
       );
       continue;
     }
@@ -393,6 +440,12 @@ export const restoreOverrideGuard = async (
         continue;
       }
       await reapply(figmaCtx, node, entry);
+    }
+    const missing = await restoreHidden(figmaCtx, hidden);
+    if (missing.length > 0) {
+      notes.push(
+        `instance ${guard.instanceId}: did not come back after reset: ${missing.join(', ')}`,
+      );
     }
     const after = normalize(inst.overrides);
     if (!same(after, guard.overrides)) {
