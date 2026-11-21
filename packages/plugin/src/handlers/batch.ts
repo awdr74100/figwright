@@ -106,6 +106,11 @@ interface BatchInverse {
   ): Promise<unknown>;
   /** Nodes the op writes: any instance containing one has its override list guarded. */
   touches?(params: unknown, captured: unknown): readonly string[];
+  /**
+   * The op writes a field `instance.overrides` never lists (batch-hidden.ts), so writing it back
+   * leaves no mark to reset: the instance holding it is reset on undo regardless.
+   */
+  hidden?: true;
   /** Nodes whose box the op can change: the layout region around each is guarded against drift. */
   resizes?(params: unknown, captured: unknown): readonly string[];
   /** For ops that move nodes between containers: which nodes, and where to (null = a new one). */
@@ -167,6 +172,8 @@ interface PropsOptions {
   bindings?: readonly string[];
   /** Whether the write can change the node's box (and so move its neighbours). */
   resizes?: boolean;
+  /** Whether the props are fields `instance.overrides` never lists (BatchInverse.hidden). */
+  hidden?: boolean;
 }
 
 /**
@@ -202,6 +209,7 @@ const propsInverse = (
   ...(opts.resizes === true && {
     resizes: (_params: unknown, captured: unknown) => [(captured as PropsState).id],
   }),
+  ...(opts.hidden === true && { hidden: true as const }),
 });
 
 const STROKE_WEIGHTS = [
@@ -669,6 +677,7 @@ const complexStrokeInverse: BatchInverse = {
     return undefined;
   },
   touches: (_params, captured) => [(captured as ComplexStrokeState).id],
+  hidden: true,
 };
 
 interface VectorState {
@@ -2303,7 +2312,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   repeat_nodes: repeatInverse,
   // The group's box follows its copies, so the layout around it is guarded.
   set_repeat: propsInverse('set_repeat', ['transformModifiers'], { resizes: true }),
-  set_text_path: propsInverse('set_text_path', ['textPathStartData']),
+  set_text_path: propsInverse('set_text_path', ['textPathStartData'], { hidden: true }),
   set_complex_stroke: complexStrokeInverse,
   set_vector: vectorInverse,
   outline_stroke: outlineInverse,
@@ -2523,7 +2532,7 @@ const captureOp = async (figmaCtx: typeof figma, op: ParsedOp): Promise<Captured
   const touched = inverse.touches?.(op.params, state) ?? [];
   const resized = inverse.resizes?.(op.params, state) ?? [];
   const [guard, layout] = await Promise.all([
-    touched.length > 0 ? captureOverrideGuard(figmaCtx, touched) : [],
+    touched.length > 0 ? captureOverrideGuard(figmaCtx, touched, inverse.hidden === true) : [],
     resized.length > 0 ? captureLayoutScope(figmaCtx, resized) : [],
   ]);
   return { state, guard, layout };
