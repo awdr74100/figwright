@@ -1,4 +1,4 @@
-import type { MutateResult } from '@figwright/shared';
+import type { KeyframeTrackResult } from '@figwright/shared';
 
 import type { SandboxToolHandler } from '../dispatcher.js';
 import {
@@ -7,6 +7,11 @@ import {
   assertMotionAliases,
   isMotionNode,
 } from './motion-shared.js';
+import {
+  assertKeyframeDepthTarget,
+  keyframeDepthAdjusted,
+  keyframeDepthOf,
+} from './set-transform-3d.js';
 
 /**
  * Set a hand-authored keyframe track on a node for one field. `field` / `track` shapes are
@@ -33,7 +38,15 @@ export const createApplyManualKeyframeTrackHandler =
         `apply_manual_keyframe_track: node ${p.nodeId} not found or does not support Motion`,
       );
     }
+    assertKeyframeDepthTarget(node, p.field, 'apply_manual_keyframe_track');
+    const drives = keyframeDepthOf(p.field);
+    const before =
+      drives === null
+        ? null
+        : ((node as unknown as Record<string, unknown>)[drives] as Transform3d | Scene3d | null);
     node.applyManualKeyframeTrack(p.field as KeyframeField, p.track as ManualKeyframeTrackInput);
-    const result: MutateResult = { ok: true, nodeId: node.id };
+    const result: KeyframeTrackResult = { ok: true, nodeId: node.id };
+    const adjusted = drives === null ? undefined : keyframeDepthAdjusted(node, p.field, before);
+    if (adjusted !== undefined) result.adjusted = adjusted;
     return result;
   };

@@ -52,6 +52,11 @@ import {
 } from './motion-shared.js';
 import { resolveDocumentedComponent } from './set-component-documentation.js';
 import {
+  keyframeDepthOf,
+  assertKeyframeDepthTarget,
+  transform3dTracksOf,
+} from './set-transform-3d.js';
+import {
   restoreStyle,
   restoreTextStyle,
   snapshotStyle,
@@ -2117,16 +2122,31 @@ const keyframeTrackInverse = (tool: string): BatchInverse => ({
     if (node === null || !isMotionNode(node)) {
       throw new Error(`batch/${tool}: node ${id} not found or does not support Motion`);
     }
+    assertKeyframeDepthTarget(node, p.field, `batch/${tool}`);
     const tracks = node.manualKeyframeTracks as Record<string, unknown>;
     const previous = tracks[field.name];
+    // A 3D track's baseValue is the transform's (or the scene's) own value, and applying one can
+    // turn a transform on or make a scene (measured) — so that goes back too.
+    const drives = keyframeDepthOf(p.field);
+    const depth =
+      drives === null
+        ? undefined
+        : toPlainJson((node as unknown as Record<string, unknown>)[drives] ?? null);
     // Deep-clone so the snapshot can't be mutated by the apply that follows.
-    return { id, field: p.field, previous: previous === undefined ? null : toPlainJson(previous) };
+    return {
+      id,
+      field: p.field,
+      previous: previous === undefined ? null : toPlainJson(previous),
+      ...(drives !== null && { drives, depth }),
+    };
   },
   async undo(figmaCtx, _params, captured) {
-    const { id, field, previous } = captured as {
+    const { id, field, previous, drives, depth } = captured as {
       id: string;
       field: KeyframeField;
       previous: ManualKeyframeTrackInput | null;
+      drives?: 'transform3d' | 'scene3d';
+      depth?: unknown;
     };
     const node = await figmaCtx.getNodeByIdAsync(id);
     if (node === null || !isMotionNode(node)) return undefined;
@@ -2138,10 +2158,71 @@ const keyframeTrackInverse = (tool: string): BatchInverse => ({
     } else if (now === undefined || !same(toPlainJson(now), previous)) {
       node.applyManualKeyframeTrack(field, previous);
     }
+    if (drives !== undefined) {
+      const bag = node as unknown as Record<string, unknown>;
+      if (!same(toPlainJson(bag[drives] ?? null), depth)) bag[drives] = depth;
+    }
     return undefined;
   },
   touches: (_params, captured) => [(captured as { id: string }).id],
 });
+
+interface Transform3dState {
+  id: string;
+  transform3d?: unknown;
+  transformOrigin?: unknown;
+  scene3d?: unknown;
+}
+
+/**
+ * Set_transform_3d: put the transform, its origin and the scene back. Two writes are refused, since
+ * a rollback could not undo them: removing a transform deletes the node's 3D keyframe tracks (put
+ * back, a track gets new ids — measured in #78), and an imported FREEFORM transform cannot be
+ * assigned at all. Writing the old values back also puts back the baseValue of a 3D track, which is
+ * the same value (measured).
+ */
+const transform3dInverse: BatchInverse = {
+  async capture(figmaCtx, params) {
+    const tool = 'set_transform_3d';
+    const id = stringParam(params, 'nodeId', tool);
+    const node = await nodeOf(figmaCtx, id, tool);
+    const asked = paramsOf(params).transform3d as { type?: unknown } | undefined;
+    const bag = node as unknown as Bag;
+    const current = bag.transform3d as Transform3d | undefined;
+    if (asked !== undefined && current?.type === 'FREEFORM') {
+      throw new Error(
+        `batch/${tool}: node ${id} has an imported FREEFORM transform, which the plugin API cannot ` +
+          'set back — run this outside the batch',
+      );
+    }
+    const tracks = transform3dTracksOf(node);
+    if (asked?.type === 'NONE' && tracks.length > 0) {
+      throw new Error(
+        `batch/${tool}: removing node ${id}'s 3D transform also deletes its keyframe tracks ` +
+          `${tracks.join(', ')}, which a rollback cannot bring back as they were — run this ` +
+          'outside the batch',
+      );
+    }
+    const state: Transform3dState = { id };
+    for (const key of ['transform3d', 'transformOrigin', 'scene3d'] as const) {
+      if (key in node) state[key] = toPlainJson(bag[key] ?? null);
+    }
+    return state;
+  },
+  async undo(figmaCtx, _params, captured) {
+    const state = captured as Transform3dState;
+    const node = await live(figmaCtx, state.id);
+    if (node === null) return undefined;
+    const bag = node as unknown as Bag;
+    // The origin first, the scene last: the order the handler writes them in.
+    for (const key of ['transformOrigin', 'transform3d', 'scene3d'] as const) {
+      if (key in state && !same(toPlainJson(bag[key] ?? null), state[key])) bag[key] = state[key];
+    }
+    return undefined;
+  },
+  touches: (_params, captured) => [(captured as Transform3dState).id],
+  hidden: true,
+};
 
 const setTimelineDurationInverse: BatchInverse = {
   async capture(figmaCtx, params) {
@@ -2314,6 +2395,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_repeat: propsInverse('set_repeat', ['transformModifiers'], { resizes: true }),
   set_text_path: propsInverse('set_text_path', ['textPathStartData'], { hidden: true }),
   set_complex_stroke: complexStrokeInverse,
+  set_transform_3d: transform3dInverse,
   set_vector: vectorInverse,
   outline_stroke: outlineInverse,
   combine_as_variants: combineInverse,
