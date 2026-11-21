@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { once as onExit } from 'node:events';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -27,6 +27,12 @@ import { closeSocket, connectFakePlugin, onText } from './_helpers.js';
 // through the SDK's own `Client`: a probe built out of the package under test can hide that
 // package's regression, because both sides move together and the comparison stays silent.
 const DIST_ENTRY = join(import.meta.dirname, '..', '..', 'dist', 'index.mjs');
+// The version the dist under test reports: what any version-capped check in it is judged against.
+const SERVER_VERSION = (
+  JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 /** What a current client offers. The server may counter-offer; both outcomes are asserted below. */
 const LATEST_CLIENT_PROTOCOL = '2025-11-25';
@@ -727,8 +733,11 @@ describe.skipIf(!existsSync(DIST_ENTRY))('MCP wire contract (built dist)', () =>
       expect(batches).toEqual([]);
     }, 30_000);
 
+    // A plugin on the server's own version: one that resolves references however the cap in
+    // handlesBatchRefs falls. A literal broke the release that raised the version past it — 0.7.0
+    // passed while the server was 0.7.0 and is refused, rightly, by 0.8.0.
     it('forwards it when the plugin behind that leader resolves them', async () => {
-      const { res, batches } = await callBatch('0.7.0');
+      const { res, batches } = await callBatch(SERVER_VERSION);
       expect(res.result?.isError).toBeUndefined();
       expect(batches).toHaveLength(1);
     }, 30_000);
