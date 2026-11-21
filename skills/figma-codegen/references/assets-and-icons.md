@@ -24,6 +24,8 @@ pixel asset grounding can't encode.
 - A **`VECTOR`** / boolean-op, or an **icon instance** (e.g. `mainComponent.name` under `Icons/…`, a
   small square instance) → **`icon_map` first, `get_screenshot` `SVG` only as the fallback** (below).
 - **Logos / brand marks are always exported**, never typed by hand.
+- An asset **inside 3D content** (a node with `cssTransform3d`, or under one) must come from a flat
+  source the CSS then turns — an export bakes the 3D in. See grounding.md "3D transforms".
 - Because `save_image_fills` reads the source bytes, a **clipped / off-canvas** node still yields its
   full asset — the empty/recovered dance below only applies to the screenshot fallback. A **`path:
   null`** (or `images: []`) means the fill's image couldn't be resolved / the node has no image fill;

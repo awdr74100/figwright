@@ -236,6 +236,68 @@ describe('handleDesignDiff', () => {
       },
     );
 
+    // Up to v11 nothing 3D was captured: a node turned in depth, or a scene, is not a change.
+    const withDepth = (rotateY: number): GetDesignContextResult => {
+      const context = withStyles({});
+      const card = context.nodes[0]!;
+      card.scene3d = { perspective: 800, preserve3d: true };
+      const title = card.children![0]!;
+      title.transform3d = { type: 'FIXED_ORDER', translateZ: 0, rotateX: 0, rotateY, rotateZ: 0 };
+      title.transformOrigin = {
+        x: { unit: 'PIXELS', value: 0 },
+        y: { unit: 'PERCENT', value: 50 },
+      };
+      title.cssTransform3d = `translate(0px, 50%) rotateY(${rotateY}deg)`;
+      return context;
+    };
+    it.each([9, 10, 11])(
+      'v%i sees a 3D transform and a scene it could not hold as no change',
+      async version => {
+        await writeAt(version, withStyles({}));
+        currentCtx = withDepth(30);
+        const r = await diff();
+        expect(r.status).toBe('no-changes');
+        expect(r.baselineCapturedAt).toBe(`v${version}`);
+      },
+    );
+
+    it('a current baseline sees a 3D turn change', async () => {
+      await writeAt(SNAPSHOT_FORMAT_VERSION, withDepth(30));
+      currentCtx = withDepth(45);
+      const r = await diff();
+      expect(r.status).toBe('diff');
+      expect(changedFields(r)?.map(([field]) => field)).toEqual(['cssTransform3d', 'transform3d']);
+    });
+
+    // The plugin sends the 3D fields whatever the server's format number, so an older server
+    // working with a newer plugin saves them in an older-format baseline.
+    it.each([9, 10, 11])(
+      'v%i captured through a newer plugin diffs the 3D it holds: unchanged, then changed',
+      async version => {
+        await writeAt(version, withDepth(30));
+        currentCtx = withDepth(30);
+        expect((await diff()).status).toBe('no-changes');
+        currentCtx = withDepth(45);
+        const r = await diff();
+        expect(r.status).toBe('diff');
+        expect(changedFields(r)?.map(([field]) => field)).toEqual([
+          'cssTransform3d',
+          'transform3d',
+        ]);
+      },
+    );
+
+    it('v11 captured through a newer plugin, holding only a scene, sees it as no change', async () => {
+      const sceneOnly = (): GetDesignContextResult => {
+        const context = withStyles({});
+        context.nodes[0]!.scene3d = { perspective: 800, preserve3d: true };
+        return context;
+      };
+      await writeAt(11, sceneOnly());
+      currentCtx = sceneOnly();
+      expect((await diff()).status).toBe('no-changes');
+    });
+
     it('v9 reports every other change, other style slots included', async () => {
       await writeAt(9, withStyles({ fill: 'S:a' }));
       currentCtx = withStyles({ fill: 'S:b,', grid: 'S:grid,' }, { title: 'Bye' });

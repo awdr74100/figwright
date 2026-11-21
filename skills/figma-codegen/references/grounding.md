@@ -300,6 +300,43 @@ the obvious ones. These are ordered by how easily they're silently dropped.
   0.7% of Figma, against 35% for a turned flow item without that box. A `GROUP` carries no `cssTransform` even when turned or flipped: its children already
   carry it, so never turn a group's wrapper by its `rotation` — that applies it twice, and a flip
   twice is no flip.
+- **3D transforms (beta).** A node turned in depth carries `transform3d` — Figma's own values:
+  `FIXED_ORDER` is `translateZ` (px) then `rotateX` / `rotateY` / `rotateZ` (degrees, CSS's signs)
+  about `transformOrigin` (reported only when it is not the centre) — and, when it is drawn,
+  `cssTransform3d`. Emit `transform: <cssTransform> <cssTransform3d>` (`cssTransform` only when the
+  node has one) with `transform-origin: 0 0` at `x` / `y`, as for a turned node, and
+  `backface-visibility: hidden` when `transform3d.backfaceVisible` is `false`. It changes no box:
+  Figma gives a 3D node the same room in a layout as without it.
+  - `visible: false` on `transform3d` is a transform the designer switched off. Figma does not draw
+    it (though its `getCSSAsync` still writes it out), so neither should you.
+  - A `FREEFORM` transform is an imported one whose matrix the plugin API does not expose, so its
+    CSS cannot be written — and the plugin API cannot make one, so nothing here was measured on it.
+    Say so in the output rather than guess.
+  - On a `GROUP`, `cssTransform3d` goes on an unturned wrapper at the group's `x` / `y` / `width` /
+    `height`, with the children inside at their own `x` / `y` less the group's. A turned group's
+    turn is already folded into it.
+  - A frame, component or instance may carry `scene3d`, the space its children are seen in:
+    `perspective: max(perspective, 1)px` (none when `perspective` is below 0 or `visible` is
+    `false`) and `transform-style: preserve-3d` when `preserve3d`. Under `preserve3d` Figma ignores
+    that container's own opacity, blend mode, effects and clipping, while CSS would flatten the
+    scene for them, so leave them off that element. A deeper layer only shares the scene through
+    containers that are `preserve3d` too.
+  - An export bakes in every 3D transform on and above the node, with its scene's perspective, at
+    the projected size (a 120 × 80 card turned 60° exports 62 × 92) — a switched-off one it does
+    not. Put inside the CSS-turned elements, such an export is turned twice, so take the art flat
+    and let the CSS turn it: `icon_map`'s file, an icon instance's main component exported where it
+    sits flat, `save_image_fills`' original, or, for a node turned in 3D itself, the inner `<svg>` of
+    its SVG export — Figma writes that as a `foreignObject` (`data-figma-3d`) wrapping the flat art.
+    A node that only sits under a turned layer has no such wrapper: its PNG has the turn baked in,
+    and its SVG is flat art in a box of the projected size, cut off at its edge — use one of the
+    others.
+  - Measured on 39 scenes against Figma's export — perspective, origins in px and %, every axis, a
+    2D turn underneath, hidden back faces, depth sorting, nested and chained scenes, turned and
+    flipped groups, repeat groups, a shadow and a stroke on a turned node: all within 0.4% of
+    Figma's pixels, text within 2% (font rendering). Drawing a switched-off transform was 11% off;
+    keeping opacity, a shadow or clipping on a `preserve3d` container 4–15%; a turned group's 3D
+    without its fold 3–17%. The two flat sources matched to 0.02%; the baked export in their place
+    was 1–2% of the frame off, about the icon's own area.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
   own `x` / `y` in its parent's axes. An export of the node covers exactly that box (measured on a

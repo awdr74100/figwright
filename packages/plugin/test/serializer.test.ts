@@ -2825,6 +2825,67 @@ describe('orientation', () => {
   );
 });
 
+describe('3D transforms', () => {
+  const turn = {
+    type: 'FIXED_ORDER',
+    translateZ: 0,
+    rotateX: 0,
+    rotateY: 45.00000125223908,
+    rotateZ: 0,
+    backfaceVisible: true,
+    visible: true,
+  };
+  const centre = { x: { unit: 'PERCENT', value: 50 }, y: { unit: 'PERCENT', value: 50 } };
+
+  it('reads a node turned in depth beside its 2D turn, which it leaves as it was', () => {
+    const c = Math.cos(Math.PI / 6);
+    const s = Math.sin(Math.PI / 6);
+    const out = serializeFlatSync(
+      fake({
+        type: 'RECTANGLE',
+        rotation: -30,
+        relativeTransform: [
+          [c, s, 10],
+          [-s, c, 20],
+        ],
+        transform3d: turn,
+        transformOrigin: centre,
+      }),
+    );
+    expect(out).toMatchObject({
+      cssTransform: 'rotate(-30deg)',
+      transform3d: { type: 'FIXED_ORDER', rotateY: 45 },
+      cssTransform3d:
+        'translate(50%, 50%) translateZ(0px) rotateX(0deg) rotateY(45deg) rotateZ(0deg) ' +
+        'translate(-50%, -50%)',
+    });
+    expect(out).not.toHaveProperty('transformOrigin');
+  });
+
+  it('reads a frame’s scene, an instance inheriting one reads the same way', () => {
+    for (const type of ['FRAME', 'INSTANCE']) {
+      const out = serializeFlatSync(
+        fake({
+          type,
+          transform3d: { type: 'NONE' },
+          transformOrigin: centre,
+          scene3d: { perspective: 600, preserve3d: true, visible: true },
+          children: [],
+        }),
+      );
+      expect(out.scene3d).toEqual({ perspective: 600, preserve3d: true });
+      expect(out).not.toHaveProperty('transform3d');
+    }
+  });
+
+  it('reads nothing 3D from a node without it, or in a Figma that predates it', () => {
+    const out = serializeFlatSync(fake({ type: 'RECTANGLE' }));
+    for (const key of ['transform3d', 'transformOrigin', 'cssTransform3d', 'scene3d']) {
+      expect(out).not.toHaveProperty(key);
+    }
+  });
+});
+
 describe('Figma Draw nodes', () => {
   const at = (x: number, y: number) => [
     [1, 0, x],
