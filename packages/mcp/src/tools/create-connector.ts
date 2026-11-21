@@ -19,14 +19,22 @@ export const createConnectorTool: ToolSpec = {
     '{ endpointNodeId, position } to attach at a point on it — px from its top-left, so its ' +
     'right-middle is { x: width, y: height / 2 } — or { position } to float, in px in the ' +
     "parent's coordinates. An attached end follows its node when it moves, and removing the node " +
-    'removes the connector with it. Defaults as in FigJam: ELBOWED, no start cap, an ARROW_LINES ' +
+    'removes the connector with it. Without parentId it goes where FigJam puts one — the section ' +
+    'or frame its two nodes share, else the page — so it reads and diffs with them. Defaults as in ' +
+    'FigJam: ELBOWED, no start cap, an ARROW_LINES ' +
     'end, weight 4. text labels it in FigJam’s caption face (Inter Medium) and names the layer ' +
     'after it; set_text rewrites it later. FigJam only: Figma Design and Dev Mode have no ' +
     'connectors. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     connectorStart: connectorEndpointSchema,
     connectorEnd: connectorEndpointSchema,
-    parentId: z.string().optional().describe('Parent node id (default: current page)'),
+    parentId: z
+      .string()
+      .optional()
+      .describe(
+        'Parent node id. Omit it and Figma places the connector as FigJam does: in the section or ' +
+          'frame its two nodes share, else on the page',
+      ),
     name: z.string().optional().describe('Layer name'),
     connectorLineType: connectorLineTypeSchema
       .optional()

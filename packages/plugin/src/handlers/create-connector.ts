@@ -126,8 +126,13 @@ export const createCreateConnectorHandler =
       connector.remove();
       throw error;
     }
-    // Removes the connector itself if the parent refuses it.
-    await placeNode(figmaCtx, connector, p.parentId, TOOL);
+    // With no parent named, the connector stays where Figma put it: assigning its ends moves it into
+    // the container its two nodes share — a section, a frame — or the page (measured; the same
+    // place FigJam's own connector tool gives one, and in an auto-layout frame it takes no part in
+    // the layout). Placing it on the current page instead pulled it out of that section, so reading
+    // or diffing the section left it out. A parent that is named is honoured, and placeNode removes
+    // the connector if that parent refuses it.
+    if (p.parentId !== undefined) await placeNode(figmaCtx, connector, p.parentId, TOOL);
 
     const result: CreateResult = {
       ok: true,

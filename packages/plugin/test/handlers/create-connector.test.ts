@@ -80,7 +80,8 @@ describe('create_connector', () => {
 
     expect(f.connector.connectorStart).toEqual({ endpointNodeId: '1:1', magnet: 'AUTO' });
     expect(f.connector.connectorEnd).toEqual({ endpointNodeId: '1:2', magnet: 'LEFT' });
-    expect(f.currentPage.appendChild).toHaveBeenCalledWith(f.connector);
+    // Figma has placed it by its ends; with no parent named it is not moved (see the test below).
+    expect(f.currentPage.appendChild).not.toHaveBeenCalled();
     expect(result).toEqual({ ok: true, nodeId: '3:1', name: 'Connector line', type: 'CONNECTOR' });
   });
 
@@ -194,6 +195,21 @@ describe('create_connector', () => {
       strokes: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 }, opacity: 1, visible: true }],
       strokeWeight: 2,
     });
+  });
+
+  // Measured: assigning the ends moves a connector into the section (or frame) its two nodes share,
+  // as FigJam's own connector tool places one; putting it on the current page pulled it out of that
+  // section, so reading or diffing the section left it out.
+  it('leaves the connector where Figma put it by its ends when no parent is named', async () => {
+    const f = makeFigJam({ nodes: NODES });
+    const section = { id: '7:7', type: 'SECTION' };
+    Object.defineProperty(f.connector, 'parent', { get: () => section });
+    await createCreateConnectorHandler(f.figmaCtx)({
+      connectorStart: { endpointNodeId: '1:1' },
+      connectorEnd: { endpointNodeId: '1:2' },
+    });
+    expect(f.currentPage.appendChild).not.toHaveBeenCalled();
+    expect((f.connector as { parent: unknown }).parent).toBe(section);
   });
 
   it('goes into the parent it is given, and removes itself if that parent refuses it', async () => {

@@ -270,7 +270,8 @@ rectangles, ellipses and text are made as anywhere else; join them with `create_
   the nearest), `{ endpointNodeId, position }` (a point on the node, in px from its top-left — its
   right-middle is `{ x: width, y: height / 2 }`), or `{ position }` (a free end, in px in the
   connector's parent's coordinates). An attached end follows its node, and **removing a node removes
-  the connectors attached to it**.
+  the connectors attached to it**. Leave `parentId` out: Figma puts the connector in the section (or
+  frame) its two nodes share, as its own connector tool does, so it reads and diffs with them.
 - In a `batch`, `endpointNodeId: "$N"` attaches to the node an earlier op made, so a whole chart —
   boxes, then the connectors between them — is one call.
 - Defaults are FigJam's own: ELBOWED, an ARROW_LINES end, weight 4. `text` labels the connector in
