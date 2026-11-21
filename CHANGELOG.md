@@ -1,5 +1,80 @@
 # Changelog
 
+## v0.8.0
+
+[compare changes](https://github.com/awdr74100/figwright/compare/v0.7.0...v0.8.0)
+
+### 🚀 Enhancements
+
+- **design:** Size a text box by width and height, through one path that follows Figma's box rules ([#335](https://github.com/awdr74100/figwright/pull/335))
+- **tools:** Let a batch op refer to what an earlier op created ([#375](https://github.com/awdr74100/figwright/pull/375))
+- **design:** Set a component's documentation, and read it back on request ([#380](https://github.com/awdr74100/figwright/pull/380))
+- **design:** Keep a layout grid's color through a read and a write ([#382](https://github.com/awdr74100/figwright/pull/382))
+- **design:** Update a grid style in place, and give every style a documentation link ([#384](https://github.com/awdr74100/figwright/pull/384))
+- **design:** Describe, scope and publish a variable after it is made ([#387](https://github.com/awdr74100/figwright/pull/387))
+- **design:** Write Dev Mode annotations and their categories ([#388](https://github.com/awdr74100/figwright/pull/388))
+- **design:** Draw, edit and read Dev Mode measurements ([#389](https://github.com/awdr74100/figwright/pull/389))
+- **grounding:** Read 3D transforms and scenes ([#393](https://github.com/awdr74100/figwright/pull/393))
+- **design:** Turn layers in 3D and keyframe their depth ([#395](https://github.com/awdr74100/figwright/pull/395))
+- **design:** Add create_connector and FigJam text sublayer support ([#392](https://github.com/awdr74100/figwright/pull/392))
+
+### 🩹 Fixes
+
+- **grounding:** Expand #RGBA in normHex and reject invalid hex lengths ([#323](https://github.com/awdr74100/figwright/pull/323))
+- **design:** Size a new node by a width or height alone, and refuse a bad size before creating it ([#336](https://github.com/awdr74100/figwright/pull/336))
+- **plugin:** Make each write call its own undo step ([#337](https://github.com/awdr74100/figwright/pull/337))
+- **plugin:** Close an undo step when no write is running, instead of queueing writes ([#339](https://github.com/awdr74100/figwright/pull/339))
+- **design:** Bring text box writes back to parity with what they did before the text box sizing ([#340](https://github.com/awdr74100/figwright/pull/340))
+- **design:** Let a create_* side of 0 through again, as it went before the lone-side fix ([#341](https://github.com/awdr74100/figwright/pull/341))
+- **plugin:** Name the editor only on errors it can be behind, not on every error raised there ([#343](https://github.com/awdr74100/figwright/pull/343))
+- **plugin:** Roll back a group, repeat group or variant set without looking up the container it deleted ([#345](https://github.com/awdr74100/figwright/pull/345))
+- **relay:** Keep the plugin's error code on the way to a follower ([#347](https://github.com/awdr74100/figwright/pull/347))
+- **plugin:** Mark Figma's silent server a TIMEOUT and say what it means ([#346](https://github.com/awdr74100/figwright/pull/346))
+- **grounding:** Read a tree holding an instance of a component set with errors, leaving out only what Figma withholds ([#348](https://github.com/awdr74100/figwright/pull/348))
+- **design:** Stop apply_style_to_node silently stripping a node's style on an id Figma cannot parse ([#349](https://github.com/awdr74100/figwright/pull/349))
+- **design:** Remove a new layer its parent refuses, instead of leaving it on the current page ([#350](https://github.com/awdr74100/figwright/pull/350))
+- **grounding:** Read a frame's grid style, and keep diffing baselines saved before it ([#352](https://github.com/awdr74100/figwright/pull/352))
+- **grounding:** Name the file's own styles in get_design_context, and give their ids back in a form the style tools take ([#353](https://github.com/awdr74100/figwright/pull/353))
+- **design:** Name the truncation limit Figma clears on a text, instead of answering a bare ok ([#354](https://github.com/awdr74100/figwright/pull/354))
+- **design:** Leave a node resize_nodes could not resize as it was, sizing and text box included ([#355](https://github.com/awdr74100/figwright/pull/355))
+- **skills:** Map a text truncated at a height to a measured line clamp, not a one-line truncate ([#356](https://github.com/awdr74100/figwright/pull/356))
+- **tools:** Name saved screenshots from the request, never from the plugin's reply ([#361](https://github.com/awdr74100/figwright/pull/361))
+- **tools:** Name saved image fills by the SHA-1 of their bytes, never by the plugin's reply ([#364](https://github.com/awdr74100/figwright/pull/364))
+- **design:** Resolve sandbox method, batch-op and stroke-kind names against a table's own keys only ([#362](https://github.com/awdr74100/figwright/pull/362))
+- **grounding:** Read an SFC script's lang through a Map so an inherited name reads as no parser ([#363](https://github.com/awdr74100/figwright/pull/363))
+- **relay:** Admit plugin connections only from the Figma desktop app ([#365](https://github.com/awdr74100/figwright/pull/365))
+- **relay:** Mint plugin session ids from the CSPRNG, not Math.random ([#366](https://github.com/awdr74100/figwright/pull/366))
+- **design:** Stop grid track reads at figma's callback-id overflow and roll HUG tracks back as HUG ([#369](https://github.com/awdr74100/figwright/pull/369))
+- **design:** Say when get_styles lost variable names to figma's callback-id overflow ([#370](https://github.com/awdr74100/figwright/pull/370))
+- **design:** Stop making images once figma's plugin runtime runs out of callback ids ([#371](https://github.com/awdr74100/figwright/pull/371))
+- **design:** Leave a style as it was when its update fails ([#381](https://github.com/awdr74100/figwright/pull/381))
+- **design:** Leave no style behind when creating one fails ([#383](https://github.com/awdr74100/figwright/pull/383))
+- **design:** Let a batch undo a text style's rename without loading its font ([#385](https://github.com/awdr74100/figwright/pull/385))
+- **design:** Keep a collection published when it is renamed ([#386](https://github.com/awdr74100/figwright/pull/386))
+- **design:** Keep an instance's hidden overrides through a batch rollback ([#394](https://github.com/awdr74100/figwright/pull/394))
+
+### 📖 Documentation
+
+- **repo:** Bring the How it works diagram up to date ([#317](https://github.com/awdr74100/figwright/pull/317))
+- **repo:** Replace the README demo GIFs with end-to-end takes ([#321](https://github.com/awdr74100/figwright/pull/321))
+- **repo:** Serve the README demos as animated WebP ([#322](https://github.com/awdr74100/figwright/pull/322))
+- **repo:** Recommend the standalone pnpm install in CONTRIBUTING ([#327](https://github.com/awdr74100/figwright/pull/327))
+- **plugin:** Describe how wrapped writes close an undo step since #339 ([#342](https://github.com/awdr74100/figwright/pull/342), [#339](https://github.com/awdr74100/figwright/issues/339))
+- **repo:** Load AGENTS.md everywhere, and make equal-or-better cover every call that worked before ([#344](https://github.com/awdr74100/figwright/pull/344))
+
+### 🏡 Chore
+
+- **repo:** Move the dev and CI Node to 26 LTS ([#326](https://github.com/awdr74100/figwright/pull/326))
+
+### 🤖 CI
+
+- **repo:** Label the semantic PR action pin with its exact version ([#333](https://github.com/awdr74100/figwright/pull/333))
+
+### ❤️ Contributors
+
+- Aditya Singh ([@adysingh5711](https://github.com/adysingh5711))
+- Roya ([@awdr74100](https://github.com/awdr74100))
+
 ## v0.7.0
 
 [compare changes](https://github.com/awdr74100/figwright/compare/v0.6.0...v0.7.0)
