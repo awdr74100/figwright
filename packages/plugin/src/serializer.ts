@@ -34,6 +34,7 @@ import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { readGridTrackSizes } from './grid-tracks.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
+import { readScene3d, readTransform3d } from './transform3d.js';
 import { flattenForest } from './traverse.js';
 
 const isGradient = (paint: Paint): paint is GradientPaint =>
@@ -643,6 +644,12 @@ const enrichWithMixins = (
       out.boundingBox = boundingBoxOf(transform, node.width, node.height);
     }
   }
+  const t3d = readTransform3d(node);
+  if (t3d.transform3d !== undefined) out.transform3d = t3d.transform3d;
+  if (t3d.transformOrigin !== undefined) out.transformOrigin = t3d.transformOrigin;
+  if (t3d.cssTransform3d !== undefined) out.cssTransform3d = t3d.cssTransform3d;
+  const scene3d = readScene3d(node);
+  if (scene3d !== undefined) out.scene3d = scene3d;
   if ('opacity' in node) {
     const opacity = node.opacity;
     if (typeof opacity === 'number') out.opacity = opacity;

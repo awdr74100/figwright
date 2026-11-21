@@ -211,6 +211,221 @@ describe('get_design_context handler', () => {
     expect(result.nodes[1]?.children === undefined).toBe(deduped);
   });
 
+  const NONE = { type: 'NONE' };
+  const CENTRE = { x: { unit: 'PERCENT', value: 50 }, y: { unit: 'PERCENT', value: 50 } };
+  const LEFT = { x: { unit: 'PIXELS', value: 0 }, y: { unit: 'PERCENT', value: 50 } };
+  const turnY = (deg: number) => ({
+    type: 'FIXED_ORDER',
+    translateZ: 0,
+    rotateX: 0,
+    rotateY: deg,
+    rotateZ: 0,
+    backfaceVisible: true,
+    visible: true,
+  });
+  /** A main component and an instance of it whose card layer may differ in 3D. */
+  const depthPair = (main: Record<string, unknown>, own: Record<string, unknown>) => {
+    const layer = (id: string, { scene3d = null, ...over }: Record<string, unknown>) =>
+      node({
+        id: `${id}-scene`,
+        transform3d: NONE,
+        transformOrigin: CENTRE,
+        scene3d,
+        children: [
+          node({
+            id: `${id}-card`,
+            type: 'RECTANGLE',
+            transform3d: turnY(30),
+            transformOrigin: CENTRE,
+            ...over,
+          }),
+        ],
+      });
+    const mainNode = node({
+      id: 'main',
+      type: 'COMPONENT',
+      transform3d: NONE,
+      transformOrigin: CENTRE,
+      scene3d: null,
+      children: [layer('main', main)],
+    });
+    const instance = (id: string, over: Record<string, unknown>) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        transform3d: NONE,
+        transformOrigin: CENTRE,
+        scene3d: null,
+        getMainComponentAsync: async () => mainNode,
+        children: [layer(id, over)],
+        overrides: [], // measured: Figma lists no 3D override here
+      });
+    return [instance('first', main), instance('second', own)];
+  };
+
+  it.each([
+    ['the same 3D as its main component', {}, {}, true],
+    ['its own turn', {}, { transform3d: turnY(60) }, false],
+    ['its own origin for a turn', {}, { transformOrigin: LEFT }, false],
+    [
+      'a different origin with no turn, which draws nothing',
+      { transform3d: NONE },
+      { transform3d: NONE, transformOrigin: LEFT },
+      true,
+    ],
+    [
+      'its own scene',
+      {},
+      { scene3d: { perspective: 400, preserve3d: true, visible: true } },
+      false,
+    ],
+    ['its own turn on a hidden layer', {}, { visible: false, transform3d: turnY(60) }, true],
+  ])('an instance with %s is deduped: %s', async (_label, main, own, deduped) => {
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: depthPair(main, own) }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped === true).toBe(deduped);
+  });
+
+  it('reads no layer of a main component whose first instance came out with no 3D', async () => {
+    const [first, second] = depthPair({ transform3d: NONE }, { transform3d: NONE });
+    const main = (await (first as InstanceNode).getMainComponentAsync())!;
+    let reads = 0;
+    const count = (n: SceneNode): void => {
+      const own = (n as unknown as { transform3d: unknown }).transform3d;
+      Object.defineProperty(n, 'transform3d', {
+        get: () => {
+          reads += 1;
+          return own;
+        },
+      });
+      for (const c of (n as unknown as { children?: SceneNode[] }).children ?? []) count(c);
+    };
+    count(main);
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [first!, second!] }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped).toBe(true);
+    expect(reads).toBe(0);
+  });
+
+  it('reads no main component when its first instance holds only deduped instances with no 3D', async () => {
+    const flat = { transform3d: NONE, transformOrigin: CENTRE };
+    const iconMain = node({
+      id: 'icon',
+      type: 'COMPONENT',
+      ...flat,
+      scene3d: null,
+      children: [node({ id: 'icon-path', type: 'VECTOR', ...flat })],
+    });
+    const icon = (id: string) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        ...flat,
+        scene3d: null,
+        getMainComponentAsync: async () => iconMain,
+        overrides: [],
+        children: [node({ id: `${id}-path`, type: 'VECTOR', ...flat })],
+      });
+    let reads = 0;
+    const cardMain = node({
+      id: 'card',
+      type: 'COMPONENT',
+      scene3d: null,
+      transformOrigin: CENTRE,
+      children: [],
+    });
+    Object.defineProperty(cardMain, 'transform3d', {
+      get: () => {
+        reads += 1;
+        return NONE;
+      },
+    });
+    const card = (id: string) =>
+      node({
+        id,
+        type: 'INSTANCE',
+        ...flat,
+        scene3d: null,
+        getMainComponentAsync: async () => cardMain,
+        overrides: [],
+        children: [icon(`${id}-icon`)],
+      });
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [icon('lone-icon'), card('first'), card('second')] }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.children?.[0]?.deduped).toBe(true); // the icon inside the first card
+    expect(result.nodes[2]?.deduped).toBe(true);
+    expect(reads).toBe(0);
+  });
+
+  it('compares exactly when the first instance was cut off by the depth limit', async () => {
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: depthPair({}, { transform3d: turnY(60) }) }),
+    )({ detail: 'full', dedupeComponents: true, depth: 1 })) as GetDesignContextResult;
+    expect(result.nodes[0]?.children?.[0]?.truncated).toBe(true);
+    expect(result.nodes[1]?.deduped === true).toBe(false);
+  });
+
+  it('dedupes as before at compact detail, which reports nothing 3D to compare', async () => {
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: depthPair({}, { transform3d: turnY(60) }) }),
+    )({ detail: 'compact', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped).toBe(true);
+  });
+
+  it('expands such an instance with its own turn, not its main component’s', async () => {
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: depthPair({}, { transform3d: turnY(60) }) }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.children?.[0]?.children?.[0]?.transform3d).toEqual({
+      type: 'FIXED_ORDER',
+      translateZ: 0,
+      rotateX: 0,
+      rotateY: 60,
+      rotateZ: 0,
+    });
+  });
+
+  // Each layer's transform3d costs a read, so the layers are compared only where 3D is in play.
+  it.each([
+    [
+      'in a scene of its own',
+      { scene3d: { perspective: 400, preserve3d: false, visible: true } },
+      false,
+    ],
+    ['turned itself', { transform3d: turnY(10) }, false],
+    ['with no 3D of its own, which is not compared', {}, true],
+  ])(
+    'an instance of a component with no 3D, a layer turned inside it, %s, is deduped: %s',
+    async (_label, root, deduped) => {
+      const [first, second] = depthPair({ transform3d: NONE }, { transform3d: turnY(60) });
+      Object.assign(second as object, root);
+      const result = (await createGetDesignContextHandler(
+        fakeFigma({ selection: [first!, second!] }),
+      )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+      expect(result.nodes[1]?.deduped === true).toBe(deduped);
+    },
+  );
+
+  it('dedupes as before in a Figma without 3D, where no layer has a transform3d', async () => {
+    const strip = (n: SceneNode): SceneNode => {
+      const o = n as unknown as Record<string, unknown>;
+      delete o.transform3d;
+      delete o.transformOrigin;
+      delete o.scene3d;
+      for (const c of (o.children as SceneNode[] | undefined) ?? []) strip(c);
+      return n;
+    };
+    const [first, second] = depthPair({}, { transform3d: turnY(60) }).map(strip);
+    strip((await (first as InstanceNode).getMainComponentAsync())!);
+    const result = (await createGetDesignContextHandler(
+      fakeFigma({ selection: [first!, second!] }),
+    )({ detail: 'full', dedupeComponents: true })) as GetDesignContextResult;
+    expect(result.nodes[1]?.deduped).toBe(true);
+  });
+
   it('limits depth and flags truncated nodes', async () => {
     const grandchild = node({ id: 'gc', type: 'RECTANGLE' });
     const child = node({ id: 'c', children: [grandchild] });

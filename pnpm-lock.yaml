@@ -253,7 +253,7 @@ importers:
         version: 4.6.7
     devDependencies:
       '@figma/plugin-typings':
-        specifier: ^1.142.0
+        specifier: ^1.143.0
         version: 1.143.0
       '@figwright/shared':
         specifier: workspace:*

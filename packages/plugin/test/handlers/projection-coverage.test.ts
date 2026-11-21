@@ -75,6 +75,18 @@ const frameInGrid = base({
     [Math.SQRT1_2, -Math.SQRT1_2, 0],
     [-Math.SQRT1_2, -Math.SQRT1_2, 0],
   ],
+  // Turned in depth about its left edge, inside a scene of its own.
+  transform3d: {
+    type: 'FIXED_ORDER',
+    translateZ: 10,
+    rotateX: 0,
+    rotateY: 30,
+    rotateZ: 0,
+    backfaceVisible: false,
+    visible: true,
+  },
+  transformOrigin: { x: { unit: 'PIXELS', value: 0 }, y: { unit: 'PERCENT', value: 50 } },
+  scene3d: { perspective: 800, preserve3d: true, visible: true },
   opacity: 0.5,
   cornerRadius: Symbol('mixed'),
   cornerSmoothing: 0.6,
