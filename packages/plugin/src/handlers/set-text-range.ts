@@ -4,6 +4,7 @@ import type { SandboxToolHandler } from '../dispatcher.js';
 import { toFigmaPaintsBound } from './bindings.js';
 import { toFigmaFontName, toFigmaLineHeight } from './convert.js';
 import { isTextLike, NOT_ON_A_PATH, unsupportedOnPath } from './text-like.js';
+import { captionHint } from './text-sublayer.js';
 
 interface RangeInput {
   start: number;
@@ -46,7 +47,9 @@ export const createSetTextRangeHandler =
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (!isTextLike(node)) {
-      throw new Error(`set_text_range: node ${p.nodeId} is not a TEXT node or text on a path`);
+      throw new Error(
+        `set_text_range: node ${p.nodeId} is not a TEXT node or text on a path${captionHint(node)}`,
+      );
     }
     const len = node.characters.length;
 

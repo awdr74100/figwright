@@ -664,6 +664,18 @@ export const SerializedScene3dSchema = z.object({
 });
 export type SerializedScene3d = z.infer<typeof SerializedScene3dSchema>;
 
+/**
+ * One end of a FigJam connector, as create_connector takes it: `endpointNodeId` + `magnet` attached
+ * to a side of that node, `endpointNodeId` + `position` attached at a point on it (px from its
+ * top-left), or `position` alone, floating (px in the connector's parent's coordinates).
+ */
+export const SerializedConnectorEndpointSchema = z.object({
+  endpointNodeId: z.string().optional(),
+  magnet: z.enum(['NONE', 'AUTO', 'TOP', 'LEFT', 'BOTTOM', 'RIGHT', 'CENTER']).optional(),
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
+});
+export type SerializedConnectorEndpoint = z.infer<typeof SerializedConnectorEndpointSchema>;
+
 /** A box measured from a node's own top-left corner: x / y are offsets (negative = up / left). */
 export const SerializedBoundsSchema = z.object({
   x: z.number(),
@@ -710,6 +722,12 @@ export interface SerializedNode {
   cssTransform3d?: string;
   /** The 3D scene a frame / component / instance gives its children — see SerializedScene3dSchema. */
   scene3d?: SerializedScene3d;
+  /** A FigJam connector's two ends, its path shape and its end caps. */
+  connectorStart?: SerializedConnectorEndpoint;
+  connectorEnd?: SerializedConnectorEndpoint;
+  connectorLineType?: string;
+  connectorStartStrokeCap?: string;
+  connectorEndStrokeCap?: string;
   opacity?: number;
   cornerRadius?: number | Mixed;
   /** Figma corner smoothing, 0–1 (0 = circular). */
@@ -913,6 +931,11 @@ export const SerializedNodeSchema = z.lazy(() =>
     transformOrigin: SerializedTransformOriginSchema.optional(),
     cssTransform3d: z.string().optional(),
     scene3d: SerializedScene3dSchema.optional(),
+    connectorStart: SerializedConnectorEndpointSchema.optional(),
+    connectorEnd: SerializedConnectorEndpointSchema.optional(),
+    connectorLineType: z.string().optional(),
+    connectorStartStrokeCap: z.string().optional(),
+    connectorEndStrokeCap: z.string().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
     cornerSmoothing: z.number().min(0).max(1).optional(),

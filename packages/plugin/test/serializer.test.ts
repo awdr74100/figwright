@@ -2769,6 +2769,16 @@ describe('serializer — variable bindings on paints / effects / grids', () => {
       },
     ]);
   });
+
+  it('surfaces a SHAPE_WITH_TEXT node’s caption via its text sublayer', () => {
+    const out = serializeFlatSync(
+      fake({
+        type: 'SHAPE_WITH_TEXT',
+        text: { characters: 'Deliver quote' },
+      }),
+    );
+    expect(out.characters).toBe('Deliver quote');
+  });
 });
 
 describe('orientation', () => {
@@ -3153,5 +3163,65 @@ describe('Figma Draw nodes', () => {
     });
     expect(out).not.toHaveProperty('complexStrokeProperties');
     expect(out).not.toHaveProperty('renderBounds');
+  });
+});
+
+describe('FigJam captions and connectors', () => {
+  it('reads the words a sticky, shape with text, table cell or connector keeps in its sublayer', () => {
+    for (const type of ['STICKY', 'SHAPE_WITH_TEXT', 'TABLE_CELL', 'CONNECTOR']) {
+      expect(
+        serializeFlatSync(fake({ type, text: { characters: `${type} words` } })).characters,
+      ).toBe(`${type} words`);
+    }
+  });
+
+  it('reads no words off a node of another type that happens to have a `text` field', () => {
+    expect(
+      serializeFlatSync(fake({ type: 'FRAME', text: { characters: 'x' } })).characters,
+    ).toBeUndefined();
+  });
+
+  // Measured: a floating end reads back attached to the page at its position, even inside a
+  // section — that id says nothing, so it is left out; an end attached to a node keeps its id.
+  it('reads a connector’s ends as create_connector takes them, a floating end without the page id', () => {
+    const page = { id: '0:1', type: 'PAGE', parent: null };
+    const section = { id: '7:1', type: 'SECTION', parent: page };
+    const out = serializeFlatSync(
+      fake({
+        type: 'CONNECTOR',
+        parent: section,
+        text: { characters: '' },
+        connectorStart: { endpointNodeId: '0:1', position: { x: 10, y: 10 } },
+        connectorEnd: { endpointNodeId: '5:5', magnet: 'LEFT' },
+        connectorLineType: 'ELBOWED',
+        connectorStartStrokeCap: 'NONE',
+        connectorEndStrokeCap: 'ARROW_LINES',
+      }),
+    );
+    expect(out).toMatchObject({
+      connectorStart: { position: { x: 10, y: 10 } },
+      connectorEnd: { endpointNodeId: '5:5', magnet: 'LEFT' },
+      connectorLineType: 'ELBOWED',
+      connectorStartStrokeCap: 'NONE',
+      connectorEndStrokeCap: 'ARROW_LINES',
+    });
+    expect(out.connectorStart).not.toHaveProperty('endpointNodeId');
+
+    const atPoint = serializeFlatSync(
+      fake({
+        type: 'CONNECTOR',
+        parent: page,
+        text: { characters: '' },
+        connectorStart: { endpointNodeId: '5:5', position: { x: 240, y: 120 } },
+        connectorEnd: { endpointNodeId: '0:1', position: { x: 0, y: 0 } },
+      }),
+    );
+    expect(atPoint.connectorStart).toEqual({ endpointNodeId: '5:5', position: { x: 240, y: 120 } });
+    expect(atPoint.connectorEnd).toEqual({ position: { x: 0, y: 0 } });
+  });
+
+  it('reads no connector fields off anything else', () => {
+    const out = serializeFlatSync(fake({ connectorStart: { position: { x: 0, y: 0 } } }));
+    expect(out.connectorStart).toBeUndefined();
   });
 });

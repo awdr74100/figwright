@@ -3,6 +3,7 @@ import type { MutateResult } from '@figwright/shared';
 import type { SandboxToolHandler } from '../dispatcher.js';
 import { keptEdges, replaceRange } from './text-edit.js';
 import { isTextLike } from './text-like.js';
+import { facesToLoad, textHostOf } from './text-sublayer.js';
 
 export const createSetTextHandler =
   (figmaCtx: typeof figma): SandboxToolHandler =>
@@ -13,17 +14,17 @@ export const createSetTextHandler =
       throw new TypeError('set_text: characters must be a string');
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
-    if (!isTextLike(node)) {
-      throw new Error(`set_text: node ${p.nodeId} is not a TEXT node or text on a path`);
+    const text = node === null ? null : isTextLike(node) ? node : textHostOf(node);
+    if (node === null || text === null) {
+      throw new Error(
+        `set_text: node ${p.nodeId} is not a TEXT node, text on a path, or a FigJam sticky, shape ` +
+          'with text, table cell or connector',
+      );
     }
-    const text = node;
 
-    // Figma requires every font in the node to be loaded before mutating characters.
-    const fonts =
-      text.fontName === figmaCtx.mixed && text.characters.length > 0
-        ? text.getRangeAllFontNames(0, text.characters.length)
-        : [text.fontName as FontName];
-    await Promise.all(fonts.map(font => figmaCtx.loadFontAsync(font)));
+    // Figma requires every font in the node to be loaded before mutating characters — and a
+    // connector's label not written yet names no font, so it takes the one FigJam writes it in.
+    await Promise.all(facesToLoad(figmaCtx.mixed, text).map(font => figmaCtx.loadFontAsync(font)));
 
     // Only what differs is rewritten: whole runs the old and new strings share at either end are
     // kept, so fixing a typo leaves a bold word or a coloured price suffix as it was. An empty node
@@ -41,6 +42,6 @@ export const createSetTextHandler =
       );
     }
 
-    const result: MutateResult = { ok: true, nodeId: text.id };
+    const result: MutateResult = { ok: true, nodeId: node.id };
     return result;
   };

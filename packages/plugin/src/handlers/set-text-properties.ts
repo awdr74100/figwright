@@ -12,6 +12,7 @@ import {
   writeTextBox,
 } from './text-box.js';
 import { isTextLike, unsupportedOnPath } from './text-like.js';
+import { captionHint } from './text-sublayer.js';
 
 type AutoResize = TextNode['textAutoResize'];
 
@@ -200,7 +201,9 @@ export const createSetTextPropertiesHandler =
 
     const node = await figmaCtx.getNodeByIdAsync(p.nodeId);
     if (!isTextLike(node)) {
-      throw new Error(`set_text_properties: node ${p.nodeId} is not a TEXT node or text on a path`);
+      throw new Error(
+        `set_text_properties: node ${p.nodeId} is not a TEXT node or text on a path${captionHint(node)}`,
+      );
     }
     // Refused before anything is written, so a path never takes half of a call.
     const missing = node.type === 'TEXT_PATH' ? unsupportedOnPath(p) : [];

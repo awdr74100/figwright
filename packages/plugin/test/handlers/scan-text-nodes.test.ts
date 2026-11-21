@@ -128,4 +128,16 @@ describe('scan_text_nodes handler', () => {
       texts.slice(0, result.nodes.length).map(node => node.id),
     );
   });
+
+  it('surfaces the caption of a SHAPE_WITH_TEXT node under its own id', async () => {
+    const page = [
+      fake('1:5', 'SHAPE_WITH_TEXT', {
+        text: { characters: 'Deliver quote', fontName: { family: 'Inter', style: 'Regular' } },
+      }),
+    ];
+    const handler = createScanTextNodesHandler(fakeFigma(page));
+    const result = (await handler({})) as ScanTextNodesResult;
+    expect(result.nodes.map(n => n.id)).toEqual(['1:5']);
+    expect(result.nodes[0]?.characters).toBe('Deliver quote');
+  });
 });

@@ -45,7 +45,7 @@ Everything runs on your machine: the server, the relay, and the plugin. Your des
 ## Why Figwright
 
 - **Not gated**: the official Dev Mode MCP is behind a paid Dev Mode seat. Figwright runs on the free tier.
-- **Bidirectional**: not read-only. **146 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
+- **Bidirectional**: not read-only. **147 tools** span reading _and_ writing the canvas, so an agent can both implement designs and build them.
 - **Provider-first codegen**: Figwright detects your real stack (framework + styling system) and reuses your existing components, tokens, and icons, instead of emitting generic markup you have to rewrite.
 - **One agent per file**: several agents can work at once, each claiming its own open Figma file. Switching tabs no longer sends one agent's edits into another's design — see [working across files](#faq).
 - **Open & extensible**: the read/write workflows ship as installable [skills](#skills) you can adopt or fork.
@@ -135,10 +135,10 @@ npx skills add https://github.com/awdr74100/figwright/tree/main/skills/figma-cod
 
 ## Tools
 
-Figwright exposes **146 MCP tools** in three groups:
+Figwright exposes **147 MCP tools** in three groups:
 
 - **Read**: selection, document and node inspection, styles, variables, components, fonts, prototype reactions and flows, motion (animation) state, screenshots, original image-fill assets, PDF export, and video export of animated frames (MP4 / GIF / WebM); plus `list_files` / `use_file` for working across more than one open Figma file at once.
-- **Write**: create and edit frames, text, shapes (lines, polygons, stars, boolean operations, flattening), auto-layout, alignment and distribution, effects, images (as a new layer or into an existing layer's fill), styles (including their documentation links), variables (including their descriptions, scopes and publishing, importing a team library's variables and styles, and switching a frame to a mode such as Dark), components (including authoring their boolean/text/instance-swap properties and their documentation: description and documentation link), Dev Mode annotations, their categories and measurements, pages, prototype reactions and flows, Motion animations (keyframes, animation-style presets, timelines), 3D transforms (turning a layer in depth, and the perspective a frame gives its children), and Figma Draw (vector paths drawn and edited point by point from any SVG path data, outlined strokes, repeat groups, text on a path, brush / dynamic / variable-width strokes, pattern fills); plus a `batch` tool to apply many edits at once.
+- **Write**: create and edit frames, text, shapes (lines, polygons, stars, boolean operations, flattening), FigJam connectors, auto-layout, alignment and distribution, effects, images (as a new layer or into an existing layer's fill), styles (including their documentation links), variables (including their descriptions, scopes and publishing, importing a team library's variables and styles, and switching a frame to a mode such as Dark), components (including authoring their boolean/text/instance-swap properties and their documentation: description and documentation link), Dev Mode annotations, their categories and measurements, pages, prototype reactions and flows, Motion animations (keyframes, animation-style presets, timelines), 3D transforms (turning a layer in depth, and the perspective a frame gives its children), and Figma Draw (vector paths drawn and edited point by point from any SVG path data, outlined strokes, repeat groups, text on a path, brush / dynamic / variable-width strokes, pattern fills); plus a `batch` tool to apply many edits at once.
 - **Grounding**: `get_design_context` for faithful, de-duplicated design context, and `component_map` / `token_map` / `icon_map`, which join Figma data to your codebase so codegen reuses what you already have; plus `design_diff`, which reports what changed in a design against a saved baseline so you update only the affected code.
 
 > [!TIP]
@@ -333,7 +333,7 @@ It runs in both, with less available than in Figma Design, because those editors
 
 - **Figma Design**: everything.
 - **Dev Mode** (Inspect panel): reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails: nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build. (The panel's own window controls — resize and **Run in background** — aren't there either: Figma owns that frame.)
-- **FigJam**: frames, sections, shapes and text work; components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
+- **FigJam**: frames, sections, shapes and text work, connectors join them, and the words on stickies, shapes with text, table cells and connectors are read and rewritten (`set_text`); components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
 
 `get_metadata` reports the editor (`editorType` / `mode`), and any tool that fails because of the editor says so in its error, so an agent can re-plan rather than retry.
 

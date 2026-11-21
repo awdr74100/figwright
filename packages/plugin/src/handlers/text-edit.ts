@@ -1,5 +1,10 @@
 import { SEGMENT_FIELDS } from './batch-snapshot.js';
-import type { TextLike } from './text-like.js';
+
+/** What an edit needs of a text: a TEXT node, text on a path, or a FigJam sublayer all carry it. */
+type Editable = Pick<
+  TextNode,
+  'characters' | 'getStyledTextSegments' | 'insertCharacters' | 'deleteCharacters'
+>;
 
 /**
  * Edit a TEXT node's characters without touching the styling of what is not edited.
@@ -19,7 +24,7 @@ import type { TextLike } from './text-like.js';
  * caret does.
  */
 export const replaceRange = (
-  text: TextLike,
+  text: Editable,
   start: number,
   end: number,
   replacement: string,
@@ -59,7 +64,7 @@ const sharedEdges = (a: string, b: string): { prefix: number; suffix: number } =
  * off to a run boundary also keeps an edge from landing between the halves of a surrogate pair,
  * since a run starts on a whole character.
  */
-export const keptEdges = (text: TextLike, next: string): { prefix: number; suffix: number } => {
+export const keptEdges = (text: Editable, next: string): { prefix: number; suffix: number } => {
   const before = text.characters;
   const { prefix, suffix } = sharedEdges(before, next);
   const starts = text.getStyledTextSegments([...SEGMENT_FIELDS]).map(run => run.start);

@@ -337,6 +337,13 @@ the obvious ones. These are ordered by how easily they're silently dropped.
     keeping opacity, a shadow or clipping on a `preserve3d` container 4–15%; a turned group's 3D
     without its fold 3–17%. The two flat sources matched to 0.02%; the baked export in their place
     was 1–2% of the frame off, about the icon's own area.
+- **FigJam boards.** A sticky, shape with text, table cell or connector carries its words in
+  `characters`, like a TEXT node (read off a sublayer, characters only — no runs). A connector is an
+  edge of the diagram: `connectorStart` / `connectorEnd` name the node each end attaches to
+  (`endpointNodeId`) and where — a side (`magnet`) or a point in px from that node's top-left
+  (`position`); a `position` alone is a free end, in px in the connector's parent's coordinates.
+  `connectorLineType` (ELBOWED / STRAIGHT / CURVED) and the two caps say how it is drawn. So a board
+  turns into a graph — nodes and the edges between them — not a picture of boxes and lines.
 - **Render bounds.** A Draw node — one of those strokes, a repeat group, text on a path — may carry
   `renderBounds` `{ x, y, width, height }`: the box it actually paints into, as offsets from its
   own `x` / `y` in its parent's axes. An export of the node covers exactly that box (measured on a

@@ -97,7 +97,8 @@ describe('findBatchRefs — where a reference is read', () => {
 
 describe('batchRefResultKeys', () => {
   it('reads the id an argument asks for', () => {
-    // startNodeId / endNodeId: a measurement's two ends, which a batch may have just created.
+    // startNodeId / endNodeId: a measurement's two ends, which a batch may have just created;
+    // endpointNodeId: the node a connector's end attaches to, likewise.
     for (const f of [
       'nodeId',
       'parentId',
@@ -107,6 +108,7 @@ describe('batchRefResultKeys', () => {
       'pageId',
       'startNodeId',
       'endNodeId',
+      'endpointNodeId',
     ]) {
       expect({ f, keys: batchRefResultKeys(f) }).toEqual({ f, keys: ['nodeId'] });
     }
