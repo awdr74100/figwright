@@ -47,9 +47,12 @@ export const DESIGN_DIFF_TOOL_NAME = 'design_diff';
  * a v9 to v11 baseline is still diffed, against a capture without them (withoutDepth), unless it
  * holds them itself (saved through a newer plugin, which sends them to any server). One thing that
  * cut cannot undo: an instance that turns a layer in 3D differently from its main component is now
- * expanded rather than deduped, so against such a baseline it reads as changed.
+ * expanded rather than deduped, so against such a baseline it reads as changed. v13: the words of a
+ * FigJam sticky, shape with text, table cell or connector (characters, read off its sublayer), and
+ * a connector's ends, path shape and caps — a v9 to v12 baseline is still diffed, against a capture
+ * without them, unless it holds them itself, as with 3D (PLUGIN_FIELDS).
  */
-export const SNAPSHOT_FORMAT_VERSION = 12;
+export const SNAPSHOT_FORMAT_VERSION = 13;
 
 interface StyledNode {
   styleIds?: Record<string, string>;
@@ -106,22 +109,76 @@ const withoutDepth = (context: GetDesignContextResult): GetDesignContextResult =
 
 type Cut = (context: GetDesignContextResult) => GetDesignContextResult;
 
+interface FigJamNode {
+  type?: string;
+  characters?: unknown;
+  connectorStart?: unknown;
+  connectorEnd?: unknown;
+  connectorLineType?: unknown;
+  connectorStartStrokeCap?: unknown;
+  connectorEndStrokeCap?: unknown;
+  children?: readonly unknown[];
+}
+
+/** The FigJam nodes whose words v13 reads off a sublayer; a TEXT node's words were always read. */
+const CAPTIONED = new Set(['STICKY', 'SHAPE_WITH_TEXT', 'TABLE_CELL', 'CONNECTOR']);
+
+/** Whether a capture holds what v13 added: a FigJam caption's words, or a connector's ends. */
+const hasFigJamFields = (context: GetDesignContextResult): boolean => {
+  const visit = (node: FigJamNode): boolean =>
+    (CAPTIONED.has(node.type ?? '') && node.characters !== undefined) ||
+    node.connectorStart !== undefined ||
+    (node.children ?? []).some(child => visit(child as FigJamNode));
+  return context.nodes.some(node => visit(node as FigJamNode));
+};
+
+/** A capture without what v13 added: the shape a v12 (or older) baseline was recorded in. */
+const withoutFigJamFields = (context: GetDesignContextResult): GetDesignContextResult => {
+  const copy = structuredClone(context);
+  const visit = (node: FigJamNode): void => {
+    if (CAPTIONED.has(node.type ?? '')) delete node.characters;
+    delete node.connectorStart;
+    delete node.connectorEnd;
+    delete node.connectorLineType;
+    delete node.connectorStartStrokeCap;
+    delete node.connectorEndStrokeCap;
+    for (const child of node.children ?? []) visit(child as FigJamNode);
+  };
+  for (const node of copy.nodes) visit(node as FigJamNode);
+  return copy;
+};
+
+/**
+ * Fields the plugin sends whatever format the server records — so a baseline in a format older than
+ * `since` lacks them unless it was captured through a newer plugin, which `has` tells. Against one
+ * that lacks them, a fresh capture is cut with `without` before the compare.
+ */
+const PLUGIN_FIELDS: readonly {
+  since: number;
+  has: (c: GetDesignContextResult) => boolean;
+  without: Cut;
+}[] = [
+  { since: 12, has: hasDepth, without: withoutDepth },
+  { since: 13, has: hasFigJamFields, without: withoutFigJamFields },
+];
+
 /**
  * Older formats still diffed: each holds everything the current one does but a field it predates,
  * so a fresh capture is cut back to that shape before the compare. Re-baselining one instead would
  * overwrite the user's baseline and lose every change made since it was taken. Every one of them
- * predates 3D, whose cut is applied apart (cutFor).
+ * predates the plugin-sent fields of PLUGIN_FIELDS, whose cuts are applied apart (cutFor).
  */
 const READABLE_OLDER_FORMATS: Readonly<Record<number, Cut>> = {
   9: context => withoutGridStyleIds(withLegacyStyleIds(context)),
   10: withLegacyStyleIds,
   11: context => context,
+  12: context => context,
 };
 
 /**
  * The cut that turns a fresh capture into the shape this baseline was saved in, if it needs one.
- * The plugin, not the server, decides whether 3D fields are sent, so an older-format baseline
- * captured through a newer plugin holds them: then they are diffed like any other field.
+ * The plugin, not the server, decides whether the PLUGIN_FIELDS are sent, so an older-format
+ * baseline captured through a newer plugin holds them: then they are diffed like any other field.
  */
 const cutFor = (baseline: SnapshotFile): Cut | undefined => {
   const older = READABLE_OLDER_FORMATS[baseline.figwrightSnapshot];
@@ -129,7 +186,10 @@ const cutFor = (baseline: SnapshotFile): Cut | undefined => {
     // A current-format baseline captured through an older plugin holds the cut style ids too.
     return hasCutStyleIds(baseline.context) ? withLegacyStyleIds : undefined;
   }
-  return hasDepth(baseline.context) ? older : context => older(withoutDepth(context));
+  const cuts = PLUGIN_FIELDS.filter(
+    field => field.since > baseline.figwrightSnapshot && !field.has(baseline.context),
+  );
+  return context => older(cuts.reduce((cut, field) => field.without(cut), context));
 };
 const SNAPSHOT_SUBDIR = join('.figwright', 'snapshots');
 

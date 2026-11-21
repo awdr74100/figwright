@@ -226,3 +226,58 @@ describe('set_text on text set along a path', () => {
     expect(node.characters).toBe('Round and round');
   });
 });
+
+describe('set_text on a FigJam caption', () => {
+  it('reaches the words of a sticky, a table cell and a connector by the container’s own id, keeping runs', async () => {
+    for (const type of ['STICKY', 'TABLE_CELL', 'CONNECTOR']) {
+      const fonts = { loaded: false };
+      const sublayer = makeText(
+        'x',
+        [
+          ['Hello ', 'plain'],
+          ['world', 'bold'],
+        ],
+        fonts,
+      );
+      const node = { id: '4:4', type, text: sublayer };
+      // eslint-disable-next-line no-await-in-loop -- one type at a time
+      const result = await createSetTextHandler(fakeFigma({ '4:4': node }, fonts))({
+        nodeId: '4:4',
+        characters: 'Hello there',
+      });
+      expect(result).toEqual({ ok: true, nodeId: '4:4' });
+      expect(sublayer.characters).toBe('Hello there');
+    }
+  });
+
+  it('writes a connector’s first label in FigJam’s caption face — an empty label names no font', async () => {
+    // Measured: a fresh connector's label reads family '' and Figma refuses the write until Inter
+    // Medium is loaded; loading '' fails outright ("Cannot load font family \"\"").
+    const fonts = { loaded: false };
+    const sublayer = Object.assign(makeText('x', [], fonts), {
+      fontName: { family: '', style: '' },
+    });
+    const loadFontAsync = vi.fn<(f?: FontName) => Promise<void>>(async f => {
+      if (f?.family === '') throw new Error('Cannot load font family ""');
+      fonts.loaded = true;
+    });
+    const node = { id: '4:5', type: 'CONNECTOR', text: sublayer };
+    await createSetTextHandler(fakeFigma({ '4:5': node }, fonts, loadFontAsync))({
+      nodeId: '4:5',
+      characters: 'yes',
+    });
+    expect(loadFontAsync).toHaveBeenCalledWith({ family: 'Inter', style: 'Medium' });
+    expect(sublayer.characters).toBe('yes');
+  });
+
+  it('still refuses a node that holds no words, naming what it takes', async () => {
+    await expect(
+      createSetTextHandler(fakeFigma({ '4:6': { id: '4:6', type: 'RECTANGLE' } }))({
+        nodeId: '4:6',
+        characters: 'x',
+      }),
+    ).rejects.toThrow(
+      /not a TEXT node, text on a path, or a FigJam sticky, shape with text, table cell or connector/,
+    );
+  });
+});

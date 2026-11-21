@@ -294,8 +294,21 @@ Object.defineProperty(brokenSetInstance, 'componentProperties', {
   },
 });
 
+// A FigJam connector: its ends, path shape, caps — and its label, read off its text sublayer.
+const connector = base({
+  id: 'h',
+  type: 'CONNECTOR',
+  connectorStart: { endpointNodeId: '1:1', magnet: 'AUTO' },
+  connectorEnd: { endpointNodeId: '1:2', position: { x: 0, y: 40 } },
+  connectorLineType: 'ELBOWED',
+  connectorStartStrokeCap: 'NONE',
+  connectorEndStrokeCap: 'ARROW_LINES',
+  text: { characters: 'flows to' },
+});
+
 const FIXTURES = [
   frameInGrid,
+  connector,
   arcWithConstraints,
   richText,
   drawnStroke,

@@ -25,6 +25,7 @@ import { writePaints } from './paints.js';
 import { sameSize } from './size.js';
 import { isAutoSized, writeTextBox } from './text-box.js';
 import type { TextLike } from './text-like.js';
+import { facesToLoad } from './text-sublayer.js';
 
 type Bag = Record<string, unknown>;
 
@@ -316,9 +317,7 @@ export interface TextSnapshot {
 }
 
 export const fontsOf = (figmaCtx: typeof figma, text: TextLike): FontName[] =>
-  text.fontName === figmaCtx.mixed && text.characters.length > 0
-    ? [...text.getRangeAllFontNames(0, text.characters.length)]
-    : [text.fontName as FontName];
+  facesToLoad(figmaCtx.mixed, text);
 
 export const loadFonts = async (
   figmaCtx: typeof figma,

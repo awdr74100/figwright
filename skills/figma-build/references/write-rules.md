@@ -261,6 +261,27 @@ fields `get_design_context` reads (and its `cssTransform3d` is how they read bac
 - FigJam turns rectangles, ellipses, frames and text too; stickies, shapes with text, sections and
   connectors take no 3D.
 
+### FigJam boards: connectors and the words on stickies
+
+A flowchart or a diagram on a FigJam board is its boxes joined by connectors. Frames, sections,
+rectangles, ellipses and text are made as anywhere else; join them with `create_connector`.
+
+- Each end is `{ endpointNodeId, magnet? }` (a side: TOP / BOTTOM / LEFT / RIGHT / CENTER, or AUTO,
+  the nearest), `{ endpointNodeId, position }` (a point on the node, in px from its top-left — its
+  right-middle is `{ x: width, y: height / 2 }`), or `{ position }` (a free end, in px in the
+  connector's parent's coordinates). An attached end follows its node, and **removing a node removes
+  the connectors attached to it**.
+- In a `batch`, `endpointNodeId: "$N"` attaches to the node an earlier op made, so a whole chart —
+  boxes, then the connectors between them — is one call.
+- Defaults are FigJam's own: ELBOWED, an ARROW_LINES end, weight 4. `text` labels the connector in
+  FigJam's caption face (Inter Medium), and the layer takes the label as its name.
+- The words on a sticky, a shape with text, a table cell or a connector are rewritten with
+  `set_text` on the node's own id (the text sublayer inside has none a tool can use); the runs the
+  old and new words share keep their styling, as on any text. `scan_text_nodes` and `get_node`
+  read them. The other text tools (`set_text_properties`, `set_text_range`, `find_replace_text`)
+  do not reach them.
+- Connectors exist only in FigJam: in a Figma Design file, draw an arrow with `create_vector`.
+
 ### Figma Draw: vectors, repeats, text on a path, brushes, patterns
 
 These write the same fields `get_design_context` reads, so a design built with them reads back

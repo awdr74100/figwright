@@ -65,6 +65,7 @@ import {
   type TextStyleSnapshot,
 } from './style-snapshot.js';
 import { isTextLike, type TextLike } from './text-like.js';
+import { captionHint, textHostOf } from './text-sublayer.js';
 import { readFlows, sameFlows } from './update-flows.js';
 import { renameCollection } from './update-variable-collection.js';
 import {
@@ -241,20 +242,39 @@ interface TextState {
 }
 
 /** Text op: snapshot the node's characters, every run and its node-level settings. */
-const textInverse = (tool: string): BatchInverse => ({
+/**
+ * The text a text op edits: the node, or a FigJam sticky / shape / table cell / connector's
+ * sublayer. The sublayer carries every run field and setter the snapshot reads and writes, and
+ * lacks only what the snapshot already takes as optional — a box and node-level bindings
+ * (measured).
+ */
+const editedText = (node: BaseNode | null, sublayers: boolean): TextLike | null => {
+  if (node === null) return null;
+  if (isTextLike(node)) return node;
+  return sublayers ? (textHostOf(node) as unknown as TextLike | null) : null;
+};
+
+/** `sublayers`: the tool edits a FigJam caption too (set_text does; the range tools do not). */
+const textInverse = (tool: string, sublayers = false): BatchInverse => ({
   async capture(figmaCtx, params) {
     const id = stringParam(params, 'nodeId', tool);
     const node = await nodeOf(figmaCtx, id, tool);
-    if (!isTextLike(node)) {
-      throw new Error(`batch/${tool}: node ${id} is not a TEXT node or text on a path`);
+    const text = editedText(node, sublayers);
+    if (text === null) {
+      throw new Error(
+        sublayers
+          ? `batch/${tool}: node ${id} is not a TEXT node, text on a path, or a FigJam sticky, ` +
+              'shape with text, table cell or connector'
+          : `batch/${tool}: node ${id} is not a TEXT node or text on a path${captionHint(node)}`,
+      );
     }
-    const state: TextState = { id, text: await captureText(figmaCtx, node) };
+    const state: TextState = { id, text: await captureText(figmaCtx, text) };
     return state;
   },
   async undo(figmaCtx, _params, captured) {
     const { id, text } = captured as TextState;
-    const node = await live(figmaCtx, id);
-    return isTextLike(node) ? restoreText(figmaCtx, node, text) : undefined;
+    const edited = editedText(await live(figmaCtx, id), sublayers);
+    return edited === null ? undefined : restoreText(figmaCtx, edited, text);
   },
   touches: (_params, captured) => [(captured as TextState).id],
   resizes: (_params, captured) => [(captured as TextState).id],
@@ -2328,7 +2348,7 @@ const INVERSES: Readonly<Record<string, BatchInverse>> = {
   set_layout_grids: propsInverse('set_layout_grids', ['layoutGrids']),
   rename_node: propsInverse('rename_node', ['name']),
   // Text.
-  set_text: textInverse('set_text'),
+  set_text: textInverse('set_text', true),
   set_text_properties: textPropertiesInverse,
   set_text_range: textInverse('set_text_range'),
   find_replace_text: findReplaceInverse,

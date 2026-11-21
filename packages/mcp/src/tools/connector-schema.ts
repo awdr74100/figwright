@@ -4,10 +4,9 @@ import { z } from 'zod';
 // accepts for a ConnectorEndpoint — floating, attached-with-magnet, and attached-at-a-relative-
 // position — stay in one place rather than drifting between the start and end fields.
 //
-// Loose validation here on purpose: which combination of fields is actually legal (endpointNodeId
-// requires magnet unless position is also given) is enforced in the plugin handler, matching how
-// this codebase validates set_arc's "at least one field" rule in the handler rather than the
-// schema.
+// Loose validation here on purpose: which combination of fields is legal (a magnet goes with a bare
+// endpointNodeId, a position with or without one) is enforced in the plugin handler, as set_arc's
+// "at least one field" rule is.
 
 export const connectorMagnetSchema = z.enum([
   'NONE',
@@ -28,20 +27,21 @@ export const connectorEndpointSchema = z
     magnet: connectorMagnetSchema
       .optional()
       .describe(
-        "Attachment side when endpointNodeId is given without position (default 'AUTO' — Figma " +
+        "The side it attaches to, with endpointNodeId and no position (default 'AUTO': Figma " +
           'picks the nearest side)',
       ),
     position: z
       .object({ x: z.number(), y: z.number() })
       .optional()
       .describe(
-        'Either an absolute canvas position (floating endpoint, no endpointNodeId) or a 0–1 ' +
-          'position relative to endpointNodeId (e.g. { x: 1, y: 0.5 } = right-middle of that node)',
+        'With endpointNodeId: px from that node’s top-left (its right-middle is { x: width, y: ' +
+          'height / 2 }; outside it is allowed). Alone: a floating end, in px in the parent’s ' +
+          'coordinates (the page’s by default), so it moves with the parent',
       ),
   })
   .describe(
-    'One connector endpoint: { endpointNodeId, magnet? } to attach with auto/side magnet, ' +
-      '{ position } to float, or { endpointNodeId, position } to attach at a relative point',
+    'One connector end: { endpointNodeId, magnet? } attached to a side of a node, ' +
+      '{ endpointNodeId, position } attached at a point on it, or { position } floating',
   );
 
 export const connectorStrokeCapSchema = z.enum([
@@ -56,6 +56,7 @@ export const connectorStrokeCapSchema = z.enum([
   'ERD_ZERO_OR_MORE',
   'ERD_ONE_OR_MORE',
   'ERD_ONE',
+  'ERD_MANY',
 ]);
 
 export const connectorLineTypeSchema = z.enum(['ELBOWED', 'STRAIGHT', 'CURVED']);

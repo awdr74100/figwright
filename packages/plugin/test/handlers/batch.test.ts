@@ -50,6 +50,7 @@ import { createSetPositionHandler } from '../../src/handlers/set-position.js';
 import { createSetReactionsHandler } from '../../src/handlers/set-reactions.js';
 import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
+import { createSetTextRangeHandler } from '../../src/handlers/set-text-range.js';
 import { createSetTextHandler } from '../../src/handlers/set-text.js';
 import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
 import { createSetTransform3dHandler } from '../../src/handlers/set-transform-3d.js';
@@ -816,6 +817,73 @@ describe('batch handler', () => {
       /rolled back 1 applied op\(s\) \(restored with residue: op 0 \(set_text_properties\): text I9:9;1:1 is back at 100 × 40, not the 100 × 20 it had/,
     );
     expect(mode).toBe('NONE');
+  });
+
+  /**
+   * A FigJam sticky whose words live in a sublayer shaped as measured: every run field and range
+   * setter of a TEXT node, but no type, no box (width / height / auto-resize, alignment) and no
+   * node-level bindings.
+   */
+  const sticky = (id: string, characters: string) => {
+    const hidden = new Set<PropertyKey>([
+      'type',
+      'parent',
+      'width',
+      'height',
+      'textAutoResize',
+      'textTruncation',
+      'maxLines',
+      'textAlignHorizontal',
+      'textAlignVertical',
+      'boundVariables',
+      'setBoundVariable',
+    ]);
+    const text = fakeText(`${id}-text`, characters);
+    const host = new Proxy(text, {
+      has: (target, key) => !hidden.has(key) && key in target,
+      get: (target, key) => (hidden.has(key) ? undefined : Reflect.get(target, key)),
+    });
+    return { node: { id, type: 'STICKY', parent: null, text: host }, host };
+  };
+
+  it('brings back the words and runs a rolled-back set_text wrote on a FigJam sticky', async () => {
+    const { node, host } = sticky('8:1', 'Hello World');
+    (host.setRangeFontName as (s: number, e: number, v: unknown) => void)(6, 11, INTER_BOLD);
+    const before = segmentsOf(host);
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('8:1', node);
+    const handler = createBatchHandler(figmaCtx, {
+      set_text: createSetTextHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+
+    await expect(
+      handler({ ops: [{ tool: 'set_text', params: { nodeId: '8:1', characters: 'Bye' } }, FAIL] }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
+
+    expect(host.characters).toBe('Hello World');
+    expect(segmentsOf(host)).toEqual(before);
+  });
+
+  it('refuses a range tool on a FigJam sticky in a batch, and says set_text reaches it', async () => {
+    const { node } = sticky('8:2', 'Hello');
+    const { figmaCtx, store } = makeFigma({ F: { id: 'F', fills: [] } });
+    store.set('8:2', node);
+    const handler = createBatchHandler(figmaCtx, {
+      set_text_range: createSetTextRangeHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_text_range',
+            params: { nodeId: '8:2', ranges: [{ start: 0, end: 1, fontSize: 30 }] },
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      /batch\/set_text_range: node 8:2 is not a TEXT node or text on a path — a FigJam STICKY's words are rewritten with set_text/,
+    );
   });
 
   it('brings back the runs a set_text restyled', async () => {

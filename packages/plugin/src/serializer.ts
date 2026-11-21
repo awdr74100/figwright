@@ -22,6 +22,7 @@ import {
   TOOL_RESULT_LIMIT_BYTES,
 } from '@figwright/shared';
 
+import { readConnector } from './connector.js';
 import { TimeSlice } from './cooperative.js';
 import {
   applyRepeat,
@@ -32,7 +33,7 @@ import {
 } from './draw.js';
 import { cssAngleFromGradientTransform } from './gradient-angle.js';
 import { readGridTrackSizes } from './grid-tracks.js';
-import { getTextHost } from './handlers/text-sublayer.js';
+import { textHostOf } from './handlers/text-sublayer.js';
 import { boundingBoxOf, orientationOf } from './orientation.js';
 import { cssProgressiveBlurLayers } from './progressive-blur.js';
 import { readScene3d, readTransform3d } from './transform3d.js';
@@ -651,6 +652,7 @@ const enrichWithMixins = (
   if (t3d.cssTransform3d !== undefined) out.cssTransform3d = t3d.cssTransform3d;
   const scene3d = readScene3d(node);
   if (scene3d !== undefined) out.scene3d = scene3d;
+  if (node.type === 'CONNECTOR') Object.assign(out, readConnector(node));
   if ('opacity' in node) {
     const opacity = node.opacity;
     if (typeof opacity === 'number') out.opacity = opacity;
@@ -1004,10 +1006,9 @@ const enrichWithMixins = (
       out.segments = serializeTextSegments(text);
     }
   } else {
-    // STICKY / SHAPE_WITH_TEXT / TABLE_CELL / CONNECTOR bake their caption into a `text` sublayer
-    // with no id of its own — surface just the characters (not the full run/segment machinery
-    // above, which is TextNode-specific) so the caption is at least visible without a screenshot.
-    const host = getTextHost(node);
+    // A FigJam sticky, shape with text, table cell or connector keeps its words in a sublayer no
+    // tool can address (text-sublayer.ts): they are read off the container, characters only.
+    const host = textHostOf(node);
     if (host !== null) out.characters = host.characters;
   }
 

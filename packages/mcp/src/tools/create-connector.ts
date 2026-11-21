@@ -13,13 +13,16 @@ export const CREATE_CONNECTOR_TOOL_NAME = 'create_connector';
 export const createConnectorTool: ToolSpec = {
   name: CREATE_CONNECTOR_TOOL_NAME,
   description:
-    'Create a FigJam connector (arrow/line) joining two nodes, or floating at explicit canvas ' +
-    'positions. connectorStart / connectorEnd each take { endpointNodeId, magnet? } to attach with ' +
-    "magnet (default 'AUTO'), { position } to float, or { endpointNodeId, position } to attach at a " +
-    "0–1 relative point (e.g. { x: 1, y: 0.5 } = right-middle). Only FigJam ('figjam' editorType) " +
-    'supports connectors — this fails in Figma Design and Dev Mode files. Optionally styled ' +
-    '(connectorLineType, stroke caps, strokes, strokeWeight) and labeled (text, using the default ' +
-    'font). Appended to a parent (default: current page). Returns { ok, nodeId, name, type }.',
+    'Join two FigJam nodes with a connector (the arrow or line of a flowchart), or draw one between ' +
+    'free points. connectorStart / connectorEnd each take { endpointNodeId, magnet? } to attach to a ' +
+    "side of a node (magnet TOP / BOTTOM / LEFT / RIGHT / CENTER, default 'AUTO': the nearest), " +
+    '{ endpointNodeId, position } to attach at a point on it — px from its top-left, so its ' +
+    'right-middle is { x: width, y: height / 2 } — or { position } to float, in px in the ' +
+    "parent's coordinates. An attached end follows its node when it moves, and removing the node " +
+    'removes the connector with it. Defaults as in FigJam: ELBOWED, no start cap, an ARROW_LINES ' +
+    'end, weight 4. text labels it in FigJam’s caption face (Inter Medium) and names the layer ' +
+    'after it; set_text rewrites it later. FigJam only: Figma Design and Dev Mode have no ' +
+    'connectors. Returns { ok, nodeId, name, type }.',
   inputSchema: z.object({
     connectorStart: connectorEndpointSchema,
     connectorEnd: connectorEndpointSchema,
@@ -27,7 +30,7 @@ export const createConnectorTool: ToolSpec = {
     name: z.string().optional().describe('Layer name'),
     connectorLineType: connectorLineTypeSchema
       .optional()
-      .describe("Path shape (default 'ELBOWED' — right-angle bends)"),
+      .describe("Path shape (default 'ELBOWED': right-angle bends)"),
     connectorStartStrokeCap: connectorStrokeCapSchema
       .optional()
       .describe("Arrowhead at the start (default 'NONE')"),
@@ -42,10 +45,7 @@ export const createConnectorTool: ToolSpec = {
     text: z
       .string()
       .optional()
-      .describe(
-        'Visible label on the connector (sets connector.text.characters with the default font ' +
-          'loaded first — a fresh connector has no valid font until text is written)',
-      ),
+      .describe('Label on the connector, written in FigJam’s caption face'),
   }),
   kind: 'write',
 };

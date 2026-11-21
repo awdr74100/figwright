@@ -19,6 +19,7 @@ import {
   SerializedLineHeightSchema,
   SerializedMainComponentSchema,
   SerializedPaintSchema,
+  SerializedConnectorEndpointSchema,
   SerializedScene3dSchema,
   SerializedStyleIdsSchema,
   SerializedTextPathStartSchema,
@@ -41,6 +42,7 @@ import type {
   SerializedLetterSpacing,
   SerializedLineHeight,
   SerializedMainComponent,
+  SerializedConnectorEndpoint,
   SerializedScene3d,
   SerializedTransform3d,
   SerializedTransformOrigin,
@@ -138,6 +140,11 @@ export interface DesignContextNode {
   cssTransform3d?: string;
   /** A container's 3D scene (beta): perspective and preserve-3d. */
   scene3d?: SerializedScene3d;
+  connectorStart?: SerializedConnectorEndpoint;
+  connectorEnd?: SerializedConnectorEndpoint;
+  connectorLineType?: string;
+  connectorStartStrokeCap?: string;
+  connectorEndStrokeCap?: string;
   opacity?: number;
   cornerRadius?: number | typeof MIXED;
   /** Figma corner smoothing, 0–1; omitted when 0 (circular). */
@@ -403,6 +410,11 @@ export const DesignContextNodeSchema = z.lazy(() =>
     transformOrigin: SerializedTransformOriginSchema.optional(),
     cssTransform3d: z.string().optional(),
     scene3d: SerializedScene3dSchema.optional(),
+    connectorStart: SerializedConnectorEndpointSchema.optional(),
+    connectorEnd: SerializedConnectorEndpointSchema.optional(),
+    connectorLineType: z.string().optional(),
+    connectorStartStrokeCap: z.string().optional(),
+    connectorEndStrokeCap: z.string().optional(),
     opacity: z.number().optional(),
     cornerRadius: z.union([z.number(), z.literal(MIXED)]).optional(),
     cornerSmoothing: z.number().min(0).max(1).optional(),
@@ -698,6 +710,10 @@ export const LAYOUT_FIELDS = [
   'transformOrigin',
   'cssTransform3d',
   'scene3d',
+  // Which two nodes a FigJam connector joins, and where on each: the diagram's structure — without
+  // them a flowchart reads as boxes and loose lines.
+  'connectorStart',
+  'connectorEnd',
 ] as const satisfies readonly (keyof DesignContextNode)[];
 
 /**

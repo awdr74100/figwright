@@ -81,6 +81,14 @@ export const project = (node: SceneNode, detail: DetailLevel): DesignContextNode
   if (flat.transformOrigin !== undefined) out.transformOrigin = flat.transformOrigin;
   if (flat.cssTransform3d !== undefined) out.cssTransform3d = flat.cssTransform3d;
   if (flat.scene3d !== undefined) out.scene3d = flat.scene3d;
+  if (flat.connectorStart !== undefined) out.connectorStart = flat.connectorStart;
+  if (flat.connectorEnd !== undefined) out.connectorEnd = flat.connectorEnd;
+  if (flat.connectorLineType !== undefined) out.connectorLineType = flat.connectorLineType;
+  if (flat.connectorStartStrokeCap !== undefined) {
+    out.connectorStartStrokeCap = flat.connectorStartStrokeCap;
+  }
+  if (flat.connectorEndStrokeCap !== undefined)
+    out.connectorEndStrokeCap = flat.connectorEndStrokeCap;
   if (flat.opacity !== undefined && flat.opacity !== 1) out.opacity = flat.opacity;
   if (flat.cornerRadius !== undefined && flat.cornerRadius !== 0)
     out.cornerRadius = flat.cornerRadius;

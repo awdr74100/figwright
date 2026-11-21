@@ -333,7 +333,7 @@ It runs in both, with less available than in Figma Design, because those editors
 
 - **Figma Design**: everything.
 - **Dev Mode** (Inspect panel): reads and exports only. Figma makes plugins read-only there, so screenshots, PDF export and every inspection tool work, while every write fails: nodes, pages, variables and styles alike. That suits the codegen direction; use Design mode to build. (The panel's own window controls — resize and **Run in background** — aren't there either: Figma owns that frame.)
-- **FigJam**: frames, sections, shapes and text work; components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
+- **FigJam**: frames, sections, shapes and text work, connectors join them, and the words on stickies, shapes with text, table cells and connectors are read and rewritten (`set_text`); components, variables, styles and Motion don't exist in that editor, so the tools for them don't apply.
 
 `get_metadata` reports the editor (`editorType` / `mode`), and any tool that fails because of the editor says so in its error, so an agent can re-plan rather than retry.
 
