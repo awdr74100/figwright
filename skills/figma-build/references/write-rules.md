@@ -230,6 +230,37 @@ is `flip_nodes` with `axis: 'HORIZONTAL'` or `'VERTICAL'`: it flips each node in
 centre and reads back as `flipped: true`. Do not fake it with `rotate_nodes` 180 — that turns the
 node upside down instead of mirroring it.
 
+### 3D: `set_transform_3d` (beta)
+
+A card flipped in depth, a tilted panel, a cube face — CSS `rotateX()` / `rotateY()` /
+`translateZ()` — is `set_transform_3d` on the element, and the `perspective` /
+`transform-style: preserve-3d` of its container is that container's `scene3d`. These are the same
+fields `get_design_context` reads (and its `cssTransform3d` is how they read back as CSS).
+
+- `transform3d` is applied in one fixed order, CSS `translateZ → rotateX → rotateY → rotateZ`,
+  about `transformOrigin` (CSS `transform-origin`, px or %; centre by default), in the layer's own
+  axes. A CSS transform in that order maps number for number; another order, or a `matrix3d()`,
+  has no exact equivalent — the plugin API cannot make any other kind — so say so and check with
+  `get_screenshot`. A flat turn (`rotate()`) is still `rotate_nodes`: `rotateZ` here turns the
+  layer after its 3D turn and leaves its box alone.
+- `backface-visibility: hidden` is `backfaceVisible: false`.
+- Perspective lives on the container, not in a layer's own transform: `scene3d: { perspective }`
+  on the frame (or component, instance) the turned layers sit in, plus `preserve3d: true` when they
+  should share one 3D space and sort by depth (CSS `transform-style: preserve-3d`). A layer deeper
+  down only shares it through containers that are `preserve3d` too.
+- Under `preserve3d`, Figma ignores that container's own opacity, blend mode, effects and
+  clipping. Put them on a flat frame around it.
+- Nothing moves: the box, `x` / `y` and an auto-layout's spacing stay as they were, as in CSS.
+- Each call merges with what the layer holds, so `{ rotateY: 30 }` keeps the other numbers.
+  `{ type: 'NONE' }` removes the transform and its 3D keyframe tracks (the result names them;
+  inside a `batch` it is refused for a layer with such tracks).
+- Animating it: `apply_manual_keyframe_track` with `TRANSFORM_3D_ROTATION_X` / `Y` / `Z`
+  (degrees), `TRANSFORM_3D_TRANSLATION_Z` (px) or `SCENE_3D_PERSPECTIVE` (px, ≥ 0, on the
+  container). A track's `baseValue` is the static value itself, so set it to what the layer rests
+  at, or leave it out to keep the current one.
+- FigJam turns rectangles, ellipses, frames and text too; stickies, shapes with text, sections and
+  connectors take no 3D.
+
 ### Figma Draw: vectors, repeats, text on a path, brushes, patterns
 
 These write the same fields `get_design_context` reads, so a design built with them reads back

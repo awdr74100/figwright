@@ -154,7 +154,8 @@ export const manualKeyframeTrackInputSchema = z.object({
   keyframes: z.array(manualKeyframeInputSchema).min(1).describe('Keyframes in timeline order'),
 });
 
-// KeyframePropertyFieldName — 30 animatable node properties.
+// KeyframePropertyFieldName — 35 animatable node properties. The last five drive a 3D transform
+// (degrees, translateZ in px) and a frame / component / instance's scene perspective (px, ≥ 0).
 export const KEYFRAME_PROPERTY_FIELDS = [
   'CORNER_RADIUS',
   'STROKE_WEIGHT',
@@ -186,6 +187,11 @@ export const KEYFRAME_PROPERTY_FIELDS = [
   'SCALE_XY',
   'PATH_TRIM_START',
   'PATH_TRIM_END',
+  'TRANSFORM_3D_TRANSLATION_Z',
+  'TRANSFORM_3D_ROTATION_X',
+  'TRANSFORM_3D_ROTATION_Y',
+  'TRANSFORM_3D_ROTATION_Z',
+  'SCENE_3D_PERSPECTIVE',
 ] as const;
 
 // EffectKeyframeFieldName — 17 animatable effect sub-fields (shadow offset/radius, noise, glass, …).

@@ -52,6 +52,7 @@ import { createSetStrokesHandler } from '../../src/handlers/set-strokes.js';
 import { createSetTextPropertiesHandler } from '../../src/handlers/set-text-properties.js';
 import { createSetTextHandler } from '../../src/handlers/set-text.js';
 import { createSetTimelineDurationHandler } from '../../src/handlers/set-timeline-duration.js';
+import { createSetTransform3dHandler } from '../../src/handlers/set-transform-3d.js';
 import { createSetVariableCodeSyntaxHandler } from '../../src/handlers/set-variable-code-syntax.js';
 import { createSetVariableValueHandler } from '../../src/handlers/set-variable-value.js';
 import { createSetVisibleHandler } from '../../src/handlers/set-visible.js';
@@ -3010,6 +3011,30 @@ describe('batch inverses for Figma Draw', () => {
     await expect(
       handler({
         ops: [{ tool: 'set_text_path', params: { nodeId: 'I9:9;1:1', startSegment: 3 } }, FAIL],
+      }),
+    ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
+    expect(instance.removeOverrides).toHaveBeenCalledOnce();
+  });
+
+  it('resets the instance a rolled-back set_transform_3d wrote into, though it left no override mark', async () => {
+    const { figmaCtx, instance } = insideInstance({
+      type: 'RECTANGLE',
+      transform3d: { type: 'NONE' },
+      transformOrigin: { x: { unit: 'PERCENT', value: 50 }, y: { unit: 'PERCENT', value: 50 } },
+    });
+    const handler = createBatchHandler(figmaCtx, {
+      set_transform_3d: createSetTransform3dHandler(figmaCtx),
+      set_fills: createSetFillsHandler(figmaCtx),
+    });
+    await expect(
+      handler({
+        ops: [
+          {
+            tool: 'set_transform_3d',
+            params: { nodeId: 'I9:9;1:1', transform3d: { rotateY: 30 } },
+          },
+          FAIL,
+        ],
       }),
     ).rejects.toThrow(/rolled back 1 applied op\(s\): GRADIENT_LINEAR/);
     expect(instance.removeOverrides).toHaveBeenCalledOnce();

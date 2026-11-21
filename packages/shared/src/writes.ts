@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
 import { SerializedMeasurementSchema } from './queries.js';
-import { FlowStartingPointSchema, SerializedAnnotationSchema } from './serialized-node.js';
+import {
+  FlowStartingPointSchema,
+  SerializedAnnotationSchema,
+  SerializedScene3dSchema,
+  SerializedTransform3dSchema,
+  SerializedTransformOriginSchema,
+} from './serialized-node.js';
 
 // Write tools carry a server-generated requestId so the plugin can dedupe retries (idempotency).
 // Inputs are validated per-tool in the plugin handlers; this module holds the shared result shapes.
@@ -57,6 +63,31 @@ export const ComponentDocumentationResultSchema = MutateResultSchema.extend({
   adjusted: z.string().optional(),
 });
 export type ComponentDocumentationResult = z.infer<typeof ComponentDocumentationResultSchema>;
+
+/**
+ * Result of set_transform_3d: the node's 3D fields read back as get_node reads them — each absent
+ * when there is none (no transform, a centred origin, no scene). `adjusted` names what changed
+ * beyond the call (keyframe tracks removed with the transform) or did not stick (a scene with no
+ * perspective and no shared space, which is none).
+ */
+export const Transform3dWriteResultSchema = MutateResultSchema.extend({
+  transform3d: SerializedTransform3dSchema.optional(),
+  transformOrigin: SerializedTransformOriginSchema.optional(),
+  cssTransform3d: z.string().optional(),
+  scene3d: SerializedScene3dSchema.optional(),
+  adjusted: z.string().optional(),
+});
+export type Transform3dWriteResult = z.infer<typeof Transform3dWriteResultSchema>;
+
+/**
+ * Result of apply_manual_keyframe_track. A 3D track can change the node beyond the track — give a
+ * node with no 3D transform one, give a frame a scene, or rewrite the static value its baseValue is
+ * — and `adjusted` says which. Absent for every other track, and when nothing else changed.
+ */
+export const KeyframeTrackResultSchema = MutateResultSchema.extend({
+  adjusted: z.string().optional(),
+});
+export type KeyframeTrackResult = z.infer<typeof KeyframeTrackResultSchema>;
 
 /**
  * Result of apply_animation_style: echoes the applied-style instance id Figma returns from
