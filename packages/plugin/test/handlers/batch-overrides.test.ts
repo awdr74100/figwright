@@ -37,6 +37,16 @@ const makeInstance = () => {
       [...store.values()].filter(n => n.type === 'INSTANCE' && n.id !== 'I'),
     findAll: () => [...store.values()].filter(n => n.id.startsWith('I;')),
   };
+  Object.defineProperty(instance, 'children', {
+    get: () => [...store.values()].filter(n => n.parent === instance),
+  });
+  // The main component's layers sit where the instance's do; `source` fills them in.
+  const sources = new Map<string, Node>();
+  const main: Node = { id: 'M', type: 'COMPONENT' };
+  Object.defineProperty(main, 'children', {
+    get: () => (instance.children as Node[]).map(n => sources.get(n.id.split(';').at(-1)!) ?? null),
+  });
+  instance.getMainComponentAsync = async () => main;
   store.set('I', instance);
   const sublayer = (
     id: string,
@@ -73,7 +83,7 @@ const makeInstance = () => {
   const markRaw = (id: string, field: string): void => mark(id, field);
   /** The main component's layer an instance layer `I;<id>` takes its values from. */
   const source = (id: string, fields: Record<string, unknown>): void => {
-    store.set(id, { id, type: 'RECTANGLE', ...fields });
+    sources.set(id, { id, type: 'RECTANGLE', ...fields });
   };
   return { instance, sublayer, store, figmaCtx, markRaw, source, loadBrushesAsync };
 };
@@ -534,6 +544,98 @@ describe('what a reset would erase that cannot be put back', () => {
       ['I;5', false],
       ['I', false],
     ]);
+  });
+
+  it('finds a library instance’s layer in its main by position — its id names the library’s file', async () => {
+    // Measured: a library component's instance names its layers by ids from the library's file,
+    // none of which this file can look up; its imported main has the same children in order.
+    const ctx = makeInstance();
+    const a = ctx.sublayer('I;1', { fills: ['red'] });
+    const b = ctx.sublayer('I;4185:3781', { fills: ['red'] });
+    Object.assign(b, motion([], TRACK));
+    const main: Node = {
+      id: '63:143144',
+      type: 'COMPONENT',
+      children: [
+        { id: '63:143162', type: 'RECTANGLE' },
+        { id: '63:143163', type: 'RECTANGLE', ...motion([], TRACK) },
+      ],
+    };
+    ctx.instance.getMainComponentAsync = async () => main;
+
+    expect(await opThenUndo(ctx, a, 'fills', ['blue'])).toBeUndefined();
+    expect(ctx.instance.removeOverrides).toHaveBeenCalledOnce();
+  });
+
+  it('walks a layer’s whole path, outermost index first', async () => {
+    const ctx = makeInstance();
+    const a = ctx.sublayer('I;1', { fills: ['red'] });
+    const frame = ctx.sublayer('I;2', { fills: ['red'] });
+    const deep: Node = { id: 'I;3', type: 'RECTANGLE', parent: frame, ...motion([], TRACK) };
+    const second: Node = { id: 'I;4', type: 'RECTANGLE', parent: frame };
+    frame.children = [deep, second];
+    ctx.store.set('I;3', deep);
+    ctx.store.set('I;4', second);
+    // The animated layer is at [1, 0]: the instance's second child, its first child. Read the other
+    // way round, [0, 1] lands on a layer with no animation.
+    ctx.instance.getMainComponentAsync = async () => ({
+      id: 'M',
+      type: 'COMPONENT',
+      children: [
+        { id: 'm1', type: 'FRAME', children: [{ id: 'x' }, { id: 'y' }] },
+        { id: 'm2', type: 'FRAME', children: [{ id: 'm3', ...motion([], TRACK) }, { id: 'm4' }] },
+      ],
+    });
+
+    expect(await opThenUndo(ctx, a, 'fills', ['blue'])).toBeUndefined();
+    expect(ctx.instance.removeOverrides).toHaveBeenCalledOnce();
+  });
+
+  it('compares a layer inside a nested instance with that instance’s own main', async () => {
+    const run = async (inMain: Record<string, unknown>) => {
+      const ctx = makeInstance();
+      const a = ctx.sublayer('I;1', { fills: ['red'] });
+      const inner: Node = {
+        id: 'I;5',
+        type: 'INSTANCE',
+        parent: ctx.instance,
+        getMainComponentAsync: async () => ({
+          id: 'N',
+          type: 'COMPONENT',
+          children: [{ id: 'n1', type: 'RECTANGLE', ...inMain }],
+        }),
+      };
+      const leaf: Node = { id: 'I;5;7', type: 'RECTANGLE', parent: inner, ...motion([], TRACK) };
+      inner.children = [leaf];
+      ctx.store.set('I;5', inner);
+      ctx.store.set('I;5;7', leaf);
+      const note = await opThenUndo(ctx, a, 'fills', ['blue']);
+      return {
+        note,
+        resets: (ctx.instance.removeOverrides as ReturnType<typeof vi.fn>).mock.calls,
+      };
+    };
+    const inherited = await run(motion([], TRACK));
+    expect(inherited.resets).toHaveLength(1);
+    const own = await run(motion([], {}));
+    expect(own.resets).toHaveLength(0);
+    expect(own.note).toMatch(/erase I;5;7 \(animation\)/);
+  });
+
+  it('compares the instance itself with its main component', async () => {
+    const custom = { type: 'BRUSH', brushType: 'STRETCH', brushName: 'CUSTOM' };
+    const ctx = makeInstance();
+    const a = ctx.sublayer('I;1', { fills: ['red'] });
+    ctx.instance.complexStrokeProperties = custom;
+    ctx.instance.getMainComponentAsync = async () => ({
+      id: 'M',
+      type: 'COMPONENT',
+      complexStrokeProperties: custom,
+      children: [],
+    });
+
+    expect(await opThenUndo(ctx, a, 'fills', ['blue'])).toBeUndefined();
+    expect(ctx.instance.removeOverrides).toHaveBeenCalledOnce();
   });
 
   it('treats a layer with no main-component counterpart as holding its own', async () => {

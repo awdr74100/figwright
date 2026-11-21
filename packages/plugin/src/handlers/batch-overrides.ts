@@ -423,7 +423,7 @@ export const restoreOverrideGuard = async (
     // what it changes that can be written back.
     const layers: readonly BaseNode[] = [inst, ...inst.findAll()];
     const hidden = readHidden(layers);
-    const lost = await unrestorable(figmaCtx, inst, layers, hidden, guard.animated);
+    const lost = await unrestorable(inst, layers, hidden, guard.animated);
     if (lost.length > 0) {
       notes.push(
         `instance ${guard.instanceId} ${residue} — it was not reset because a reset would also` +
