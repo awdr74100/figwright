@@ -152,6 +152,26 @@ describe('Relay upgrade gating', () => {
     ws.close();
   });
 
+  it('admits the plugin in figma-linux, the community Linux client, and records no refusal', async () => {
+    const b = await startRelay();
+    const ws = new WebSocket(`ws://127.0.0.1:${b.port}`, {
+      headers: {
+        origin: 'null',
+        // As reported in #400 from figma-linux 0.11.5.
+        'user-agent':
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+          'figma-linux/0.11.5 Chrome/124.0.6367.230 Electron/30.0.8 Safari/537.36',
+      },
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', () => resolve());
+      ws.once('error', reject);
+    });
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    expect(b.relay.refusedUpgrades()).toBeNull();
+    ws.close();
+  });
+
   it('records each refusal by reason, and a clean relay records none', async () => {
     const b = await startRelay();
     expect(b.relay.refusedUpgrades()).toBeNull();

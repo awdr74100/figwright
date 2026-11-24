@@ -76,10 +76,17 @@ export const isAllowedHost = (host: string | undefined): boolean => {
  * stable, Beta and every install flavour carry it, and only optional suffixes (FigmaMSI, FigmaPKG,
  * FigmaARM) differ. Measured on the desktop app's plugin handshake on macOS (arm64) and Windows
  * (x64). Matched as a token, not the full string, so no suffix and no version is required.
+ *
+ * `figma-linux/<version>` is the community Electron client Linux users run, since Figma ships no
+ * desktop app there. Its session code copies Figma's rewrite (`Figma([^/]+)\/…` → `… Figma/<v>`),
+ * but that pattern is case-sensitive and the app's Electron name is the lowercase `figma-linux`, so
+ * the `Figma/` token it meant to add never appears (read from its v0.11.5 source; the project has
+ * not released since). A page cannot present this token any more than `Figma/`; what it loads is
+ * figma.com, and links opening a new window go to the system browser, as in Figma's own app.
  */
-const FIGMA_DESKTOP_UA = /(?:^|\s)Figma\/\d/;
+const FIGMA_DESKTOP_UA = /(?:^|\s)(?:Figma|figma-linux)\/\d/;
 
-/** True when a User-Agent header comes from the Figma desktop app. */
+/** True when a User-Agent header comes from a Figma desktop app (Figma's own, or figma-linux). */
 export const isFigmaDesktopUserAgent = (userAgent: string | undefined): boolean =>
   userAgent !== undefined && FIGMA_DESKTOP_UA.test(userAgent);
 
