@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.8.1
+
+[compare changes](https://github.com/awdr74100/figwright/compare/v0.8.0...v0.8.1)
+
+### 🩹 Fixes
+
+- **relay:** Admit the figma-linux desktop client ([#402](https://github.com/awdr74100/figwright/pull/402))
+
+### 🏡 Chore
+
+- **repo:** Build and test the bumped version before pnpm release offers to push ([#397](https://github.com/awdr74100/figwright/pull/397))
+
+### ❤️ Contributors
+
+- Roya ([@awdr74100](https://github.com/awdr74100))
+
 ## v0.8.0
 
 [compare changes](https://github.com/awdr74100/figwright/compare/v0.7.0...v0.8.0)
