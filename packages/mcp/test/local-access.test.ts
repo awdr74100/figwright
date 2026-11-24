@@ -56,6 +56,11 @@ const FIGMA_BETA =
   'Figma Beta/127.0.1 Figma/127.0.1 Chrome/152.0.7977.169 Electron/44.10.0 Safari/537.36';
 const FIGMA_MSI = `${FIGMA_WINDOWS_X64} FigmaMSI`;
 const FIGMA_PKG = `${FIGMA_MAC_ARM.replace(' FigmaARM', '')} FigmaPKG`;
+// The community Linux client (figma-linux), as reported in #400: its rewrite to add `Figma/` is
+// case-sensitive and misses its own lowercase name, so only `figma-linux/<v>` is there.
+const FIGMA_LINUX =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+  'figma-linux/0.11.5 Chrome/124.0.6367.230 Electron/30.0.8 Safari/537.36';
 
 const BROWSERS = {
   chrome:
@@ -81,6 +86,7 @@ describe('isAllowedWsOrigin', () => {
     ['Beta', FIGMA_BETA],
     ['MSI install', FIGMA_MSI],
     ['PKG install', FIGMA_PKG],
+    ['figma-linux', FIGMA_LINUX],
   ])('admits the plugin in the Figma desktop app (%s), origin "null"', (_name, ua) => {
     expect(isAllowedWsOrigin('null', ua)).toBe(true);
   });
@@ -99,8 +105,14 @@ describe('isAllowedWsOrigin', () => {
 
   it('wants the Figma token itself, not a lookalike name or a mention elsewhere', () => {
     expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} NotFigma/1.0`)).toBe(false);
-    expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} figma-linux/0.11.5`)).toBe(false);
     expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} Figma/`)).toBe(false);
+    expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} not-figma-linux/0.11.5`)).toBe(false);
+    expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} figma-linux/`)).toBe(false);
+    expect(isAllowedWsOrigin('null', `${BROWSERS.chrome} Figma-Linux/0.11.5`)).toBe(false);
+  });
+
+  it('refuses a web page origin from figma-linux, as it does from Figma itself', () => {
+    expect(isAllowedWsOrigin('https://evil.example', FIGMA_LINUX)).toBe(false);
   });
 
   it('applies the same rule to a figma.com origin', () => {
@@ -137,6 +149,7 @@ describe('isFigmaDesktopUserAgent', () => {
   it('recognises the desktop app on both platforms and refuses browsers', () => {
     expect(isFigmaDesktopUserAgent(FIGMA_MAC_ARM)).toBe(true);
     expect(isFigmaDesktopUserAgent(FIGMA_WINDOWS_X64)).toBe(true);
+    expect(isFigmaDesktopUserAgent(FIGMA_LINUX)).toBe(true);
     for (const ua of Object.values(BROWSERS)) expect(isFigmaDesktopUserAgent(ua)).toBe(false);
     expect(isFigmaDesktopUserAgent(undefined)).toBe(false);
   });
